@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="#featured">Featured</a> ·
+  <a href="./docs/">Explore</a> ·
   <a href="#ai-coding">AI Coding</a> ·
   <a href="#learning-paths">Learning Paths</a> ·
   <a href="#principles">Principles</a>
@@ -29,6 +30,13 @@ AI 资料已经足够多，真正缺的是判断力。
 - 哪些 Demo 很漂亮，但不适合生产环境
 
 别人给你一堆链接，这里帮你建立 AI 技术判断力。
+
+## Explore
+
+| 入口 | 内容 |
+| --- | --- |
+| [AI Guide Map](./docs/) | 项目内容地图、学习路线、技术雷达和后续 Roadmap |
+| [AI Coding](./docs/ai-coding/) | Claude Code、Codex、Cursor、Cline、Continue、Gemini CLI |
 
 ## Featured
 
