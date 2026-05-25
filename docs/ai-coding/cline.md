@@ -1,0 +1,156 @@
+# Cline 资料与项目索引
+
+> 更新日期：2026-05-25  
+> 范围：Cline VS Code / JetBrains / CLI、MCP Marketplace、checkpoints、context management、Memory Bank、rules、browser use、terminal command approval、学习资料和评测研究。
+
+Cline 是一个开源 autonomous coding agent，最初以 VS Code extension 形态广为人知。它的核心特征是：在 IDE 内读写文件、执行命令、使用浏览器、接入 MCP，并且每一步需要用户审批。
+
+## 推荐阅读顺序
+
+1. [What is Cline?](https://docs.cline.bot/introduction/overview)
+2. [cline/cline GitHub](https://github.com/cline/cline)
+3. [Context Management](https://docs.cline.bot/getting-started/understanding-context-management)
+4. [Cline MCP Marketplace](https://cline.bot/mcp-marketplace)
+5. [cline/mcp-marketplace](https://github.com/cline/mcp-marketplace)
+6. [Enterprise MCP configuration](https://docs.cline.bot/enterprise-solutions/configuration/infrastructure-configuration/mcp/overview)
+
+## 官方资料
+
+| 资源 | 类型 | 适合谁 | 价值 |
+| --- | --- | --- | --- |
+| [What is Cline?](https://docs.cline.bot/introduction/overview) | 官方文档 | 所有用户 | 了解 Cline 的文件编辑、命令执行、浏览器、MCP、CLI、checkpoints。 |
+| [cline/cline](https://github.com/cline/cline) | 官方开源仓库 | 开源用户、工具研究者 | 查看源码、issue、release、VS Code agent 实现。 |
+| [Context Management](https://docs.cline.bot/getting-started/understanding-context-management) | 官方文档 | 重度用户 | 理解 Focus Chain、Auto Compact、Memory Bank、Cline Rules。 |
+| [MCP Marketplace](https://cline.bot/mcp-marketplace) | 官方市场 | 想接外部工具的人 | 浏览可安装 MCP servers。 |
+| [cline/mcp-marketplace](https://github.com/cline/mcp-marketplace) | 官方仓库 | MCP 开发者 | 了解 MCP server 提交流程、审核标准、one-click install 要求。 |
+| [Enterprise MCP configuration](https://docs.cline.bot/enterprise-solutions/configuration/infrastructure-configuration/mcp/overview) | 官方文档 | 企业管理员 | 管理企业部署中的 MCP server 和 marketplace。 |
+
+## 学习资料
+
+| 资源 | 类型 | 价值 |
+| --- | --- | --- |
+| [What is Cline?](https://docs.cline.bot/introduction/overview) | 官方入门 | 最可靠入口。 |
+| [Context Management](https://docs.cline.bot/getting-started/understanding-context-management) | 官方指南 | Cline 和其他工具相比最值得理解的部分之一。 |
+| [MCP Marketplace](https://cline.bot/mcp-marketplace) | 官方生态入口 | 适合发现 Cline 可接入的外部能力。 |
+| [Cline MCP Setup Guide](https://www.agensi.io/learn/cline-mcp-setup-guide) | 第三方教程 | 入门配置 MCP，可作辅助参考。 |
+
+## 生态项目与能带来的东西
+
+### 1. 官方开源与 Marketplace
+
+| 项目 | 定位 | 能带来什么 | 风险 / 注意点 |
+| --- | --- | --- | --- |
+| [cline/cline](https://github.com/cline/cline) | 官方开源 agent | 学习 IDE agent 如何读写文件、运行命令、使用浏览器、接模型供应商。 | 开源不等于低风险，执行命令和 MCP 权限仍需控制。 |
+| [cline/mcp-marketplace](https://github.com/cline/mcp-marketplace) | 官方 MCP 提交流程 | 了解 Cline 如何审核 MCP servers，适合判断生态成熟度。 | Marketplace 仍需要使用者自行审查具体 server。 |
+| [Cline MCP Marketplace](https://cline.bot/mcp-marketplace) | MCP 目录 | 一键安装 GitHub、Postgres、docs、API 等外部工具能力。 | 一键安装降低门槛，也增加供应链风险。 |
+
+### 2. MCP / 外部工具
+
+| 组合 | 适合场景 | 风险 |
+| --- | --- | --- |
+| Cline + GitHub MCP | Issue、PR、仓库管理、review。 | token 权限最小化。 |
+| Cline + Docs MCP | 最新文档检索，减少框架 API 幻觉。 | 文档来源和版本要确认。 |
+| Cline + Browser | 前端页面验证、截图、交互检查。 | 注意登录状态、cookies、外部站点。 |
+| Cline + Database MCP | schema 查询、只读诊断。 | 禁止生产写操作。 |
+| Cline + Domain APIs | 业务系统自动化。 | 需要严格权限和审计。 |
+
+### 3. 研究与评测
+
+| 资源 | 类型 | 价值 |
+| --- | --- | --- |
+| [Developer Experience with AI Coding Agents](https://arxiv.org/abs/2604.02544) | 论文 | 覆盖 Cline、Cursor、Claude Code 等 agent 的文档访问行为。 |
+| [Comparing AI Coding Agents](https://arxiv.org/abs/2602.08915) | 论文 | 虽然不直接覆盖 Cline，但可作为 coding agent 评测方法参考。 |
+| [Code2MCP](https://arxiv.org/abs/2509.05941) | 论文 | 研究如何把代码仓库转成 MCP services，和 Cline 的 MCP-first 生态相关。 |
+| [Evaluating Tool Cloning in Agentic-AI Ecosystems](https://arxiv.org/abs/2605.09817) | 论文 | 研究 MCP / Skills 生态中的工具重复和来源问题。 |
+
+## 使用场景分类
+
+### 适合优先尝试
+
+- VS Code 内的 agentic coding
+- 文件编辑、命令执行、浏览器验证组合任务
+- 前端 UI 实现和交互检查
+- 小到中型功能开发
+- 用 checkpoints 回滚探索性修改
+- 通过 MCP 接入 docs、GitHub、数据库、API
+
+### 适合谨慎尝试
+
+- 自动运行长命令
+- 大量安装 MCP servers
+- 对大仓库长期对话导致上下文膨胀
+- 让 Memory Bank 自动更新关键规范
+- 多模型供应商和 API key 管理
+
+### 不建议直接交给 Cline
+
+- 生产数据库写操作
+- 无人工审批的高风险命令
+- 无 review 的自动合并
+- 带 secret 的浏览器和外部 API 自动化
+- 无回滚方案的核心重构
+
+## Cline 核心机制对比
+
+| 机制 | 解决什么问题 | 适合放什么 | 不适合放什么 |
+| --- | --- | --- | --- |
+| IDE Agent | 读写文件、执行命令 | 中小型实现、调试、测试 | 无人值守高风险任务 |
+| Checkpoints | 探索式修改回滚 | 多步重构、实验性修改 | 替代 git 流程 |
+| Context Management | 控制上下文和任务连续性 | 项目摘要、当前任务、错误反馈 | 无限制塞全部文件 |
+| Memory Bank | 长期项目知识 | 架构、产品上下文、决策记录 | 频繁变化的临时信息 |
+| Cline Rules | 行为约束 | 编码规范、安全边界、测试命令 | 大段教程 |
+| MCP Marketplace | 外部工具发现 | GitHub、docs、DB、browser、API | 未审计高权限工具 |
+| Browser Use | 前端验证 | 页面检查、截图、交互测试 | 敏感账号操作 |
+
+## Cline Rules / Memory Bank 模板
+
+```md
+# Cline Project Guidelines
+
+## Project Context
+
+- Stack:
+- Main directories:
+- Important commands:
+
+## Development Rules
+
+- Keep changes scoped.
+- Prefer existing patterns.
+- Run relevant tests before finishing.
+- Explain any risky operation before requesting approval.
+
+## Memory Bank
+
+- Architecture decisions:
+- Product constraints:
+- Known pitfalls:
+- Testing strategy:
+
+## Safety
+
+- Do not touch secrets.
+- Do not run destructive commands without explicit approval.
+- Do not write to production databases.
+- Do not install MCP servers without review.
+```
+
+## 评测维度建议
+
+| 维度 | 看什么 |
+| --- | --- |
+| IDE 集成 | 文件编辑、diff、命令输出、浏览器协作是否顺畅 |
+| 审批体验 | 每一步权限请求是否清晰、可控 |
+| 回滚能力 | checkpoints 是否可靠，和 git 是否协同 |
+| MCP 生态 | Marketplace 质量、安装体验、安全边界 |
+| 上下文管理 | Memory Bank、Auto Compact、Focus Chain 是否稳定 |
+| 成本 | API provider 选择、token 消耗、长任务成本 |
+| 安全风险 | shell、browser、MCP、secrets、外部 API |
+
+## 当前判断
+
+Cline 的优势是 **开源、可审计、IDE 内强执行能力和 MCP-first 生态**。它适合愿意逐步审批 agent 行为、希望使用多模型和外部工具的开发者。它的风险也很直接：工具越强，权限治理越重要。
+
+核心评测问题：
+
+> Cline 能否在保持每一步可审批、可回滚、可审计的前提下，稳定完成 IDE 内真实开发任务？

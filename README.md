@@ -43,10 +43,10 @@ AI 资料已经足够多，真正缺的是判断力。
 | --- | --- | --- |
 | [Claude Code](./docs/ai-coding/claude-code.md) | 终端 AI Coding Agent | 已整理 |
 | [OpenAI Codex](./docs/ai-coding/openai-codex.md) | AI Coding Agent | 已整理 |
-| Cursor | AI IDE | 待整理 |
-| Cline | VS Code Agent 插件 | 待整理 |
-| Continue | 开源 AI Coding 助手 | 待整理 |
-| Gemini CLI | 终端 AI Coding Agent | 待整理 |
+| [Cursor](./docs/ai-coding/cursor.md) | AI IDE | 已整理 |
+| [Cline](./docs/ai-coding/cline.md) | VS Code Agent 插件 | 已整理 |
+| [Continue](./docs/ai-coding/continue.md) | 开源 AI Coding 助手 | 已整理 |
+| [Gemini CLI](./docs/ai-coding/gemini-cli.md) | 终端 AI Coding Agent | 已整理 |
 
 ## Evaluation
 

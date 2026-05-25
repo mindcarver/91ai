@@ -1,0 +1,169 @@
+# Continue 资料与项目索引
+
+> 更新日期：2026-05-25  
+> 范围：Continue.dev、Continue CLI、VS Code / JetBrains extension、source-controlled AI checks、`.continue/checks/`、config.yaml、rules、models、MCP、Hub、本地模型和企业部署。
+
+Continue 早期更像一个开源 IDE AI coding assistant，重点是可配置模型、上下文提供器、本地模型和 VS Code / JetBrains 集成。当前 Continue 的公开定位更强调 **source-controlled AI checks**：把 AI 检查写进仓库，作为 PR 上可执行、可审查、可 CI 化的状态检查。
+
+## 推荐阅读顺序
+
+1. [continuedev/continue](https://github.com/continuedev/continue)
+2. [Continue docs](https://docs.continue.dev/)
+3. [config.yaml reference](https://continue-docs.mintlify.app/reference/config)
+4. [Continue Docs MCP cookbook](https://docs.continue.dev/guides/continue-docs-mcp-cookbook)
+5. [Continue resources](https://resources.continue.dev/)
+6. [Continue Hub](https://hub.continue.dev/)
+
+## 官方资料
+
+| 资源 | 类型 | 适合谁 | 价值 |
+| --- | --- | --- | --- |
+| [continuedev/continue](https://github.com/continuedev/continue) | 官方开源仓库 | 所有用户 | 查看 Continue 当前定位、CLI、AI checks、VS Code / JetBrains extension、源码。 |
+| [Continue docs](https://docs.continue.dev/) | 官方文档 | 所有用户 | 了解安装、配置、models、rules、context、MCP 和 checks。 |
+| [config.yaml reference](https://continue-docs.mintlify.app/reference/config) | 官方 / 镜像文档 | 重度用户 | 学习本地配置、models、rules、docs、tools、context providers。 |
+| [Continue Docs MCP cookbook](https://docs.continue.dev/guides/continue-docs-mcp-cookbook) | 官方指南 | 文档贡献者、MCP 用户 | 使用 Continue Docs MCP 做文档贡献和上下文检索。 |
+| [Continue resources](https://resources.continue.dev/) | 官方资源 | 学习者 | 教程、企业部署、VS Code 集成、实践文章入口。 |
+| [Continue Hub](https://hub.continue.dev/) | 官方 Hub | 团队用户 | 管理和复用 assistants、models、rules、prompts、docs、context。 |
+
+## 学习资料
+
+| 资源 | 类型 | 价值 |
+| --- | --- | --- |
+| [Continue README](https://github.com/continuedev/continue) | 官方入口 | 当前最准确地反映 Continue 的产品方向。 |
+| [config.yaml Reference](https://continue-docs.mintlify.app/reference/config) | 配置指南 | Continue 的核心竞争力之一是可配置性。 |
+| [Continue Docs MCP cookbook](https://docs.continue.dev/guides/continue-docs-mcp-cookbook) | 官方 cookbook | 适合理解 Continue + MCP + docs 的组合。 |
+| [Continue.dev Rules & Config Guide](https://cursor-alternatives.com/blog/continue-dev-rules/) | 第三方教程 | 汇总 rules、models、MCP、context providers，适合辅助参考。 |
+| [Continue 中文配置文档](https://docs.continue.org.cn/customize/deep-dives/configuration) | 中文文档 | 中文用户理解 config.yaml 和本地配置入口。 |
+
+## 生态项目与能带来的东西
+
+### 1. Source-controlled AI Checks
+
+| 机制 | 定位 | 能带来什么 | 风险 / 注意点 |
+| --- | --- | --- | --- |
+| `.continue/checks/` | 仓库内 AI 检查定义 | 把 review 规则、质量检查、安全检查写进版本控制。 | 检查质量取决于 prompt、模型、上下文和 CI 权限。 |
+| Continue CLI | PR / CI 检查执行器 | 在每个 PR 上运行 agent checks，作为 GitHub status checks。 | 需要控制模型 key、成本、权限和误报。 |
+| Continue Hub | 团队配置中心 | 复用 assistants、models、rules、docs 和 prompts。 | 团队共享配置需要版本、权限和变更审计。 |
+
+### 2. IDE Assistant / 本地模型
+
+| 机制 | 定位 | 能带来什么 | 风险 / 注意点 |
+| --- | --- | --- | --- |
+| VS Code / JetBrains extension | IDE 内 AI 助手 | Chat、edit、autocomplete、agent、模型切换。 | 功能随版本变化，需关注官方当前路线。 |
+| Local models / Ollama / OpenRouter | 模型可替换 | 成本控制、隐私、本地化实验。 | 本地模型能力、上下文、速度和 tool use 可能不足。 |
+| config.yaml | 本地配置 | 自定义 models、rules、docs、context、tools。 | 配置复杂，团队需要模板和规范。 |
+
+### 3. MCP / Docs / Context
+
+| 组合 | 适合场景 | 风险 |
+| --- | --- | --- |
+| Continue + Docs MCP | 文档贡献、最新 docs 检索、减少幻觉。 | 需要确认索引来源和版本。 |
+| Continue + GitHub MCP | PR / Issue / 仓库上下文。 | GitHub token 权限最小化。 |
+| Continue + local docs | 私有文档问答和开发规范。 | 文档更新机制很关键。 |
+| Continue + local models | 私有化和成本敏感团队。 | 模型质量和 agent 能力需单独评测。 |
+
+## 研究与评测资料
+
+| 资源 | 类型 | 价值 |
+| --- | --- | --- |
+| [Configuring Agentic AI Coding Tools](https://arxiv.org/abs/2602.14690) | 论文 | 对比 agentic coding 工具配置机制，可作为 Continue config/rules 研究背景。 |
+| [Developer Experience with AI Coding Agents](https://arxiv.org/abs/2604.02544) | 论文 | 虽不一定直接覆盖 Continue，但对 AI coding agent 文档访问行为有参考意义。 |
+| [Continue GitHub issues / PRs](https://github.com/continuedev/continue) | 开源数据 | 观察产品路线、用户痛点、配置变化和企业需求。 |
+
+## 使用场景分类
+
+### 适合优先尝试
+
+- 团队想把 AI review 规则写进仓库
+- PR 上运行 source-controlled AI checks
+- 需要可替换模型和本地模型
+- 想在 VS Code / JetBrains 中使用开源 AI 助手
+- 私有文档、代码上下文和 rules 的可配置工作流
+
+### 适合谨慎尝试
+
+- 希望开箱即用、少配置的个人用户
+- 对 agent 自动修改能力期望很高的场景
+- 大量本地模型组合调参
+- 把 AI checks 当成唯一 review gate
+- 在 CI 中运行高权限 agent checks
+
+### 不建议直接交给 Continue
+
+- 无人工 review 的自动修复和自动合并
+- 高风险生产变更
+- 没有成本预算的全量 PR 检查
+- 没有维护人的复杂 config.yaml
+
+## Continue 核心机制对比
+
+| 机制 | 解决什么问题 | 适合放什么 | 不适合放什么 |
+| --- | --- | --- | --- |
+| `.continue/checks/` | AI 检查版本化 | PR 质量、安全、测试、文档检查 | 模糊的大而全审查 |
+| config.yaml | 本地 agent 配置 | models、rules、docs、context、tools | 无人维护的复杂配置 |
+| Hub Assistants | 团队复用 | 标准模型、规则、文档、prompt | 频繁临时试验 |
+| IDE Extension | 日常辅助 | Chat、Edit、Autocomplete、Agent | 高风险无人值守任务 |
+| MCP | 外部工具连接 | docs、GitHub、私有知识库 | 不可信高权限服务 |
+| Local Models | 隐私和成本 | 本地补全、私有代码问答 | 复杂 agentic coding 默认方案 |
+
+## config.yaml / checks 模板
+
+```yaml
+name: Project Assistant
+version: 1.0.0
+
+models:
+  - name: coding-model
+    provider: openai
+    model: gpt-5
+
+rules:
+  - Keep changes scoped to the requested task.
+  - Prefer existing project patterns.
+  - Add or update tests when changing behavior.
+  - Do not touch secrets or deployment credentials.
+
+docs:
+  - name: Project Docs
+    startUrl: https://example.com/docs
+
+context:
+  - provider: code
+  - provider: docs
+```
+
+AI check 示例：
+
+```md
+# PR Review Check
+
+Review this pull request for:
+
+- correctness bugs
+- missing tests
+- security risks
+- breaking changes
+- unclear behavior
+
+Return concise findings with file references. Do not make code changes.
+```
+
+## 评测维度建议
+
+| 维度 | 看什么 |
+| --- | --- |
+| 可配置性 | models、rules、docs、context、tools 是否清晰 |
+| CI 价值 | AI checks 是否能稳定发现问题并减少 review 成本 |
+| IDE 体验 | Chat、Edit、Autocomplete、Agent 是否顺畅 |
+| 本地模型支持 | Ollama / OpenRouter / 私有模型是否易用 |
+| 团队治理 | Hub、配置共享、版本控制、审计 |
+| 成本控制 | PR checks 的 token 和运行频率 |
+| 风险 | 误报、漏报、CI 权限、模型 key、配置漂移 |
+
+## 当前判断
+
+Continue 的差异化不在于“最强 autonomous agent”，而在于 **可配置、开源、可版本化、可 CI 化**。它更适合想把 AI 代码检查和团队规则纳入工程流程的团队，而不是只想要一个强力单人 coding agent 的用户。
+
+核心评测问题：
+
+> Continue 能否把 AI 辅助从个人 IDE 体验，推进到团队可维护、可审计、可执行的工程检查体系？
