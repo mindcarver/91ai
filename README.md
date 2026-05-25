@@ -178,7 +178,7 @@ AI 工具评测是本项目的核心栏目。
 | --- | --- | --- | --- |
 | Cursor | AI IDE | 日常开发、项目问答、代码生成 | 待评测 |
 | Claude Code | 终端 AI Coding Agent | 复杂代码任务、仓库级修改 | 待评测 |
-| Codex | AI Coding Agent | 自动实现、调试、代码协作 | 待评测 |
+| [Codex](./docs/ai-coding/openai-codex.md) | AI Coding Agent | 自动实现、调试、代码协作 | 资料整理中 |
 | Cline | VS Code Agent 插件 | 本地 IDE 内的 Agent 工作流 | 待评测 |
 | Continue | 开源 AI Coding 助手 | 自定义模型、本地化代码助手 | 待评测 |
 
