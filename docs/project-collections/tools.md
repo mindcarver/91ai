@@ -1,0 +1,18 @@
+# 通用工具
+
+通用开发工具、浏览器工具、推理插件和效率工具。
+
+数量：10
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| agentclip-python - AgentClip Python SDK/CLI/MCP 服务器，将 Agent 运行转为可分享 URL | AgentClip Python SDK/CLI/MCP 服务器，将 Agent 运行转为可分享 URL | mcp, multi-agent, agent | [打开](https://github.com/ericelizes1/agentclip-python) |
+| CCPM - 关键链项目管理 | 实现关键链项目管理方法论的高级项目管理工具 | project-management, critical-chain, scheduling, resource-management, automation, productivity | - |
+| IDE集成 | 与您首选的IDE和开发工具协同工作，无需改变工作流程 | ide, vscode, editor, integration | - |
+| mirage - AI Agent 统一虚拟文件系统，基于 FUSE | AI Agent 统一虚拟文件系统，基于 FUSE | multi-agent, agent | [打开](https://github.com/strukto-ai/mirage) |
+| obscura - 专为 AI Agent 设计的无头浏览器和 Web 抓取工具，Rust 编写 | 专为 AI Agent 设计的无头浏览器和 Web 抓取工具，Rust 编写 | multi-agent, agent, tool | [打开](https://github.com/h4ckf0r0day/obscura) |
+| RustDesk - 开源远程桌面 | 使用Rust构建的开源远程桌面应用程序，提供安全的跨平台访问 | remote-desktop, rust, open-source, cross-platform, screen-sharing, remote-access | - |
+| Unix哲学与可组合性 | 遵循Unix哲学的可组合和可脚本化，与现有工具集成 | unix, composable, scriptable, pipes | - |
+| vllm-ascend - vLLM 在华为昇腾硬件上的社区维护插件 | vLLM 在华为昇腾硬件上的社区维护插件 | llm | [打开](https://github.com/vllm-project/vllm-ascend) |
+| Warp - Agentic 开发环境，从终端诞生的 AI 驱动 IDE | Agentic 开发环境，从终端诞生的 AI 驱动 IDE。将终端与 AI Agent 能力深度结合，支持自然语言命令、智能补全、Agent 工作流等。 | multi-agent, agent | [打开](https://github.com/warpdotdev/Warp) |
+| 项目初始化与脚手架 | 使用适当的结构、依赖项和最佳实践引导新项目 | initialization, scaffolding, templates, setup | - |

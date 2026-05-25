@@ -12,6 +12,7 @@
   <a href="#featured">Featured</a> ·
   <a href="./docs/">Explore</a> ·
   <a href="#ai-coding">AI Coding</a> ·
+  <a href="./docs/project-collections/">Project Collections</a> ·
   <a href="#learning-paths">Learning Paths</a> ·
   <a href="#principles">Principles</a>
 </p>
@@ -38,6 +39,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | [AI Guide Map](./docs/) | 项目内容地图、学习路线、技术雷达和后续 Roadmap |
 | [AI Coding](./docs/ai-coding/) | Claude Code、Codex、Cursor、Cline、Continue、Gemini CLI |
 | [Agent Learning Path](./docs/agent/) | 从 LLM API 到可评测、可上线 Agent 系统的学习路线 |
+| [Project Collections](./docs/project-collections/) | AI 项目、Agent 框架、开发者工具、MCP 集成和垂直应用收藏 |
 
 ## Featured
 
@@ -45,6 +47,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | --- | --- | --- |
 | [Claude Code](./docs/ai-coding/claude-code.md) | 官方资料、生态项目、CLAUDE.md、hooks、subagents、MCP、GitHub Actions、评测维度 | 资料整理中 |
 | [OpenAI Codex](./docs/ai-coding/openai-codex.md) | 官方资料、生态项目、AGENTS.md、Codex Action、MCP、横向评测资料 | 资料整理中 |
+| [Project Collections](./docs/project-collections/) | 443 个 AI 项目与能力条目，按 Agent、AI Coding、MCP、工作流、金融、设计等方向分类 | 持续扩充 |
 
 ## AI Coding
 

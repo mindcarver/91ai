@@ -1,0 +1,23 @@
+# 教程与学习资源
+
+教程、课程、实践指南、学习项目和知识资料。
+
+数量：15
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| AI-Agents-Projects-Tutorials - 多智能体系统、记忆、规划和推理循环的教程合集 | 多智能体系统、记忆、规划和推理循环的教程合集 | ai | [打开](https://github.com/Marktechpost/AI-Agents-Projects-Tutorials) |
+| AI-Native - AI-Native 开发工作流方法论，多 Agent 协作四阶段框架 | AI-Native 开发工作流方法论，多 Agent 协作四阶段框架 | framework, multi-agent, agent | [打开](https://github.com/tianji-qingtian/AI-Native) |
+| awesome-agentic-ai-zh - AI Agent 中文学习路线图（三语对照） | AI Agent 中文学习路线图（三语对照） | multi-agent, agent | [打开](https://github.com/WenyuChiou/awesome-agentic-ai-zh) |
+| awesome-ai-apps - RAG、Agent、Workflow 等 AI 应用案例合集 | RAG、Agent、Workflow 等 AI 应用案例合集 | rag, multi-agent, agent | [打开](https://github.com/Arindam200/awesome-ai-apps) |
+| awesome-claude-code - Claude Code 优秀资源合集，涵盖 skills、hooks、命令、Agent 编排器、应用和插件 | Claude Code 优秀资源合集，涵盖 skills、hooks、命令、Agent 编排器、应用和插件 | multi-agent, agent, coding | [打开](https://github.com/hesreallyhim/awesome-claude-code) |
+| dive-into-llms - 《动手学大模型》系列编程实践教程，涵盖 LLM 从原理到实践的完整学习路径 | 《动手学大模型》系列编程实践教程，涵盖 LLM 从原理到实践的完整学习路径。 | llm, coding, tutorial | [打开](https://github.com/Lordog/dive-into-llms) |
+| easy-vibe - Vibe Coding 2026 入门编程课程，面向零基础用户的现代编程教学 | Vibe Coding 2026 入门编程课程，面向零基础用户的现代编程教学 | coding | [打开](https://github.com/datawhalechina/easy-vibe) |
+| GenAI_Agents - 50+ 生成式 AI Agent 技术教程和实现，全面的多智能体学习资源，5k Star | 50+ 生成式 AI Agent 技术教程和实现，全面的多智能体学习资源，5k Star | multi-agent, agent | [打开](https://github.com/NirDiamant/GenAI_Agents) |
+| hello-agents - 《从零开始构建智能体》中文教程 | 《从零开始构建智能体》中文教程 | ai | [打开](https://github.com/datawhalechina/hello-agents) |
+| hermes-agent-orange-book - Hermes Agent 从入门到精通 · 橙皮书系列 · Nous Research 开源 AI Agent 框架实战指南 | Hermes Agent 从入门到精通 · 橙皮书系列 · Nous Research 开源 AI Agent 框架实战指南 | multi-agent, agent, framework, open-source | [打开](https://github.com/alchaincyf/hermes-agent-orange-book) |
+| learn-claude-code - 从零构建类Claude Code Agent的教学项目，帮助理解Agent内部原理 | 从零构建类Claude Code Agent的教学项目，帮助理解Agent内部原理 | agent, coding, multi-agent | [打开](https://github.com/shareAI-lab/learn-claude-code) |
+| LLMs-from-scratch - 在PyTorch中从零实现ChatGPT级别的LLM，逐步教程 | 在PyTorch中从零实现ChatGPT级别的LLM，逐步教程 | llm | [打开](https://github.com/rasbt/LLMs-from-scratch) |
+| minimind - 2 小时从零训练 64M 参数 LLM 的教学项目，大模型入门首选 | 2 小时从零训练 64M 参数 LLM 的教学项目，大模型入门首选 | llm | [打开](https://github.com/jingyaogong/minimind) |
+| vibe-coding-cn - 中文 Vibe Coding 入门到精通教程 | 中文 Vibe Coding 入门到精通教程 | coding | [打开](https://github.com/tukuaiai/vibe-coding-cn) |
+| 完整财务跟踪器教程 | 使用Claude Code构建完整个人财务跟踪器网页应用的综合教程 | tutorial, finance, web-app, complete-guide, hands-on | - |

@@ -1,0 +1,16 @@
+# DevOps 与基础设施
+
+部署、CI/CD、基础设施自动化、运行环境和平台工程。
+
+数量：8
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| agent-scan - Snyk推出的AI Agent安全扫描器，扫描Agent技能配置和MCP服务器的安全漏洞 | Snyk推出的AI Agent安全扫描器，扫描Agent技能配置和MCP服务器的安全漏洞 | mcp, agent, multi-agent | [打开](https://github.com/snyk/agent-scan) |
+| airflow-steward - Apache 基金会 AI 辅助维护 Agent | Apache 基金会 AI 辅助维护 Agent | multi-agent, agent | [打开](https://github.com/apache/airflow-steward) |
+| Ansible - 基础设施自动化 | 强大的自动化平台，用于配置管理、应用部署和编排 | automation, configuration-management, infrastructure, deployment, orchestration, yaml | - |
+| compose-for-agents - Docker 官方 Agent 编排方案，用 Docker Compose 构建 AI Agent | Docker 官方 Agent 编排方案，用 Docker Compose 构建 AI Agent | agent, multi-agent | [打开](https://github.com/docker/compose-for-agents) |
+| kstack - K8s 监控排障 Claude Code 技能包 | K8s 监控排障 Claude Code 技能包 | ai | [打开](https://github.com/kubetail-org/kstack) |
+| kubeastra - 开源 AI Agent，自动调试和恢复 Kubernetes Pod | 开源 AI Agent，自动调试和恢复 Kubernetes Pod | multi-agent, open-source, agent | [打开](https://github.com/kubeastra/kubeastra) |
+| opensre - 开源 SRE 平台 | 开源 SRE 平台。 | open-source | [打开](https://github.com/Tracer-Cloud/opensre) |
+| ProcMon-MCP - 进程监控 MCP，安全分析 Agent 辅助 | 进程监控 MCP，安全分析 Agent 辅助 | multi-agent, mcp, agent | [打开](https://github.com/0xhackerfren/ProcMon-MCP) |

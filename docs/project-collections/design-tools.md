@@ -1,0 +1,18 @@
+# 设计与可视化工具
+
+设计系统、UI、图表、可视化和 Agent 驱动设计工具。
+
+数量：10
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| AionUi - AI 驱动的 UI 组件库 | AI 驱动的 UI 组件库。 | ai | [打开](https://github.com/iOfficeAI/AionUi) |
+| Claude-Code-AI-Design - 用 Claude Code CLI 做 AI 设计（Figma to Code, React 19, Tailwind v4） | 用 Claude Code CLI 做 AI 设计（Figma to Code, React 19, Tailwind v4） | coding | [打开](https://github.com/Julpygo/Claude-Code-AI-Design) |
+| claude-design-agents-toolkit - Claude Code agent 设计插件和 hooks 集合 | Claude Code agent 设计插件和 hooks 集合 | agent, multi-agent | [打开](https://github.com/Alfredo7777777/claude-design-agents-toolkit) |
+| content-agents - NVIDIA 出品，3D 内容自动化 Agent (VLM) | NVIDIA 出品，3D 内容自动化 Agent (VLM) | multi-agent, agent | [打开](https://github.com/NVIDIA-Omniverse/content-agents) |
+| fireworks-tech-graph - 自然语言生成生产级 SVG+PNG 技术图表，支持 7 种样式及 Agent 工作流 | 自然语言生成生产级 SVG+PNG 技术图表，支持 7 种样式及 Agent 工作流 | multi-agent, agent | [打开](https://github.com/yizhiyanhua-ai/fireworks-tech-graph) |
+| json-render - Vercel 实验室的生成式 UI 框架 | Vercel 实验室的生成式 UI 框架 | framework | [打开](https://github.com/vercel-labs/json-render) |
+| open-design - 将编码 Agent 用作设计引擎的开源工具，通过 AI 编码 Agent 驱动 UI/UX 设计流程 | 将编码 Agent 用作设计引擎的开源工具，通过 AI 编码 Agent 驱动 UI/UX 设计流程 | multi-agent, agent, open-source, tool | [打开](https://github.com/nexu-io/open-design) |
+| openui - 生成式 UI 的开放标准 | 生成式 UI 的开放标准 | ai | [打开](https://github.com/thesysdev/openui) |
+| supersplat - 3D 高斯溅射编辑器，3DGS 场景编辑工具 | 3D 高斯溅射编辑器，3DGS 场景编辑工具 | tool | [打开](https://github.com/playcanvas/supersplat) |
+| 微软Magentic UI | 微软的高级UI设计系统和组件库 | ui, microsoft, design-system, components, figma | - |

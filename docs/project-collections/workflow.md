@@ -1,0 +1,17 @@
+# 工作流与自动化
+
+流程编排、上下文管理、测试生成、调试和自动化工作流。
+
+数量：9
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| Activepieces - 无代码自动化 | 开源的无代码自动化平台，用于构建业务工作流程和集成 | no-code, automation, workflow, open-source, integration, business-process | - |
+| Claude Code最佳实践 | 最大化Claude Code效果的官方最佳实践和优化技巧 | best-practices, optimization, clear, context, efficiency | - |
+| GitHub问题自动化 | 使用自定义斜杠命令自动化GitHub问题处理，拉取和修复问题 | github, issues, automation, custom-commands, workflow | - |
+| 上下文管理 | 使用/clear命令和会话优化管理对话上下文 | context, memory, clear, session | - |
+| 代码重构与优化 | 智能代码重构，包括模式识别和优化建议 | refactoring, code-quality, patterns, cleanup | - |
+| 文档生成 | 自动生成README文件、API文档和代码注释 | documentation, readme, api-docs, comments | - |
+| 测试生成与集成 | 生成全面的测试套件并与测试框架集成 | testing, unit-tests, integration, automation | - |
+| 自动化安全审查 | 新的/security-review命令用于自动漏洞检测和修复 | security, review, automation, vulnerabilities | - |
+| 调试与错误分析 | 智能调试辅助，包括错误分析和修复建议 | debugging, errors, troubleshooting, analysis | - |

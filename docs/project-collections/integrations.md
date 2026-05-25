@@ -1,0 +1,35 @@
+# 集成与 MCP
+
+MCP、外部系统接入、模型集成、工具调用和平台连接能力。
+
+数量：27
+
+| 名称 | 概括 | 标签 | 链接 |
+| --- | --- | --- | --- |
+| activepieces - AI 代理 & MCP & AI 工作流自动化平台 | AI 代理 & MCP & AI 工作流自动化平台 | mcp | [打开](https://github.com/activepieces/activepieces) |
+| chatgpt-on-wechat - 基于大模型的超级 AI 助手，支持任务规划、技能执行、多渠道部署 | 基于大模型的超级 AI 助手，支持任务规划、技能执行、多渠道部署 | llm | [打开](https://github.com/zhayujie/chatgpt-on-wechat) |
+| Chroma向量数据库 | 面向AI的开源嵌入数据库，用于AI应用中的语义搜索和检索 | vector-database, embeddings, ai, search, rag, llm | - |
+| claude-context - 为 Claude Code 提供上下文管理的工具 | 为 Claude Code 提供上下文管理的工具。 | tool | [打开](https://github.com/zilliztech/claude-context) |
+| claude-mem - Claude Code 插件，自动捕获编码会话中的操作并注入到未来会话中，实现跨会话上下文延续 | Claude Code 插件，自动捕获编码会话中的操作并注入到未来会话中，实现跨会话上下文延续。 | ai | [打开](https://github.com/thedotmack/claude-mem) |
+| claude-plugins-official - Anthropic 官方管理的 Claude Code 插件目录 | Anthropic 官方管理的 Claude Code 插件目录 | ai | [打开](https://github.com/anthropics/claude-plugins-official) |
+| composio - Agent 集成 SDK（支持 Anthropic、OpenAI、LangChain、MCP、OAuth） | Agent 集成 SDK（支持 Anthropic、OpenAI、LangChain、MCP、OAuth） | agent, mcp, multi-agent | [打开](https://github.com/warpdot-dev/composio) |
+| GitHub Actions集成 | 与自动PR审查和CI/CD工作流程的原生GitHub集成 | github, actions, ci-cd, automation, pr | - |
+| GitHub上的Claude Code（Beta） | 直接在GitHub上基于浏览器的Claude Code体验 | github, beta, web, browser | - |
+| GitHub应用安装 | 简单的/install-github-app命令设置GitHub集成 | github, installation, app, setup | - |
+| krusch-context-mcp - 零信任 MCP 服务器，IDE Agent 语义代码搜索 | 零信任 MCP 服务器，IDE Agent 语义代码搜索 | multi-agent, mcp, agent | [打开](https://github.com/kruschdev/krusch-context-mcp) |
+| mcp-context-forge - IBM 的 AI 网关/注册中心，统一 MCP、A2A、REST/gRPC API | IBM 的 AI 网关/注册中心，统一 MCP、A2A、REST/gRPC API | mcp | [打开](https://github.com/IBM/mcp-context-forge) |
+| mcp-server-purelymail - Purelymail MCP 服务器，通过 AI Agent 管理邮件域名和路由 | Purelymail MCP 服务器，通过 AI Agent 管理邮件域名和路由 | mcp, multi-agent, agent | [打开](https://github.com/zinxer/mcp-server-purelymail) |
+| mcp-use - 全栈MCP框架，为ChatGPT/Claude开发MCP应用，为Agent开发MCP服务器 | 全栈MCP框架，为ChatGPT/Claude开发MCP应用，为Agent开发MCP服务器 | mcp, framework, multi-agent, agent | [打开](https://github.com/mcp-use/mcp-use) |
+| mcp-x-mac-seed - 自进化的MCP服务器，让AI Agent控制任何macOS应用，自动发现388个工具，Swift编写 | 自进化的MCP服务器，让AI Agent控制任何macOS应用，自动发现388个工具，Swift编写 | tool, mcp, agent, multi-agent | [打开](https://github.com/reverendish/mcp-x-mac-seed) |
+| mcpconfig - 通用 MCP Agent 驱动器，桥接任何 OpenAI 兼容 LLM 到 MCP 服务器 | 通用 MCP Agent 驱动器，桥接任何 OpenAI 兼容 LLM 到 MCP 服务器 | llm, mcp, multi-agent, agent | [打开](https://github.com/AIWander/mcpconfig) |
+| missive-mail - Cloudflare Workers 上的 MCP 原生邮件服务器 | Cloudflare Workers 上的 MCP 原生邮件服务器 | mcp | [打开](https://github.com/ialer/missive-mail) |
+| n8n-mcp - MCP服务器，让Claude Desktop/Code/Windsurf/Cursor直接构建n8n工作流 | MCP服务器，让Claude Desktop/Code/Windsurf/Cursor直接构建n8n工作流 | mcp | [打开](https://github.com/czlonkowski/n8n-mcp) |
+| near-hydra - NEAR 区块链 MCP 服务器，一个账户跨 10 条链签名 | NEAR 区块链 MCP 服务器，一个账户跨 10 条链签名 | mcp | [打开](https://github.com/nikshepsvn/near-hydra) |
+| nexu - OpenClaw 桌面客户端，一键连接 Agent 到微信、飞书、Slack 和 Discord | OpenClaw 桌面客户端，一键连接 Agent 到微信、飞书、Slack 和 Discord | multi-agent, agent | [打开](https://github.com/nexu-io/nexu) |
+| playwright-mcp - 微软 Playwright 的 MCP 服务器，让 AI Agent 能控制浏览器 | 微软 Playwright 的 MCP 服务器，让 AI Agent 能控制浏览器。 | mcp, multi-agent, agent | [打开](https://github.com/microsoft/playwright-mcp) |
+| plugins - OpenAI官方Plugins仓库 | OpenAI官方Plugins仓库 | ai | [打开](https://github.com/openai/plugins) |
+| servers - Model Context Protocol服务器集合 | Model Context Protocol服务器集合 | ai | [打开](https://github.com/modelcontextprotocol/servers) |
+| 增强的MCP支持 | 具有OAuth 2.0身份验证的MCP的SSE和HTTP传输 | mcp, sse, http, oauth, real-time | - |
+| 多种AI模型 | 访问Claude Sonnet 4、Opus 4.1和Haiku 3.5模型 | models, sonnet, opus, haiku, ai | - |
+| 模型上下文协议 (MCP) | 通过MCP服务器连接外部工具和数据源 | mcp, protocol, servers, tools | - |
+| 钩子系统 | 在Claude Code生命周期各个点执行的Shell命令 | hooks, lifecycle, automation, events | - |
