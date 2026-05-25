@@ -37,6 +37,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | --- | --- |
 | [AI Guide Map](./docs/) | 项目内容地图、学习路线、技术雷达和后续 Roadmap |
 | [AI Coding](./docs/ai-coding/) | Claude Code、Codex、Cursor、Cline、Continue、Gemini CLI |
+| [Agent Learning Path](./docs/agent/) | 从 LLM API 到可评测、可上线 Agent 系统的学习路线 |
 
 ## Featured
 
