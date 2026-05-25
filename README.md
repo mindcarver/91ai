@@ -11,6 +11,7 @@
 <p align="center">
   <a href="#featured">Featured</a> ·
   <a href="./docs/">Explore</a> ·
+  <a href="./docs/paths/">Role Paths</a> ·
   <a href="#ai-coding">AI Coding</a> ·
   <a href="./docs/project-collections/">Project Collections</a> ·
   <a href="#learning-paths">Learning Paths</a> ·
@@ -37,6 +38,8 @@ AI 资料已经足够多，真正缺的是判断力。
 | 入口 | 内容 |
 | --- | --- |
 | [AI Guide Map](./docs/) | 项目内容地图、学习路线、技术雷达和后续 Roadmap |
+| [AI Knowledge Map](./docs/knowledge-map.md) | 从身份、能力、工具、项目和风险串起完整学习图谱 |
+| [Role Learning Paths](./docs/paths/) | 前端、后端、AI 应用开发者、DevOps、产品经理和普通人的学习入口 |
 | [AI Coding](./docs/ai-coding/) | Claude Code、Codex、Cursor、Cline、Continue、Gemini CLI |
 | [Agent Learning Path](./docs/agent/) | 从 LLM API 到可评测、可上线 Agent 系统的学习路线 |
 | [Project Collections](./docs/project-collections/) | AI 项目、Agent 框架、开发者工具、MCP 集成和垂直应用收藏 |
@@ -45,6 +48,8 @@ AI 资料已经足够多，真正缺的是判断力。
 
 | 专题 | 内容 | 状态 |
 | --- | --- | --- |
+| [Role Learning Paths](./docs/paths/) | 面向前端、后端、AI 应用开发者、DevOps、产品经理和普通人的学习路线 | 已启动 |
+| [AI Knowledge Map](./docs/knowledge-map.md) | 把身份、能力、工具、项目、评测和安全边界串成总图 | 已启动 |
 | [Claude Code](./docs/ai-coding/claude-code.md) | 官方资料、生态项目、CLAUDE.md、hooks、subagents、MCP、GitHub Actions、评测维度 | 资料整理中 |
 | [OpenAI Codex](./docs/ai-coding/openai-codex.md) | 官方资料、生态项目、AGENTS.md、Codex Action、MCP、横向评测资料 | 资料整理中 |
 | [Project Collections](./docs/project-collections/) | 443 个 AI 项目与能力条目，按 Agent、AI Coding、MCP、工作流、金融、设计等方向分类 | 持续扩充 |
@@ -78,11 +83,12 @@ AI 资料已经足够多，真正缺的是判断力。
 
 | 角色 | 推荐路线 |
 | --- | --- |
-| 后端工程师 | 大模型 API → RAG → Agent → Evaluation → 部署与观测 |
-| 前端工程师 | AI Coding → AI UI → 流式交互 → 多模态应用 |
-| AI 应用开发者 | Prompt → Tool Calling → RAG → Agent → Workflow |
-| 产品经理 | 场景识别 → 工具选型 → 原型验证 → 评测指标 |
-| 创业者 | AI 产品机会 → 成本结构 → 落地案例 → 技术风险 |
+| [前端工程师](./docs/paths/frontend.md) | AI Coding → AI UI → 流式交互 → 多模态应用 |
+| [后端工程师](./docs/paths/backend.md) | 大模型 API → RAG → Agent → Evaluation → 部署与观测 |
+| [AI 应用开发者](./docs/paths/ai-app-developer.md) | Prompt → Tool Calling → RAG → Agent → Workflow |
+| [DevOps / SRE](./docs/paths/devops.md) | AI for CI/CD → 日志分析 → 权限边界 → 审计回放 |
+| [产品经理](./docs/paths/product.md) | 场景识别 → 工具选型 → 原型验证 → 评测指标 |
+| [普通人](./docs/paths/everyday-user.md) | AI 对话 → 资料整理 → 知识管理 → 轻量自动化 |
 
 ## Radar
 

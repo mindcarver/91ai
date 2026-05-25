@@ -1,0 +1,56 @@
+# Backend Path
+
+面向后端工程师、平台工程师、全栈偏后端开发者。
+
+核心目标：构建可靠、可观测、可评测的 AI 应用后端，而不是只封装一次模型调用。
+
+## 推荐路线
+
+| 阶段 | 学什么 | 产出 |
+| --- | --- | --- |
+| 1 | Model API | 统一模型调用、超时、重试、错误处理、成本日志 |
+| 2 | Structured Output | JSON schema、校验、降级和失败处理 |
+| 3 | Tool Calling | 工具 schema、参数校验、幂等性、权限 |
+| 4 | RAG | 文档切分、embedding、检索、rerank、引用 |
+| 5 | Workflow | 多步骤流程、人工确认、状态机、回滚 |
+| 6 | Agent | 受控 agent loop、最大步数、最大成本、停止条件 |
+| 7 | Evaluation | 用例集、trace、回归评测、失败分类 |
+| 8 | Productionization | tracing、replay、监控、限流、fallback |
+
+## 先看这些专题
+
+- [Agent Learning Path](../agent/)
+- [AI Coding](../ai-coding/)
+- [Agent 与多智能体](../project-collections/agents.md)
+- [集成与 MCP](../project-collections/integrations.md)
+- [数据工具](../project-collections/data.md)
+
+## 第一个项目
+
+做一个 **文档 RAG API**。
+
+它应该包含：
+
+- 文档导入。
+- 检索与引用。
+- 检索失败处理。
+- API 日志。
+- 简单评测集。
+- 成本和延迟记录。
+
+## 推荐工具方向
+
+| 方向 | 工具类型 |
+| --- | --- |
+| 模型调用 | OpenAI、Anthropic、Gemini、本地模型网关 |
+| RAG | LlamaIndex、LangChain、向量数据库、rerank |
+| Agent / Workflow | OpenAI Agents SDK、LangGraph、CrewAI、AutoGen |
+| 评测 | Promptfoo、DeepEval、LangSmith、agent eval |
+| 观测 | tracing、structured logs、cost dashboard |
+
+## 避坑
+
+- 不要把向量检索当成万能长期记忆。
+- 不要没有引用就声称回答基于资料。
+- 不要让 Agent 拥有过大的写权限。
+- 不要没有回归评测就替换模型、prompt 或检索策略。

@@ -1,0 +1,123 @@
+# Recommended By Role
+
+这个页面把项目集合按读者身份重新组织。
+
+它不是最终排行榜，而是后续评测和推荐清单的工作台：先按角色和任务缩小范围，再进入具体工具专题或实测。
+
+## 总览
+
+| 身份 | 应优先关注 | 对应项目分类 |
+| --- | --- | --- |
+| 前端工程师 | AI Coding、AI UI、设计到代码、交互体验 | [开发者工具与 AI Coding](./developer-tools.md)、[设计与可视化工具](./design-tools.md)、[交互能力](./interactive.md) |
+| 后端工程师 | Model API、RAG、Agent 框架、工具接入 | [Agent 与多智能体](./agents.md)、[集成与 MCP](./integrations.md)、[数据工具](./data.md) |
+| AI 应用开发者 | Workflow、Agent、RAG、自动化项目 | [Agent 与多智能体](./agents.md)、[工作流与自动化](./workflow.md)、[AI 工具与应用](./ai-tools.md) |
+| DevOps / SRE | CI/CD、日志分析、沙箱、安全、审计 | [DevOps 与基础设施](./devops.md)、[安全工具](./security.md)、[配置与环境](./configuration.md) |
+| 产品经理 | 原型工具、低代码、知识库、评测素材 | [AI 工具与应用](./ai-tools.md)、[教程与学习资源](./tutorial.md)、[企业能力](./enterprise.md) |
+| 普通人 | 写作、资料整理、知识管理、轻量自动化 | [AI 工具与应用](./ai-tools.md)、[生产力工具](./productivity.md)、[文档处理](./document-processing.md) |
+
+## 前端工程师
+
+优先找这几类：
+
+- AI Coding 工具：日常开发、重构、测试、代码解释。
+- UI 生成工具：从需求、截图、设计稿生成组件。
+- 交互工具：命令面板、流式界面、AI 状态展示。
+- 设计系统辅助：组件规范、样式一致性、可访问性检查。
+
+第一批候选分类：
+
+- [开发者工具与 AI Coding](./developer-tools.md)
+- [设计与可视化工具](./design-tools.md)
+- [交互能力](./interactive.md)
+
+## 后端工程师
+
+优先找这几类：
+
+- Agent / Workflow 框架：状态、工具、handoff、trace。
+- RAG 和数据工具：文档处理、检索、索引、引用。
+- MCP / 集成工具：连接数据库、API、文件和内部系统。
+- 评测工具：任务回归、工具调用质量、成本和延迟。
+
+第一批候选分类：
+
+- [Agent 与多智能体](./agents.md)
+- [集成与 MCP](./integrations.md)
+- [数据工具](./data.md)
+- [文档处理](./document-processing.md)
+
+## AI 应用开发者
+
+优先找这几类：
+
+- 可直接运行的 AI 应用项目。
+- Agent 框架和工作流编排。
+- RAG 应用模板。
+- 工具调用和外部系统集成。
+
+第一批候选分类：
+
+- [AI 工具与应用](./ai-tools.md)
+- [Agent 与多智能体](./agents.md)
+- [工作流与自动化](./workflow.md)
+- [集成与 MCP](./integrations.md)
+
+## DevOps / SRE
+
+优先找这几类：
+
+- AI for CI/CD：PR 总结、代码审查、测试生成。
+- 日志和告警分析：事件摘要、根因线索、时间线。
+- 沙箱和权限：限制 shell、网络、文件和云账号访问。
+- 审计和回放：trace、run log、人工确认记录。
+
+第一批候选分类：
+
+- [DevOps 与基础设施](./devops.md)
+- [安全工具](./security.md)
+- [配置与环境](./configuration.md)
+- [优化与质量](./optimization.md)
+
+## 产品经理
+
+优先找这几类：
+
+- 原型工具：快速验证 AI 交互和业务流程。
+- 知识库工具：内部资料问答和搜索。
+- 工作流工具：把人工流程拆成可验证节点。
+- 评测资料：定义成功率、人工修正量、成本和风险。
+
+第一批候选分类：
+
+- [AI 工具与应用](./ai-tools.md)
+- [教程与学习资源](./tutorial.md)
+- [企业能力](./enterprise.md)
+- [工作流与自动化](./workflow.md)
+
+## 普通人
+
+优先找这几类：
+
+- 写作和总结工具。
+- 文档、PDF、网页资料整理。
+- 个人知识库。
+- 轻量自动化和生产力工具。
+
+第一批候选分类：
+
+- [AI 工具与应用](./ai-tools.md)
+- [文档处理](./document-processing.md)
+- [生产力工具](./productivity.md)
+- [教程与学习资源](./tutorial.md)
+
+## 后续评测模板
+
+每个身份推荐榜都应该记录：
+
+- 适合谁。
+- 解决什么任务。
+- 上手成本。
+- 是否可本地运行。
+- 是否需要敏感权限。
+- 是否有评测、日志或回滚能力。
+- 当前推荐等级：优先尝试、持续观察、谨慎使用。

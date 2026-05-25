@@ -1,0 +1,56 @@
+# AI App Developer Path
+
+面向正在构建 AI 应用、Agent、自动化工作流或内部工具的开发者。
+
+核心目标：从 Prompt demo 走向可运行、可评测、可上线的 AI 应用系统。
+
+## 推荐路线
+
+| 阶段 | 学什么 | 产出 |
+| --- | --- | --- |
+| 1 | Prompt / Context | 可复用 prompt 模板和失败案例记录 |
+| 2 | Structured Output | 稳定输出 JSON、表格或任务计划 |
+| 3 | Tool Calling | 调用搜索、数据库、文件、HTTP API |
+| 4 | Workflow | 固定流程、人工确认、状态管理 |
+| 5 | Agent Loop | observe -> plan -> act -> evaluate |
+| 6 | Memory / RAG | 区分上下文、记忆、知识库和工作状态 |
+| 7 | Evaluation | 任务成功率、工具调用质量、成本和失败恢复 |
+| 8 | Safety | 权限表、高风险操作确认、审计日志 |
+
+## 先看这些专题
+
+- [Agent Learning Path](../agent/)
+- [Project Collections](../project-collections/)
+- [工作流与自动化](../project-collections/workflow.md)
+- [集成与 MCP](../project-collections/integrations.md)
+
+## 第一个项目
+
+做一个 **GitHub Issue Triage Agent**。
+
+它应该能：
+
+- 读取 issue 标题和正文。
+- 判断类型：bug、feature、question、docs。
+- 检索项目文档。
+- 给出建议标签。
+- 判断是否需要人工确认。
+- 输出结构化 JSON。
+- 记录失败案例。
+
+## 推荐工具方向
+
+| 方向 | 工具类型 |
+| --- | --- |
+| 应用框架 | Next.js、FastAPI、Express、Workers |
+| Agent SDK | OpenAI Agents SDK、LangGraph、LlamaIndex、CrewAI |
+| 工具协议 | MCP、OpenAPI、HTTP tools |
+| 评测 | Promptfoo、DeepEval、trace grading |
+| 生产化 | tracing、replay、human-in-the-loop |
+
+## 避坑
+
+- 不要一开始就做多 Agent。
+- 不要把 prompt 当成唯一控制手段。
+- 不要忽略工具失败、重试和幂等性。
+- 不要没有评测就把 demo 改成生产功能。

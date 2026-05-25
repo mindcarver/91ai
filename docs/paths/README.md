@@ -1,0 +1,34 @@
+# Role Learning Paths
+
+这里按读者身份组织学习路线。
+
+同一个 AI 技术栈，对不同人意味着不同任务：前端关心交互和体验，后端关心接口和可靠性，DevOps 关心权限和审计，产品关心场景和指标，普通人关心能不能改善自己的工作流。
+
+## 快速选择
+
+| 你是谁 | 推荐入口 | 第一目标 |
+| --- | --- | --- |
+| 前端工程师 | [Frontend Path](./frontend.md) | 把 AI 能力做成可用、可控、可解释的界面 |
+| 后端工程师 | [Backend Path](./backend.md) | 构建可靠的模型 API、RAG、Agent 和评测系统 |
+| AI 应用开发者 | [AI App Developer Path](./ai-app-developer.md) | 从 Prompt 走到工具调用、Workflow、Agent 和上线 |
+| DevOps / SRE | [DevOps Path](./devops.md) | 把 AI 安全地接入 CI/CD、日志、告警和运维流程 |
+| 产品经理 | [Product Path](./product.md) | 判断哪些 AI 场景值得做，并定义可验证指标 |
+| 普通人 | [Everyday User Path](./everyday-user.md) | 用 AI 改善资料整理、写作、搜索和自动化 |
+
+## 共用学习顺序
+
+| 阶段 | 主题 | 为什么重要 |
+| --- | --- | --- |
+| 1 | AI Coding | 先让 AI 帮你完成真实工作，而不是只看概念 |
+| 2 | Prompt / Context | 学会给模型边界、上下文和输出格式 |
+| 3 | Tool Calling | 让模型能安全使用外部工具 |
+| 4 | Workflow | 把可控流程自动化，而不是盲目追求自主 Agent |
+| 5 | RAG / Knowledge | 让 AI 基于你的资料和文档工作 |
+| 6 | Evaluation | 判断方案是否稳定、可复现、可改进 |
+| 7 | Safety / Permissions | 控制数据、账号、权限和高风险操作 |
+
+## 使用方式
+
+- 新手：先读自己的身份路线，再选一个第一个项目。
+- 技术人：把身份路线和 [Agent Learning Path](../agent/) 一起看。
+- 贡献者：优先补充“适合谁、解决什么、限制是什么、如何验证”。
