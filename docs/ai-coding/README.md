@@ -36,6 +36,13 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 - Continue 更偏可配置、可版本化、可 CI 化的团队 AI checks。
 - Gemini CLI 技术设计值得研究，但需关注迁移到 Antigravity CLI 的风险。
 
+## Learning Paths
+
+| 专题 | 适合谁 | 内容 |
+| --- | --- | --- |
+| [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 想系统学习 Claude Code 工程化的人 | 从 CLAUDE.md、Skills、Subagents、Hooks、MCP 到 Headless、Agent SDK、Plugins 的原创 32 讲路线。 |
+| [Claude Code 工程化实战系列](./claude-code-engineering/) | 想逐篇阅读和沉淀团队材料的人 | 34 篇独立文章，覆盖个人使用、工作流沉淀、Subagents、MCP、Hooks、CI/CD、SDK、Plugins 和组织治理。 |
+
 ## Next Work
 
 1. 设计同任务横向评测任务集。
