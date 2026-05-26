@@ -1,0 +1,261 @@
+# 多智能体框架：资源、对比与实践
+
+多智能体（Multi-Agent）框架全景图，覆盖框架对比、架构模式、技术文章、生产用例和行业趋势。
+
+数据更新：2026-05
+
+---
+
+## 一、主流框架对比
+
+按 GitHub Star 和生产部署成熟度分层。Star 数为近似值，持续变化。
+
+### Tier 1：头部框架（10K+ Star）
+
+| 框架 | Star | 语言 | 核心模式 | 特色 |
+| --- | ---: | --- | --- | --- |
+| [LangGraph](https://github.com/langchain-ai/langgraph) | 8K+（生态 122K+） | Python / TS | 图状态机 | LinkedIn、Uber 生产使用；循环工作流 + 持久状态；最成熟的复杂 Agent 编排方案 |
+| [AutoGen / MS Agent Framework](https://github.com/microsoft/autogen) | 53K+ | Python / .NET | 对话式多 Agent | 2026.4 与 Semantic Kernel 合并为 Microsoft Agent Framework 1.0；企业级 Python + .NET 双语言 |
+| [CrewAI](https://github.com/crewAIInc/crewAI) | 45K+ | Python | 角色扮演 | 角色定义直观（Role/Goal/Backstory）；150+ 企业客户；CrewAI+ 商业平台 |
+| [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) | 19K+ | Python | Handoff 委派 | 官方 SDK；10M+ 月下载；Guardrails + Tracing 内置；最低上手成本 |
+| [Google ADK](https://github.com/google/adk-python) | 10K+ | Python | 代码优先 | Google Next 2025 发布；原生 A2A 协议；Cloud Run / Vertex AI 一键部署 |
+| [MetaGPT](https://github.com/FoundationAgents/MetaGPT) | 62K+ | Python | SOP 驱动 | 模拟软件公司角色（PM/架构师/工程师）；MGX 商业版 |
+| [Dify](https://github.com/langgenius/dify) | 129K+ | Python / TS | 低代码平台 | 可视化 Agent 编排 + RAG Pipeline；非技术团队友好；RBAC/SSO/审计 |
+| [Agno](https://github.com/agno-agi/agno)（原 Phidata） | 36K+ | Python | 全栈 SDK | Agent 即服务；内置 Tracing / RBAC；Agent 实例化 <4us |
+
+### Tier 2：成熟框架（5K-10K Star）
+
+| 框架 | Star | 语言 | 核心模式 | 特色 |
+| --- | ---: | --- | --- | --- |
+| [Mastra](https://github.com/mastra-ai/mastra) | 10K+ | TypeScript | TS 原生 | Gatsby 团队出品；YC $13M；TypeScript 生态唯一的原生 Agent 框架 |
+| [BeeAI](https://github.com/i-am-bee/beeai-framework) (IBM) | 8K+ | Python / TS | 动态工作流 | IBM Research 出品；并行 / 重试 / 重规划；watsonx 集成 |
+| [ElizaOS](https://github.com/elizaos/eliza) | 15K+ | TypeScript | Agent OS | 多平台角色 Agent（Twitter/Discord/Telegram）；Web3 友好 |
+| [LlamaIndex](https://github.com/run-llama/llama_index) | 46K+ | Python / TS | 数据优先 | 160+ 数据连接器；数据驱动 Agent 的最佳选择；RAG 领域标杆 |
+| [Haystack](https://github.com/deepset-ai/haystack) | 10K+ | Python | 模块化管线 | deepset 出品；企业搜索 + Agent 组合；成熟 RAG 能力 |
+| [Semantic Kernel](https://github.com/microsoft/semantic-kernel) | 23K+ | C# / Python / Java | 插件系统 | 已并入 MS Agent Framework；.NET 生态首选 |
+
+### Tier 3：值得关注的新兴框架
+
+| 框架 | Star | 语言 | 特色 |
+| --- | ---: | --- | --- |
+| [PydanticAI](https://github.com/pydantic/pydantic-ai) | 5K+ | Python | Pydantic 团队出品；类型安全最强；结构化输出 |
+| [SmolAgents](https://github.com/huggingface/smolagents) (HuggingFace) | 5K+ | Python | 核心仅 ~1000 行；Code-as-Actions 范式 |
+| [CopilotKit](https://github.com/CopilotKit/CopilotKit) | 20K+ | TS / React | AG-UI 协议创建者；全栈 Agentic App SDK |
+| [PraisonAI](https://github.com/MervinPraison/PraisonAI) | 3K+ | Python | Agent 实例化 <4us；100+ 预置工具；低代码 + 代码双模式 |
+| [Agent Zero](https://github.com/agent0ai/agent-zero) | 3K+ | Python | 每个 Agent 独立 Linux 环境；自我纠错；MCP 原生 |
+| [EvoAgentX](https://github.com/EvoAgentX/EvoAgentX) | 2K+ | Python | 自进化 Agent 生态；自动优化 Agent 架构 |
+| [CAMEL AI](https://github.com/camel-ai/camel) | 2K+ | Python | 研究导向；Agent 通信 Scaling Laws；学术社区活跃 |
+| [Motia](https://github.com/MotiaDev/motia) | 1.5K+ | Python / TS | 可视化 Agent 后端；设计器友好 |
+| [DeerFlow](https://github.com/bytedance/deer-flow) (字节) | 4K+ | Python | 基于 LangGraph 的 SuperAgent；Docker 沙箱研究自动化 |
+| [Koog](https://github.com/JetBrains/koog) (JetBrains) | 新 | Kotlin / Java | JVM 生态 Agent 框架；企业级容错 |
+
+---
+
+## 二、架构模式
+
+多智能体系统有四种核心架构模式，选型依据是控制流复杂度和调试需求。
+
+### 1. Supervisor（监督者模式）
+
+```
+用户 → Supervisor Agent → 路由到 Worker Agent A / B / C → 汇总返回
+```
+
+- **适用场景**：大多数生产系统；需要明确控制流和可调试性
+- **代表框架**：LangGraph、Google ADK、OpenAI Agents SDK
+- **优点**：控制流清晰、易调试、易加权限和审计
+- **缺点**：Supervisor 本身是单点，需要容错设计
+
+### 2. Peer-to-Peer（对等模式）
+
+```
+Agent A ←→ Agent B ←→ Agent C
+     ↕           ↕
+   共享状态 / 消息总线
+```
+
+- **适用场景**：去中心化协作；Agent 间需要灵活协商
+- **代表框架**：AutoGen、CAMEL
+- **优点**：灵活、可扩展、无单点故障
+- **缺点**：行为难预测、调试困难、容易出现死循环
+
+### 3. Hierarchical Teams（层级团队模式）
+
+```
+CEO Agent → Manager Agent A → Worker 1, Worker 2
+          → Manager Agent B → Worker 3, Worker 4
+```
+
+- **适用场景**：复杂任务需要分层拆解和管理
+- **代表框架**：CrewAI（Hierarchical Process）、MetaGPT
+- **优点**：适合复杂工作流、职责清晰
+- **缺点**：层级越深延迟越高、需要精心设计 Manager
+
+### 4. Event-Driven（事件驱动模式）
+
+```
+Agent A → Kafka Topic → Agent B / Agent C / Agent D
+事件总线负责解耦、重试和持久化
+```
+
+- **适用场景**：长时间运行、需要容错和审计的生产系统
+- **代表**：Temporal + Agents SDK、Confluent Kafka 方案
+- **优点**：解耦彻底、天然容错、完整审计链
+- **缺点**：基础设施复杂度高、调试需要专门工具
+
+### 选型建议
+
+| 需求 | 推荐模式 | 推荐框架 |
+| --- | --- | --- |
+| 快速原型 | Supervisor | CrewAI / OpenAI Agents SDK |
+| 复杂状态机 | Supervisor + Graph | LangGraph |
+| 学术研究 | Peer-to-Peer | AutoGen / CAMEL |
+| 企业生产 | Event-Driven | LangGraph + Temporal |
+| 低代码团队 | Hierarchical | CrewAI / Dify |
+| TypeScript 项目 | Supervisor | Mastra / CopilotKit |
+
+---
+
+## 三、技术文章与教程
+
+### 架构与设计
+
+| 文章 | 来源 | 核心内容 |
+| --- | --- | --- |
+| [Architectures for Multi-Agent Systems](https://galileo.ai/blog/architectures-for-multi-agent-systems) | Galileo AI | 四种核心架构模式详解 + LangGraph 代码示例；推荐 Supervisor 模式用于生产 |
+| [Event-Driven Design Patterns for Multi-Agent Systems](https://www.confluent.io/blog/event-driven-multi-agent-systems/) | Confluent | 基于 Kafka 的四种事件驱动模式；Orchestrator-Worker、层级、黑板、市场竞价 |
+| [A Developer's Guide to Agentic Frameworks in 2026](https://pub.towardsai.net/a-developers-guide-to-agentic-frameworks-in-2026-3f22a492dc3d) | Towards AI | 框架分类（Graph/Conversation/Role/Code-first/Handoff）+ 选型决策树 |
+| [Comparing Open-Source AI Agent Frameworks](https://langfuse.com/blog/2025-03-19-ai-agent-comparison) | Langfuse | Graph-based vs Conversation-based 架构权衡；状态管理、错误处理、可观测性对比 |
+
+### 框架对比与评测
+
+| 文章 | 来源 | 核心内容 |
+| --- | --- | --- |
+| [Best Open Source Agent Frameworks 2026](https://www.firecrawl.dev/blog/best-open-source-agent-frameworks) | Firecrawl | 7 框架对比 + 代码片段；OpenAI Agents SDK 19K Star / 10.3M 月下载 |
+| [Top AI Agent Frameworks 2026: Production-Ready Comparison](https://pub.towardsai.net/top-ai-agent-frameworks-in-2026-a-production-ready-comparison-7ba5e39ad56d) | Towards AI | 生产维度评测；LangGraph ~400 生产部署，CrewAI 150+ 企业客户 |
+| [Production-Tested Ranking by Alice Labs](https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026) | Alice Labs | 基于 18+ 生产部署的排序；图架构在生;产环境占主导 |
+| [Comparing CrewAI, LangGraph, and BeeAI](https://developer.ibm.com/articles/awb-comparing-ai-agent-frameworks-crewai-langgraph-and-beeai/) | IBM Developer | 同一任务三框架实现对比；开发体验、样板代码、控制流差异 |
+| [Top 12 Multi-Agent AI Frameworks for Developers in 2026](https://is4.ai/blog/our-blog-1/top-12-multi-agent-ai-frameworks-2026-335) | is4.ai | 12 框架功能矩阵排名；含 Star 数、语言、部署集成对比 |
+
+### 实现教程
+
+| 文章 | 来源 | 核心内容 |
+| --- | --- | --- |
+| [Building Multi-Agent Systems with CrewAI](https://www.firecrawl.dev/blog/crewai-multi-agent-systems-tutorial) | Firecrawl | 逐步构建多 Agent ChatGPT clone；角色定义、顺序/并行执行、Web 数据抓取集成 |
+| [Mastra AI Quickstart](https://workos.com/blog/mastra-ai-quick-start) | WorkOS | 5 分钟构建 TypeScript Agent；装饰器工作流 + 内置 RAG + 本地开发服务器 |
+| [Building Multi-Agent System with Temporal.io](https://generativeai.pub/building-a-multi-agent-ai-system-with-temporal-io-0c3e8f928f6d) | Generative AI | Temporal 持久执行层 + Agent 编排；内置重试、超时、Saga 补偿事务 |
+| [Production-Ready Agents with OpenAI SDK + Temporal](https://temporal.io/blog/announcing-openai-agents-sdk-integration) | Temporal | GA 发布 OpenAI Agents SDK + Temporal 集成；Handoff 多 Agent + 持久执行 |
+| [Top 5 Open-Source Frameworks for Multi-Agent Systems](https://generativeai.pub/top-5-open-source-frameworks-to-build-multi-agent-ai-systems-in-2025-fc92b0fb62af) | Generative AI | Motia（可视化）、Agno（瑞士军刀）等框架安装指南和基础示例 |
+
+### 官方发布
+
+| 文章 | 来源 | 核心内容 |
+| --- | --- | --- |
+| [State of Agent Engineering](https://www.langchain.com/state-of-agent-engineering) | LangChain | 年度报告；2026 企业关注点从"是否用 Agent"转向"如何可靠部署" |
+| [Google ADK: Easy to Build Multi-Agent Applications](https://developers.googleblog.com/en/agent-development-kit-easy-to-build-multi-agent-applications/) | Google | ADK 官宣；ADK 2.0 可视化 Web UI + Gemini 原生集成 |
+| [The Next Evolution of the Agents SDK](https://openai.com/index/the-next-evolution-of-the-agents-sdk/) | OpenAI | Agents SDK 更新；文件检查、命令执行、代码编辑、长周期任务 |
+| [From MCP to Multi-Agents: Top 10 Open Source AI Projects](https://github.blog/open-source/maintainers/from-mcp-to-multi-agents-the-top-10-open-source-ai-projects-on-github-right-now-and-why-they-matter/) | GitHub Blog | GitHub 官方 99 天内 Top 10 新项目分析；MCP Server、多 Agent 编排趋势 |
+
+### 研究论文
+
+| 论文 | 来源 | 核心内容 |
+| --- | --- | --- |
+| [AutoGen: Multi-Agent Conversation Framework](https://www.microsoft.com/en-us/research/publication/autogen-enabling-next-gen-llm-applications-via-multi-agent-conversation-framework/) | Microsoft Research | AutoGen 基础论文；对话式多 Agent 范式；影响了后续 A2A 标准设计 |
+| [MetaGPT: Meta Programming for Multi-Agent](https://arxiv.org/html/2308.00352v6) | arXiv | SOP 驱动多 Agent 协作；模拟人类组织结构显著提升输出质量 |
+| [Eliza: A Web3 Friendly AI Agent OS](https://arxiv.org/pdf/2501.06781) | arXiv | Agent 身份持久化、跨平台行为一致性、角色定义系统 |
+
+---
+
+## 四、生产用例
+
+### 互联网大厂
+
+| 公司 | 用例 | 框架 | 详情 |
+| --- | --- | --- | --- |
+| LinkedIn | AI 招聘助手 | LangGraph | LangGraph 1.0 发布后首批大规模生产部署 |
+| Uber | 代码迁移 Agent | LangGraph | 大规模代码库自动迁移，图架构保障控制流 |
+| 字节跳动 | 深度研究 Agent | LangGraph | DeerFlow 2.0 开源；多子 Agent + Docker 沙箱 + 记忆管理 |
+| 微软 | 企业 Agent 平台 | MS Agent Framework | AutoGen + Semantic Kernel 合并；.NET + Python 双语言 |
+
+### 行业应用
+
+| 行业 | 用例 | 描述 |
+| --- | --- | --- |
+| 金融服务 | 24/7 加密交易 Agent | Temporal + MCP 驱动；Schedules / Signals / Queries 实现 always-on 交易系统 |
+| 软件开发 | 全流程 SDLC Agent | 多 Agent 从需求 → 设计 → 编码 → 测试 → 部署全链路自动化 |
+| 安全测试 | 渗透测试 Agent | 多 Agent 协作执行 Bug Bounty、红队和渗透测试任务 |
+| 研究分析 | 深度研究管线 | 多 Agent 分层执行文献检索、摘要、分析、报告生成 |
+| 客服 | 多轮对话 Agent | Supervisor 模式路由到专业子 Agent（退款/技术支持/账户管理） |
+
+### 通信协议
+
+多智能体通信正在标准化，三大协议并行发展：
+
+| 协议 | 推动方 | 用途 | 状态 |
+| --- | --- | --- | --- |
+| **MCP**（Model Context Protocol） | Anthropic | Agent ↔ 工具/上下文集成 | 所有主流框架已支持 |
+| **A2A**（Agent-to-Agent） | Google | Agent ↔ Agent 通信 | Google ADK 原生支持；各框架陆续集成 |
+| **AG-UI**（Agent User Interaction Protocol） | CopilotKit | Agent ↔ UI 实时交互 | CopilotKit 创建；前端 Agent 交互标准 |
+
+---
+
+## 五、关键趋势
+
+### 1. 框架整合
+
+2024 年有 14 个 1K+ Star 的 Agent 框架，2025 年增长到 89 个（+535%）。但生产部署集中在 5-7 个。微软合并 AutoGen + Semantic Kernel 是整合信号。
+
+### 2. 图架构胜出
+
+LangGraph 的 Graph-native 架构在生产部署中占主导（LinkedIn、Uber、字节）。Graph 模式比 Conversation/Role 模式提供更好的可调试性和控制力。
+
+### 3. 协议标准化
+
+MCP 和 A2A 成为互操作层，所有主要框架在 2025-2026 都添加了支持。框架之争正在让位于协议之争。
+
+### 4. TypeScript 崛起
+
+TypeScript 在 GitHub 2025 语言报告中超过 Python。Mastra、ElizaOS、n8n、CopilotKit 证明了 TS 原生 Agent 框架的需求。
+
+### 5. 基础设施层成熟
+
+Temporal 作为持久执行层正在成为生产 Agent 系统的基础设施选择。OpenAI Agents SDK 已有官方 Temporal 集成。
+
+### 6. 低代码占据最大用户量
+
+Langflow（149K Star）、Dify（142K Star）、n8n（100K Star）证明可视化/低代码框架拥有最大受众，市场正在向可访问性倾斜。
+
+---
+
+## 六、快速选型
+
+```
+你的需求是什么？
+│
+├─ 复杂状态机 + 生产级
+│  └─ LangGraph（Python）或 LangGraph + Temporal（持久执行）
+│
+├─ 角色扮演 + 快速原型
+│  └─ CrewAI（Python）或 OpenAI Agents SDK（最轻量）
+│
+├─ TypeScript 项目
+│  └─ Mastra（全栈）或 CopilotKit（前端集成）
+│
+├─ 企业 .NET
+│  └─ Microsoft Agent Framework 1.0
+│
+├─ Google Cloud 部署
+│  └─ Google ADK
+│
+├─ 数据驱动 Agent
+│  └─ LlamaIndex（160+ 数据连接器）
+│
+├─ 低代码 / 非技术团队
+│  └─ Dify 或 Langflow
+│
+├─ 研究 / 学术
+│  └─ AutoGen 或 CAMEL AI
+│
+└─ 长时间运行 + 审计
+   └─ 任意框架 + Temporal
+```
