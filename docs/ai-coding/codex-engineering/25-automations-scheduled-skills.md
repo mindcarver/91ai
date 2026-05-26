@@ -1,0 +1,720 @@
+# Automations：定时执行稳定技能的工程实践
+
+**TL;DR：** Automation 不是凭空出现的自动化能力，而是对已经稳定运行的 Skill 的定时封装。核心原则是"技能定义怎么做，自动化定义什么时候做"。只有当一个 Skill 满足四个条件——至少成功执行 5 次、不需要人工判断、结果可自动验证、失败时有明确回滚策略——才应该考虑把它转化为 Automation。典型场景包括每日代码审查、定期文档更新、依赖版本检查、测试覆盖追踪等周期性任务。配置方式基于 cron 表达式或事件触发，输出可以是报告、PR 或通知。安全方面需要最小权限沙箱、审计日志和失败告警。最常见的错误是对不稳定的流程过早自动化、缺少失败告警导致静默失败、以及没有回滚策略导致错误累积。
+
+## Automations 的定位
+
+在 Codex 的工程体系中，Skill 解决的是"怎么做"的问题。一个 Skill 封装了一套经过验证的操作流程：读哪些文件、执行什么命令、输出什么结果。但 Skill 本身是被动的——它需要有人触发。
+
+Automation 解决的是"什么时候做"的问题。它把一个稳定的 Skill 包装成定时或事件驱动的任务，让这个流程可以在无人干预的情况下自动执行。
+
+```
+Skill（技能）    → 定义"做什么"和"怎么做"
+Automation（自动化） → 定义"什么时候做"和"做了之后怎样"
+```
+
+这个分工非常重要。很多团队在还没有把流程固化成稳定 Skill 的情况下就急于自动化，结果是自动化频繁失败，最终被废弃。正确的顺序是：先把流程写成 Skill，手动执行直到稳定，然后再把稳定的 Skill 转化为 Automation。
+
+Automation 适合的场景有一个共同特征：周期性重复。每天都要做的事情、每次 PR 都要跑的检查、每周都要生成的报告——这些任务的执行逻辑不变，只是触发时间不同。这正是 Automation 的最佳适用范围。
+
+## 从 Skill 到 Automation 的演进条件
+
+不是所有 Skill 都适合自动化。将一个 Skill 转化为 Automation 之前，必须逐条检查以下四个条件。任何一个条件不满足，都不应该自动化。
+
+### 条件一：Skill 本身已经稳定
+
+一个 Skill 至少需要成功执行 5 次以上，才能被认为"稳定"。这里的"成功"不是"没有报错"，而是"产出了符合预期的结果"。举例来说，一个"生成代码审查报告"的 Skill，如果 5 次执行中有 2 次报告内容明显遗漏了重要问题，那它还不算稳定。
+
+稳定性验证的具体做法：
+
+```text
+执行记录追踪：
+- 第 1 次：手动执行，检查输出完整性
+- 第 2 次：换一个不同的代码变更集，再次执行
+- 第 3 次：让另一个团队成员执行，验证可重复性
+- 第 4 次：在更大的变更集上执行，测试边界情况
+- 第 5 次：在正常工作负载下执行，确认稳定性
+```
+
+如果 5 次执行中有任何一次产出了不合格的结果，就需要回到 Skill 层面修复问题，然后重新计数。
+
+### 条件二：Skill 不需要人工判断
+
+自动化的前提是完全无需人工干预。如果一个 Skill 在执行过程中需要人类做决策——比如"这段代码的设计意图是什么"、"这个重构是否安全"——那它就不适合自动化。
+
+判断标准：把 Skill 的执行步骤列出来，逐条检查每一步是否可以在没有任何人类输入的情况下完成。如果存在任何需要人类判断的步骤，有两个选择：
+
+1. 修改 Skill 的设计，把需要判断的部分替换为确定性规则
+2. 暂时不自动化，保持手动触发
+
+```text
+不适合自动化的 Skill 示例：
+- "审查这段代码的架构是否合理" → 需要人类判断架构优劣
+- "决定是否应该将这个模块拆分" → 需要人类权衡利弊
+
+适合自动化的 Skill 示例：
+- "检查所有 .ts 文件中未使用的 import 语句" → 确定性规则
+- "运行 eslint 并输出违规报告" → 工具输出，无需判断
+```
+
+### 条件三：结果可以通过自动化方式验证
+
+Automation 执行完毕后，必须有一种自动化的方式验证结果是否正确。不能依赖人类阅读输出来判断"这次自动化是否成功了"。
+
+验证方式可以是：
+
+| 验证方式 | 适用场景 | 示例 |
+|----------|----------|------|
+| 退出码 | 命令执行类任务 | 测试运行、lint 检查 |
+| 文件存在性检查 | 报告生成类任务 | 确认报告文件已生成 |
+| 内容模式匹配 | 内容验证类任务 | 检查报告包含必要章节 |
+| 数值阈值 | 指标追踪类任务 | 覆盖率不低于某个值 |
+| diff 检查 | 代码修改类任务 | 确认修改的文件列表符合预期 |
+
+```yaml
+# Automation 配置中的验证示例
+validation:
+  type: "combined"
+  checks:
+    - exit_code: 0                    # 命令必须成功退出
+    - file_exists: "reports/daily-review.md"  # 报告必须生成
+    - content_contains:               # 报告必须包含关键章节
+        file: "reports/daily-review.md"
+        patterns: ["## 变更概览", "## 风险项", "## 建议操作"]
+```
+
+### 条件四：失败时有明确的回滚策略
+
+自动化必然会在某个时刻失败。当失败发生时，系统必须知道如何恢复到安全状态。回滚策略不复杂，但必须明确。
+
+常见的回滚策略：
+
+```text
+1. 无副作用任务（报告生成、指标统计）：
+   → 无需回滚，标记失败，发送告警
+
+2. 有副作用的任务（代码修改、文件更新）：
+   → git restore 回退所有文件变更
+   → 删除生成的临时文件
+   → 发送告警，附上失败日志
+
+3. 外部操作（创建 PR、发送通知）：
+   → 关闭已创建的 PR（如果处于 draft 状态）
+   → 发送修正通知
+   → 记录操作日志供事后审计
+```
+
+四个条件的检查清单：
+
+```text
+[ ] Skill 已成功执行至少 5 次，结果符合预期
+[ ] Skill 执行过程中无需任何人工判断
+[ ] Skill 的结果可以通过自动化方式验证
+[ ] Skill 失败时有明确的回滚策略
+→ 四项全部通过 → 可以创建 Automation
+→ 任一项未通过 → 继续打磨 Skill 或保持手动触发
+```
+
+## 典型 Automation 场景
+
+以下五个场景是经过实践验证的、适合自动化的典型用例。每个场景都附带了 Skill 定义和 Automation 配置的参考。
+
+### 场景一：每日代码审查
+
+目标：每天早上自动扫描昨天的所有提交，输出一份结构化的审查报告。
+
+这个场景满足全部四个条件：代码审查的 Skill 可以用静态分析 + 规则检查完成，不需要人类判断每行代码的意义；审查报告是纯输出，无副作用；可以通过检查报告文件是否存在且包含必要章节来验证；失败时只需标记告警。
+
+```yaml
+# Skill 定义
+name: daily-code-review
+description: "扫描指定时间范围内的代码提交，生成结构化审查报告"
+inputs:
+  - name: since
+    type: string
+    default: "yesterday"
+  - name: repo_path
+    type: string
+steps:
+  - "git log --since=${since} --oneline 获取提交列表"
+  - "git diff HEAD~${commit_count}..HEAD 获取完整 diff"
+  - "根据预设规则分析变更：安全风险、性能问题、代码风格"
+  - "生成 reports/daily-review.md 报告"
+```
+
+```yaml
+# Automation 配置
+automation:
+  name: "每日代码审查"
+  schedule: "0 9 * * 1-5"       # 工作日每天早上 9 点
+  skill: daily-code-review
+  outputs:
+    - type: report
+      path: "reports/daily-review.md"
+    - type: notification
+      channel: slack
+      template: "代码审查报告已生成：{{report_path}}"
+  validation:
+    file_exists: "reports/daily-review.md"
+    content_patterns: ["## 变更概览", "## 风险项"]
+  failure:
+    alert: true
+    channel: slack
+    rollback: none               # 纯报告，无副作用
+```
+
+### 场景二：定期文档更新
+
+目标：检测代码变更导致的文档过时，自动更新文档内容或创建更新提醒。
+
+文档和代码的同步是长期维护中的典型痛点。API 接口改了但文档没更新、配置参数加了但 README 没同步、新功能上线了但使用指南还停留在旧版本。这类问题通过定期自动化扫描可以有效缓解。
+
+```yaml
+# Skill 定义
+name: doc-sync-check
+description: "检查代码变更是否导致文档过时，自动更新或创建修复任务"
+inputs:
+  - name: check_paths
+    type: list
+    default: ["src/", "lib/"]
+  - name: doc_paths
+    type: list
+    default: ["docs/", "README.md"]
+steps:
+  - "扫描代码中的公开 API 和导出符号"
+  - "检查文档中引用的 API 是否仍然存在"
+  - "检查配置文件中的参数是否在文档中有记录"
+  - "对比代码和文档的不一致列表"
+  - "对于简单的不一致（参数名变更、新增可选参数），直接修改文档"
+  - "对于复杂的不一致（行为语义变更），创建 Issue 跟踪"
+```
+
+```yaml
+# Automation 配置
+automation:
+  name: "文档同步检查"
+  schedule: "0 2 * * 0"          # 每周日凌晨 2 点
+  skill: doc-sync-check
+  outputs:
+    - type: pull_request         # 自动修复的简单不一致
+      branch_prefix: "docs/sync-"
+      labels: ["documentation", "automated"]
+    - type: issue                # 需要人工处理的复杂不一致
+      labels: ["documentation", "needs-review"]
+    - type: report
+      path: "reports/doc-sync.md"
+  validation:
+    file_exists: "reports/doc-sync.md"
+  failure:
+    alert: true
+    rollback: "git restore docs/"
+```
+
+### 场景三：依赖版本检查
+
+目标：定期检查项目依赖是否有安全更新或重要版本升级。
+
+```yaml
+# Skill 定义
+name: dependency-check
+description: "检查项目依赖的安全更新和版本变化"
+inputs:
+  - name: severity_threshold
+    type: string
+    default: "moderate"          # moderate, high, critical
+steps:
+  - "运行 npm audit / pip audit 获取安全报告"
+  - "检查 package.json / requirements.txt 中依赖的最新版本"
+  - "对比当前版本和最新版本，标注破坏性变更"
+  - "对于安全更新，直接提交更新 PR"
+  - "对于非安全的大版本更新，创建 Issue 记录"
+```
+
+```yaml
+# Automation 配置
+automation:
+  name: "依赖安全检查"
+  schedule: "0 6 * * 1"          # 每周一早上 6 点
+  skill: dependency-check
+  outputs:
+    - type: pull_request         # 安全更新直接提 PR
+      branch_prefix: "deps/security-"
+      labels: ["dependencies", "security"]
+    - type: issue                # 大版本升级创建 Issue
+      labels: ["dependencies", "upgrade"]
+    - type: notification
+      channel: slack
+      template: "依赖检查完成：{{security_count}} 个安全更新，{{upgrade_count}} 个版本升级可用"
+  validation:
+    exit_code: 0
+  failure:
+    alert: true
+    rollback: "git restore package.json package-lock.json"
+```
+
+### 场景四：测试覆盖追踪
+
+目标：每周统计测试覆盖率变化，标注下降趋势。
+
+```yaml
+# Skill 定义
+name: coverage-tracking
+description: "运行测试覆盖率分析，追踪覆盖率变化趋势"
+inputs:
+  - name: coverage_command
+    type: string
+    default: "npm run test:coverage"
+  - name: threshold
+    type: number
+    default: 80
+steps:
+  - "运行覆盖率命令获取当前数据"
+  - "从 reports/coverage-history.json 读取历史数据"
+  - "对比本周和上周的覆盖率变化"
+  - "如果覆盖率低于阈值或下降超过 2%，标注为警告"
+  - "更新 reports/coverage-history.json"
+  - "生成覆盖率趋势报告"
+```
+
+```yaml
+# Automation 配置
+automation:
+  name: "测试覆盖追踪"
+  schedule: "0 18 * * 5"         # 每周五下午 6 点
+  skill: coverage-tracking
+  outputs:
+    - type: report
+      path: "reports/coverage-weekly.md"
+    - type: notification
+      channel: slack
+      template: "覆盖率报告：当前 {{current}}%，较上周 {{delta}}"
+      alert_on: "coverage_drop > 2%"
+  validation:
+    file_exists: "reports/coverage-weekly.md"
+    content_patterns: ["## 覆盖率概览", "## 变化趋势"]
+  failure:
+    alert: true
+    rollback: "rm -f coverage/tmp/*"
+```
+
+### 场景五：文档园艺（Doc Gardening）
+
+这是 OpenAI Harness Engineering 团队公开分享过的实践。文档和代码一样需要持续维护——过时的文档比没有文档更危险，因为它会误导读者做出错误决策。
+
+Doc Gardening 的 Automation 不只是检查文档是否和代码一致，还会主动扫描以下问题：
+
+```text
+扫描维度：
+1. 链接有效性：文档中的外部链接和内部引用是否仍然可达
+2. 代码示例：文档中的代码片段是否能正确运行
+3. 版本标注：文档中提到的版本号是否和当前版本匹配
+4. 过时标记：标记为 TODO、FIXME 或 "待补充" 的段落是否已超期
+5. 结构完整性：文档是否包含必要的标准章节
+```
+
+```yaml
+# Automation 配置
+automation:
+  name: "文档园艺"
+  schedule: "0 3 1 * *"          # 每月 1 日凌晨 3 点
+  skill: doc-gardening
+  outputs:
+    - type: pull_request         # 自动修复的问题（链接、格式）
+      branch_prefix: "docs/garden-"
+      labels: ["documentation", "gardening"]
+    - type: issue                # 需要人工处理的重大过时
+      labels: ["documentation", "stale"]
+  validation:
+    exit_code: 0
+  failure:
+    alert: true
+    rollback: "git restore docs/"
+```
+
+五种场景的对比总结：
+
+| 场景 | 频率 | 副作用 | 输出形式 | 回滚复杂度 |
+|------|------|--------|----------|------------|
+| 每日代码审查 | 工作日每天 | 无 | 报告 + 通知 | 无需回滚 |
+| 定期文档更新 | 每周 | 修改文档 | PR + Issue | git restore |
+| 依赖版本检查 | 每周 | 修改依赖文件 | PR + Issue + 通知 | git restore |
+| 测试覆盖追踪 | 每周 | 无 | 报告 + 通知 | 清理临时文件 |
+| 文档园艺 | 每月 | 修改文档 | PR + Issue | git restore |
+
+## Automation 的配置方式
+
+Automation 的触发方式分为两类：基于时间的定时触发和基于事件的条件触发。两种方式可以组合使用。
+
+### 基于时间的触发（Cron 表达式）
+
+Cron 表达式是 Automation 最常用的触发方式。它使用标准的五段式语法：
+
+```text
+┌───────────── 分钟 (0-59)
+│ ┌───────────── 小时 (0-23)
+│ │ ┌───────────── 日 (1-31)
+│ │ │ ┌───────────── 月 (1-12)
+│ │ │ │ ┌───────────── 星期 (0-6, 0=周日)
+│ │ │ │ │
+* * * * *
+```
+
+常用配置示例：
+
+```text
+0 9 * * 1-5        → 工作日每天早上 9:00
+0 */6 * * *        → 每 6 小时一次
+30 2 * * 0         → 每周日凌晨 2:30
+0 0 1 * *          → 每月 1 日午夜
+0 18 * * 5         → 每周五下午 6:00
+```
+
+### 基于事件的触发
+
+除了定时触发，Automation 还可以基于代码仓库中的事件自动执行：
+
+```yaml
+# 事件触发配置
+automation:
+  name: "PR 规模检查"
+  trigger:
+    type: event
+    event: pull_request
+    actions: [opened, synchronize]    # PR 创建或更新时触发
+  skill: pr-size-check
+  conditions:
+    - files_changed > 20              # 变更超过 20 个文件时触发
+  outputs:
+    - type: comment
+      target: pull_request
+      template: "本 PR 变更了 {{file_count}} 个文件，建议拆分"
+```
+
+支持的事件类型：
+
+| 事件 | 触发时机 | 典型用途 |
+|------|----------|----------|
+| pull_request.opened | PR 创建时 | 自动审查、标签分配 |
+| pull_request.synchronize | PR 更新时 | 增量检查 |
+| push | 代码推送到分支 | CI 检查、文档更新 |
+| issue.opened | Issue 创建时 | 自动分类、标签分配 |
+| schedule.cron | 定时触发 | 周期性维护任务 |
+
+### 输出方式
+
+Automation 支持三种输出方式，可以组合使用：
+
+**生成报告**：将执行结果写入文件系统。适合需要存档或后续引用的场景。
+
+```yaml
+outputs:
+  - type: report
+    path: "reports/{{date}}-review.md"
+    format: markdown
+```
+
+**创建 PR**：将 Automation 的修改提交为 Pull Request。适合涉及代码或文档变更的场景。
+
+```yaml
+outputs:
+  - type: pull_request
+    branch_prefix: "auto/{{skill_name}}-"
+    title_template: "[Auto] {{skill_name}} - {{date}}"
+    labels: ["automated"]
+    draft: true                    # 默认创建为 draft PR，需人工确认后合并
+```
+
+**发送通知**：通过 Slack、邮件等渠道通知相关人员。适合信息传递类场景。
+
+```yaml
+outputs:
+  - type: notification
+    channel: slack
+    webhook: "{{secrets.SLACK_WEBHOOK}}"
+    template: "{{skill_name}} 执行完成，详情：{{report_url}}"
+    alert_on_failure: true
+```
+
+## 桌面端和移动端的 Automation 管理
+
+Codex 的 Automation 不局限于桌面环境。通过 Symphony 和 Codex 的集成，可以在移动端触发和管理自动化任务。
+
+### Symphony + Codex 集成
+
+Symphony 是 OpenAI 的移动端应用，支持与 Codex 的深度集成。在手机上，你可以通过自然语言创建 Issue 或任务，Codex 会自动理解意图并执行相应的 Skill。
+
+典型工作流：
+
+```text
+1. 用户在 Symphony 中输入："这个登录页面的验证码功能有个 bug，图片加载不出来"
+2. Symphony 将自然语言转换为结构化的 Issue
+3. Codex 接收到 Issue，自动执行以下流程：
+   a. 定位相关代码文件
+   b. 分析 bug 原因
+   c. 生成修复代码
+   d. 运行相关测试
+   e. 提交 draft PR
+4. 用户收到通知："PR #42 已创建，修复了验证码图片加载问题"
+```
+
+这个流程的价值不在于"用手机写代码"，而在于"碎片化时间不浪费"。在通勤途中、会议间隙发现的代码问题，可以直接转化为具体的工程行动，而不需要等到回到电脑前再处理。
+
+### 桌面端 App 管理
+
+Codex 桌面端 App 提供了 Automation 的可视化管理界面：
+
+```text
+管理功能：
+- 查看所有已配置的 Automation 列表
+- 查看每个 Automation 的执行历史和成功率
+- 手动触发特定的 Automation（不等待定时触发）
+- 暂停/恢复 Automation
+- 编辑 Automation 的配置参数
+- 查看失败告警和日志
+```
+
+桌面端 App 还支持并行管理多个 Automation 线程。不同的 Automation 可以同时在不同的仓库或分支上运行，互不干扰。这对于维护多个项目或 monorepo 中的多个模块尤为有用。
+
+### 跨设备协同
+
+一个完整的跨设备工作流：
+
+```text
+移动端（Symphony）：
+  → 创建 Issue "支付模块缺少金额校验"
+  → 自动触发 skill: triage-issue（标签分配、优先级判断）
+
+桌面端（Codex App）：
+  → 查看已分级的 Issue 列表
+  → 确认优先级和上下文
+  → 触发 skill: implement-fix（编码修复）
+
+CLI（终端）：
+  → codex "运行支付模块的全部测试"
+  → 验证修复结果
+
+Automation（自动）：
+  → PR 合并后自动更新相关文档
+  → 每周自动检查支付模块的测试覆盖率
+```
+
+## 安全注意事项
+
+Automation 的自动化特性意味着它在无人监督的情况下执行操作。安全设计不是可选项，而是前提条件。
+
+### 最小权限沙箱
+
+每个 Automation 应该运行在最小权限的沙箱环境中。权限范围应该严格限制在该 Automation 需要的操作上，而不是给一个宽泛的"全部权限"。
+
+```yaml
+# 最小权限配置示例
+automation:
+  name: "每日代码审查"
+  sandbox:
+    filesystem:
+      read: ["src/", "lib/", "configs/"]      # 只读源代码
+      write: ["reports/"]                      # 只能写报告目录
+    network:
+      allow: []                                # 不需要网络访问
+    commands:
+      allow: ["git log", "git diff", "eslint"] # 只允许必要的命令
+      deny: ["rm -rf", "sudo", "curl", "wget"] # 禁止危险命令
+```
+
+权限设计的原则：
+
+```text
+1. 默认拒绝：所有权限默认关闭，按需开放
+2. 最小范围：开放的最小权限足以完成任务即可
+3. 分离关注：不同 Automation 之间不应共享权限
+4. 定期审计：每季度审查权限是否仍然必要
+```
+
+### 审计日志
+
+所有 Automation 操作必须有完整的审计日志。日志不是给 Automation 自己看的，而是给人类事后审查用的。
+
+审计日志应包含：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| timestamp | 操作时间 | 2025-03-15T09:00:01Z |
+| automation_id | 哪个 Automation | daily-code-review |
+| skill_id | 执行的 Skill | code-review-v2 |
+| trigger_type | 触发方式 | schedule / event |
+| actions_taken | 执行了哪些操作 | ["read:src/auth.ts", "write:reports/review.md"] |
+| result | 执行结果 | success / failure / partial |
+| duration | 执行时长 | 47s |
+| changes | 文件变更摘要 | {"modified": 0, "created": 1, "deleted": 0} |
+
+```yaml
+# 审计日志配置
+audit:
+  enabled: true
+  destination: "logs/automations/"
+  format: jsonl                    # 每行一条 JSON 记录
+  retention: 90d                   # 保留 90 天
+  include_diff: false              # 不记录完整 diff，避免日志膨胀
+```
+
+### 失败告警
+
+Automation 失败时必须有告警。静默失败是最危险的情况——你以为自动化在正常工作，实际上它已经停止了。
+
+告警策略：
+
+```text
+告警层级：
+1. 单次失败：发送信息性通知（可能是一次性网络抖动）
+2. 连续 2 次失败：发送警告通知（可能需要人工介入）
+3. 连续 3 次及以上失败：发送紧急告警（建议暂停 Automation）
+4. 连续 24 小时未执行（应该执行但没有）：发送紧急告警
+```
+
+```yaml
+# 告警配置
+alerts:
+  on_failure:
+    - condition: "consecutive_failures >= 1"
+      level: info
+      channel: slack
+    - condition: "consecutive_failures >= 2"
+      level: warning
+      channel: slack
+      action: notify_oncall
+    - condition: "consecutive_failures >= 3"
+      level: critical
+      channel: slack + email
+      action: pause_automation
+  on_miss:
+    - condition: "expected_run_missed"
+      level: warning
+      channel: slack
+```
+
+### 不建议自动化的高风险操作
+
+有些操作理论上可以自动化，但实际上不应该自动化。判断标准是"失败的代价是否可承受"：
+
+```text
+不建议自动化的操作：
+1. 生产环境部署 → 失败代价：服务中断，影响用户
+2. 数据库 schema 迁移 → 失败代价：数据丢失或损坏
+3. 密钥轮换 → 失败代价：服务认证失败，全线瘫痪
+4. 大规模代码重构 → 失败代价：代码库处于不一致状态
+5. 用户数据处理 → 失败代价：隐私泄露或合规风险
+
+判断原则：如果失败的后果需要超过 1 小时来修复，或者会影响其他团队，
+那么它不应该被自动化，至少不应该被全自动执行。折中方案是"半自动"：
+Automation 准备好变更（比如创建 draft PR），但最终合并需要人工确认。
+```
+
+## 常见错误与应对
+
+在实际落地 Automation 的过程中，有三种错误反复出现。
+
+### 错误一：流程还不稳定就自动化
+
+这是最常见的错误。团队刚设计出一个新流程，还没有验证它是否在各种边界情况下都能正常工作，就急于把它变成 Automation。结果是 Automation 频繁失败，团队成员对自动化的信心下降，最终 Automation 被废弃。
+
+症状识别：
+
+```text
+- Automation 的成功率低于 80%
+- 每次失败的原因都不同（说明流程本身不稳定）
+- 团队成员开始忽略 Automation 的输出
+- Automation 被频繁暂停和修改
+```
+
+解决方案：
+
+```text
+1. 回退到手动执行 Skill，积累更多执行经验
+2. 记录每次执行的输入、输出和失败原因
+3. 根据失败记录改进 Skill 的设计
+4. 重新验证稳定性（至少连续 5 次成功）
+5. 再次考虑自动化
+```
+
+### 错误二：没有失败告警导致静默失败
+
+Automation 在后台运行，没有人盯着它。如果它失败了但没有告警，团队成员会以为一切正常，实际上自动化已经停止工作了。
+
+真实案例：一个团队配置了每周自动更新依赖的 Automation。三个月后才发现这个 Automation 在第二周就失败了，但因为没有告警，没有人注意到。三个月的依赖更新积压在一起，导致一次大规模的依赖升级，引入了多个兼容性问题。
+
+解决方案：
+
+```text
+1. 所有 Automation 必须配置失败告警（参见上文告警策略）
+2. 配置"预期执行但未执行"的检测（heartbeat 机制）
+3. 每月审查 Automation 的执行记录
+4. 将 Automation 健康状况纳入团队例会检查项
+```
+
+### 错误三：没有回滚策略导致错误累积
+
+当一个有副作用的 Automation（比如自动修改代码或文档）失败时，如果没有回滚策略，部分完成的修改会留在代码库中。这些不完整的修改可能不会立刻被发现，而是随着时间累积，最终导致难以排查的问题。
+
+症状识别：
+
+```text
+- 代码库中出现了无法解释的变更
+- 文档中有不完整的段落或格式错误
+- 测试偶尔失败，原因指向不相关的代码区域
+- git log 中有多个 "auto:" 前缀的提交，内容不一致
+```
+
+解决方案：
+
+```text
+1. 有副作用的 Automation 必须在独立的分支上执行
+2. 所有变更通过 draft PR 提交，不直接合并到主分支
+3. 执行失败时自动回退分支：git checkout main && git branch -D auto/xxx
+4. 对于无法自动回滚的操作，标记为需要人工介入
+5. 定期清理过期的自动化分支
+```
+
+## 构建可靠的 Automation 流程
+
+将上述内容整合为一个可操作的构建流程：
+
+```text
+阶段一：Skill 成熟
+  → 编写 Skill 定义
+  → 手动执行至少 5 次
+  → 记录边界情况和失败模式
+  → 修改 Skill 直到稳定
+
+阶段二：自动化评估
+  → 逐条检查四个条件（稳定、无人工判断、可验证、有回滚）
+  → 确定触发方式（定时 vs 事件）
+  → 确定输出方式（报告、PR、通知）
+  → 设计权限范围和沙箱配置
+
+阶段三：配置与测试
+  → 编写 Automation 配置
+  → 在测试环境中手动触发执行
+  → 模拟失败场景，验证回滚和告警
+  → 确认审计日志正常记录
+
+阶段四：上线与监控
+  → 启用定时/事件触发
+  → 第一周每天检查执行结果
+  → 第二周每两天检查一次
+  → 稳定后切换到每周检查
+  → 每月审查执行记录和权限
+```
+
+这个流程的核心思想是渐进式信任。Automation 不是开关——不能今天关闭、明天全开。它是一个逐步建立信心的过程：先验证 Skill，再验证 Automation 配置，最后逐步减少人工检查频率，直到 Automation 成为可靠的工程基础设施。
+
+## 总结
+
+Automation 是 Codex 工程体系中 Skill 之上的自动化层。它的价值不在于"让 AI 自动做事"，而在于"把已经验证可靠的工程流程变成无需人工干预的周期性任务"。关键原则：
+
+1. 技能定义怎么做，自动化定义什么时候做——两者职责分离
+2. 四个条件全部满足才考虑自动化——稳定、无人工判断、可验证、有回滚
+3. 最小权限沙箱、审计日志、失败告警——安全三要素缺一不可
+4. 渐进式信任——从手动到半自动到全自动，逐步推进
+5. 高风险操作不建议全自动——失败的代价决定自动化的边界
+
+Automation 的终极目标不是取代人类的工程判断，而是把人类从重复性劳动中解放出来，让工程师把精力集中在真正需要创造性思维的工作上。

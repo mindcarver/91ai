@@ -1,0 +1,1006 @@
+# Codex SDK：把 Codex 能力嵌入内部平台
+
+**TL;DR：** 当多个团队需要在各自的工作流中复用同一套 Codex 能力时，CLI 和 IDE Extension 的交互模式就不够了。Codex SDK 把 Agent Loop 的核心能力抽象为可编程接口，让内部平台通过代码调用 Codex 的推理、工具执行和上下文管理能力。本文覆盖 SDK 的定位判断、基本用法、Thread 管理机制、四种平台化场景的设计方案、权限/错误/成本/审计四个关键设计决策，以及与 Claude Code Agent SDK 的对比。读完后你能判断团队是否需要 SDK，以及如果需要，第一步该怎么走。
+
+## SDK 解决什么问题
+
+前面 33 篇文章讲的所有内容——AGENTS.md、prompt 四要素、Skills、MCP、codex exec、GitHub Actions——都在一个隐含前提上运行：有人在终端或编辑器里手动发起任务。CLI 和 IDE Extension 是为人机交互设计的工具，人的判断力负责判断"什么时候该调用"、"调用结果对不对"、"下一步该怎么办"。
+
+当组织规模扩大到多个团队、多条业务线都需要 Codex 能力时，这个前提开始失效。具体表现为三类问题：
+
+**重复建设。** 团队 A 在工单系统里写了个脚本调 codex exec，团队 B 在代码审查平台里也写了一套类似的脚本，团队 C 想在知识库里自动更新文档又写了一套。三套脚本做的事情有大量重叠——都是构造 prompt、管理上下文、解析输出、处理错误——但各自维护，Bug 各自修，优化各自做。
+
+**质量不一致。** 不同团队对 Codex 的使用水平参差不齐。有的团队 AGENTS.md 写得完善、prompt 模板成熟；有的团队直接甩一句"帮我改一下这个 bug"就交出去了。同一个组织内，Codex 的产出质量差异可能很大，而且这种差异难以标准化治理。
+
+**集成困难。** 内部平台（工单系统、代码质量平台、测试平台、文档系统）需要把 Codex 能力嵌入自己的工作流。用 codex exec 做集成是一种方法，但 exec 模式是一次性的：执行完就结束，没有上下文连续性，没有结构化的中间状态管理，错误处理也很粗糙。对于需要多步骤交互的平台场景，exec 模式力不从心。
+
+Codex SDK 的定位就是解决这三个问题：提供统一的编程接口，让多团队共享同一套 Codex 能力，同时保持各平台自己定义工作流的灵活性。
+
+### SDK 不适合什么场景
+
+在讲怎么用之前，先说清楚什么时候不该用 SDK。
+
+**单仓库个人使用。** 一个工程师在自己的仓库里用 Codex 做日常开发，CLI 或 IDE Extension 就够了。SDK 引入了额外的抽象层，对于个人使用来说是过度工程。直接用 CLI 的好处是零配置、即时反馈、交互自然。引入 SDK 意味着你要写代码来管理 Codex 的生命周期，这只有在"复用"和"集成"成为痛点时才值得。
+
+**一次性脚本。** 需要跑一次的迁移脚本、临时分析任务，用 codex exec 就够了。SDK 适合长期运行的平台级集成，不是一次性任务的工具。
+
+**不需要 Agent Loop 的场景。** 如果你只需要调用 GPT 模型做文本生成、分类、摘要，不需要 Codex 的文件读写、命令执行、多步推理能力，直接用 OpenAI API 的 chat completions 更简单、更便宜、延迟更低。SDK 封装的是 Agent Loop 的完整执行能力，如果你不需要这个循环，SDK 就是多余的抽象。
+
+## SDK 安装和基本使用
+
+### 安装
+
+```bash
+npm install @openai/codex-sdk
+```
+
+SDK 是一个 Node.js 包，需要 Node.js 22 或更高版本（与 CLI 一致）。如果你的平台用其他语言（Python、Go、Java），需要通过子进程调用 Node.js 脚本，或者用 codex exec 作为替代方案。
+
+SDK 依赖 OpenAI API Key 进行认证。设置方式与 CLI 相同：
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+也可以在代码中传入：
+
+```typescript
+import { Codex } from "@openai/codex-sdk";
+
+const agent = new Codex({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+```
+
+### 最小可运行示例
+
+```typescript
+import { Codex } from "@openai/codex-sdk";
+
+async function main() {
+  const agent = new Codex();
+  const thread = await agent.startThread();
+
+  // 第一步：让 Codex 了解代码库
+  const result1 = await thread.run("Explore this repo and summarize its architecture");
+  console.log("架构分析:", result1);
+
+  // 第二步：在同一会话中继续深入
+  const result2 = await thread.run("Based on the architecture analysis, identify the top 3 risk areas");
+  console.log("风险分析:", result2);
+}
+
+main().catch(console.error);
+```
+
+这段代码展示了 SDK 的两个核心概念：**Codex 实例** 和 **Thread**。Codex 实例是 SDK 的入口，负责管理配置和 API 连接。Thread 是一次会话，内部维护上下文状态，支持多轮交互。
+
+### 与 codex exec 的对比
+
+为了更清楚地理解 SDK 的定位，把它和前面第 31 篇讲的 codex exec 做个对比：
+
+| 维度 | codex exec | Codex SDK |
+|------|-----------|-----------|
+| 调用方式 | Shell 命令行 | Node.js API |
+| 上下文管理 | 每次调用独立，无状态 | Thread 内多轮共享上下文 |
+| 输出格式 | stdout/stderr 文本流 | 结构化对象，可编程处理 |
+| 错误处理 | 退出码 + 文本消息 | 异常对象，可捕获和分类处理 |
+| 并发控制 | 手动管理子进程 | SDK 内部管理 |
+| 适用场景 | CI 脚本、一次性批处理 | 长期运行的平台集成 |
+| 集成成本 | 低（任何语言都能调） | 中（需要 Node.js 运行时） |
+| 灵活性 | 受限于 CLI 参数 | 完全可编程 |
+
+简单说：exec 是"用 shell 调 Codex"，SDK 是"用代码调 Codex"。如果你的集成逻辑复杂到需要条件判断、状态管理、错误重试、并发控制，就该用 SDK 而不是 exec。
+
+## Thread 管理：会话的生命周期
+
+Thread 是 SDK 最核心的概念。理解 Thread 的生命周期和状态管理，是用好 SDK 的关键。
+
+### Thread 的本质
+
+一个 Thread 代表一次连贯的工程会话。它内部维护了完整的上下文历史——之前所有的 prompt、Codex 的输出、工具调用的结果。这意味着你在 Thread 内做的第二次调用，Codex 能"记住"第一次调用的内容。
+
+这个特性在平台场景下特别重要。比如一个自动化工单处理流程：
+
+```
+Step 1: 分析 Issue 描述，理解问题
+Step 2: 阅读相关代码，定位根因
+Step 3: 提出修复方案
+Step 4: 实施代码修改
+Step 5: 运行测试验证
+```
+
+这五个步骤之间有严格的依赖关系：步骤 3 需要步骤 2 的分析结果，步骤 4 需要步骤 3 的方案。如果每次调用都是无状态的，你需要在每次调用时把之前的结果拼接到 prompt 里，手动管理上下文窗口的截断和压缩。Thread 把这些事情内部化了。
+
+### Thread 的创建和基本操作
+
+```typescript
+const agent = new Codex();
+
+// 创建新 Thread
+const thread = await agent.startThread();
+
+// 在 Thread 中执行任务
+const result = await thread.run("Analyze the authentication module in src/auth/");
+
+// 继续在同一 Thread 中执行后续任务
+const followUp = await thread.run("Based on your analysis, write unit tests for the login function");
+
+// Thread 在 agent 实例的生命周期内保持有效
+// 不再需要时，让它被垃圾回收即可（或显式关闭，如果 SDK 提供了 close 方法）
+```
+
+### Thread 的上下文管理策略
+
+Thread 内部的上下文不是无限的。随着交互轮次增加，上下文窗口会逐渐填满。SDK 内部使用了与 CLI 相同的 Compaction 机制（第 28 篇讲过的）来自动压缩上下文。但作为平台开发者，你需要理解这个机制的影响：
+
+**压缩可能导致信息丢失。** 当上下文超出窗口限制时，早期的详细输出会被压缩为摘要。如果平台工作流依赖某个早期步骤的具体细节（比如某段代码的精确行号），压缩后这些细节可能丢失。
+
+**设计建议：在每一步提取关键信息。** 不要等到最后才从 Thread 中提取所有结果。每一步执行完后，从返回结果中提取该步骤的关键输出，存储到平台自己的数据库中。这样即使 Thread 内部压缩了上下文，平台侧仍然有完整记录。
+
+```typescript
+// 反面模式：依赖 Thread 保留所有历史
+const step1 = await thread.run("Analyze code");
+const step2 = await thread.run("Based on previous analysis, fix bugs");
+// 如果 step1 和 step2 之间轮次太多，step1 的细节可能被压缩
+
+// 正面模式：每步提取关键信息
+const step1Result = await thread.run("Analyze code");
+const analysisSummary = extractKeyFindings(step1Result); // 平台侧存储
+
+const step2Result = await thread.run(`Based on this analysis: ${analysisSummary}, fix bugs`);
+const fixDetails = extractFixDetails(step2Result); // 平台侧存储
+```
+
+### 多 Thread 管理
+
+平台可能需要同时处理多个任务，每个任务对应一个独立的 Thread。比如工单系统同时处理 10 个 Issue，每个 Issue 一个 Thread，互不干扰。
+
+```typescript
+const agent = new Codex();
+
+// 为每个任务创建独立 Thread
+const threads = await Promise.all([
+  agent.startThread(),
+  agent.startThread(),
+  agent.startThread(),
+]);
+
+// 并行执行不同任务
+const results = await Promise.all([
+  threads[0].run("Analyze Issue #101: login timeout on mobile"),
+  threads[1].run("Analyze Issue #102: CSS layout broken on Safari"),
+  threads[2].run("Analyze Issue #103: API rate limiting not working"),
+]);
+
+// 各 Thread 独立，互不影响
+```
+
+多 Thread 并发时要注意 API 速率限制。每个 Thread 内部的每次 `run()` 调用都会消耗 API 请求。10 个 Thread 同时运行，瞬时请求量是单 Thread 的 10 倍。如果触发速率限制，SDK 会抛出异常。平台需要实现请求队列和速率控制。
+
+```typescript
+// 简单的并发控制
+const MAX_CONCURRENT = 3;
+
+async function processIssues(issues: Issue[]) {
+  const agent = new Codex();
+  const results: Map<string, string> = new Map();
+
+  // 用信号量控制并发数
+  const semaphore = new Semaphore(MAX_CONCURRENT);
+
+  await Promise.all(
+    issues.map(async (issue) => {
+      await semaphore.acquire();
+      try {
+        const thread = await agent.startThread();
+        const result = await thread.run(`Analyze and fix: ${issue.description}`);
+        results.set(issue.id, result);
+      } finally {
+        semaphore.release();
+      }
+    })
+  );
+
+  return results;
+}
+```
+
+## 四种平台化场景的设计方案
+
+下面深入四个典型的平台化场景，每个场景给出架构设计、集成方案和关键实现细节。
+
+### 场景一：内部工单系统——Issue 到修复建议的自动化
+
+**业务流程。** 工程师在内部工单系统（Jira、Linear、自研平台）提交 Bug 报告或功能请求。平台接收到 Issue 后，自动调用 Codex SDK 分析问题、定位根因、生成修复建议。
+
+**架构设计。**
+
+```
+Issue 创建/更新 → Webhook → 平台后端
+                              ↓
+                         Codex SDK (Thread)
+                              ↓
+                    分析 Issue → 定位代码 → 生成修复建议
+                              ↓
+                    结构化结果 → 回写 Issue 评论
+                              ↓
+                    （可选）自动创建 PR
+```
+
+**核心实现。**
+
+```typescript
+interface IssueAnalysis {
+  summary: string;           // 问题概述
+  rootCause: string;         // 根因分析
+  affectedFiles: string[];   // 受影响文件
+  fixSuggestion: string;     // 修复建议
+  confidence: number;        // 置信度 0-1
+  riskLevel: "low" | "medium" | "high";  // 修复风险
+}
+
+async function analyzeIssue(issue: Issue): Promise<IssueAnalysis> {
+  const agent = new Codex();
+  const thread = await agent.startThread();
+
+  // 第一步：理解 Issue
+  const understanding = await thread.run(`
+    Analyze this bug report:
+    Title: ${issue.title}
+    Description: ${issue.description}
+    Labels: ${issue.labels.join(", ")}
+
+    Summarize the core problem in 2-3 sentences.
+  `);
+
+  // 第二步：定位相关代码
+  const codeAnalysis = await thread.run(`
+    Based on the problem: "${understanding}"
+    Search the codebase for the relevant code.
+    Identify which files and functions are most likely related.
+    Explain the connection between the code and the reported issue.
+  `);
+
+  // 第三步：生成修复建议
+  const fixResult = await thread.run(`
+    Based on the code analysis above, propose a fix.
+    Consider:
+    - Minimal change principle: fix only what's broken
+    - Side effects: what else could this change affect
+    - Test coverage: what tests should be added or updated
+    Output the suggestion as a structured analysis.
+  `);
+
+  // 从结果中提取结构化数据（实际实现需要更健壮的解析）
+  return parseAnalysisResult(understanding, codeAnalysis, fixResult);
+}
+```
+
+**关键设计决策。**
+
+第一个决策是**人工审批节点**。工单自动分析可以全自动运行（只读操作，零风险），但"自动创建 PR"必须有人工审批。修复建议生成后，先作为 Issue 评论展示，工程师确认后再执行代码修改。
+
+第二个决策是**置信度过滤**。不是所有 Issue 都适合让 Codex 分析。Title 写"页面坏了"、Description 是空的这类 Issue，Codex 无法给出有价值的分析。平台应该在调用 SDK 前做预处理，过滤掉信息不足的 Issue。
+
+```typescript
+function shouldAnalyze(issue: Issue): boolean {
+  // Issue 描述太短，信息不足
+  if (issue.description.length < 50) return false;
+
+  // 标记为"需要人工处理"的 Issue 不走自动分析
+  if (issue.labels.includes("manual-only")) return false;
+
+  // 已关闭的 Issue 不处理
+  if (issue.status === "closed") return false;
+
+  return true;
+}
+```
+
+第三个决策是**超时控制**。复杂 Issue 的分析可能消耗大量 Token 和时间。平台必须设置超时上限，避免单个 Issue 阻塞整个处理队列。
+
+```typescript
+async function analyzeWithTimeout(issue: Issue, timeoutMs: number = 120000): Promise<IssueAnalysis> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    // 在实际 SDK 中，可能需要通过配置或信号传入 abort 信号
+    return await analyzeIssue(issue);
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return {
+        summary: "分析超时，Issue 复杂度超出自动处理能力",
+        rootCause: "无法确定",
+        affectedFiles: [],
+        fixSuggestion: "建议人工分析",
+        confidence: 0,
+        riskLevel: "high",
+      };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+```
+
+### 场景二：代码质量平台——定期自动审查和报告
+
+**业务流程。** 平台按计划（每日/每周/每次合并到 main）自动扫描指定仓库的代码变更，生成结构化的质量报告。报告内容包括代码风格问题、潜在 Bug、性能风险、安全漏洞。
+
+**架构设计。**
+
+```
+定时触发 / Webhook → 获取最近变更
+                         ↓
+                 创建 Codex Thread
+                         ↓
+            阶段一：理解变更范围和影响
+                         ↓
+            阶段二：逐文件深度审查
+                         ↓
+            阶段三：聚合生成质量报告
+                         ↓
+            存储报告 → 通知相关团队
+```
+
+**核心实现。**
+
+```typescript
+interface QualityReport {
+  repository: string;
+  scanTime: string;
+  commitsScanned: string[];
+  summary: {
+    totalIssues: number;
+    critical: number;
+    warning: number;
+    info: number;
+  };
+  findings: Finding[];
+  overallScore: number;  // 0-100
+}
+
+interface Finding {
+  file: string;
+  line?: number;
+  severity: "critical" | "warning" | "info";
+  category: "bug" | "security" | "performance" | "style" | "maintainability";
+  description: string;
+  suggestion: string;
+}
+
+async function scanCodeQuality(
+  repoPath: string,
+  commitRange: { from: string; to: string }
+): Promise<QualityReport> {
+  const agent = new Codex();
+  const thread = await agent.startThread();
+
+  // 第一步：获取变更范围
+  const changedFiles = await thread.run(`
+    Analyze the git diff between ${commitRange.from} and ${commitRange.to}.
+    List all changed files and summarize the nature of changes
+    (new feature, refactor, bug fix, config change, etc.).
+  `);
+
+  // 第二步：深度审查
+  const review = await thread.run(`
+    Based on the changed files listed above, perform a thorough code review.
+    Check for:
+    1. Potential bugs: null pointer, off-by-one, race conditions
+    2. Security issues: injection, auth bypass, data exposure
+    3. Performance: N+1 queries, unnecessary allocations, blocking operations
+    4. Maintainability: code duplication, unclear naming, missing error handling
+    For each issue, specify the file, approximate line, severity, and suggestion.
+  `);
+
+  // 第三步：生成评分和总结
+  const scoring = await thread.run(`
+    Based on all findings above, calculate an overall code quality score (0-100).
+    Scoring criteria:
+    - Critical bug or security issue: -20 each
+    - Warning-level issue: -5 each
+    - Info-level suggestion: -1 each
+    Provide the final score and a 3-sentence summary of the codebase health.
+  `);
+
+  return parseQualityReport(changedFiles, review, scoring);
+}
+```
+
+**关键设计决策。**
+
+**增量扫描 vs 全量扫描。** 全量扫描每次扫描整个仓库，结果全面但成本高。增量扫描只扫描最近变更的文件，成本低但可能遗漏跨文件的影响。建议日常使用增量扫描（基于 git diff），每周做一次全量扫描。
+
+**报告的可操作性。** 报告的价值不在于"发现了多少问题"，而在于"工程师看到报告后能不能直接行动"。每个 Finding 应该包含：问题在哪、为什么是问题、怎么修。纯描述性的发现（"这段代码可读性一般"）没有行动价值，应该过滤掉。
+
+### 场景三：知识管理系统——代码变更驱动的文档更新
+
+**业务流程。** 当代码变更合并到主分支后，平台自动检测哪些文档受到影响，生成更新建议或直接更新文档。解决"代码改了但文档没改"这个普遍问题。
+
+**架构设计。**
+
+```
+代码合并到 main → Webhook 触发
+                      ↓
+              Codex Thread：分析变更
+                      ↓
+            识别受影响的文档（API 文档、README、架构文档）
+                      ↓
+            生成文档更新 diff
+                      ↓
+            创建文档更新 PR / 直接更新
+```
+
+**核心实现。**
+
+```typescript
+interface DocUpdateSuggestion {
+  docFile: string;
+  currentContent: string;
+  suggestedContent: string;
+  changeReason: string;
+  confidence: number;
+}
+
+async function detectDocImpact(
+  repoPath: string,
+  changedFiles: string[],
+  commitMessage: string
+): Promise<DocUpdateSuggestion[]> {
+  const agent = new Codex();
+  const thread = await agent.startThread();
+
+  // 第一步：理解代码变更的语义
+  const changeAnalysis = await thread.run(`
+    Analyze these code changes:
+    Changed files: ${changedFiles.join(", ")}
+    Commit message: ${commitMessage}
+
+    Explain in plain language:
+    1. What functionality was added, changed, or removed
+    2. What public APIs were affected (endpoints, exported functions, CLI flags)
+    3. What behavior changed that users or developers would notice
+  `);
+
+  // 第二步：匹配受影响的文档
+  const docImpact = await thread.run(`
+    Based on the changes described above, find all documentation files that
+    reference the affected functionality. Check:
+    - README.md (setup, usage instructions)
+    - docs/ directory (API docs, guides, tutorials)
+    - CHANGELOG.md (if this is a user-facing change)
+    - Inline code examples in comments
+
+    For each affected document, explain what specifically needs to be updated.
+  `);
+
+  // 第三步：生成具体的文档更新
+  const updates = await thread.run(`
+    For each document that needs updating, provide the exact changes.
+    Show the current text and the suggested replacement text.
+    Preserve the existing document style and formatting.
+  `);
+
+  return parseDocUpdates(docImpact, updates);
+}
+```
+
+**关键设计决策。**
+
+**更新粒度。** 文档更新是生成 PR 让人审核，还是直接提交？这取决于变更的置信度。API 行为变更必须人工审核（高风险），而修正一个过时的版本号或更新一个示例命令可以自动提交（低风险）。
+
+**文档覆盖范围。** 不是所有代码变更都需要更新文档。内部实现细节的修改（比如重命名一个私有函数）不应该触发文档更新。平台需要根据变更的"公开性"过滤：只有影响公开 API、用户可见行为、配置选项的变更才触发文档更新流程。
+
+### 场景四：测试平台——代码变更自动补全测试
+
+**业务流程。** 代码变更提交后，平台自动检测新增或修改的函数/类，为它们生成测试用例，运行测试，报告覆盖率变化。
+
+**核心实现。**
+
+```typescript
+interface TestGenerationResult {
+  sourceFile: string;
+  testFile: string;
+  testCases: {
+    name: string;
+    description: string;
+    passed: boolean;
+    coverageTarget: string;
+  }[];
+  coverageBefore: number;
+  coverageAfter: number;
+}
+
+async function generateTests(
+  repoPath: string,
+  changedFiles: string[]
+): Promise<TestGenerationResult[]> {
+  const agent = new Codex();
+  const thread = await agent.startThread();
+
+  const results: TestGenerationResult[] = [];
+
+  for (const file of changedFiles) {
+    // 理解文件内容
+    const analysis = await thread.run(`
+      Analyze ${file} and identify:
+      1. All exported functions/classes that need tests
+      2. Edge cases and boundary conditions for each
+      3. Dependencies that need to be mocked
+      4. Existing test patterns in the project (check existing test files)
+    `);
+
+    // 生成测试代码
+    const testCode = await thread.run(`
+      Based on the analysis above, write comprehensive tests for ${file}.
+      Follow the project's existing test patterns.
+      Cover: happy path, error cases, edge cases.
+      Use appropriate mocking for external dependencies.
+    `);
+
+    // 运行测试验证
+    const testResult = await thread.run(`
+      Run the generated tests and report:
+      1. Which tests pass and which fail
+      2. Fix any failing tests
+      3. Run again to confirm all pass
+      4. Report final coverage numbers
+    `);
+
+    results.push(parseTestResult(file, analysis, testCode, testResult));
+  }
+
+  return results;
+}
+```
+
+**关键设计决策。**
+
+**测试质量验证。** 生成的测试用例可能本身就有 Bug——断言写错了、Mock 行为不正确、测试了错误的边界条件。平台需要双重验证：第一层是"测试能通过"（自动验证），第二层是"测试有意义"（人工抽样审查）。
+
+**现有测试的尊重。** 如果文件已经有测试，新增测试应该补充而不是替换。平台在生成测试前应该先分析现有测试的覆盖范围，只为未覆盖的代码路径生成新测试。
+
+## 四个关键设计决策
+
+不管你做哪种平台化场景，以下四个设计决策都需要在架构阶段想清楚。它们不是"可选的优化"，而是平台能否在生产环境稳定运行的必要条件。
+
+### 决策一：权限管理
+
+SDK 调用 Codex 时，权限应该继承平台的权限体系，而不是另起一套。
+
+**问题本质。** Codex 的 Agent Loop 能读代码、改文件、跑命令。如果通过 SDK 调用的 Codex 实例拥有不受限的权限，就相当于给平台开了一个不受限的后门。一个恶意构造的 Issue 描述可能导致 Codex 执行危险命令。
+
+**设计原则。**
+
+最小权限原则。每个 SDK 调用只授予完成当前任务所需的最小权限。工单分析只需要读权限，不需要写权限。测试生成需要写测试文件的权限，但不应该写源代码文件。
+
+权限继承。SDK 的权限应该从平台用户上下文中继承。用户 A 提交的 Issue，Codex 只能访问用户 A 有权限的仓库。用户 B 无权访问的代码库，即使用户 B 提交了相关 Issue，Codex 也不应该去读。
+
+权限分级。建议至少分三级：
+
+| 权限级别 | 可执行操作 | 适用场景 |
+|---------|-----------|---------|
+| read-only | 读取文件、搜索代码、分析架构 | 工单分析、代码审查、知识管理 |
+| workspace-write | 读写工作区文件、运行测试 | 测试生成、文档更新、代码修改 |
+| full-access | 完整 shell 权限、网络访问 | 部署操作（需额外审批） |
+
+```typescript
+// 根据场景配置权限
+const readOnlyAgent = new Codex({
+  sandbox: "read-only",  // 只读沙箱
+});
+
+const writeAgent = new Codex({
+  sandbox: "workspace-write",  // 可写工作区
+  allowedPaths: ["/tmp/test-workspace"],  // 限制写入范围
+});
+```
+
+### 决策二：错误处理
+
+SDK 调用失败是常态，不是异常。网络超时、API 限流、模型输出格式错误、上下文窗口溢出——这些都会在生产环境中频繁发生。
+
+**错误分类。**
+
+| 错误类型 | 原因 | 处理策略 |
+|---------|------|---------|
+| 临时性错误 | 网络超时、API 限流、服务过载 | 自动重试，指数退避 |
+| 输入错误 | prompt 格式错误、上下文超出限制 | 记录日志，跳过该任务，通知操作者 |
+| 输出错误 | 模型输出不符合预期格式 | 重试一次（可能模型重新生成了正确格式），仍失败则降级 |
+| 权限错误 | API Key 无效、仓库无访问权限 | 记录日志，通知管理员，不重试 |
+| 系统错误 | SDK 内部错误、内存溢出 | 记录完整堆栈，重启 SDK 实例 |
+
+**重试策略。**
+
+不是所有错误都应该重试。权限错误重试毫无意义，只会浪费时间和配额。只有临时性错误才值得重试，而且重试次数要有上限。
+
+```typescript
+async function runWithRetry(
+  thread: Thread,
+  prompt: string,
+  options: {
+    maxRetries?: number;
+    retryableErrors?: string[];
+    onRetry?: (attempt: number, error: Error) => void;
+  } = {}
+): Promise<string> {
+  const {
+    maxRetries = 2,
+    retryableErrors = ["rate_limit", "timeout", "overloaded"],
+    onRetry = () => {},
+  } = options;
+
+  let lastError: Error;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await thread.run(prompt);
+    } catch (error) {
+      lastError = error;
+
+      // 判断是否可重试
+      const isRetryable = retryableErrors.some(
+        (code) => error.code === code || error.message?.includes(code)
+      );
+
+      if (!isRetryable || attempt === maxRetries) {
+        break;
+      }
+
+      // 指数退避：1s, 2s, 4s...
+      const delay = Math.pow(2, attempt) * 1000;
+      onRetry(attempt + 1, error);
+      await sleep(delay);
+    }
+  }
+
+  throw lastError;
+}
+```
+
+**降级策略。**
+
+重试失败后的降级方案。不同场景的降级策略不同：
+
+- 工单分析失败 → 标记为"自动分析失败，需要人工处理"，不阻塞工单流程
+- 代码审查失败 → 降级为只做基础 lint 检查，跳过深度分析
+- 测试生成失败 → 跳过自动测试，提醒工程师手动补充
+- 文档更新失败 → 记录待更新项，等待下次批量处理
+
+降级策略的核心原则是：平台的功能不应该因为 Codex 不可用而完全停止。Codex 是增强，不是依赖。
+
+### 决策三：成本控制
+
+SDK 调用消耗 Token，Token 就是钱。不加控制的 SDK 集成可能产生意外的高额账单。
+
+**Token 预算管理。**
+
+为每个任务类型设定 Token 预算上限。不同任务的合理消耗差异很大：
+
+| 任务类型 | 预期 Token 消耗 | 建议预算上限 |
+|---------|---------------|------------|
+| Issue 分析 | 5K-15K | 30K |
+| 代码审查 | 10K-30K | 50K |
+| 测试生成 | 15K-40K | 60K |
+| 文档更新 | 8K-20K | 40K |
+| 全量扫描 | 50K-200K | 300K |
+
+```typescript
+class BudgetManager {
+  private spent: Map<string, number> = new Map();
+  private limits: Map<string, number>;
+
+  constructor(limits: Record<string, number>) {
+    this.limits = new Map(Object.entries(limits));
+  }
+
+  async runWithBudget(
+    taskType: string,
+    thread: Thread,
+    prompt: string
+  ): Promise<string> {
+    const limit = this.limits.get(taskType);
+    if (!limit) {
+      throw new Error(`No budget configured for task type: ${taskType}`);
+    }
+
+    const currentSpent = this.spent.get(taskType) || 0;
+    if (currentSpent >= limit) {
+      throw new Error(
+        `Budget exhausted for ${taskType}: ${currentSpent}/${limit} tokens`
+      );
+    }
+
+    const result = await thread.run(prompt);
+
+    // 更新已消耗预算（实际实现中需要从 SDK 响应中获取精确 Token 数）
+    const tokensUsed = estimateTokens(prompt, result);
+    this.spent.set(taskType, currentSpent + tokensUsed);
+
+    return result;
+  }
+
+  reset(taskType?: string): void {
+    if (taskType) {
+      this.spent.delete(taskType);
+    } else {
+      this.spent.clear();
+    }
+  }
+}
+```
+
+**成本优化策略。**
+
+除了硬性预算上限，还有几个减少 Token 消耗的方法：
+
+缩小输入范围。只传 Codex 真正需要看的内容。一个 Issue 分析不需要把整个仓库都传进去，只需要传相关的文件。平台应该在调用 SDK 前做预处理，缩小上下文范围。
+
+复用 Thread。同一个仓库的多个 Issue 分析可以共享一个 Thread，因为 Codex 已经在 Thread 中积累了该仓库的架构知识。新 Issue 不需要从头开始分析。
+
+控制输出长度。在 prompt 中明确要求简洁输出。"用 200 字以内总结"比"详细分析"省很多 Token。
+
+### 决策四：审计日志
+
+所有 SDK 操作必须记录审计日志。这不仅是安全合规的要求，也是调试和质量改进的基础。
+
+**记录内容。**
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| timestamp | 操作时间 | 2025-03-15T10:30:00Z |
+| taskId | 平台任务 ID | issue-1234-analysis |
+| threadId | Codex Thread ID | thread_abc123 |
+| operation | 操作类型 | analyze, review, generate, update |
+| promptHash | 输入 prompt 的哈希（不存原文，可能含敏感信息） | sha256:a3f2... |
+| tokenUsage | Token 消耗 | { input: 5000, output: 3000 } |
+| duration | 执行时长（ms） | 45000 |
+| status | 执行结果 | success, timeout, error, budget_exceeded |
+| errorCode | 错误码（如果失败） | rate_limit, context_overflow |
+| userId | 触发用户 | user@example.com |
+| repository | 目标仓库 | org/repo-name |
+
+**实现。**
+
+```typescript
+interface AuditLogEntry {
+  timestamp: string;
+  taskId: string;
+  threadId: string;
+  operation: string;
+  promptHash: string;
+  tokenUsage: { input: number; output: number };
+  duration: number;
+  status: "success" | "timeout" | "error" | "budget_exceeded";
+  errorCode?: string;
+  userId: string;
+  repository: string;
+}
+
+class AuditLogger {
+  private backend: AuditBackend;
+
+  constructor(backend: AuditBackend) {
+    this.backend = backend;
+  }
+
+  async log(entry: AuditLogEntry): Promise<void> {
+    await this.backend.write(entry);
+  }
+
+  async query(filter: Partial<AuditLogEntry>): Promise<AuditLogEntry[]> {
+    return this.backend.query(filter);
+  }
+}
+
+// 包装 SDK 调用，自动记录审计日志
+async function auditedRun(
+  thread: Thread,
+  prompt: string,
+  context: { taskId: string; operation: string; userId: string; repository: string },
+  logger: AuditLogger
+): Promise<string> {
+  const startTime = Date.now();
+
+  try {
+    const result = await thread.run(prompt);
+    const duration = Date.now() - startTime;
+
+    await logger.log({
+      timestamp: new Date().toISOString(),
+      taskId: context.taskId,
+      threadId: thread.id,
+      operation: context.operation,
+      promptHash: hashString(prompt),
+      tokenUsage: { input: 0, output: 0 }, // 实际从 SDK 响应获取
+      duration,
+      status: "success",
+      userId: context.userId,
+      repository: context.repository,
+    });
+
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    await logger.log({
+      timestamp: new Date().toISOString(),
+      taskId: context.taskId,
+      threadId: thread.id,
+      operation: context.operation,
+      promptHash: hashString(prompt),
+      tokenUsage: { input: 0, output: 0 },
+      duration,
+      status: "error",
+      errorCode: error.code || "unknown",
+      userId: context.userId,
+      repository: context.repository,
+    });
+
+    throw error;
+  }
+}
+```
+
+审计日志的核心价值不在记录本身，而在后续的分析。基于审计日志可以回答这些问题：
+
+- 哪类任务的失败率最高？需要改进 prompt 模板还是调整预算？
+- Token 消耗的趋势是上升还是下降？有没有异常的消耗峰值？
+- 哪些仓库的 SDK 调用最频繁？是否需要优化复用策略？
+- 平均执行时长是多少？超时集中在哪些任务类型？
+
+## 与 Claude Code Agent SDK 的对比
+
+市场上不止 OpenAI 一家在做 Agent SDK。Anthropic 的 Claude Code 也在推进类似的方向。两者的 SDK 设计理念有相似之处，但定位和实现有显著差异。
+
+| 维度 | Codex SDK | Claude Code Agent SDK |
+|------|-----------|----------------------|
+| 核心抽象 | Codex 实例 + Thread | Agent 实例 + Session |
+| 会话管理 | Thread 内多轮上下文共享 | Session 内多轮上下文共享 |
+| 工具执行 | 文件读写、shell 命令、MCP 工具 | 文件读写、shell 命令、MCP 工具 |
+| 模型 | GPT-4.1 / GPT-5.x 系列 | Claude Opus / Sonnet 系列 |
+| 沙箱 | macOS Seatbelt / Linux Landlock | 内置沙箱机制 |
+| 权限控制 | 三级沙箱 + Rules 策略引擎 | 权限提示 + 允许列表 |
+| MCP 支持 | 完整 MCP 协议支持 | 完整 MCP 协议支持 |
+| 企业特性 | ZDR 无数据留存、API 组织管理 | 企业级 API、团队管理 |
+| 语言支持 | Node.js（官方），其他语言需桥接 | Python（官方），其他语言需桥接 |
+
+**选型建议。**
+
+如果你的组织已经大量使用 OpenAI 的 API 和基础设施（Azure OpenAI、OpenAI Organization），Codex SDK 的集成成本更低。如果已经在使用 Anthropic 的 API 和 Claude 系列，Claude Code Agent SDK 可能是更自然的选择。
+
+更务实的做法是两者都用。Codex 擅长需要大量工具调用的复杂工程任务（多文件修改、长时间运行的 Agent Loop），Claude Code 擅长需要深度理解和推理的任务（代码审查、架构分析、复杂 Bug 定位）。第 37 篇讲的双 Agent 工作流在 SDK 层面同样适用：一个 SDK 做实现，另一个 SDK 做审查。
+
+## 常见错误和陷阱
+
+### 错误一：把 SDK 当成同步 API
+
+SDK 的 `thread.run()` 内部执行的是一个完整的 Agent Loop：可能调用模型多次、执行多个工具、运行多轮推理。单次调用的延迟可能是几十秒到几分钟。如果你的平台把 SDK 调用放在同步请求处理路径上，用户体验会很差——HTTP 请求可能超时，前端可能白屏等待。
+
+**正确做法。** 用异步任务队列处理 SDK 调用。前端提交任务后立即返回一个任务 ID，后台队列消费任务，结果通过 WebSocket、轮询或回调通知。
+
+```typescript
+// 反面模式：同步等待 SDK 结果
+app.post("/analyze", async (req, res) => {
+  const result = await analyzeIssue(req.body.issue); // 可能要 60 秒
+  res.json(result); // 前端早就超时了
+});
+
+// 正面模式：异步任务队列
+app.post("/analyze", async (req, res) => {
+  const taskId = await enqueueTask("issue-analysis", req.body.issue);
+  res.json({ taskId, status: "queued" });
+});
+
+app.get("/analyze/:taskId", async (req, res) => {
+  const task = await getTaskStatus(req.params.taskId);
+  res.json(task); // { status: "completed", result: {...} } 或 { status: "running" }
+});
+```
+
+### 错误二：不处理上下文溢出
+
+Thread 的上下文窗口有限。如果你的工作流包含很多步骤，每步的输出都很长，迟早会遇到上下文溢出。SDK 内部的 Compaction 机制会自动压缩，但压缩可能导致关键信息丢失。
+
+**正确做法。** 如前面 Thread 管理部分提到的，每步执行后提取关键信息存到平台侧。设计工作流时控制单次 Thread 的交互轮次，如果步骤太多，拆分为多个 Thread，用平台侧的数据传递替代 Thread 内的上下文传递。
+
+### 错误三：忽略速率限制
+
+OpenAI API 有速率限制。单用户限制、单组织限制、每分钟请求数限制、每分钟 Token 数限制。当平台用 SDK 同时处理几十个任务时，很容易触发这些限制。
+
+**正确做法。** 在平台层面实现速率控制器。监控 API 返回的速率限制头（`x-ratelimit-remaining`、`x-ratelimit-reset`），在接近限制时主动降速而不是等到被拒绝。
+
+```typescript
+class RateLimiter {
+  private lastResponse: Map<string, { remaining: number; resetAt: number }> = new Map();
+
+  updateFromResponse(apiPath: string, headers: Record<string, string>): void {
+    this.lastResponse.set(apiPath, {
+      remaining: parseInt(headers["x-ratelimit-remaining"] || "9999", 10),
+      resetAt: parseInt(headers["x-ratelimit-reset"] || "0", 10) * 1000,
+    });
+  }
+
+  async waitForSlot(apiPath: string): Promise<void> {
+    const status = this.lastResponse.get(apiPath);
+    if (!status || status.remaining > 5) return;
+
+    const waitTime = Math.max(0, status.resetAt - Date.now());
+    if (waitTime > 0) {
+      console.log(`Rate limit approaching, waiting ${waitTime}ms`);
+      await sleep(waitTime);
+    }
+  }
+}
+```
+
+### 错误四：硬编码模型和参数
+
+SDK 代码中硬编码模型名称、推理深度、温度等参数，导致无法根据任务类型灵活调整。简单任务用最强模型浪费钱，复杂任务用弱模型质量不够。
+
+**正确做法。** 把模型和参数配置外部化，放到平台配置中心。不同任务类型使用不同的模型配置：
+
+```typescript
+interface ModelConfig {
+  model: string;
+  reasoningEffort: "medium" | "high" | "xhigh";
+  temperature?: number;
+  maxTokens?: number;
+}
+
+const TASK_MODEL_CONFIGS: Record<string, ModelConfig> = {
+  "issue-analysis": {
+    model: "gpt-4.1",
+    reasoningEffort: "medium",
+  },
+  "code-review": {
+    model: "gpt-4.1",
+    reasoningEffort: "high",
+  },
+  "test-generation": {
+    model: "gpt-4.1",
+    reasoningEffort: "high",
+    temperature: 0.3,
+  },
+  "doc-update": {
+    model: "gpt-4.1-mini",
+    reasoningEffort: "medium",
+  },
+  "full-scan": {
+    model: "gpt-4.1-mini",  // 全量扫描文件多，用 mini 控制成本
+    reasoningEffort: "medium",
+  },
+};
+```
+
+### 错误五：不加监控就上线
+
+SDK 集成上线后没有监控，出问题了不知道，成本超了不知道，质量降了不知道。等有人发现的时候可能已经造成了损失。
+
+**正确做法。** 至少监控三个指标：
+
+1. **成功率。** 每类任务的成功率低于阈值就告警。初始阈值设 80%，稳定后逐步提高到 90%。
+2. **延迟 P99。** 任务的 P99 延迟超过阈值就告警。说明上游 API 可能过载或者任务复杂度失控。
+3. **成本趋势。** 每日 Token 消耗环比增长超过 50% 就告警。可能是某个任务类型失控，或者有异常调用。
+
+## 从零开始的上手阶梯
+
+如果你判断团队需要 SDK，以下是推荐的上手顺序：
+
+**第一步：跑通最小示例。** 用本文开头的代码在本地跑通一次 `thread.run()`。确认 SDK 安装、认证、基本调用都没问题。
+
+**第二步：封装一个场景的原型。** 选一个最简单的场景（建议从 Issue 分析开始，因为只读操作零风险），实现完整的调用链：接收输入 → 创建 Thread → 多步执行 → 解析输出 → 返回结果。
+
+**第三步：加上错误处理和重试。** 原型跑通后，加上前文讲的重试逻辑、超时控制、降级策略。这部分是生产环境的基本要求。
+
+**第四步：加上审计日志。** 每次调用记录审计日志。初期可以用简单的文件日志，后续迁移到专业的日志系统。
+
+**第五步：做成本测算。** 基于实际运行的审计日志，统计每个任务类型的平均 Token 消耗和成本。据此设定预算上限。
+
+**第六步：扩展到更多场景。** 第一个场景稳定运行后，逐步把其他场景（代码审查、测试生成、文档更新）迁移到 SDK。
+
+整个过程的核心原则是：先在一个场景上跑通完整链路（包含错误处理、审计、成本控制），再横向扩展到其他场景。不要一开始就四个场景同时铺开。

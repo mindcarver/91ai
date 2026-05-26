@@ -1,0 +1,705 @@
+# AGENTS.md 分层机制：全局、仓库和子目录的上下文继承
+
+**TL;DR：** Codex 加载 AGENTS.md 不是读一个文件，而是沿着目录树从内到外扫描五层，子目录覆盖父目录，override 文件覆盖同名文件。不理解这套继承机制，你会写出每层重复、挤爆上下文窗口的配置；理解了，就能做到全局管偏好、仓库管规范、子目录管细节，各司其职。
+
+## 为什么需要分层
+
+上一篇讲了 AGENTS.md 是什么、怎么写。这篇解决一个更微妙的问题：一个真实项目通常有多个 AGENTS.md，它们之间是什么关系？
+
+考虑一个典型的场景。你的项目根目录有团队共享的 AGENTS.md，写了构建命令和编码规范。同时你在 `frontend/` 子目录工作，前端组件有自己的命名约定和测试策略。再往上，你个人在 `~/.codex/` 下有一个全局 AGENTS.md，写了"用中文注释"这种个人偏好。当 Codex 在 `frontend/src/components/` 下执行任务时，它看到的是哪些规则？规则之间冲突了怎么办？
+
+这就是分层机制要解决的问题。Codex 不从单个文件读取配置，而是沿着目录树收集多层上下文，按优先级合并。理解这套机制是避免上下文爆炸和规则冲突的前提。
+
+## 五级加载顺序
+
+Codex 在启动时按以下顺序扫描并加载 AGENTS.md 文件。理解这个顺序的关键是"从内到外"——越靠近当前工作目录（CWD）的文件，优先级越高。
+
+### 第一级：当前工作目录
+
+路径：`./AGENTS.md`（相对于 CWD）
+
+这是优先级最高的项目级文件。如果 Codex 在 `frontend/src/components/` 下执行任务，它会首先查找 `frontend/src/components/AGENTS.md`。这个位置的文件用于定义当前目录特有的规则：组件的 prop 命名规范、文件组织约定、本目录的测试策略等。
+
+典型内容：
+
+```markdown
+# AGENTS.md — frontend/src/components/
+
+## 组件规范
+- 每个组件一个文件，文件名使用 PascalCase
+- Props 类型定义放在同文件顶部，使用 interface 而非 type
+- 样式使用 CSS Modules，类名使用 camelCase
+
+## 测试
+- 每个组件目录下必须有 __tests__/ 目录
+- 使用 @testing-library/react，不使用 Enzyme
+- 快照测试只用于纯展示组件
+```
+
+### 第二级：父目录链
+
+路径：从 CWD 向上逐级查找父目录中的 `AGENTS.md`
+
+Codex 会从 CWD 开始，向上遍历每个父目录，收集所有找到的 AGENTS.md。如果 CWD 是 `frontend/src/components/`，它会依次查找：
+
+1. `frontend/src/AGENTS.md`
+2. `frontend/AGENTS.md`
+
+每一层只定义该层特有的规则。更靠近 CWD 的层覆盖更远的层——如果 `frontend/AGENTS.md` 规定了"测试框架使用 Vitest"，而 `frontend/src/components/AGENTS.md` 规定了"组件测试使用 @testing-library/react"，两者不冲突；但如果两层都定义了"测试运行命令"，以更靠近 CWD 的为准。
+
+父目录的典型内容：
+
+```markdown
+# AGENTS.md — frontend/
+
+## 前端技术栈
+- 框架: Next.js 14 (App Router)
+- 状态管理: Zustand
+- 样式: Tailwind CSS + CSS Modules
+- 测试: Vitest + @testing-library/react
+
+## 构建和开发
+- 开发服务器: pnpm dev
+- 构建: pnpm build
+- 测试: pnpm test
+- Lint: pnpm lint
+
+## 前端特有规则
+- 新页面必须放在 app/ 目录下，遵循 App Router 约定
+- API 调用统一通过 src/lib/api/ 封装，不要直接在组件中 fetch
+- 图片使用 next/image，不要用原生 <img>
+```
+
+### 第三级：仓库根目录
+
+路径：仓库根目录下的 `AGENTS.md`
+
+这是项目级的全局配置，通常由团队共享，纳入版本控制。它定义所有开发者（包括 AI）都必须遵守的项目规范：构建命令、测试命令、架构约束、安全边界。
+
+仓库根目录的 AGENTS.md 是最重要的一个，因为它影响所有人在所有子目录下的工作。它的核心原则是"只写全团队共享的规则"，不要把个人偏好或模块特有的细节写在这里。
+
+```markdown
+# AGENTS.md — 项目根目录
+
+## Project Context
+- Monorepo managed by pnpm workspaces
+- Primary language: TypeScript
+- Package manager: pnpm (not npm, not yarn)
+
+## Commands
+- Install all: pnpm install
+- Build all: pnpm build
+- Test all: pnpm test
+- Lint all: pnpm lint
+- Type check: pnpm typecheck
+
+## Architecture
+- apps/web — Next.js 前端应用
+- apps/api — Express API 服务
+- packages/shared — 共享类型和工具函数
+- packages/ui — 共享 UI 组件库
+
+## Safety Boundaries
+- 不要修改 .env* 文件
+- 不要直接操作数据库，通过 migration 脚本
+- 不要提交含有 console.log 的代码到 main 分支
+- 不要删除或重命名已有的公共 API 端点，先创建废弃版本
+```
+
+### 第四级：用户级全局配置
+
+路径：`~/.codex/AGENTS.md`
+
+这是用户个人的全局配置，对所有仓库生效。它不纳入版本控制，用于定义个人偏好和跨项目通用规则。
+
+用户级配置适合放以下内容：
+
+```markdown
+# AGENTS.md — 全局用户级
+
+## 个人偏好
+- 代码注释使用中文
+- Git commit message 使用英文
+- 变量命名使用 camelCase，常量使用 UPPER_SNAKE_CASE
+- 优先使用函数式风格，避免 class
+
+## 通用规则
+- 每次修改代码后运行相关的 lint 和 typecheck
+- 新增公开函数必须添加 JSDoc 注释
+- 修改逻辑时同步更新对应的测试用例
+```
+
+这个层级的配置对所有项目生效。如果某个项目的根目录 AGENTS.md 规定了不同的规则（比如"注释使用英文"），项目级规则覆盖用户级。
+
+### 第五级：系统级配置
+
+路径：`/etc/codex/AGENTS.md`
+
+这是系统级的全局配置，由系统管理员设置，对所有用户的所有仓库生效。通常用于组织级别的强制策略：安全合规要求、数据保护规则、审计规范等。
+
+```markdown
+# AGENTS.md — 系统级
+
+## 安全合规
+- 不要将任何凭证、密钥、Token 写入代码文件
+- 处理用户数据时必须遵循数据脱敏规范
+- 网络请求必须使用 HTTPS
+- 不得将生产环境数据用于开发和测试
+```
+
+大多数开发者不会直接编辑系统级配置。它的主要消费者是企业环境中的安全团队。
+
+### 加载顺序总结
+
+```
+优先级从高到低：
+
+1. CWD/AGENTS.md              ← 当前工作目录（最高优先级）
+2. CWD/../AGENTS.md           ← 父目录
+3. CWD/../.. /AGENTS.md       ← 祖父目录（继续向上直到仓库根）
+4. 仓库根/AGENTS.md           ← 项目级
+5. ~/.codex/AGENTS.md         ← 用户级全局
+6. /etc/codex/AGENTS.md       ← 系统级全局（最低优先级）
+```
+
+当规则冲突时，高优先级的覆盖低优先级的。当规则不冲突时，所有层的内容都会被加载到上下文中。
+
+## Override 机制
+
+### AGENTS.override.md
+
+除了标准的 AGENTS.md，Codex 还支持 `AGENTS.override.md`。这个文件的优先级**绝对高于**同目录下的 `AGENTS.md`。
+
+它的设计意图是：当你需要临时覆盖某个目录的规则，但不想修改已经被团队共享的 AGENTS.md 时，可以创建一个 override 文件。override 文件通常不纳入版本控制（加入 `.gitignore`）。
+
+使用场景举例：
+
+- 你在本地调试时需要放宽某个安全限制，但不想影响团队其他成员
+- 你在实验一个新工具链，临时覆盖构建命令
+- CI 环境需要特殊的配置，与本地开发不同
+
+```bash
+# 在 .gitignore 中添加
+AGENTS.override.md
+```
+
+```markdown
+# AGENTS.override.md — 临时覆盖
+
+## 本地调试特殊配置
+- 测试命令使用 vitest --watch 模式
+- 允许跳过 typecheck 加速迭代（仅本地）
+- Debug 日志级别设为 verbose
+```
+
+关键规则：`AGENTS.override.md` 的存在会让同目录下的 `AGENTS.md` 完全失效。这不是部分覆盖，而是全量替换。所以 override 文件需要包含该目录需要的所有规则，不能只写覆盖的部分。
+
+### Fallback 文件名
+
+除了 `AGENTS.md`，Codex 还会查找备选文件名。默认的 fallback 列表：
+
+```
+project_doc_fallback_filenames = ["TEAM_GUIDE.md", ".agents.md"]
+```
+
+这意味着 Codex 在每个目录层级查找时，会按以下顺序搜索：
+
+1. `AGENTS.md`（首选）
+2. `TEAM_GUIDE.md`（第一备选）
+3. `.agents.md`（第二备选，隐藏文件）
+
+找到一个就停止，不会叠加多个备选文件。这个机制的主要用途是兼容已有项目——如果团队已经在使用 `TEAM_GUIDE.md` 作为开发指南，不需要重命名为 `AGENTS.md`。
+
+## 配置选项
+
+分层行为可以通过 `config.toml` 进行配置。
+
+### 文件名配置
+
+```toml
+# 自定义 fallback 文件名列表
+# Codex 会依次查找 AGENTS.md、TEAM_GUIDE.md、.agents.md
+# 修改此配置可以适配团队的现有文档命名习惯
+project_doc_fallback_filenames = ["TEAM_GUIDE.md", ".agents.md"]
+```
+
+### 大小限制
+
+```toml
+# 单个 AGENTS.md 文件的最大字节数
+# 默认 32 KiB (32768 bytes)
+# 最大可配置到 64 KiB (65536 bytes)
+project_doc_max_bytes = 32768
+```
+
+超过大小限制的文件会被**静默忽略**——不会报错，但内容不会加载到上下文中。这是一个隐蔽的失败模式：你写了 500 行 AGENTS.md，超过了 32 KiB，Codex 好像完全无视了你的规则，但你不知道为什么。
+
+调试方法：
+
+```bash
+# 检查文件大小
+wc -c AGENTS.md
+
+# 如果超过限制，考虑拆分或精简
+# 目标：每个文件控制在 8 KiB 以内（约 200 行）
+```
+
+### CODEX_HOME 环境变量
+
+默认情况下，用户级配置从 `~/.codex/` 读取。通过设置 `CODEX_HOME` 环境变量，可以改变这个基准目录：
+
+```bash
+# 将用户级配置目录改为自定义位置
+export CODEX_HOME=/path/to/custom/codex/home
+
+# 此后 Codex 会从以下位置读取用户级配置：
+# $CODEX_HOME/AGENTS.md
+# $CODEX_HOME/config.toml
+```
+
+这在以下场景有用：
+
+- 多人共享同一台开发机，每人需要独立的 Codex 配置
+- CI 环境需要特殊的用户级配置，与本地开发隔离
+- 需要将配置纳入特定目录的备份策略
+
+## 实际场景示例
+
+### 场景一：前后端分离的 monorepo
+
+目录结构：
+
+```
+repo/
+  AGENTS.md                    ← 团队共享规范
+  frontend/
+    AGENTS.md                  ← 前端专属规则
+    src/
+      components/
+        AGENTS.md              ← 组件规范
+      hooks/
+        AGENTS.md              ← Hooks 规范
+  backend/
+    AGENTS.md                  ← 后端专属规则
+    src/
+      routes/
+        AGENTS.md              ← API 设计规范
+      repositories/
+        AGENTS.md              ← 数据库操作规范
+```
+
+当 Codex 在 `frontend/src/components/` 下工作时，它加载的上下文包括：
+
+| 层级 | 文件 | 内容 |
+|------|------|------|
+| 1 | `frontend/src/components/AGENTS.md` | 组件命名、prop 规范、测试策略 |
+| 2 | `frontend/AGENTS.md` | 前端技术栈、构建命令、样式约定 |
+| 3 | `repo/AGENTS.md` | 全项目命令、架构概览、安全边界 |
+| 4 | `~/.codex/AGENTS.md` | 个人偏好 |
+
+四层内容不重复、不冲突，各自负责不同粒度的规则。
+
+`frontend/AGENTS.md` 内容示例：
+
+```markdown
+# AGENTS.md — frontend/
+
+## 技术栈
+- Next.js 14 (App Router)
+- React 18
+- Tailwind CSS + CSS Modules
+- Vitest + Testing Library
+
+## 前端特有规则
+- 页面组件放在 app/ 目录，可复用组件放在 src/components/
+- 服务端组件不要使用 useState 和 useEffect
+- 客户端组件在文件顶部标记 'use client'
+- API 路由统一放在 app/api/ 目录下
+
+## 测试
+- 运行: pnpm --filter frontend test
+- 组件测试使用 Testing Library，不测试实现细节
+- 自定义 Hook 测试使用 renderHook
+```
+
+`backend/AGENTS.md` 内容示例：
+
+```markdown
+# AGENTS.md — backend/
+
+## 技术栈
+- Express.js
+- Prisma ORM
+- PostgreSQL
+
+## API 设计规范
+- RESTful 风格，资源名用复数名词
+- 请求验证使用 zod schema
+- 响应格式统一: { data, error, meta }
+- 错误响应使用标准 HTTP 状态码，不发明新码
+
+## 数据库操作规范
+- 新增字段必须通过 prisma migrate dev 创建 migration
+- 不要手动编辑已应用的 migration 文件
+- 查询使用 Prisma Client，不写原生 SQL（除非性能必须）
+- 批量操作使用 transaction
+
+## 测试
+- 运行: pnpm --filter backend test
+- API 测试使用 supertest
+- 数据库测试使用独立的测试数据库
+```
+
+### 场景二：多环境配置
+
+通过 override 文件区分开发环境和 CI 环境：
+
+```bash
+# .gitignore
+AGENTS.override.md
+```
+
+开发者本地的 `AGENTS.override.md`：
+
+```markdown
+# AGENTS.override.md — 本地开发覆盖
+
+## 本地特殊配置
+- 数据库连接使用 localhost:5432
+- 日志级别: debug
+- 允许跳过 migration 直接同步 schema（仅开发环境）
+```
+
+CI 环境通过环境变量注入不同的配置，不使用 override 文件。
+
+### 场景三：个人全局配置
+
+`~/.codex/AGENTS.md` 定义跨项目的个人偏好：
+
+```markdown
+# AGENTS.md — 全局
+
+## 代码风格
+- 注释语言: 中文
+- Commit message 语言: 英文
+- 缩进: 2 空格（TypeScript），4 空格（Python）
+- 字符串: 优先单引号（JS/TS），双引号（Python）
+
+## 工作习惯
+- 修改代码后自动运行相关测试
+- 新增函数时添加类型注释和简短说明
+- 提交前检查 lint 错误
+
+## 模型偏好
+- 默认模型: codex-mini（快速迭代）
+- 复杂任务: o3（深度推理）
+```
+
+## 与 Claude Code 分层机制的对比
+
+Codex 和 Claude Code 都支持分层的上下文配置，但设计哲学不同。
+
+### 加载模型对比
+
+| 维度 | Codex | Claude Code |
+|------|-------|-------------|
+| 文件名 | AGENTS.md | CLAUDE.md |
+| 层级数量 | 五级（CWD → 父目录 → 仓库根 → 用户级 → 系统级） | 三级（项目级 → .claude/rules/ → 用户级） |
+| 继承方向 | 从内到外，子覆盖父 | 从外到内，项目级为基准，rules 扩展 |
+| 覆盖机制 | AGENTS.override.md 全量替换同目录 AGENTS.md | 无 override 机制，使用更精细的条件加载 |
+| 条件加载 | 无（所有匹配的文件都加载） | .claude/rules/ 支持路径和文件类型条件 |
+| 子目录支持 | 每个目录都可以有独立的 AGENTS.md | 子目录不自动查找 CLAUDE.md，依赖 rules 路径匹配 |
+| Fallback | 支持（TEAM_GUIDE.md, .agents.md） | 不支持 fallback 文件名 |
+| 大小限制 | 32 KiB 默认，可配到 64 KiB | 无硬性大小限制 |
+
+### 设计哲学差异
+
+Codex 的分层设计遵循**目录树继承**模型。它的灵感来自文件系统的权限继承——子目录继承父目录的权限，但可以覆盖。这种模型的优点是直觉性强，开发者熟悉这个概念。缺点是层级多了以后，上下文总量容易失控。每多一层目录，就多一个 AGENTS.md 要加载。
+
+Claude Code 的分层设计更偏向**条件化配置**模型。CLAUDE.md 是主配置，`.claude/rules/` 目录下的 `.md` 文件可以根据文件路径和类型条件加载。这种模型的优点是精细控制——你可以为 `.tsx` 文件写一套规则，为 `.py` 文件写另一套，只有匹配时才加载。缺点是配置逻辑不那么直观，需要理解条件匹配语法。
+
+### 选型建议
+
+如果你在两个工具之间犹豫，分层机制不是决定因素——两者的能力相当，只是风格不同。真正影响选择的是其他维度（模型能力、工具生态、执行模式）。但如果你的项目目录层级很深（超过 4 层），Codex 的自动继承可能导致上下文膨胀；如果你的项目需要按文件类型精确控制规则加载，Claude Code 的条件加载更合适。
+
+实际操作中，这两个工具的分层机制可以互补。一种在团队中行之有效的模式是：用 Codex 处理需要快速迭代和多文件编辑的开发任务，利用其五级继承自动获取不同层级的上下文；用 Claude Code 处理需要深度分析和跨文件审查的任务，利用其条件加载机制精确匹配审查规则。两个工具可以共享同一份核心规则（命令清单、架构约束、安全边界），只是存放的位置和格式不同。
+
+## 最佳实践
+
+### 根目录 AGENTS.md：全团队共享
+
+只放三类内容：
+
+1. **命令清单**：构建、测试、lint、部署——这些是所有人都要用的命令
+2. **架构约束**：目录结构、模块职责、依赖方向——违反这些会导致架构退化
+3. **安全边界**：不能碰的文件、不能执行的命令——违反这些会导致事故
+
+```markdown
+# AGENTS.md — 仓库根目录
+
+## Commands
+- Install: pnpm install
+- Build: pnpm build
+- Test: pnpm test
+- Lint: pnpm lint
+- Typecheck: pnpm typecheck
+
+## Architecture
+- monorepo 结构: apps/ + packages/
+- apps/ 之间不允许直接依赖，通过 packages/shared 通信
+- 所有外部 API 调用必须经过 packages/api-client 封装
+
+## Safety
+- 不要修改 .env* 文件
+- 不要直接操作数据库
+- 不要提交 console.log 到 main 分支
+```
+
+控制在这个规模：15-30 行。根目录 AGENTS.md 越短越好，因为它是每次都加载的。
+
+### 子目录 AGENTS.md：模块特定规则
+
+放只在该目录（及其子目录）下工作时有意义的规则。判断标准：如果一个规则只在特定模块下有意义，它属于子目录 AGENTS.md。
+
+```markdown
+# AGENTS.md — packages/ui/
+
+## 组件库规则
+- 所有组件必须支持 className prop 透传
+- 使用 forwardRef 包装需要 ref 转发的组件
+- 组件样式变量定义在 theme.css 中，不要硬编码颜色值
+- 导出通过 src/index.ts 统一管理
+
+## 测试要求
+- 每个组件至少有一个渲染测试
+- 交互组件（Button, Input 等）需要可访问性测试
+- 视觉回归测试使用 Chromatic
+```
+
+### 全局 AGENTS.md：个人偏好
+
+放不影响团队协作的个人设置。判断标准：如果把这条规则去掉，只会影响你自己的体验，不会影响代码质量或团队协作。
+
+```markdown
+# ~/.codex/AGENTS.md
+
+## 个人偏好
+- 注释用中文
+- 优先函数式写法
+- 代码段之间保留一个空行
+```
+
+### 不要在各层重复写相同内容
+
+这是最常见的错误。有人在根目录 AGENTS.md 写了"使用 pnpm install"，又在 `frontend/AGENTS.md` 写了"使用 pnpm install"，还在 `frontend/src/components/AGENTS.md` 写了"使用 pnpm install"。三层重复，浪费上下文窗口。
+
+原则：每条规则只出现在能覆盖其所需范围的最底层。
+
+- "使用 pnpm install" → 根目录（全项目生效）
+- "组件测试使用 @testing-library/react" → `frontend/AGENTS.md`（仅前端生效）
+- "表单组件使用 react-hook-form" → `frontend/src/components/forms/AGENTS.md`（仅表单组件生效）
+
+### 上下文预算分配
+
+假设一个典型的 Codex 会话有 128K Token 的上下文窗口。AGENTS.md 的总加载量应该控制在什么范围？
+
+| 组件 | 建议预算 | 说明 |
+|------|---------|------|
+| 系统指令 | 固定 | Codex 内置的系统提示，不可控 |
+| AGENTS.md 总量 | 2K-4K Token | 所有层级加起来 |
+| 用户任务描述 | 1K-2K Token | 当前任务的 prompt |
+| 工具调用和结果 | 剩余空间的大部分 | 文件读取、命令执行结果 |
+| 模型推理 | 内部使用 | 模型的思考过程 |
+
+AGENTS.md 占 2K-4K Token，大约是 150-300 行纯文本。如果五层加起来超过 300 行，就需要审视是否有些规则可以删除或合并。
+
+## 失败案例：上下文爆炸
+
+### 症状
+
+一个团队在仓库根目录写了一个 500 行的 AGENTS.md，内容涵盖：
+
+- 项目介绍（50 行）
+- 技术栈详情（80 行）
+- 所有模块的架构说明（120 行）
+- 前端规范（60 行）
+- 后端规范（60 行）
+- 测试规范（40 行）
+- 部署流程（50 行）
+- 安全规则（40 行）
+
+每个子目录又有一份 50-100 行的 AGENTS.md，内容与根目录有 30% 的重叠。
+
+结果：
+
+1. **Codex 经常忽略规则**——上下文窗口里塞了太多规则，模型无法区分优先级，开始选择性忽略
+2. **Token 消耗异常**——每次会话光是加载 AGENTS.md 就消耗 10K+ Token
+3. **规则冲突**——根目录写了"测试使用 jest"，前端子目录写了"测试使用 vitest"，模型随机选择
+
+### 诊断
+
+```bash
+# 统计所有 AGENTS.md 的总大小
+find . -name "AGENTS.md" -o -name "AGENTS.override.md" | xargs wc -l
+
+# 检查每层文件的大小
+for f in $(find . -name "AGENTS.md"); do
+  echo "$f: $(wc -l < $f) lines, $(wc -c < $f) bytes"
+done
+
+# 检查是否有重复内容
+for f in $(find . -name "AGENTS.md"); do
+  echo "=== $f ==="
+  grep -E "^(#|##|-)" "$f" | head -20
+done
+```
+
+### 修复方案
+
+1. **根目录精简到 30 行**：只保留命令、架构概览、安全边界
+2. **删除项目介绍**：模型不需要知道项目愿景
+3. **删除技术栈详情**：模型通过代码就能判断技术栈
+4. **子目录各精简到 20 行**：只保留该模块特有的规则
+5. **删除重复内容**：如果根目录已经写了"使用 pnpm install"，子目录不要重复
+
+精简后的结构：
+
+```
+仓库根 AGENTS.md:    30 行  (~1K Token)
+frontend/AGENTS.md:  20 行  (~600 Token)
+backend/AGENTS.md:   20 行  (~600 Token)
+全局 ~/.codex/:      10 行  (~300 Token)
+────────────────────────────
+总计:                80 行  (~2.5K Token)
+```
+
+从 500+ 行压缩到 80 行，Token 消耗减少 80%，规则遵循率反而提升了——因为模型现在能清楚地看到每条规则，不再被噪音淹没。
+
+## 诊断框架：判断分层是否合理
+
+当你接手一个项目，或者审计一个已有的 Codex 配置时，按以下步骤诊断分层是否合理。
+
+### 第一步：统计总量
+
+```bash
+# 统计所有 AGENTS.md 文件
+find . -name "AGENTS.md" -o -name "AGENTS.override.md" | while read f; do
+  lines=$(wc -l < "$f")
+  bytes=$(wc -c < "$f")
+  echo "$f: ${lines} lines, ${bytes} bytes"
+done
+```
+
+判断标准：
+
+| 总行数 | 评估 | 建议 |
+|--------|------|------|
+| < 100 行 | 健康 | 当前配置合理 |
+| 100-200 行 | 需要关注 | 检查是否有冗余内容 |
+| 200-400 行 | 偏高 | 需要精简或合并 |
+| > 400 行 | 危险 | 上下文几乎肯定被浪费 |
+
+### 第二步：检查层级覆盖
+
+```bash
+# 列出所有层级
+find . -name "AGENTS.md" | sort
+```
+
+判断标准：
+
+- 如果某个目录下有 AGENTS.md，但它的父目录也有 AGENTS.md，检查是否有重复内容
+- 如果某个 AGENTS.md 的内容与父目录完全相同，删除子目录的文件
+- 如果根目录 AGENTS.md 包含模块特有的内容（如"前端组件规范"），移到对应子目录
+
+### 第三步：检查单文件大小
+
+```bash
+# 检查是否有超过限制的文件
+find . -name "AGENTS.md" -size +32k
+```
+
+超过 32 KiB 的文件会被静默忽略。如果发现这种情况，要么增大 `project_doc_max_bytes`，要么精简文件内容。
+
+### 第四步：检查内容重复
+
+```bash
+# 提取所有规则行（以 - 开头的行），检查重复
+find . -name "AGENTS.md" -exec grep "^- " {} \; | sort | uniq -c | sort -rn | head -20
+```
+
+出现次数大于 1 的行就是重复规则。决定它应该只出现在哪一层。
+
+### 第五步：验证规则生效
+
+```bash
+# 用一个简单的测试任务验证 Codex 是否遵守规则
+codex --ask "列出你当前加载的所有 AGENTS.md 规则"
+```
+
+如果 Codex 列出的规则与你写的有出入，说明分层配置可能存在问题——要么文件被跳过了（大小超限），要么规则被覆盖了（override 文件），要么文件路径不对（CWD 不是你以为的目录）。
+
+## 配置速查表
+
+| 配置项 | 默认值 | 最大值 | 说明 |
+|--------|--------|--------|------|
+| `project_doc_fallback_filenames` | `["TEAM_GUIDE.md", ".agents.md"]` | 无限制 | 备选文件名列表 |
+| `project_doc_max_bytes` | 32768 (32 KiB) | 65536 (64 KiB) | 单文件最大字节数 |
+| `CODEX_HOME` 环境变量 | `~/.codex/` | 无限制 | 用户级配置基准目录 |
+
+### 层级优先级速查
+
+```
+优先级从高到低：
+  AGENTS.override.md（同目录）> AGENTS.md（当前目录）> AGENTS.md（父目录）> ... > AGENTS.md（仓库根）> ~/.codex/AGENTS.md > /etc/codex/AGENTS.md
+```
+
+### 文件查找顺序（每个目录）
+
+```
+AGENTS.md > TEAM_GUIDE.md > .agents.md
+（找到一个即停止）
+```
+
+## 常见问题排查
+
+### 规则没有被遵守
+
+当 Codex 明显违反了 AGENTS.md 中的规则时，按以下顺序排查：
+
+1. **文件是否被加载**：在任务开始前运行 `codex --ask "告诉我你看到了哪些 AGENTS.md 规则"`，确认 Codex 确实读到了你写的规则。
+2. **文件是否超过大小限制**：运行 `wc -c path/to/AGENTS.md`，如果超过 32 KiB（默认），内容会被静默丢弃。要么在 `config.toml` 中增大 `project_doc_max_bytes`，要么精简文件内容。
+3. **是否被 override 覆盖**：检查同目录下是否存在 `AGENTS.override.md`。如果存在，同目录的 `AGENTS.md` 会被完全忽略。
+4. **是否与更高优先级的规则冲突**：检查 CWD 到仓库根路径上每一层的 AGENTS.md，看是否有矛盾规则。更靠近 CWD 的文件优先级更高，即使你期望根目录的规则生效。
+5. **当前工作目录是否正确**：Codex 从 CWD 开始向上查找。如果你在错误的目录下启动 Codex，可能读不到期望的 AGENTS.md。确认启动目录。
+
+### 不同开发者看到不同规则
+
+在团队协作中，可能出现"我这边 Codex 表现正常，同事那边完全不一样"的情况。常见原因：
+
+- **全局 AGENTS.md 不同**：每个开发者的 `~/.codex/AGENTS.md` 是独立的。一个人的全局配置可能定义了与项目冲突的规则。
+- **override 文件未同步**：`AGENTS.override.md` 通常在 `.gitignore` 中，不会被版本控制。一个人的本地 override 可能改变了行为。
+- **CODEX_HOME 不同**：如果有人设置了自定义的 `CODEX_HOME` 环境变量，用户级配置的读取路径会不同。
+- **config.toml 不同**：`project_doc_max_bytes` 和 `project_doc_fallback_filenames` 的差异会导致不同的文件加载行为。
+
+解决方案：在团队文档中明确列出 AGENTS.md 的分层策略，约定哪些内容放在哪一层，并确保根目录的 AGENTS.md 包含所有必要的共享规则。
+
+### 新增子目录后规则丢失
+
+当你在项目中新建一个子目录并开始在其中工作时，可能发现之前在父目录 AGENTS.md 中定义的规则突然"不生效了"。这通常不是因为规则真的丢失了，而是因为你在新目录中创建了一个 AGENTS.md，它的某些规则覆盖了父目录的规则。
+
+排查方法：检查新目录的 AGENTS.md 是否与父目录的规则存在冲突。如果新目录的 AGENTS.md 只是补充规则（没有覆盖任何父目录规则），那么父目录的规则依然会生效——因为分层机制是叠加的，不是互斥的。
+
+## 总结
+
+AGENTS.md 的分层机制不是复杂的特性，但它是一个容易被忽视的特性。大多数问题出在两个极端：要么完全不用分层，所有规则塞进一个文件；要么过度分层，每层都重复写，挤爆上下文。
+
+正确的做法是遵循三条原则：
+
+1. **只写必要的内容**：每条规则都应该能回答"删掉这条，Codex 的行为会变差吗？"如果不能，删掉它。
+2. **放在正确的层级**：全团队的规则放根目录，模块特有的规则放子目录，个人偏好放全局。每条规则只出现一次。
+3. **控制总量**：所有层级的 AGENTS.md 加起来不要超过 100 行。如果超过了，说明规则太多或者有重复，需要精简。
+
+分层机制的终极目标是让 Codex 在正确的上下文中做出正确的决策。根目录告诉它项目的基本规矩，子目录告诉它当前模块的特殊要求，全局告诉它你的个人习惯。三层各司其职，不重复，不冲突，不浪费。理解了这套机制，你就能把项目知识从"每次手动告诉 Codex"升级为"自动按需加载"，这是工程化的第一步。
+
+下一篇讲指令工程的核心原则：怎么写一个让 Codex 准确执行的任务描述。
