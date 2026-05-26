@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2F80ED"/>
+      <stop offset="100%" stop-color="#1B4FD7"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#26C6DA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1E40AF" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .font { font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .title { font-size: 64px; font-weight: 800; fill: #10245C; letter-spacing: .5px; }
+      .subtitle { font-size: 26px; font-weight: 500; fill: #1F2A44; }
+      .source { font-size: 20px; font-weight: 600; fill: #2563EB; }
+      .section { font-size: 28px; font-weight: 800; fill: #0F3AA5; }
+      .card-title { font-size: 22px; font-weight: 800; fill: #101828; }
+      .card-body { font-size: 17px; font-weight: 500; fill: #344054; }
+      .small { font-size: 16px; font-weight: 600; fill: #344054; }
+      .num { font-size: 26px; font-weight: 900; fill: #FFFFFF; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" rx="28" fill="#F8FBFF"/>
+  <rect x="8" y="8" width="1584" height="884" rx="24" fill="none" stroke="#2563EB" stroke-width="3"/>
+
+  <g opacity="0.14">
+    <circle cx="90" cy="90" r="64" fill="none" stroke="#2563EB" stroke-width="24"/>
+    <circle cx="90" cy="90" r="35" fill="none" stroke="#2563EB" stroke-width="10"/>
+    <path d="M1420 18 L1480 78 M1465 18 L1525 78 M1510 18 L1570 78" stroke="#2563EB" stroke-width="4"/>
+    <path d="M1360 58 H1440 V118 H1540" fill="none" stroke="#2563EB" stroke-width="3"/>
+  </g>
+
+  <g transform="translate(70,52)">
+    <rect x="0" y="0" width="136" height="136" rx="38" fill="#EAF2FF"/>
+    <rect x="34" y="38" width="68" height="54" rx="18" fill="none" stroke="#123A91" stroke-width="8"/>
+    <circle cx="55" cy="65" r="8" fill="#22D3EE"/>
+    <circle cx="81" cy="65" r="8" fill="#22D3EE"/>
+    <path d="M68 38 V20 M48 20 H88" stroke="#123A91" stroke-width="7" stroke-linecap="round"/>
+    <path d="M104 60 h38 a22 22 0 0 1 0 44 h-22" fill="#9EC5FF"/>
+  </g>
+
+  <text x="245" y="92" class="font title">Agent 学习路径知识卡片</text>
+  <text x="250" y="138" class="font subtitle">从 LLM API 使用者，到能设计、评测、上线 Agent 系统的开发者</text>
+  <text x="250" y="176" class="font source">来源：mindcarver / awesome-aiguide / docs/agent</text>
+
+  <g filter="url(#shadow)">
+    <rect x="38" y="215" width="1524" height="66" rx="16" fill="#FFFFFF" stroke="#8AB4FF" stroke-width="2"/>
+    <circle cx="94" cy="248" r="25" fill="#EAF2FF"/>
+    <path d="M82 250 l9 9 19-24" fill="none" stroke="#2563EB" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="140" y="258" class="font section">目标：</text>
+    <text x="220" y="258" class="font subtitle">帮助技术人逐步掌握 Agent 的设计、工具调用、评测、安全与生产化。</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="38" y="300" width="1524" height="72" rx="16" fill="#F5FFF8" stroke="#86D39C" stroke-width="2"/>
+    <path d="M82 322 l34 12 v28 c0 20-15 34-34 42-19-8-34-22-34-42v-28z" fill="#16A34A"/>
+    <path d="M68 357 l12 12 25-30" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="140" y="345" class="font section" fill="#15803D">核心原则：</text>
+    <text x="285" y="345" class="font subtitle">不要一上来就学多 Agent。先打好基础，再进入工具调用、工作流、记忆、评测、权限、安全与生产化。</text>
+  </g>
+
+  <text x="640" y="424" text-anchor="middle" class="font section">10 个阶段，一张图看懂</text>
+  <line x1="40" y1="414" x2="520" y2="414" stroke="#9CC1FF" stroke-width="2"/>
+  <line x1="760" y1="414" x2="1560" y2="414" stroke="#9CC1FF" stroke-width="2"/>
+
+  <!-- stage cards -->
+  <g filter="url(#shadow)">
+    <g transform="translate(38,445)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">0</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M98 38 l12-14 12 14" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">LLM 应用基础</text><text x="154" y="54" class="font card-body">稳定调用模型，处理结构化输出</text>
+    </g>
+    <g transform="translate(38,520)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">1</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><circle cx="109" cy="32" r="11" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Prompt 与上下文工程</text><text x="154" y="54" class="font card-body">明确边界、格式、约束与失败说明</text>
+    </g>
+    <g transform="translate(38,595)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">2</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M100 24 h18 v16 h-18z M118 32 h12" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Tool Calling</text><text x="154" y="54" class="font card-body">安全调用函数与 API，做好 schema、校验与失败处理</text>
+    </g>
+    <g transform="translate(38,670)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">3</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M109 22 v20 M96 42 h26 M96 32 h26" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Workflow</text><text x="154" y="54" class="font card-body">把多步骤任务拆成可控流程，优先于盲目上 Agent</text>
+    </g>
+    <g transform="translate(38,745)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">4</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M100 28 a14 14 0 1 1 2 20 M99 28 h12 M102 48 h-12" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Agent Loop</text><text x="154" y="54" class="font card-body">设计 observe → plan → act → evaluate 的受控循环</text>
+    </g>
+
+    <g transform="translate(805,445)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">5</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M98 26 h22 M98 36 h22 M98 46 h22" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Memory</text><text x="154" y="54" class="font card-body">区分短期上下文、长期记忆、工作状态</text>
+    </g>
+    <g transform="translate(805,520)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">6</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M99 23 h18 v25 h-18z M118 42 l10 10" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">RAG for Agent</text><text x="154" y="54" class="font card-body">让 Agent 使用外部知识、引用来源、驱动下一步行动</text>
+    </g>
+    <g transform="translate(805,595)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">7</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M100 47 v-12 M111 47 v-22 M122 47 v-30" stroke="#fff" stroke-width="5"/>
+      <text x="154" y="30" class="font card-title">Evaluation</text><text x="154" y="54" class="font card-body">评测任务完成率、工具调用质量、成本与恢复能力</text>
+    </g>
+    <g transform="translate(805,670)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">8</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M109 21 l18 8 v13 c0 11-8 18-18 23-10-5-18-12-18-23v-13z" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Safety &amp; Permissions</text><text x="154" y="54" class="font card-body">控制权限分级、人工确认、审计与风险边界</text>
+    </g>
+    <g transform="translate(805,745)">
+      <rect width="704" height="64" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+      <rect x="18" y="14" width="46" height="36" rx="8" fill="url(#blue)"/><text x="41" y="41" text-anchor="middle" class="font num">9</text>
+      <rect x="88" y="13" width="42" height="38" rx="10" fill="url(#cyan)"/><path d="M96 44 h26 M99 38 l8-8 6 5 10-13" fill="none" stroke="#fff" stroke-width="4"/>
+      <text x="154" y="30" class="font card-title">Productionization</text><text x="154" y="54" class="font card-body">做好 tracing、回放、降级、监控与持续改进</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="355" y="820" width="890" height="54" rx="14" fill="#FFFFFF" stroke="#C7D8FF"/>
+    <rect x="385" y="830" width="50" height="34" rx="8" fill="url(#blue)"/><text x="410" y="855" text-anchor="middle" class="font num">10</text>
+    <circle cx="485" cy="847" r="18" fill="url(#cyan)"/>
+    <text x="530" y="842" class="font card-title">Multi-Agent</text>
+    <text x="530" y="865" class="font card-body">最后再学；只有确有必要时再上多 Agent</text>
+  </g>
+</svg>
