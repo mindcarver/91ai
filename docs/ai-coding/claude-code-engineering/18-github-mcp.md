@@ -613,7 +613,7 @@ Step 4: 配置 MCP Server
 读取 Checks               │ read:checks            │ Checks: Read
 ```
 
-GitHub App 的权限模型比 PAT 更适合团队场景的一个关键原因是：它区分了"仓库级权限"和"组织级权限"。你可以让 App 只对特定仓库有写权限，对其他仓库只有读权限，而不需要创建多个 token。这在 PAT 模式下需要创建多个 Fine-grained token 才能实现。
+GitHub App 的权限模型比 PAT 更适合团队场景的一个关键原因是：它区分了"仓库级权限"和"组织级权限"。App 可以只对特定仓库有写权限，对其他仓库只有读权限，而不需要创建多个 token。这在 PAT 模式下需要创建多个 Fine-grained token 才能实现。
 
 ## Token Scope 深度分析
 

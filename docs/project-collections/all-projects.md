@@ -389,7 +389,7 @@ MCP、外部系统接入、模型集成、工具调用和平台连接能力。
 | TradingAgents-CN - 基于多智能体LLM的中文金融交易框架 | 基于多智能体LLM的中文金融交易框架 | [打开](https://github.com/hsliuping/TradingAgents-CN) |
 | valuecell - 社区驱动的多智能体金融应用平台 | 社区驱动的多智能体金融应用平台 | [打开](https://github.com/ValueCell-ai/valuecell) |
 | Vibe-Trading - 个人交易代理，AI驱动的交易系统 | 个人交易代理，AI驱动的交易系统 | [打开](https://github.com/HKUDS/Vibe-Trading) |
-| 微软Qlib | 面向AI的量化投资平台，使用机器学习赋能量化研究 | - |
+| 微软Qlib | 面向AI的量化投资平台，用机器学习辅助量化研究 | - |
 
 ## 教程与学习资源
 
@@ -554,7 +554,7 @@ API、框架、语言、代码生成和高级开发能力。
 
 | 名称 | 概括 | 链接 |
 | --- | --- | --- |
-| Git工作流集成 | 与Git工作流无缝集成，包括提交、分支和代码审查 | - |
+| Git工作流集成 | 原生支持Git操作，包括提交、分支和代码审查 | - |
 | 基础CLI操作 | 启动和管理Claude Code会话的核心命令行界面操作 | - |
 | 直接文件编辑 | Claude Code可以直接编辑代码库中的文件，无需复制粘贴 | - |
 | 自然语言代码生成 | 使用纯英文描述生成、修改和理解代码 | - |

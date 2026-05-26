@@ -26,4 +26,4 @@
 | TradingAgents-CN - 基于多智能体LLM的中文金融交易框架 | 基于多智能体LLM的中文金融交易框架 | framework, finance, llm | [打开](https://github.com/hsliuping/TradingAgents-CN) |
 | valuecell - 社区驱动的多智能体金融应用平台 | 社区驱动的多智能体金融应用平台 | agent, multi-agent | [打开](https://github.com/ValueCell-ai/valuecell) |
 | Vibe-Trading - 个人交易代理，AI驱动的交易系统 | 个人交易代理，AI驱动的交易系统 | agent, multi-agent | [打开](https://github.com/HKUDS/Vibe-Trading) |
-| 微软Qlib | 面向AI的量化投资平台，使用机器学习赋能量化研究 | ai, quantitative-finance, machine-learning, microsoft, investment, trading | - |
+| 微软Qlib | 面向AI的量化投资平台，用机器学习辅助量化研究 | ai, quantitative-finance, machine-learning, microsoft, investment, trading | - |
