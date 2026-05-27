@@ -175,7 +175,13 @@ AI 赚钱的信息已经严重过载。随便搜一下就有「3 天赚 5783 元
 | **Greg Isenberg** ([@GregIsenberg](https://www.youtube.com/@GregIsenberg)) | 50 万+ | AI 创业想法、社区建设 |
 | **Alex Finn** ([@AlexFinnOfficial](https://www.youtube.com/@AlexFinnOfficial)) | 6.4 万+ | Vibe Coding，非技术人员用 AI 构建产品 |
 | **Mark Kashef** ([@Mark_Kashef](https://www.youtube.com/@Mark_Kashef)) | 77.4k | AI 专家，10 年 Data Science & NLP 经验，Prompt Advisers 创始人 |
-| **Dan Martell** | 高 | AI 商业模式，25 种用 AI 赚钱的合法方法 |
+| **Dan Martell** ([@danmartell](https://www.youtube.com/@danmartell)) | 275 万+ | SaaS 创业教练，25 种 AI 赚钱方法，商业模式拆解 |
+| **Corbin Brown** ([@corbinbrown](https://www.youtube.com/@corbinbrown)) | 17.1 万+ | AI 自动化实战，n8n/Make 工作流，从零到 $10K MRR |
+| **Grace Leung** ([@GraceLeungCEO](https://www.youtube.com/@GraceLeungCEO)) | 13.8 万+ | AI 副业与在线收入，女性创业者视角 |
+| **Ryan Doser** ([@RyanDoser](https://www.youtube.com/@RyanDoser)) | 3.56 万+ | AI 赚钱实战，联盟营销+AI 自动化 |
+| **WeAreNoCode** ([@WeAreNoCode](https://www.youtube.com/@WeAreNoCode)) | 30.9 万+ | 无代码+AI 创业，非技术人员构建产品 |
+| **Dorian Develops** ([@DorianDevelops](https://www.youtube.com/@DorianDevelops)) | 31 万+ | AI 开发者视角，SaaS 构建与变现 |
+| **Authority Hacker** ([@authorityhacker](https://www.youtube.com/@authorityhacker)) | 高 | SEO+AI 内容变现，联盟营销权威 |
 
 ### Bilibili（中文）
 
@@ -185,6 +191,13 @@ AI 赚钱的信息已经严重过载。随便搜一下就有「3 天赚 5783 元
 | **小鱼儿 AI 技术课堂** ([B 站](https://space.bilibili.com/3546654984636898/) / [YouTube](https://www.youtube.com/@xiaoyuerjishu)) | AI 赚钱教程、副业风口 |
 | **蚂蚁学 Python** ([B 站](https://space.bilibili.com/61036655/)) | 24 门课程，ChatGPT 赚钱实测 |
 | **老麦的工具库** | AI 工具推荐，「爆款选题器」12.9 万播放 |
+| **秋芝2046** | 1.25M+ 粉丝，AI 工具深度测评，变现实操 |
+| **大黄 AI 黑科技** | AI 前沿工具分享，副业赚钱方向 |
+| **AI 冷科长** | AI 赚钱案例分析，实用工具推荐 |
+| **艾克 AI 分享** | AI 副业教程，新手友好 |
+| **鱼总聊 AI** | AI 创业与商业变现，行业洞察 |
+| **土豆的 AI 创业** | AI 创业实战记录，从 0 到 1 |
+| **AI 研习社** | AI 技术与商业结合，行业报告解读 |
 
 ### 值得看的单集视频
 
@@ -252,8 +265,20 @@ AI 赚钱的信息已经严重过载。随便搜一下就有「3 天赚 5783 元
 | --- | --- |
 | [Reddit r/SideProject](https://www.reddit.com/r/SideProject/) | 副业项目分享，有 AI 变现案例 |
 | [Reddit r/automation](https://www.reddit.com/r/automation/) | AI 自动化讨论 |
+| [Reddit r/OnlineIncomeHustle](https://www.reddit.com/r/OnlineIncomeHustle/) | 在线收入策略，含 AI 变现方法 |
+| [Reddit r/AISEOInsider](https://www.reddit.com/r/AISEOInsider/) | AI + SEO 变现策略 |
 | [Indie Hackers](https://www.indiehackers.com/) | 独立开发者社区 |
 | [AI Automation Discord](https://www.reddit.com/r/automation/comments/1izdjvx/discord_channel_for_ai_automation_enthusiasts/) | AI 自动化爱好者 Discord |
+| [AI YouTubers Discord](https://www.reddit.com/r/youtubers/) | YouTube AI 频道创作者社区 |
+
+### Newsletter
+
+| Newsletter | 说明 |
+| --- | --- |
+| [Write With AI (Substack)](https://substack.com/@writewithai) | Nicolas Cole，年收入 $400K 的付费 AI 资讯 |
+| [Latent Space](https://latent.space/) | AI 工程深度分析，技术人必读 |
+| [Superhuman AI](https://substack.com/@superhumanai) | AI 新闻与工具速递 |
+| [One Useful Thing](https://www.oneusefulthing.org/) | Ethan Mollick，沃顿商学院 AI 应用研究 |
 
 ## 行业数据
 
