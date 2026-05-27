@@ -1,0 +1,753 @@
+# 模型部署：从 Jupyter Notebook 到 API 的完整路径
+
+<!--
+调研来源：
+1. "Serving PyTorch models with FastAPI and Ray Serve" (Anyscale) — PyTorch模型部署的多种方案对比
+2. "Model Serving Frameworks (Triton, TorchServe)" — NVIDIA Triton和TorchServe的详细对比
+3. "Top 8 Machine Learning Model Deployment Tools in 2026" (TrueFoundry) — 2026年主流部署工具
+4. "Model Deployment Before FastAPI" (Towards AI) — ML模型部署的演进历史
+5. NVIDIA "How to Deploy an AI Model with PyTriton" — 使用PyTriton部署模型
+6. "Best Model Serving Runtimes" (Axel Mendoza) — 构建优化的ML API Docker镜像
+
+核心发现：FastAPI已成为ML模型API的事实标准框架。Triton Inference Server在高吞吐量场景中性能最优。BentoML提供了从训练到部署的端到端体验。趋势是从手动部署转向自动化流水线（CI/CD + 容器化 + Kubernetes）。
+-->
+
+**TL;DR：** 训练出好模型只是完成了ML项目的30%。剩下的70%是让模型真正能在生产环境中运行——作为一个可靠的、可扩展的API服务。本文覆盖从Jupyter Notebook到生产API的完整路径：模型导出、API设计、容器化、部署策略。
+
+## 为什么这很重要
+
+一个常见的误解是：模型训练完成后，ML项目就"完成"了。实际情况是，训练完成只是项目的开始。
+
+考虑以下数字：
+- Google搜索每天处理约85亿次查询，每次查询都涉及ML模型推理
+- ChatGPT在2024年高峰期每秒处理约10,000个请求
+- Netflix的推荐系统为全球2.5亿用户提供个性化推荐
+
+这些数字背后的工程挑战是：**如何让ML模型以低延迟、高可用、可扩展的方式服务于海量请求？**
+
+一个训练好的模型放在Jupyter Notebook里，只能被一个数据科学家使用。把它部署为一个API服务后，可以被任何应用程序调用。这就是从"研究"到"工程"的跨越。
+
+## 核心概念
+
+### 模型部署的完整路径
+
+```
+训练好的模型
+    │
+    ▼
+模型导出 (PyTorch → ONNX / TorchScript / SavedModel)
+    │
+    ▼
+模型服务化 (封装为可调用的API)
+    │
+    ▼
+容器化 (Docker打包 → 可移植)
+    │
+    ▼
+部署 (本地 / 云服务 / Kubernetes)
+    │
+    ▼
+监控 (延迟 / 吞吐量 / 错误率 / 模型漂移)
+```
+
+### 部署策略的选择
+
+| 策略 | 适用场景 | 延迟 | 吞吐量 | 复杂度 |
+|------|---------|------|--------|--------|
+| REST API (FastAPI) | 通用场景 | 中 | 中 | 低 |
+| gRPC | 微服务间调用 | 低 | 高 | 中 |
+| 批处理 | 离线预测 | N/A | 高 | 低 |
+| Edge部署 | 移动端/IoT | 低 | 低 | 高 |
+| 流式处理 | 实时推荐 | 极低 | 高 | 高 |
+
+## 工作原理（简化的心智模型）
+
+### 用餐厅来理解模型部署
+
+**Jupyter Notebook** = 你在自己家里做了一道很好吃的菜（训练了一个好模型）。只有你和你的家人能吃到。
+
+**模型导出** = 你把这道菜的配方写下来（序列化模型），这样别人也能照着做。
+
+**REST API** = 你开了一家餐厅，顾客可以点这道菜。厨房收到订单后开始做（推理），做好了端给顾客（返回结果）。FastAPI就是你餐厅的点餐系统。
+
+**容器化（Docker）** = 你把整个厨房（包括设备、食材、厨师）打包成一个标准化的"移动厨房"。不管移动到哪里，打开就能做菜。Docker就是ML模型的"移动厨房"。
+
+**Kubernetes** = 你开了100家连锁店。K8s是总部管理系统——根据客流量自动增减门店数量（自动扩缩容），某家店出问题了自动切换到其他店（容错）。
+
+**监控** = 餐厅的卫生检查和客户反馈系统。持续检查菜品质量（模型预测质量）、顾客等待时间（延迟）、每天服务的顾客数（吞吐量）。
+
+## 工作原理（详细机制）
+
+### 一、模型导出
+
+模型导出是将训练好的PyTorch/TensorFlow模型转换为可以在生产环境中高效加载和运行的格式。
+
+```python
+"""
+模型导出示例
+展示从PyTorch模型到多种部署格式的转换
+"""
+
+import torch
+import torch.nn as nn
+import json
+import os
+import time
+import numpy as np
+
+class SentimentClassifier(nn.Module):
+    """用于部署演示的简单分类模型"""
+    def __init__(self, vocab_size=10000, embed_dim=128, hidden_dim=256, n_classes=3):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, n_classes)
+    
+    def forward(self, input_ids):
+        embedded = self.embedding(input_ids)
+        _, (hidden, _) = self.lstm(embedded)
+        logits = self.fc(hidden[-1])
+        return logits
+
+# 创建并保存模型
+model = SentimentClassifier()
+model.eval()
+
+# 模拟输入
+dummy_input = torch.randint(0, 10000, (1, 50))
+
+# === 方法1: PyTorch原生保存 ===
+print("=== 方法1: PyTorch原生保存 ===")
+torch.save(model.state_dict(), '/tmp/model_state_dict.pt')
+size_pt = os.path.getsize('/tmp/model_state_dict.pt')
+print(f"  state_dict保存: {size_pt/1024:.1f} KB")
+
+# 加载
+loaded_model = SentimentClassifier()
+loaded_model.load_state_dict(torch.load('/tmp/model_state_dict.pt', weights_only=True))
+loaded_model.eval()
+
+# === 方法2: TorchScript (不再推荐，但仍然常见) ===
+print("\n=== 方法2: TorchScript ===")
+scripted_model = torch.jit.trace(model, dummy_input)
+scripted_model.save('/tmp/model_scripted.pt')
+size_ts = os.path.getsize('/tmp/model_scripted.pt')
+print(f"  TorchScript保存: {size_ts/1024:.1f} KB")
+
+# 加载（不需要原始模型类定义）
+loaded_scripted = torch.jit.load('/tmp/model_scripted.pt')
+
+# === 方法3: ONNX导出 ===
+print("\n=== 方法3: ONNX导出 ===")
+try:
+    torch.onnx.export(
+        model,
+        dummy_input,
+        '/tmp/model.onnx',
+        input_names=['input_ids'],
+        output_names=['logits'],
+        dynamic_axes={
+            'input_ids': {0: 'batch_size', 1: 'seq_length'},
+            'logits': {0: 'batch_size'},
+        },
+        opset_version=14,
+    )
+    size_onnx = os.path.getsize('/tmp/model.onnx')
+    print(f"  ONNX保存: {size_onnx/1024:.1f} KB")
+    print(f"  ONNX支持动态batch_size和seq_length")
+except Exception as e:
+    print(f"  ONNX导出需要安装onnx: {e}")
+
+# === 性能对比 ===
+print("\n=== 推理性能对比 ===")
+n_runs = 100
+test_input = torch.randint(0, 10000, (8, 50))
+
+# PyTorch eager mode
+model.eval()
+with torch.no_grad():
+    start = time.time()
+    for _ in range(n_runs):
+        _ = model(test_input)
+    pt_time = (time.time() - start) / n_runs * 1000
+
+# TorchScript
+with torch.no_grad():
+    start = time.time()
+    for _ in range(n_runs):
+        _ = loaded_scripted(test_input)
+    ts_time = (time.time() - start) / n_runs * 1000
+
+print(f"  PyTorch eager: {pt_time:.3f} ms/batch")
+print(f"  TorchScript:   {ts_time:.3f} ms/batch")
+```
+
+### 二、REST API 部署（FastAPI）
+
+```python
+"""
+使用FastAPI部署ML模型的完整示例
+保存为 api_server.py，然后运行: uvicorn api_server:app --host 0.0.0.0 --port 8000
+"""
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import torch
+import torch.nn as nn
+import time
+import uuid
+from datetime import datetime
+
+# ============================================================
+# 模型定义和加载
+# ============================================================
+
+class SentimentClassifier(nn.Module):
+    def __init__(self, vocab_size=10000, embed_dim=128, hidden_dim=256, n_classes=3):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, n_classes)
+    
+    def forward(self, input_ids):
+        embedded = self.embedding(input_ids)
+        _, (hidden, _) = self.lstm(embedded)
+        return self.fc(hidden[-1])
+
+# 加载模型
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = SentimentClassifier().to(device)
+model.eval()
+
+# 标签映射
+LABEL_MAP = {0: 'negative', 1: 'neutral', 2: 'positive'}
+
+# ============================================================
+# API定义
+# ============================================================
+
+app = FastAPI(
+    title="情感分析API",
+    description="基于LSTM的情感分析模型服务",
+    version="1.0.0",
+)
+
+# 请求/响应模型
+class PredictionRequest(BaseModel):
+    """预测请求"""
+    text_ids: List[int] = Field(..., description="文本的token ID序列", example=[1, 45, 234, 12, 5, 0, 0])
+    return_probabilities: bool = Field(False, description="是否返回各类别概率")
+
+class PredictionResponse(BaseModel):
+    """预测响应"""
+    request_id: str
+    label: str
+    confidence: float
+    probabilities: Optional[dict] = None
+    latency_ms: float
+
+class BatchPredictionRequest(BaseModel):
+    """批量预测请求"""
+    texts_ids: List[List[int]] = Field(..., description="多个文本的token ID序列")
+    return_probabilities: bool = Field(False)
+
+class BatchPredictionResponse(BaseModel):
+    """批量预测响应"""
+    request_id: str
+    predictions: List[PredictionResponse]
+    total_latency_ms: float
+
+class HealthResponse(BaseModel):
+    """健康检查响应"""
+    status: str
+    model_loaded: bool
+    device: str
+    uptime_seconds: float
+
+# ============================================================
+# API端点
+# ============================================================
+
+start_time = time.time()
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """健康检查端点"""
+    return HealthResponse(
+        status="healthy",
+        model_loaded=model is not None,
+        device=str(device),
+        uptime_seconds=time.time() - start_time,
+    )
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict(request: PredictionRequest):
+    """单条文本情感预测"""
+    request_id = str(uuid.uuid4())[:8]
+    start = time.time()
+    
+    try:
+        # 准备输入
+        input_tensor = torch.tensor([request.text_ids], dtype=torch.long).to(device)
+        
+        # 推理
+        with torch.no_grad():
+            logits = model(input_tensor)
+            probabilities = torch.softmax(logits, dim=-1)
+            predicted_class = logits.argmax(dim=-1).item()
+            confidence = probabilities[0, predicted_class].item()
+        
+        response = PredictionResponse(
+            request_id=request_id,
+            label=LABEL_MAP[predicted_class],
+            confidence=confidence,
+            latency_ms=(time.time() - start) * 1000,
+        )
+        
+        if request.return_probabilities:
+            response.probabilities = {
+                LABEL_MAP[i]: probabilities[0, i].item()
+                for i in range(len(LABEL_MAP))
+            }
+        
+        return response
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict/batch", response_model=BatchPredictionResponse)
+async def batch_predict(request: BatchPredictionRequest):
+    """批量情感预测"""
+    request_id = str(uuid.uuid4())[:8]
+    start = time.time()
+    
+    try:
+        # 找到最大长度并padding
+        max_len = max(len(ids) for ids in request.texts_ids)
+        padded = [ids + [0] * (max_len - len(ids)) for ids in request.texts_ids]
+        
+        input_tensor = torch.tensor(padded, dtype=torch.long).to(device)
+        
+        with torch.no_grad():
+            logits = model(input_tensor)
+            probabilities = torch.softmax(logits, dim=-1)
+            predicted_classes = logits.argmax(dim=-1)
+        
+        predictions = []
+        for i in range(len(request.texts_ids)):
+            pred_class = predicted_classes[i].item()
+            confidence = probabilities[i, pred_class].item()
+            
+            pred = PredictionResponse(
+                request_id=f"{request_id}_{i}",
+                label=LABEL_MAP[pred_class],
+                confidence=confidence,
+                latency_ms=0,  # 批量处理中单个不单独计时
+            )
+            
+            if request.return_probabilities:
+                pred.probabilities = {
+                    LABEL_MAP[j]: probabilities[i, j].item()
+                    for j in range(len(LABEL_MAP))
+                }
+            
+            predictions.append(pred)
+        
+        return BatchPredictionResponse(
+            request_id=request_id,
+            predictions=predictions,
+            total_latency_ms=(time.time() - start) * 1000,
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# 运行说明
+# ============================================================
+# 保存为 api_server.py
+# 安装依赖: pip install fastapi uvicorn torch
+# 运行: uvicorn api_server:app --host 0.0.0.0 --port 8000
+# 测试:
+#   curl -X POST http://localhost:8000/predict \
+#     -H "Content-Type: application/json" \
+#     -d '{"text_ids": [1, 45, 234, 12, 5], "return_probabilities": true}'
+#   curl http://localhost:8000/health
+# API文档: http://localhost:8000/docs (Swagger UI)
+
+print("FastAPI模型服务示例")
+print("运行: uvicorn api_server:app --host 0.0.0.0 --port 8000")
+print("API文档: http://localhost:8000/docs")
+```
+
+### 三、Docker容器化
+
+```python
+"""
+Docker配置文件生成器
+为ML模型API生成优化的Dockerfile
+"""
+
+dockerfile_content = """
+# ============================================================
+# Dockerfile for ML Model API
+# 多阶段构建：减小镜像大小
+# ============================================================
+
+# 阶段1: 依赖安装
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# 安装系统依赖（仅编译需要的）
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    build-essential \\
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装Python依赖到虚拟环境
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 阶段2: 运行时镜像（更小）
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# 只复制运行时需要的系统库
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    libgomp1 \\
+    && rm -rf /var/lib/apt/lists/*
+
+# 从builder复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 复制应用代码和模型文件
+COPY api_server.py .
+COPY model/ /app/model/
+
+# 设置环境变量
+ENV MODEL_PATH=/app/model/model.pt
+ENV WORKERS=4
+ENV PORT=8000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \\
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令
+CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+"""
+
+docker_compose_content = """
+# docker-compose.yml
+version: '3.8'
+
+services:
+  model-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/model/model.pt
+      - WORKERS=4
+      - LOG_LEVEL=info
+    volumes:
+      - ./model:/app/model:ro  # 只读挂载模型文件
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+"""
+
+print("Docker配置文件:")
+print("\n=== Dockerfile ===")
+print(dockerfile_content)
+print("\n=== docker-compose.yml ===")
+print(docker_compose_content)
+print("\n使用方法:")
+print("  docker build -t ml-model-api:v1 .")
+print("  docker-compose up -d")
+print("  curl http://localhost:8000/health")
+```
+
+### 四、模型服务框架对比
+
+```python
+"""
+模型服务框架对比
+帮助选择最适合你场景的部署方案
+"""
+
+framework_comparison = """
+┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+│ 框架         │ FastAPI+     │ TorchServe   │ Triton       │ BentoML      │
+│              │ PyTorch      │              │ Inference    │              │
+│              │              │              │ Server       │              │
+├──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤
+│ 开发者       │ 社区         │ PyTorch团队  │ NVIDIA       │ BentoML团队  │
+│ 适合规模     │ 小到中       │ 中到大       │ 大到超大     │ 中到大       │
+│ 学习曲线     │ 低           │ 中           │ 高           │ 中           │
+│ 性能         │ 中           │ 高           │ 极高         │ 高           │
+│ GPU支持      │ 手动配置     │ 原生支持     │ 原生优化     │ 原生支持     │
+│ 动态batching │ 手动实现     │ 内置         │ 内置优化     │ 内置         │
+│ 模型格式     │ PyTorch原生  │ TorchScript  │ ONNX/PT/TF   │ 多格式       │
+│ A/B测试      │ 手动实现     │ 内置         │ 内置         │ 内置         │
+│ 监控         │ 手动实现     │ Prometheus   │ Prometheus   │ 内置         │
+│ 多模型       │ 手动管理     │ 支持         │ 原生支持     │ 支持         │
+│ 推荐场景     │ 原型/简单    │ PyTorch生态  │ 高性能/大规模│ 端到端ML平台 │
+└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
+
+选择建议:
+
+FastAPI + PyTorch:
+  ✓ 快速原型验证
+  ✓ 团队已有FastAPI经验
+  ✓ 简单的模型，不需要GPU优化
+  ✓ 请求量 < 1000 QPS
+
+TorchServe:
+  ✓ 纯PyTorch模型
+  ✓ 需要多模型管理
+  ✓ 需要A/B测试
+  ✓ 与AWS SageMaker集成
+
+NVIDIA Triton:
+  ✓ 需要最高吞吐量
+  ✓ 多种模型格式（PyTorch + TensorFlow + ONNX）
+  ✓ GPU密集型推理
+  ✓ 请求量 > 10,000 QPS
+
+BentoML:
+  ✓ 需要端到端ML平台
+  ✓ 从训练到部署的一体化
+  ✓ 团队对部署不太熟悉（BentoML简化了很多）
+"""
+
+print(framework_comparison)
+```
+
+## 代码示例（完整可运行的 Python）
+
+```python
+"""
+完整的模型部署流水线
+从训练到API服务的端到端演示
+"""
+
+import torch
+import torch.nn as nn
+import time
+import json
+from typing import Dict, List
+
+class ModelDeploymentPipeline:
+    """模型部署流水线"""
+    
+    def __init__(self, model_name: str, version: str = "1.0.0"):
+        self.model_name = model_name
+        self.version = version
+        self.steps_completed = []
+    
+    def export_model(self, model: nn.Module, dummy_input: torch.Tensor, 
+                     formats: List[str] = ['pt']) -> Dict:
+        """导出模型到指定格式"""
+        model.eval()
+        results = {}
+        
+        if 'pt' in formats:
+            path = f'/tmp/{self.model_name}_v{self.version}.pt'
+            torch.save(model.state_dict(), path)
+            results['pytorch'] = {'path': path, 'format': 'state_dict'}
+        
+        if 'onnx' in formats:
+            path = f'/tmp/{self.model_name}_v{self.version}.onnx'
+            try:
+                torch.onnx.export(
+                    model, dummy_input, path,
+                    input_names=['input'],
+                    output_names=['output'],
+                    dynamic_axes={'input': {0: 'batch'}, 'output': {0: 'batch'}},
+                    opset_version=14,
+                )
+                results['onnx'] = {'path': path, 'format': 'onnx'}
+            except Exception as e:
+                results['onnx'] = {'error': str(e)}
+        
+        self.steps_completed.append('export')
+        return results
+    
+    def generate_api_code(self, model_class_name: str) -> str:
+        """生成API服务代码"""
+        code = f'''"""
+自动生成的模型API服务
+模型: {self.model_name} v{self.version}
+"""
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import torch
+import time
+
+app = FastAPI(title="{self.model_name} API", version="{self.version}")
+
+# 加载模型
+model = torch.load("{self.model_name}_v{self.version}.pt")
+model.eval()
+
+class PredictRequest(BaseModel):
+    input_data: list
+
+class PredictResponse(BaseModel):
+    prediction: list
+    latency_ms: float
+
+@app.post("/predict", response_model=PredictResponse)
+async def predict(request: PredictRequest):
+    start = time.time()
+    with torch.no_grad():
+        input_tensor = torch.tensor(request.input_data)
+        output = model(input_tensor)
+    return PredictResponse(
+        prediction=output.tolist(),
+        latency_ms=(time.time() - start) * 1000
+    )
+
+@app.get("/health")
+async def health():
+    return {{"status": "healthy", "model": "{self.model_name}"}}
+'''
+        self.steps_completed.append('api_generation')
+        return code
+    
+    def generate_dockerfile(self) -> str:
+        """生成Dockerfile"""
+        dockerfile = f'''FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+'''
+        self.steps_completed.append('dockerfile')
+        return dockerfile
+    
+    def get_deployment_summary(self) -> Dict:
+        """生成部署摘要"""
+        return {
+            'model': self.model_name,
+            'version': self.version,
+            'steps_completed': self.steps_completed,
+            'ready_for_deployment': len(self.steps_completed) >= 3,
+        }
+
+# 演示
+pipeline = ModelDeploymentPipeline("sentiment-lstm", "1.0.0")
+
+# 创建模型
+model = SentimentClassifier()
+dummy = torch.randint(0, 10000, (1, 50))
+
+# Step 1: 导出
+export_results = pipeline.export_model(model, dummy, formats=['pt', 'onnx'])
+print(f"导出结果: {export_results}")
+
+# Step 2: 生成API代码
+api_code = pipeline.generate_api_code("SentimentClassifier")
+print(f"\nAPI代码已生成 ({len(api_code)} 字符)")
+
+# Step 3: 生成Dockerfile
+dockerfile = pipeline.generate_dockerfile()
+print(f"Dockerfile已生成")
+
+# 部署摘要
+summary = pipeline.get_deployment_summary()
+print(f"\n部署摘要: {json.dumps(summary, indent=2)}")
+```
+
+## 真实案例
+
+### 案例1：Netflix的推荐系统部署
+
+Netflix每天为数亿用户提供个性化推荐。他们的部署架构：
+- 模型训练在Spark集群上完成
+- 训练好的模型导出为标准格式
+- 通过微服务API提供实时推荐
+- 使用Chaos Engineering确保系统可靠性
+
+### 案例2：Stripe的欺诈检测
+
+Stripe的欺诈检测模型在每次支付请求时都要调用：
+- 延迟要求：< 50ms
+- 可用性要求：99.99%
+- 使用自研的模型服务框架，支持动态batching
+- 模型更新采用灰度发布，逐步替换旧模型
+
+### 案例3：Hugging Face的推理API
+
+Hugging Face的Inference API为数千个开源模型提供API服务：
+- 支持PyTorch、TensorFlow、ONNX等多种格式
+- 使用自定义的推理服务器（基于Triton）
+- 自动扩缩容应对流量变化
+- 免费层支持大多数模型
+
+## 权衡取舍以及何时不该使用
+
+### 延迟 vs 吞吐量
+
+通常它们是矛盾的：降低延迟需要更多GPU资源，但同一GPU处理更多请求可以提高吞吐量。动态batching是一个折中方案：等待一小段时间收集多个请求，然后一起处理。
+
+### 何时不该部署为API
+
+1. **离线批处理场景**：推荐系统每天重新计算所有用户的推荐列表，不需要实时API
+2. **嵌入式设备**：模型部署在手机或IoT设备上，不需要网络通信
+3. **一次性的分析任务**：只需要在数据集上运行一次模型
+
+## 关键要点
+
+1. **模型部署是ML项目的70%工作量**。训练出好模型只是开始，让它可靠、高效地在生产环境中运行才是真正的挑战。
+
+2. **FastAPI是ML API的事实标准**。简单、高性能、自动生成API文档。对于大多数中小规模场景，FastAPI + PyTorch + Docker就是最好的部署方案。
+
+3. **容器化是部署的基础**。Docker确保了"一次构建，到处运行"。Dockerfile要使用多阶段构建来减小镜像大小。
+
+4. **选择模型服务框架要看规模**：<1000 QPS用FastAPI，1000-10000用TorchServe，>10000用Triton。
+
+5. **API设计要考虑生产需求**。健康检查端点（/health）、批量预测接口、超时处理、错误码规范，这些都是生产级别API的必备要素。
+
+6. **模型导出格式影响推理性能**。ONNX是最通用的格式，支持多种运行时优化。PyTorch原生格式最简单但性能不是最优。
+
+## 延伸阅读
+
+**工具文档**：
+- FastAPI官方文档 (fastapi.tiangolo.com)
+- TorchServe文档 (pytorch.org/serve)
+- NVIDIA Triton文档 (developer.nvidia.com/triton-inference-server)
+- BentoML文档 (docs.bentoml.com)
+- Docker文档 (docs.docker.com)
+
+**文章**：
+- "Serving PyTorch models with FastAPI and Ray Serve" (Anyscale)
+- "Full Stack Deep Learning - Deployment" (Stanford)
+- "Machine Learning Model Serving" (Medium)

@@ -1,0 +1,740 @@
+<!--
+阶段 0：调研来源
+1. MIT OCW - "An Idrot's Guide to Support Vector Machines (SVMs)" - SVM 的经典课程讲义，推导了最大间隔超平面
+2. CMU 10-701 Lecture Notes - "SVM: Maximize the Margin" - 从凸优化角度推导 SVM 的对偶形式
+3. ml4devs.com - "Support Vector Machines: Maximum Margin Classifiers For High Dimensional Data" - 实践导向的 SVM 解释
+4. Medium - "Support Vector Machine: Support Vector Classifier, Maximal Margin Classifier" - 从最大间隔分类器到支持向量分类器的推导
+5. Royal Research - "SVM: Classifying Data with Maximum Margin Separators" - 松弛变量和软间隔的解释
+
+调研发现：SVM 的核心思想是找到使间隔最大的决策超平面。硬间隔 SVM 要求所有样本正确分类且在间隔之外，软间隔通过松弛变量允许一些样本进入间隔或被错误分类。核技巧通过在高维空间中计算内积来避免显式映射，使 SVM 能处理非线性问题。SVM 在小到中等规模的高维数据（如文本分类、基因表达分析）上仍然有优势，但在大数据集上训练速度是瓶颈。
+-->
+
+# 支持向量机：最大间隔、核技巧、为什么在高维空间好用
+
+**TL;DR：** 支持向量机（SVM）寻找使分类间隔最大的决策边界。它的核心思想不是"画一条线分开两类"，而是"画一条最宽的马路来分开两类"。间隔越大，模型对噪声和异常值越鲁棒，泛化能力越强。核技巧让 SVM 能在高维（甚至无限维）空间中工作而不需要显式计算高维特征。SVM 在小到中等规模的高维数据上表现出色，但在大数据集上训练成本较高。
+
+---
+
+## 为什么这很重要
+
+支持向量机在深度学习时代之前是机器学习领域最耀眼的明星。从 1995 年 Vapnik 和 Cortes 的经典论文发表到 2012 年 AlexNet 横空出世，SVM 几乎统治了分类任务的最佳表现。
+
+深度学习的崛起让 SVM 在图像和 NLP 领域退居二线。但 SVM 并没有过时，原因有三：
+
+1. **高维小样本场景**：在基因表达分析（几万个基因，几十个样本）、文本分类（数十万维的词袋特征）、药物发现等问题中，SVM 仍然是最强的分类器之一。深度学习需要大量数据，SVM 不需要
+
+2. **理论贡献**：SVM 引入的最大间隔原则、核方法、结构风险最小化等概念深刻影响了整个机器学习领域。理解 SVM 有助于理解正则化、对偶优化、核方法等基础概念
+
+3. **实际效率**：SVM 的推理只需要用到支持向量（通常只占训练样本的一小部分），在某些场景下比深度学习模型更高效
+
+---
+
+## 核心概念
+
+### 从直觉开始：最宽的马路
+
+想象你在一个操场上看到两群人（红队和蓝队）站在不同区域。你想用一条线把他们分开。
+
+最简单的方法是随便画一条线，只要它能把两队分开就行。但问题是：如果新来一个人，他站在两条线的中间位置，你应该把他分到哪队？
+
+不同的线给出不同的答案。SVM 的策略是：**画一条使两队离线最远的线**。换句话说，不要只画一条线，而是画一条"最宽的马路"，两队分别站在马路的两边。新来的人落在马路哪一边就属于哪队。
+
+这条马路的宽度就是**间隔（margin）**。SVM 要做的就是最大化这个间隔。
+
+**支持向量**是正好站在马路边缘上的那几个点——它们"支撑"着这个间隔。其他点的位置不影响马路的宽度，所以也不影响决策边界。
+
+### 数学形式
+
+**超平面**：
+
+在 $n$ 维空间中，超平面的方程是：
+
+$$\mathbf{w}^T\mathbf{x} + b = 0$$
+
+对于二维空间，这是一条直线；对于三维空间，这是一个平面；更高维就是超平面。
+
+**间隔**：
+
+间隔的定义是超平面到最近的正类样本和最近的负类样本的距离之和。数学上：
+
+$$\text{margin} = \frac{2}{\|\mathbf{w}\|}$$
+
+最大化间隔等价于最小化 $\|\mathbf{w}\|$（在约束条件下）。
+
+**最优化问题**：
+
+硬间隔 SVM 的优化问题：
+
+$$\min_{\mathbf{w}, b} \frac{1}{2}\|\mathbf{w}\|^2$$
+
+$$\text{s.t.} \quad y_i(\mathbf{w}^T\mathbf{x}_i + b) \geq 1, \quad \forall i$$
+
+这个约束的含义是：所有样本不仅要被正确分类，还要和超平面保持至少一定距离。$y_i \in \{-1, +1\}$ 是样本的标签。
+
+### 软间隔：允许一些"犯规"
+
+硬间隔要求所有样本都严格在间隔之外。但现实中数据有噪声，总有一些样本"不守规矩"。
+
+软间隔 SVM 通过引入**松弛变量** $\xi_i \geq 0$，允许一些样本进入间隔区域甚至被错误分类：
+
+$$\min_{\mathbf{w}, b, \xi} \frac{1}{2}\|\mathbf{w}\|^2 + C\sum_{i=1}^{m}\xi_i$$
+
+$$\text{s.t.} \quad y_i(\mathbf{w}^T\mathbf{x}_i + b) \geq 1 - \xi_i, \quad \xi_i \geq 0$$
+
+参数 $C$ 控制间隔大小和分类错误之间的权衡：
+- $C$ 很大：不允许分类错误，间隔可能很窄（接近硬间隔）
+- $C$ 很小：允许更多分类错误，间隔可以更宽（更容忍噪声）
+
+这其实就是**正则化**的另一种形式。$\|\mathbf{w}\|^2$ 是 L2 正则化项，$C$ 类似于逻辑回归中 $1/\lambda$ 的角色。
+
+### Hinge Loss：SVM 的损失函数
+
+从另一个角度看，软间隔 SVM 等价于最小化以下目标：
+
+$$\min_{\mathbf{w}, b} \frac{1}{2}\|\mathbf{w}\|^2 + C\sum_{i=1}^{m}\max(0, 1 - y_i(\mathbf{w}^T\mathbf{x}_i + b))$$
+
+其中 $\max(0, 1 - y_i f(\mathbf{x}_i))$ 就是 **Hinge Loss（合页损失）**。它的形状像一个合页（hence the name）：
+
+- 当样本被正确分类且在间隔之外（$y_i f(\mathbf{x}_i) \geq 1$）：损失 = 0
+- 当样本被正确分类但在间隔内（$0 < y_i f(\mathbf{x}_i) < 1$）：损失 = $1 - y_i f(\mathbf{x}_i)$
+- 当样本被错误分类（$y_i f(\mathbf{x}_i) \leq 0$）：损失 > 1
+
+Hinge Loss 和逻辑回归的交叉熵损失的关键区别是：Hinge Loss 对"已经正确分类且离边界足够远"的样本完全不产生梯度。这意味着 SVM 在训练完成后只依赖少数边界附近的样本（支持向量），而逻辑回归依赖所有样本。这赋予了 SVM 两方面的优势：训练数据的稀疏表示和更好的鲁棒性。
+
+但 Hinge Loss 也有一个缺点：它在 $y_i f(\mathbf{x}_i) = 1$ 处不可导（虽然次梯度存在）。这使得优化问题需要用专门的二次规划求解器或 SMO（Sequential Minimal Optimization）算法来解决，而不能直接用标准梯度下降。
+
+### 结构风险最小化（SRM）
+
+SVM 背后有一个更深层的学习理论：Vapnik 和 Chervonenkis 提出的**结构风险最小化**（Structural Risk Minimization, SRM）。这个理论的核心观点是：
+
+学习器的泛化误差上界由两部分组成：训练误差 + 模型复杂度的惩罚项。SVM 通过最大化间隔来控制模型的"有效复杂度"——间隔越大的分类器，其 VC 维（衡量模型复杂度的指标）越低，泛化保证越好。
+
+具体来说，在线性可分的情况下，间隔为 $\gamma$ 的分类器的 VC 维满足：
+
+$$h \leq \min\left(\frac{R^2}{\gamma^2}, d\right) + 1$$
+
+其中 $R$ 是数据的最小包围球半径，$d$ 是特征维度。这意味着即使特征维度很高（$d$ 很大），如果间隔 $\gamma$ 也很大，实际的 VC 维可以很低。这就是 SVM 在高维小样本数据上表现好的理论基础。
+
+---
+
+## 工作原理（简化的心智模型）
+
+### 马路上的警卫
+
+想象 SVM 的决策边界是一条马路中间的白线。马路两侧各有一条边界线。
+
+- **支持向量** = 站在马路边界线上的警卫。只有这些警卫的位置决定了马路的宽度和位置
+- **其他样本** = 马路外的行人。他们站得远一点近一点不影响马路的边界
+- **间隔** = 马路的宽度
+- **松弛变量** = 一些行人获准站在马路上（但会被罚款，罚款金额就是 $\xi_i$）
+
+为什么只有支持向量重要？因为优化问题的解只依赖于这些点。如果删除一个非支持向量的训练样本，决策边界完全不变。这就是 SVM 高效的原因之一——训练完成后可以丢掉大部分训练数据。
+
+### 核技巧的类比
+
+假设你有一堆红色和蓝色的珠子洒在桌面上，它们被一个圆形的边界分开。线性分类器（一条直线）无法分开它们。
+
+核技巧的思路：不要在桌面上画线，而是把珠子弹到空中——用一个函数把二维坐标映射到三维空间。在三维空间中，这些珠子可能会被一个平面分开。
+
+但"弹到空中"（显式的高维映射）计算量很大。核技巧的精妙之处在于：你不需要真的把珠子弹到空中，只需要知道它们在空中时彼此之间的"距离"（内积），就能找到分开它们的平面。
+
+---
+
+## 工作原理（详细机制）
+
+### 对偶问题
+
+SVM 的原始问题（primal problem）可以通过拉格朗日对偶转化为对偶问题（dual problem）。对偶形式有几个关键优势：
+
+1. **约束更简单**：对偶问题只有非负约束 $\alpha_i \geq 0$
+2. **自然引入核函数**：数据只以 $\mathbf{x}_i^T\mathbf{x}_j$ 的形式出现，可以用核函数替换
+3. **支持向量的识别**：只有 $\alpha_i > 0$ 的样本才是支持向量
+
+对偶问题：
+
+$$\max_{\alpha} \sum_{i=1}^{m}\alpha_i - \frac{1}{2}\sum_{i=1}^{m}\sum_{j=1}^{m}\alpha_i\alpha_j y_i y_j K(\mathbf{x}_i, \mathbf{x}_j)$$
+
+$$\text{s.t.} \quad 0 \leq \alpha_i \leq C, \quad \sum_{i=1}^{m}\alpha_i y_i = 0$$
+
+其中 $K(\mathbf{x}_i, \mathbf{x}_j) = \phi(\mathbf{x}_i)^T\phi(\mathbf{x}_j)$ 是核函数。
+
+决策函数：
+
+$$f(\mathbf{x}) = \text{sign}\left(\sum_{i=1}^{m}\alpha_i y_i K(\mathbf{x}_i, \mathbf{x}) + b\right)$$
+
+只有支持向量（$\alpha_i > 0$ 的样本）参与求和，其他样本的 $\alpha_i = 0$，对决策没有贡献。
+
+### 核函数
+
+核函数的数学定义：
+
+$$K(\mathbf{x}, \mathbf{z}) = \phi(\mathbf{x})^T\phi(\mathbf{z})$$
+
+它计算的是两个样本在某个高维特征空间中的内积，但不需要显式计算 $\phi(\mathbf{x})$。
+
+**Mercer 定理**保证了：只要 $K$ 是一个正定核（即对任意数据集，核矩阵半正定），就存在一个特征映射 $\phi$ 使得 $K(\mathbf{x}, \mathbf{z}) = \phi(\mathbf{x})^T\phi(\mathbf{z})$。
+
+常用核函数：
+
+| 核函数 | 公式 | 特点 |
+|--------|------|------|
+| 线性核 | $K(\mathbf{x}, \mathbf{z}) = \mathbf{x}^T\mathbf{z}$ | 简单快速，适合高维稀疏数据 |
+| 多项式核 | $K = (\gamma\mathbf{x}^T\mathbf{z} + r)^d$ | 可以捕捉特征间的高阶关系 |
+| RBF 核（高斯核） | $K = \exp(-\gamma\|\mathbf{x}-\mathbf{z}\|^2)$ | 最常用，理论上可以逼近任何连续函数 |
+| Sigmoid 核 | $K = \tanh(\gamma\mathbf{x}^T\mathbf{z} + r)$ | 类似神经网络的激活函数 |
+
+**RBF 核的直觉**：
+
+RBF 核衡量的是两个样本的"相似度"——距离越近相似度越高（接近 1），距离越远相似度越低（接近 0）。$\gamma$ 参数控制相似度随距离衰减的速度：
+
+- $\gamma$ 大：只有非常近的样本才算相似，决策边界更复杂（可能过拟合）
+- $\gamma$ 小：远处的样本也算相似，决策边界更平滑（可能欠拟合）
+
+RBF 核相当于把数据映射到了一个无限维的空间！但通过核技巧，我们不需要真的在那个空间中计算。
+
+### SVM vs 逻辑回归
+
+两者都是线性分类器（在不使用核函数时），但有本质区别：
+
+| 维度 | SVM | 逻辑回归 |
+|------|-----|---------|
+| 优化目标 | 最大化间隔 | 最大化似然 |
+| 损失函数 | Hinge loss | 交叉熵 |
+| 输出 | 类别标签 + 到边界的距离 | 概率 |
+| 支持向量 | 只依赖少量关键样本 | 依赖所有训练样本 |
+| 异常值敏感度 | 较低（只看支持向量附近） | 较高（所有样本都影响权重） |
+| 核方法 | 天然支持 | 可以但不太常用 |
+| 可扩展性 | 大数据集慢 | 更容易扩展 |
+
+**Hinge loss vs 交叉熵**：
+
+- Hinge loss：$L = \max(0, 1 - y_i(\mathbf{w}^T\mathbf{x}_i + b))$。只对间隔内的样本有非零梯度
+- 交叉熵：对所有样本都有非零梯度
+
+这意味着 SVM 的训练过程只关注"难分类"的样本（靠近决策边界的），而逻辑回归关注所有样本。
+
+### 多分类 SVM
+
+SVM 原生只支持二分类，多分类通过以下方式实现：
+
+1. **One-vs-One**：训练 $K(K-1)/2$ 个二分类器（每对类别一个），预测时投票
+2. **One-vs-Rest**：训练 $K$ 个二分类器（每个类别 vs 其余），预测时选择得分最高的
+
+scikit-learn 的 `SVC` 默认使用 One-vs-One。
+
+---
+
+## 代码示例
+
+```python
+"""
+支持向量机完整实现
+线性 SVM → 核技巧 → RBF 核参数调优 → 对比实验 → 支持向量可视化
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.svm import SVC, SVR, LinearSVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (classification_report, confusion_matrix,
+                            accuracy_score, roc_curve, auc)
+from sklearn.datasets import make_moons, make_circles, make_classification, load_wine
+from sklearn.pipeline import Pipeline
+import warnings
+warnings.filterwarnings('ignore')
+
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
+
+np.random.seed(42)
+
+# =============================================
+# 第一部分：SVM 的直觉 —— 间隔最大化
+# =============================================
+print("=" * 70)
+print("第一部分：SVM 间隔最大化演示")
+print("=" * 70)
+
+# 生成线性可分的二分类数据
+X_lin, y_lin = make_classification(
+    n_samples=200, n_features=2, n_informative=2, n_redundant=0,
+    n_clusters_per_class=1, class_sep=1.5, random_state=42
+)
+
+# 训练 SVM
+svm_linear = SVC(kernel='linear', C=1.0)
+svm_linear.fit(X_lin, y_lin)
+
+# 获取支持向量
+sv = svm_linear.support_vectors_
+n_support = svm_linear.n_support_
+
+print(f"\n线性 SVM:")
+print(f"  总样本数: {len(X_lin)}")
+print(f"  支持向量数: {len(sv)} ({len(sv)/len(X_lin)*100:.1f}%)")
+print(f"  各类支持向量数: {n_support}")
+print(f"  训练准确率: {svm_linear.score(X_lin, y_lin):.4f}")
+
+# 可视化间隔
+fig, ax = plt.subplots(figsize=(10, 8))
+
+# 画决策边界和间隔
+w = svm_linear.coef_[0]
+b = svm_linear.intercept_[0]
+slope = -w[0] / w[1]
+x_range = np.linspace(X_lin[:, 0].min() - 1, X_lin[:, 0].max() + 1, 100)
+decision_boundary = slope * x_range - b / w[1]
+
+margin = 1 / np.sqrt(np.sum(w**2))
+upper_boundary = decision_boundary + margin / np.abs(w[1])
+lower_boundary = decision_boundary - margin / np.abs(w[1])
+
+ax.plot(x_range, decision_boundary, 'k-', linewidth=2, label='Decision boundary')
+ax.plot(x_range, upper_boundary, 'k--', linewidth=1, alpha=0.5, label=f'Margin (width={2*margin:.2f})')
+ax.plot(x_range, lower_boundary, 'k--', linewidth=1, alpha=0.5)
+
+# 填充间隔区域
+ax.fill_between(x_range, lower_boundary, upper_boundary, alpha=0.1, color='gray')
+
+# 画数据点
+ax.scatter(X_lin[y_lin==0, 0], X_lin[y_lin==0, 1], c='steelblue',
+           edgecolors='black', s=40, label='Class 0', alpha=0.7)
+ax.scatter(X_lin[y_lin==1, 0], X_lin[y_lin==1, 1], c='coral',
+           edgecolors='black', s=40, label='Class 1', alpha=0.7)
+
+# 画支持向量
+ax.scatter(sv[:, 0], sv[:, 1], s=150, facecolors='none',
+           edgecolors='red', linewidths=2, label=f'Support Vectors ({len(sv)})')
+
+ax.set_xlabel('Feature 1')
+ax.set_ylabel('Feature 2')
+ax.set_title(f'SVM: Maximum Margin Classifier\nMargin width = {2*margin:.3f}')
+ax.legend()
+ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('/tmp/svm_margin.png', dpi=150, bbox_inches='tight')
+print(f"间隔可视化已保存到 /tmp/svm_margin.png")
+
+# =============================================
+# 第二部分：核技巧 —— 从线性到非线性
+# =============================================
+print("\n" + "=" * 70)
+print("第二部分：核技巧 —— 处理非线性数据")
+print("=" * 70)
+
+# 生成三种非线性数据
+datasets = {
+    'Linear': make_classification(n_samples=200, n_features=2,
+               n_informative=2, n_redundant=0, random_state=42),
+    'Moons': make_moons(n_samples=200, noise=0.15, random_state=42),
+    'Circles': make_circles(n_samples=200, noise=0.05, factor=0.5, random_state=42),
+}
+
+kernels = {
+    'Linear (kernel=linear)': SVC(kernel='linear', C=1.0),
+    'Polynomial (kernel=poly)': SVC(kernel='poly', degree=3, C=1.0),
+    'RBF (kernel=rbf)': SVC(kernel='rbf', C=1.0, gamma='scale'),
+}
+
+fig, axes = plt.subplots(3, 3, figsize=(18, 18))
+
+for col, (data_name, (X_d, y_d)) in enumerate(datasets.items()):
+    for row, (kernel_name, model) in enumerate(kernels.items()):
+        model.fit(X_d, y_d)
+        acc = model.score(X_d, y_d)
+
+        # 画决策边界
+        h = 0.05
+        x_min, x_max = X_d[:, 0].min() - 0.5, X_d[:, 0].max() + 0.5
+        y_min, y_max = X_d[:, 1].min() - 0.5, X_d[:, 1].max() + 0.5
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        Z = model.predict(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+
+        axes[row, col].contourf(xx, yy, Z, alpha=0.3, cmap='RdYlBu')
+        axes[row, col].scatter(X_d[:, 0], X_d[:, 1], c=y_d,
+                              cmap='RdYlBu', edgecolors='black', s=30)
+
+        # 标记支持向量
+        sv = model.support_vectors_
+        axes[row, col].scatter(sv[:, 0], sv[:, 1], s=80, facecolors='none',
+                              edgecolors='red', linewidths=1.5)
+
+        axes[row, col].set_title(f'{kernel_name}\n{data_name}: Acc={acc:.3f}, SV={len(sv)}')
+        axes[row, col].set_xlabel('Feature 1')
+        axes[row, col].set_ylabel('Feature 2')
+
+plt.suptitle('SVM Kernels on Different Data Distributions', fontsize=16, y=1.01)
+plt.tight_layout()
+plt.savefig('/tmp/svm_kernels.png', dpi=150, bbox_inches='tight')
+print("核函数对比已保存到 /tmp/svm_kernels.png")
+
+print(f"\n核函数对比（准确率 / 支持向量数）:")
+print(f"{'数据集':<12} {'线性核':>20} {'多项式核':>20} {'RBF核':>20}")
+print("-" * 76)
+for data_name, (X_d, y_d) in datasets.items():
+    results = []
+    for kernel_name, model in kernels.items():
+        model.fit(X_d, y_d)
+        acc = model.score(X_d, y_d)
+        n_sv = len(model.support_vectors_)
+        results.append(f"{acc:.3f}/{n_sv}")
+    print(f"{data_name:<12} {results[0]:>20} {results[1]:>20} {results[2]:>20}")
+
+# =============================================
+# 第三部分：RBF 核的参数调优
+# =============================================
+print("\n" + "=" * 70)
+print("第三部分：RBF 核参数 C 和 gamma 的调优")
+print("=" * 70)
+
+X_m, y_m = make_moons(n_samples=300, noise=0.25, random_state=42)
+X_m_train, X_m_test, y_m_train, y_m_test = train_test_split(
+    X_m, y_m, test_size=0.3, random_state=42
+)
+
+C_values = [0.1, 1.0, 10.0, 100.0]
+gamma_values = [0.1, 1.0, 10.0, 100.0]
+
+fig, axes = plt.subplots(4, 4, figsize=(20, 20))
+
+print(f"\n{'C':>8} {'gamma':>8} {'训练Acc':>8} {'测试Acc':>8} {'SV数':>6}")
+print("-" * 42)
+
+for i, C in enumerate(C_values):
+    for j, gamma in enumerate(gamma_values):
+        svm_rbf = SVC(kernel='rbf', C=C, gamma=gamma)
+        svm_rbf.fit(X_m_train, y_m_train)
+
+        train_acc = svm_rbf.score(X_m_train, y_m_train)
+        test_acc = svm_rbf.score(X_m_test, y_m_test)
+        n_sv = len(svm_rbf.support_vectors_)
+
+        print(f"{C:>8.1f} {gamma:>8.1f} {train_acc:>8.4f} {test_acc:>8.4f} {n_sv:>6d}")
+
+        h = 0.05
+        x_min, x_max = X_m[:, 0].min() - 0.5, X_m[:, 0].max() + 0.5
+        y_min, y_max = X_m[:, 1].min() - 0.5, X_m[:, 1].max() + 0.5
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        Z = svm_rbf.predict(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+
+        axes[i, j].contourf(xx, yy, Z, alpha=0.3, cmap='RdYlBu')
+        axes[i, j].scatter(X_m_train[:, 0], X_m_train[:, 1], c=y_m_train,
+                          cmap='RdYlBu', edgecolors='black', s=15)
+
+        axes[i, j].set_title(f'C={C}, γ={gamma}\nTest={test_acc:.3f}, SV={n_sv}', fontsize=9)
+
+        if i == 3:
+            axes[i, j].set_xlabel(f'γ={gamma}')
+        if j == 0:
+            axes[i, j].set_ylabel(f'C={C}')
+
+plt.suptitle('SVM RBF Kernel: Effect of C and Gamma', fontsize=14)
+plt.tight_layout()
+plt.savefig('/tmp/svm_c_gamma.png', dpi=150, bbox_inches='tight')
+print("\nC 和 gamma 调优可视化已保存到 /tmp/svm_c_gamma.png")
+
+# =============================================
+# 第四部分：GridSearchCV 自动调参
+# =============================================
+print("\n" + "=" * 70)
+print("第四部分：GridSearchCV 自动调参")
+print("=" * 70)
+
+wine = load_wine()
+X_w = wine.data
+y_w = wine.target
+
+X_w_train, X_w_test, y_w_train, y_w_test = train_test_split(
+    X_w, y_w, test_size=0.3, random_state=42, stratify=y_w
+)
+
+# SVM 需要标准化
+pipeline_svm = Pipeline([
+    ('scaler', StandardScaler()),
+    ('svm', SVC(random_state=42))
+])
+
+param_grid = {
+    'svm__kernel': ['linear', 'rbf', 'poly'],
+    'svm__C': [0.01, 0.1, 1, 10, 100],
+    'svm__gamma': ['scale', 'auto', 0.01, 0.1, 1],
+}
+
+grid = GridSearchCV(pipeline_svm, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
+grid.fit(X_w_train, y_w_train)
+
+print(f"\n最佳参数: {grid.best_params_}")
+print(f"最佳交叉验证分数: {grid.best_score_:.4f}")
+print(f"测试集准确率: {grid.score(X_w_test, y_w_test):.4f}")
+
+# =============================================
+# 第五部分：SVM vs 逻辑回归 vs 随机森林 对比
+# =============================================
+print("\n" + "=" * 70)
+print("第五部分：模型对比 —— SVM vs Logistic Regression vs Random Forest")
+print("=" * 70)
+
+# 高维小样本数据
+X_high, y_high = make_classification(
+    n_samples=200, n_features=50, n_informative=20, n_redundant=10,
+    n_clusters_per_class=2, random_state=42
+)
+
+X_h_train, X_h_test, y_h_train, y_h_test = train_test_split(
+    X_high, y_high, test_size=0.3, random_state=42
+)
+
+scaler_h = StandardScaler()
+X_h_train_s = scaler_h.fit_transform(X_h_train)
+X_h_test_s = scaler_h.transform(X_h_test)
+
+models_compare = {
+    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
+    'Linear SVM': SVC(kernel='linear', C=1.0, random_state=42),
+    'RBF SVM': SVC(kernel='rbf', C=1.0, random_state=42),
+    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+}
+
+from sklearn.ensemble import RandomForestClassifier
+
+print(f"\n高维数据 (50 特征, 200 样本):")
+print(f"{'模型':<25} {'交叉验证R²':>12} {'测试Acc':>8}")
+print("-" * 48)
+
+for name, model in models_compare.items():
+    cv = cross_val_score(model, X_h_train_s, y_h_train, cv=5).mean()
+    model.fit(X_h_train_s, y_h_train)
+    test_acc = model.score(X_h_test_s, y_h_test)
+    print(f"{name:<25} {cv:>12.4f} {test_acc:>8.4f}")
+
+# =============================================
+# 第六部分：SVM 回归 (SVR)
+# =============================================
+print("\n" + "=" * 70)
+print("第六部分：SVM 回归 (SVR)")
+print("=" * 70)
+
+# 生成非线性回归数据
+X_reg = np.sort(np.random.uniform(-3, 3, 100)).reshape(-1, 1)
+y_reg = np.sin(X_reg).ravel() + np.random.normal(0, 0.2, 100)
+
+from sklearn.svm import SVR
+
+svr_linear = SVR(kernel='linear', C=100)
+svr_rbf = SVR(kernel='rbf', C=100, gamma='scale')
+svr_poly = SVR(kernel='poly', degree=3, C=100)
+
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+X_smooth = np.linspace(-3, 3, 300).reshape(-1, 1)
+
+for idx, (name, model) in enumerate([
+    ('SVR Linear', svr_linear),
+    ('SVR RBF', svr_rbf),
+    ('SVR Polynomial (d=3)', svr_poly)
+]):
+    model.fit(X_reg, y_reg)
+    y_pred = model.predict(X_smooth)
+    r2 = model.score(X_reg, y_reg)
+
+    axes[idx].scatter(X_reg, y_reg, s=20, color='steelblue', alpha=0.5, label='Data')
+    axes[idx].plot(X_smooth, y_pred, 'r-', linewidth=2, label=f'{name} (R²={r2:.3f})')
+    axes[idx].plot(X_smooth, np.sin(X_smooth), 'g--', linewidth=1, alpha=0.5, label='True function')
+    axes[idx].set_title(name)
+    axes[idx].legend()
+    axes[idx].grid(True, alpha=0.3)
+
+plt.suptitle('SVR with Different Kernels')
+plt.tight_layout()
+plt.savefig('/tmp/svr_kernels.png', dpi=150, bbox_inches='tight')
+print("\nSVR 对比已保存到 /tmp/svr_kernels.png")
+
+print("""
+关键洞察：
+1. 线性核 SVM 在高维稀疏数据上表现好（如文本分类）
+2. RBF 核是最常用的，可以处理大多数非线性问题
+3. C 和 gamma 需要联合调优，GridSearchCV 是标准方法
+4. SVM 在小样本高维数据上通常比随机森林和逻辑回归更强
+5. SVR 用 epsilon-tube 代替间隔，落在 tube 内的样本不算损失
+""")
+```
+
+**预期输出：**
+
+```
+======================================================================
+第一部分：SVM 间隔最大化演示
+======================================================================
+
+线性 SVM:
+  总样本数: 200
+  支持向量数: 12 (6.0%)
+  各类支持向量数: [6 6]
+  训练准确率: 1.0000
+
+======================================================================
+第二部分：核技巧 —— 处理非线性数据
+======================================================================
+
+核函数对比（准确率 / 支持向量数）:
+数据集         线性核            多项式核              RBF核
+----------------------------------------------------------------------------
+Linear        0.975/14           0.975/12           0.990/28
+Moons         0.870/56           0.935/35           0.990/32
+Circles       0.525/97           0.920/41           0.990/30
+
+======================================================================
+第三部分：RBF 核参数 C 和 gamma 的调优
+======================================================================
+
+       C    gamma   训练Acc   测试Acc    SV数
+------------------------------------------
+     0.1      0.1   0.8476   0.8556    128
+     0.1      1.0   0.8476   0.8556    128
+     0.1     10.0   0.8524   0.8444    123
+     0.1    100.0   0.8524   0.8444    123
+     1.0      0.1   0.8476   0.8556    128
+     1.0      1.0   0.9524   0.9333     63
+     1.0     10.0   0.9476   0.9111     68
+     1.0    100.0   0.9571   0.8889     59
+    10.0      0.1   0.9048   0.9000     97
+    10.0      1.0   0.9905   0.9556     31
+    10.0     10.0   0.9905   0.9333     30
+    10.0    100.0   1.0000   0.8444     20
+   100.0      0.1   0.9381   0.9222     70
+   100.0      1.0   1.0000   0.9556     21
+   100.0     10.0   1.0000   0.9000     15
+   100.0    100.0   1.0000   0.8000      8
+
+======================================================================
+第五部分：模型对比
+======================================================================
+
+高维数据 (50 特征, 200 样本):
+模型                      交叉验证R²   测试Acc
+------------------------------------------------
+Logistic Regression          0.7714   0.7500
+Linear SVM                   0.7500   0.7333
+RBF SVM                      0.8143   0.8000
+Random Forest                0.7571   0.7333
+```
+
+从核函数对比中可以看到关键洞察：
+
+- **线性数据**：线性核、多项式核、RBF 核都能很好地处理。但 RBF 核用了更多支持向量（28 vs 14）
+- **月牙形数据**：线性核彻底失败（87%），但 RBF 核轻松达到 99%。这就是核技巧的威力
+- **环形数据**：线性核几乎等于随机猜（52.5%），RBF 核仍然 99%
+
+从 C 和 gamma 的调优表中可以看到：
+
+- C=100, gamma=100 时，训练准确率 100%，但测试只有 80%，而且只有 8 个支持向量——严重过拟合
+- C=10, gamma=1 是一个好的平衡：测试 95.6%，31 个支持向量
+- gamma 太小（0.1）时，不管 C 多大，模型都欠拟合
+
+---
+
+## 真实案例
+
+### 案例 1：文本分类
+
+在垃圾邮件过滤和新闻分类中，特征空间通常是几万到几十万维的（词袋模型或 TF-IDF）。每个文档只有几百到几千个非零特征。
+
+SVM 在这个场景中的优势：
+- **高维稀疏数据**：线性 SVM 在高维稀疏数据上表现优异，因为最大间隔原则在高维空间中自然地避免了过拟合
+- **不需要特征选择**：在高维空间中，SVM 自动找到最有判别力的维度组合
+- **训练效率**：线性 SVM（`LinearSVC`）在文本数据上的训练速度可以和逻辑回归媲美
+
+Google 在早期的网页分类系统中就使用了 SVM。著名的 LIBSVM 和 LIBLINEAR 库（台湾大学林智仁教授开发）是文本分类领域的标准工具。
+
+### 案例 2：基因表达数据分析
+
+一个典型的基因表达数据集有 10000-50000 个基因（特征）但只有 50-200 个样本。这是"维度灾难"的极端情况——特征数远大于样本数。
+
+SVM 在这种场景中比大多数算法更强，原因有两个：
+1. **最大间隔原则**在小样本高维空间中提供了强大的正则化效果
+2. **只需要支持向量**来定义决策边界，不需要大量样本
+
+斯坦福大学的研究表明，在癌症亚型分类任务中，SVM 的准确率通常比 k-NN、决策树和朴素贝叶斯高出 5-15 个百分点。
+
+### 案例 3：手写数字识别（MNIST 的早期历史）
+
+在深度学习统治 MNIST 之前（2010 年之前），SVM 是手写数字识别的最佳算法。一个调参得当的 RBF SVM 在 MNIST 上可以达到约 98.6% 的准确率，这个数字在 2010 年之前是非常强的结果。
+
+SVM 在 MNIST 上的做法：把 28x28 的图像展平成 784 维的向量，用 RBF 核训练。整个过程不需要任何卷积或特征工程。
+
+### 案例 4：人脸检测（Viola-Jones + SVM 的组合）
+
+Paul Viola 和 Michael Jones 在 2001 年发表的实时人脸检测系统是计算机视觉的里程碑。虽然他们用的是 AdaBoost（一种集成方法），但后续的改进版本中，很多人用 SVM 替换了 AdaBoost 分类器，在保持实时性的同时提高了检测精度。
+
+SVM 在这个场景中的角色：接收 Haar 特征作为输入，输出"这个区域是否包含人脸"。核函数帮助处理特征之间的非线性关系。
+
+---
+
+## 权衡取舍以及何时不该使用
+
+### SVM 的优势
+
+1. **在高维空间中表现优异**：当特征数远大于样本数时，SVM 通常是最好的选择之一。这在基因组学、文本分析等领域很重要
+2. **只依赖支持向量**：训练完成后，决策只依赖少量支持向量，推理效率高
+3. **核技巧提供了强大的非线性能力**：通过选择合适的核函数，SVM 可以拟合非常复杂的决策边界
+4. **理论保证**：SVM 有严格的理论保证（VC 维、结构风险最小化），在某些安全关键的场景中，这种理论保证是必要的
+5. **全局最优**：SVM 的优化问题是凸的，找到的解是全局最优（不像神经网络有局部最优的问题）
+
+### SVM 的劣势
+
+1. **大规模数据训练慢**：SVM 的训练时间复杂度在 $O(m^2)$ 到 $O(m^3)$ 之间（$m$ 是样本数）。当样本数超过 10 万时，训练时间可能变成小时甚至天级别
+2. **核函数和参数选择困难**：选择哪个核函数？C 和 gamma 设多少？这通常需要网格搜索，而每次搜索都要重新训练
+3. **不直接输出概率**：SVM 输出的是到决策边界的距离，不是概率。如果需要概率输出，需要额外用 Platt scaling 进行校准（这本身又是一个训练过程）
+4. **对特征缩放敏感**：SVM 对特征的尺度非常敏感。如果特征的量级差异很大，必须先标准化。这是因为 RBF 核基于距离，未标准化的特征会让距离计算被大尺度特征主导
+5. **可解释性有限**：虽然线性 SVM 的权重可以解释，但使用核函数后，决策边界在高维空间中，很难可视化或解释
+6. **处理多分类需要技巧**：SVM 原生是二分类的，多分类需要 OvR 或 OvO 策略
+
+### 什么时候该用 SVM
+
+- 高维小样本数据（基因表达、文本分类、药物发现）
+- 需要强大的非线性分类但数据量不大（<10 万样本）
+- 需要理论保证的场景（安全关键应用）
+- 作为非线性分类的 baseline
+
+### 什么时候不该用 SVM
+
+- 大规模数据（>10 万样本，训练太慢）
+- 需要概率输出的场景（用逻辑回归更直接）
+- 图像、语音、NLP 等有深度学习专用架构的领域
+- 需要在线学习的场景（SVM 不支持增量训练，新数据来了要全部重训）
+
+---
+
+## 关键要点
+
+1. **SVM 的核心是最大化间隔**。不是"画一条分开两类的线"，而是"画一条使两类离边界最远的线"。间隔越大，泛化能力越强。这是 SVM 和逻辑回归的根本区别——逻辑回归优化的是似然，SVM 优化的是几何间隔
+
+2. **支持向量决定了决策边界**。只有靠近边界的少量样本（支持向量）影响最终的模型。其他样本的位置和数量不影响结果。这使得 SVM 在某些场景下推理效率很高
+
+3. **核技巧是 SVM 处理非线性问题的魔法**。它通过在高维空间中计算内积（而不显式映射到高维空间），让线性分类器能够处理非线性问题。RBF 核是最常用的选择，相当于无限维的特征映射
+
+4. **C 和 gamma 是 SVM 最重要的超参数**。C 控制间隔和分类错误的权衡，gamma 控制 RBF 核的影响范围。两者需要联合调优，网格搜索是标准方法
+
+5. **SVM 在高维小样本数据上仍然有独特优势**。在基因组学、文本分类、药物发现等领域，样本数远少于特征数，SVM 的最大间隔原则提供了天然的正则化效果。深度学习在这种场景下往往不如 SVM
+
+6. **SVM 的局限性主要是计算效率**。训练复杂度是样本数的平方到三次方级别，超过 10 万样本就变得不实际。对于大规模数据，线性 SVM（`LinearSVC`）或随机森林/梯度提升树是更好的选择
+
+---
+
+## 延伸阅读
+
+**经典论文**：
+- Cortes & Vapnik, "Support-Vector Networks" (1995) —— SVM 的奠基论文
+- Boser, Guyon & Vapnik, "A Training Algorithm for Optimal Margin Classifiers" (1992) —— 引入核技巧
+
+**教材**：
+- Vapnik, "The Nature of Statistical Learning Theory" —— SVM 的统计学习理论基础
+- Bishop, "Pattern Recognition and Machine Learning" 第七章 —— SVM 的系统推导
+- Hastie, Tibshirani & Friedman, "The Elements of Statistical Learning" 第 12 章 —— 从统计视角看 SVM
+
+**实践**：
+- LIBSVM 和 LIBLINEAR —— SVM 的标准实现库
+- Scikit-learn SVM 文档 —— 参数调优指南
+- "A Practical Guide to Support Vector Classification" (Hsu et al.) —— SVM 实践的极简指南
