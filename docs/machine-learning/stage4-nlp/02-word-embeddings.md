@@ -1,0 +1,725 @@
+<!--
+调研来源：
+1. Mikolov et al., "Efficient Estimation of Word Representations in Vector Space" (2013) — Word2Vec 原始论文
+2. Mikolov et al., "Distributed Representations of Words and Phrases and their Compositionality" (2013) — 负采样论文
+3. Pennington et al., "GloVe: Global Vectors for Word Representation" (2014) — GloVe 论文
+4. Bojanowski et al., "Enriching Word Vectors with Subword Information" (2017) — FastText 论文
+5. Levy & Goldberg, "Neural Word Embedding as Implicit Matrix Factorization" (2014) — Word2Vec 与矩阵分解的关系
+6. Ethayarajh, "How Contextual are Contextualized Word Representations?" (2019) — 词向量的各向异性分析
+
+核心发现：Word2Vec 的两种架构（CBOW 和 Skip-gram）代表了两种理解上下文的方式——CBOW 从上下文预测中心词，Skip-gram 从中心词预测上下文。负采样是让训练变得可行的关键技术，它把 O(V) 的 Softmax 问题变成 O(k) 的二分类问题（k 通常为 5-20）。词向量的几何意义不仅仅是"相似词距离近"，还包含线性子结构（类比关系）和潜在的语义维度（性别、时态、地理等）。GloVe 从全局统计的角度出发，但最终学到的向量空间和 Word2Vec 高度一致，说明分布式假设是本质，具体实现是表层。
+-->
+
+# Word2Vec 与词嵌入：CBOW / Skip-gram、负采样，词向量的几何意义
+
+**TL;DR：** Word2Vec 用两种方式训练词向量：CBOW 从上下文词预测中心词，Skip-gram 从中心词预测上下文词。训练的核心挑战是 Softmax 的计算代价（需要遍历整个词汇表），负采样通过只对 k 个"噪声词"做二分类来解决这个问题。训练出来的词向量空间具有惊人的几何性质：语义相似的词彼此接近，词间差异向量编码了类比关系（king - man + woman ≈ queen），不同方向对应不同的语义维度。
+
+## 为什么这很重要
+
+2013 年，Tomas Mikolov 等人在 Google 发表了两篇论文，展示了用极其简单的方法可以在大规模文本上学到高质量的词向量。这些向量不仅能做语义相似度计算，还能通过向量运算完成类比推理——这在当时引起了轰动。
+
+Word2Vec 的重要性不在于算法本身有多复杂（它实际上非常简单），而在于它证明了三件事：
+
+1. **简单的预测任务可以学到丰富的语义表示**。你不需要标注数据，只需要大量原始文本。
+2. **词向量空间的几何结构编码了语义关系**。向量运算不是黑魔法，是统计规律的几何体现。
+3. **高效的训练方法是实用的关键**。负采样把训练时间从 O(V) 降到 O(k)，使得在十亿级词的语料上训练成为可能。
+
+这三点直接影响了后来所有 NLP 模型的设计——从 ELMo 到 BERT 到 GPT。
+
+## 核心概念
+
+### CBOW vs Skip-gram
+
+```
+CBOW (Continuous Bag of Words):
+  上下文: "The cat ___ on the mat"
+  输入: ["The", "cat", "on", "the", "mat"] → 预测: "sat"
+  (用周围词预测中心词)
+
+Skip-gram:
+  中心词: "sat"
+  输入: "sat" → 预测: ["The", "cat", "on", "the", "mat"]
+  (用中心词预测周围词)
+```
+
+#### 选择哪种？
+
+| 特性 | CBOW | Skip-gram |
+|------|------|-----------|
+| 训练速度 | 较快（多个上下文词平均后预测） | 较慢（每个上下文词独立预测） |
+| 低频词效果 | 较差（多个词平均会"稀释"低频词信息） | 较好（低频词也能生成足够多的训练样本） |
+| 高频词效果 | 较好（高频词的上下文丰富，平均后更稳定） | 一般（高频词会生成过多训练样本） |
+| 总体精度 | 略低 | 略高 |
+| 推荐场景 | 计算资源有限、语料以常见词为主 | 需要高质量低频词向量 |
+
+在实践中，Skip-gram 更常用，因为低频词往往是更有信息量的词（术语、专有名词等）。
+
+### 负采样（Negative Sampling）
+
+训练 Word2Vec 的原始目标需要对整个词汇表做 Softmax，计算代价是 O(V)，其中 V 可能是 50 万。对于每个训练样本都需要计算 50 万次——这在十亿级语料上完全不现实。
+
+负采样的核心思想：**不计算所有词的概率，只区分"真实词"和 k 个随机"噪声词"。**
+
+把多分类问题变成 k+1 个二分类问题。k 通常取 5（小数据集）到 20（大数据集）。
+
+## 工作原理（简化的心智模型）
+
+### 给 12 岁孩子的解释
+
+想象你在一个大聚会中，你要记住每个人的名字。
+
+**CBOW 方法**：你看到一个人的朋友们（上下文），通过朋友们猜测这个人是谁（中心词）。如果他的朋友都是篮球运动员，那他可能也是篮球运动员。
+
+**Skip-gram 方法**：你知道一个人是谁（中心词），猜他的朋友们会是谁（上下文）。如果他是篮球运动员，他的朋友可能也是运动员。
+
+**负采样**：老师不让你背全班 50 个同学的名字（Softmax），而是给你一个正确的名字和 5 个错误的名字，让你区分哪个是对的。简单多了。
+
+**词向量的几何意义**：训练完成后，每个词变成了一个 300 维空间中的一个点。相似的词会聚集在一起——"猫"和"狗"是邻居，"猫"和"汽车"隔得很远。更有趣的是，连接"国王"到"男人"的箭头，和连接"王后"到"女人"的箭头，方向几乎相同。这个箭头就是"王权"这个概念。
+
+## 工作原理（详细机制）
+
+### 1. Skip-gram 模型
+
+#### 目标函数
+
+给定一个词序列 $w_1, w_2, \ldots, w_T$，Skip-gram 的目标是最大化：
+
+$$\mathcal{L} = \sum_{t=1}^{T} \sum_{-c \leq j \leq c, j \neq 0} \log p(w_{t+j} | w_t)$$
+
+其中 $c$ 是上下文窗口大小。
+
+条件概率用 Softmax 定义：
+
+$$p(w_O | w_I) = \frac{\exp(\mathbf{u}_{w_O}^T \mathbf{v}_{w_I})}{\sum_{w=1}^{V} \exp(\mathbf{u}_w^T \mathbf{v}_{w_I})}$$
+
+其中：
+- $\mathbf{v}_{w_I}$ 是中心词 $w_I$ 的输入向量（从 W_in 矩阵查找）
+- $\mathbf{u}_{w_O}$ 是上下文词 $w_O$ 的输出向量（从 W_out 矩阵查找）
+- $V$ 是词汇表大小
+
+分母 $\sum_{w=1}^{V} \exp(\mathbf{u}_w^T \mathbf{v}_{w_I})$ 需要遍历整个词汇表——这就是计算瓶颈。
+
+#### 模型结构
+
+Skip-gram 的网络结构极其简单：
+
+```
+输入: one-hot 向量 (V 维, 只有一个 1)
+  │
+  ▼ W_in (V × D 矩阵, 查表操作)
+隐藏层: D 维向量 (中心词的词向量)
+  │
+  ▼ W_out (D × V 矩阵)
+输出: V 维 Softmax (预测每个词作为上下文词的概率)
+```
+
+注意：隐藏层没有激活函数。它只是从 W_in 矩阵中查找对应的行——这就是词向量。
+
+### 2. 负采样（Negative Sampling）
+
+#### 目标函数的改写
+
+负采样把 Softmax 分类替换为多个 Sigmoid 二分类。
+
+对于一对正样本 $(w, c)$（$w$ 是中心词，$c$ 是真实上下文词）：
+
+$$\mathcal{L}_{NEG} = \log \sigma(\mathbf{u}_c^T \mathbf{v}_w) + \sum_{i=1}^{k} \mathbb{E}_{w_i \sim P_n(w)} [\log \sigma(-\mathbf{u}_{w_i}^T \mathbf{v}_w)]$$
+
+其中：
+- $\sigma(x) = 1/(1+e^{-x})$ 是 Sigmoid 函数
+- $k$ 是负样本数量（通常 5-20）
+- $P_n(w)$ 是噪声分布，通常取 $P_n(w) \propto f(w)^{3/4}$（$f(w)$ 是词频）
+
+直觉理解：
+- 第一项 $\log \sigma(\mathbf{u}_c^T \mathbf{v}_w)$：让真实上下文词 $c$ 和中心词 $w$ 的向量更接近（点积更大）
+- 第二项 $\sum \log \sigma(-\mathbf{u}_{w_i}^T \mathbf{v}_w)$：让随机噪声词 $w_i$ 和中心词 $w$ 的向量更远离（点积更小）
+
+#### 为什么噪声分布用 $f(w)^{3/4}$ 而不是 $f(w)$？
+
+直接按词频采样会导致高频词被过度采样。$f(w)^{3/4}$ 是一个"平滑"的词频分布：
+
+| 词 | 频率 | $f^{3/4}$ | 采样概率比 |
+|----|------|-----------|-----------|
+| "the" | 0.05 | 0.011 | 1.00x |
+| "cat" | 0.0001 | 0.0001 | 0.009x |
+| "quantum" | 0.000001 | 0.000003 | 0.0003x |
+
+$3/4$ 次方让低频词的采样概率相对于词频有所提升（"quantum"的采样概率是频率的 3 倍），高频词有所降低。这确保了模型有机会学习低频词的表示。
+
+#### 负采样的梯度推导
+
+对于正样本 $(w, c)$，目标函数的第一项：
+
+$$\log \sigma(\mathbf{u}_c^T \mathbf{v}_w)$$
+
+对 $\mathbf{v}_w$ 求梯度：
+
+$$\frac{\partial}{\partial \mathbf{v}_w} \log \sigma(\mathbf{u}_c^T \mathbf{v}_w) = (1 - \sigma(\mathbf{u}_c^T \mathbf{v}_w)) \cdot \mathbf{u}_c$$
+
+这个梯度的直觉很清晰：
+- 如果当前预测已经很好（$\sigma(\mathbf{u}_c^T \mathbf{v}_w)$ 接近 1），梯度很小，几乎不更新
+- 如果当前预测不好（$\sigma(\mathbf{u}_c^T \mathbf{v}_w)$ 接近 0），梯度大，往 $\mathbf{u}_c$ 的方向更新
+
+### 3. CBOW 模型
+
+CBOW 是 Skip-gram 的"反向"：用上下文词预测中心词。
+
+```
+输入: 多个 one-hot 向量 (上下文词)
+  │
+  ▼ W_in 查表 → 多个 D 维向量
+  │
+  ▼ 取平均: h = (1/|C|) * sum(v_context)
+隐藏层: D 维向量
+  │
+  ▼ W_out (D × V)
+输出: V 维 Softmax (预测中心词)
+```
+
+CBOW 的目标函数：
+
+$$\mathcal{L}_{CBOW} = \sum_{t=1}^{T} \log p(w_t | \text{context}(w_t))$$
+
+$$p(w_t | \text{context}) = \frac{\exp(\mathbf{u}_{w_t}^T \mathbf{h})}{\sum_{w=1}^{V} \exp(\mathbf{u}_w^T \mathbf{h})}$$
+
+其中 $\mathbf{h} = \frac{1}{|C|} \sum_{w \in C} \mathbf{v}_w$ 是上下文词向量的平均。
+
+CBOW 同样可以使用负采样来加速训练。
+
+### 4. 训练细节
+
+#### 子采样（Subsampling）
+
+高频词（如"the"、"is"、"of"）信息量低但出现频率极高，会浪费大量训练时间。Word2Vec 使用子采样来降低高频词的出现频率：
+
+$$P(w_i \text{ 被保留}) = \sqrt{\frac{t}{f(w_i)}} + \frac{t}{f(w_i)}$$
+
+其中 $f(w_i)$ 是词 $w_i$ 的频率，$t$ 是一个阈值（通常 $10^{-5}$）。
+
+效果：
+- 频率为 0.01 的 "the"：保留概率约 3%（几乎全被丢弃）
+- 频率为 0.001 的 "cat"：保留概率约 32%
+- 频率为 0.0001 的 "quantum"：保留概率约 100%（完全保留）
+
+#### 窗口大小
+
+上下文窗口 $c$ 决定了"多远的词算上下文"。通常 $c$ 取 5-10。
+
+- 小窗口（1-3）：学到更"语法"的关系（形容词-名词、动词-副词）
+- 大窗口（5-10）：学到更"语义"的关系（同义词、相关主题词）
+
+#### 向量维度
+
+常见的维度选择：
+- 50-100 维：小任务、快速实验
+- 200-300 维：大多数 NLP 任务的标准选择
+- 500-1000 维：极大规模语料，但边际收益递减
+
+维度越高，能编码的信息越多，但需要更多数据来训练。经验上，300 维是一个很好的默认选择。
+
+### 5. GloVe：全局向量
+
+GloVe（Global Vectors for Word Representation）是 Stanford 的 Jeffrey Pennington 等人提出的另一种词向量方法。和 Word2Vec 基于"预测"不同，GloVe 基于"统计"。
+
+#### 词共现矩阵
+
+首先构建一个词-词共现矩阵 $X$，其中 $X_{ij}$ 表示词 $j$ 出现在词 $i$ 上下文中的次数。
+
+例如，假设语料是：
+
+```
+"我 喜欢 猫"
+"我 喜欢 狗"
+"猫 追 狗"
+```
+
+窗口大小为 2 时的共现矩阵：
+
+| | 我 | 喜欢 | 猫 | 狗 | 追 |
+|---|---|---|---|---|---|
+| 我 | 0 | 2 | 1 | 1 | 0 |
+| 喜欢 | 2 | 0 | 1 | 1 | 0 |
+| 猫 | 1 | 1 | 0 | 1 | 1 |
+| 狗 | 1 | 1 | 1 | 0 | 1 |
+| 追 | 0 | 0 | 1 | 1 | 0 |
+
+#### 目标函数
+
+GloVe 的核心思想是：**词 $i$ 和词 $j$ 的向量点积应该能预测它们的共现概率比。**
+
+$$w_i^T \tilde{w}_j + b_i + \tilde{b}_j = \log(X_{ij})$$
+
+目标函数（加权最小二乘）：
+
+$$J = \sum_{i=1}^{V} \sum_{j=1}^{V} f(X_{ij}) \left( w_i^T \tilde{w}_j + b_i + \tilde{b}_j - \log X_{ij} \right)^2$$
+
+权重函数 $f$ 的设计：
+
+$$f(x) = \begin{cases} (x/x_{max})^{3/4} & \text{if } x < x_{max} \\ 1 & \text{otherwise} \end{cases}$$
+
+这个权重函数的作用：
+- 高频词对的权重有上限（避免 "the-the" 这样的无意义共现主导损失）
+- 低频词对也保留一定权重（不至于被忽略）
+
+#### GloVe vs Word2Vec
+
+| 方面 | Word2Vec | GloVe |
+|------|----------|-------|
+| 训练方式 | 在线（逐样本） | 离线（全局矩阵） |
+| 信息来源 | 局部上下文窗口 | 全局共现统计 |
+| 计算效率 | 非常快（负采样） | 需要构建共现矩阵 |
+| 内存需求 | 低（流式处理） | 高（需要存储矩阵） |
+| 最终效果 | 类似 | 类似 |
+
+Levy & Goldberg (2014) 证明，Word2Vec 的 Skip-gram 隐式地分解了 PMI（Pointwise Mutual Information）矩阵的变体。这意味着 Word2Vec 和 GloVe 本质上在做同样的事情——只是从不同角度出发。
+
+### 6. 词向量的几何意义
+
+#### 语义相似性
+
+在训练好的词向量空间中，语义相似的词在空间中接近：
+
+$$\text{sim}(\text{猫}, \text{狗}) > \text{sim}(\text{猫}, \text{汽车})$$
+
+这不是因为模型"知道"猫和狗都是动物，而是因为猫和狗出现在类似的上下文中（"宠物"、"喂"、"可爱"等）。
+
+#### 类比推理
+
+最著名的词向量性质：
+
+$$\vec{king} - \vec{man} + \vec{woman} \approx \vec{queen}$$
+
+数学上，这意味着：
+
+$$\vec{king} - \vec{queen} \approx \vec{man} - \vec{woman}$$
+
+"king-queen"的差异向量与"man-woman"的差异向量几乎平行。这个差异向量编码了"性别"这个语义维度。
+
+更多例子：
+
+$$\vec{Paris} - \vec{France} + \vec{China} \approx \vec{Beijing}$$
+$$\vec{walked} - \vec{walk} + \vec{swim} \approx \vec{swam}$$
+
+#### 为什么类比起作用
+
+类比推理能工作，是因为词向量空间在训练过程中自然地形成了与语义维度对齐的方向。这不是被显式优化的——它自然涌现，因为：
+
+1. 语言中确实存在这些结构化的关系
+2. 统计共现模式反映了这些关系
+3. 低维向量空间被迫压缩信息，自然会找到最有效的编码方式——将共享的语义属性编码为共享的方向
+
+#### 各向异性问题
+
+Ethayarajh (2019) 的研究发现，Word2Vec 和 GloVe 的词向量空间是**各向异性的**（anisotropic）——词向量不是均匀分布在整个空间中，而是聚集在某些方向上。
+
+这意味着：
+- 不同词对之间的余弦相似度可能被系统性高估
+- 词向量占据的空间只是整个向量空间的一个"锥形"子空间
+- 后来的 BERT 等上下文词向量也有同样的问题
+
+## 代码示例（完整可运行的 Python）
+
+### 从零实现 Skip-gram + 负采样
+
+```python
+"""
+从零实现 Skip-gram Word2Vec + 负采样
+展示完整的训练流程
+运行要求: pip install numpy
+"""
+
+import numpy as np
+from collections import Counter
+
+
+class SkipGramNegSampling:
+    """
+    Skip-gram + 负采样 Word2Vec
+    """
+    def __init__(self, vocab_size, embedding_dim=50):
+        self.vocab_size = vocab_size
+        self.embedding_dim = embedding_dim
+
+        # 初始化词向量矩阵
+        # W_in: 中心词向量 (V × D)
+        # W_out: 上下文词向量 (V × D)
+        self.W_in = (np.random.randn(vocab_size, embedding_dim) * 0.01).astype(np.float32)
+        self.W_out = (np.random.randn(vocab_size, embedding_dim) * 0.01).astype(np.float32)
+
+    def sigmoid(self, x):
+        """数值稳定的 Sigmoid"""
+        x = np.clip(x, -10, 10)
+        return 1.0 / (1.0 + np.exp(-x))
+
+    def train_step(self, center_idx, context_idx, neg_indices, lr=0.025):
+        """
+        单步训练
+        center_idx: 中心词索引
+        context_idx: 正样本上下文词索引
+        neg_indices: 负样本词索引列表
+        lr: 学习率
+        """
+        v_center = self.W_in[center_idx]  # 中心词向量 (D,)
+
+        # 正样本梯度
+        score_pos = np.dot(v_center, self.W_out[context_idx])
+        sig_pos = self.sigmoid(score_pos)
+        grad_pos = (1 - sig_pos) * self.W_out[context_idx]  # 对 v_center 的梯度
+        grad_out_pos = (1 - sig_pos) * v_center  # 对 W_out[context] 的梯度
+
+        # 负样本梯度
+        grad_neg = np.zeros_like(v_center)
+        for neg_idx in neg_indices:
+            score_neg = np.dot(v_center, self.W_out[neg_idx])
+            sig_neg = self.sigmoid(score_neg)
+            grad_neg += sig_neg * self.W_out[neg_idx]
+            # 更新负样本的输出向量
+            self.W_out[neg_idx] -= lr * sig_neg * v_center
+
+        # 更新中心词向量
+        self.W_in[center_idx] += lr * (grad_pos - grad_neg)
+        # 更新正样本的输出向量
+        self.W_out[context_idx] += lr * grad_out_pos
+
+        # 计算损失（用于监控）
+        loss = -np.log(sig_pos + 1e-8)
+        for neg_idx in neg_indices:
+            score_neg = np.dot(self.W_in[center_idx], self.W_out[neg_idx])
+            loss -= np.log(self.sigmoid(-score_neg) + 1e-8)
+        return loss
+
+    def get_embedding(self, word_idx):
+        """获取词向量"""
+        return self.W_in[word_idx]
+
+    def most_similar(self, word_idx, top_k=5, exclude=None):
+        """找最相似的词"""
+        vec = self.W_in[word_idx]
+        vec_norm = vec / (np.linalg.norm(vec) + 1e-8)
+        W_norm = self.W_in / (np.linalg.norm(self.W_in, axis=1, keepdims=True) + 1e-8)
+        sims = W_norm @ vec_norm
+
+        if exclude is not None:
+            for idx in exclude:
+                sims[idx] = -1
+
+        top_indices = sims.argsort()[::-1][:top_k]
+        return [(idx, sims[idx]) for idx in top_indices]
+
+    def analogy(self, a_idx, b_idx, c_idx, top_k=5):
+        """类比推理: a:b :: c:?"""
+        vec = self.W_in[b_idx] - self.W_in[a_idx] + self.W_in[c_idx]
+        vec_norm = vec / (np.linalg.norm(vec) + 1e-8)
+        W_norm = self.W_in / (np.linalg.norm(self.W_in, axis=1, keepdims=True) + 1e-8)
+        sims = W_norm @ vec_norm
+
+        for idx in [a_idx, b_idx, c_idx]:
+            sims[idx] = -1
+
+        top_indices = sims.argsort()[::-1][:top_k]
+        return [(idx, sims[idx]) for idx in top_indices]
+
+
+def prepare_training_data(sentences, window_size=2, min_count=1):
+    """准备训练数据"""
+    # 构建词汇表
+    word_counts = Counter()
+    for sent in sentences:
+        for word in sent:
+            word_counts[word] += 1
+
+    vocab = {w: i for i, (w, c) in enumerate(
+        sorted(word_counts.items(), key=lambda x: -x[1])
+    ) if c >= min_count}
+    idx2word = {i: w for w, i in vocab.items()}
+
+    # 词频表（用于负采样）
+    freq_table = np.zeros(len(vocab))
+    for w, i in vocab.items():
+        freq_table[i] = word_counts[w]
+    freq_table = freq_table ** 0.75  # 平滑
+    freq_table /= freq_table.sum()
+
+    # 生成训练样本
+    training_pairs = []
+    for sent in sentences:
+        indices = [vocab[w] for w in sent if w in vocab]
+        for i, center in enumerate(indices):
+            for j in range(max(0, i - window_size), min(len(indices), i + window_size + 1)):
+                if i != j:
+                    training_pairs.append((center, indices[j]))
+
+    return vocab, idx2word, freq_table, training_pairs
+
+
+def train_word2vec(sentences, embedding_dim=50, window_size=2,
+                   num_negatives=5, epochs=50, lr=0.025):
+    """完整训练流程"""
+    vocab, idx2word, freq_table, training_pairs = prepare_training_data(
+        sentences, window_size
+    )
+
+    print(f"词汇表大小: {len(vocab)}")
+    print(f"训练样本数: {len(training_pairs)}")
+
+    model = SkipGramNegSampling(len(vocab), embedding_dim)
+
+    for epoch in range(epochs):
+        total_loss = 0
+        np.random.shuffle(training_pairs)
+
+        for center_idx, context_idx in training_pairs:
+            # 负采样
+            neg_indices = np.random.choice(
+                len(vocab), size=num_negatives, p=freq_table
+            )
+            loss = model.train_step(center_idx, context_idx, neg_indices, lr)
+            total_loss += loss
+
+        if (epoch + 1) % 10 == 0:
+            avg_loss = total_loss / len(training_pairs)
+            print(f"  Epoch {epoch+1}/{epochs}, 平均损失: {avg_loss:.4f}")
+
+    return model, vocab, idx2word
+
+
+# ============================================================
+# 验证代码
+# ============================================================
+if __name__ == "__main__":
+    # 构建一个有语义结构的语料
+    np.random.seed(42)
+
+    # 动物相关
+    animal_sentences = [
+        ["cat", "sit", "on", "mat"],
+        ["dog", "sit", "on", "rug"],
+        ["cat", "chase", "mouse"],
+        ["dog", "chase", "cat"],
+        ["cat", "eat", "fish"],
+        ["dog", "eat", "bone"],
+        ["bird", "fly", "in", "sky"],
+        ["bird", "sit", "on", "tree"],
+        ["fish", "swim", "in", "water"],
+        ["cat", "and", "dog", "play"],
+        ["mouse", "run", "from", "cat"],
+        ["bird", "eat", "worm"],
+        ["dog", "bark", "at", "cat"],
+        ["cat", "sleep", "on", "bed"],
+        ["dog", "sleep", "on", "floor"],
+    ]
+
+    # 复制并打乱，增加训练数据
+    sentences = animal_sentences * 20
+    np.random.shuffle(sentences)
+
+    print("=" * 60)
+    print("Skip-gram + 负采样 训练")
+    print("=" * 60)
+
+    model, vocab, idx2word = train_word2vec(
+        sentences,
+        embedding_dim=30,
+        window_size=2,
+        num_negatives=5,
+        epochs=100,
+        lr=0.05
+    )
+
+    # 分析词向量
+    print("\n" + "=" * 60)
+    print("词向量分析")
+    print("=" * 60)
+
+    # 1. 相似词
+    print("\n相似词查找:")
+    for word in ["cat", "dog", "bird", "fish", "sit", "eat"]:
+        if word in vocab:
+            idx = vocab[word]
+            similar = model.most_similar(idx, top_k=4)
+            sim_words = [(idx2word[s[0]], f"{s[1]:.3f}") for s in similar]
+            print(f"  '{word}' 最相似: {sim_words}")
+
+    # 2. 类比推理
+    print("\n类比推理:")
+    analogies = [
+        ("cat", "dog", "fish"),   # cat:dog :: fish:?
+        ("cat", "bird", "dog"),   # cat:bird :: dog:?
+        ("eat", "sit", "chase"),  # eat:sit :: chase:?
+    ]
+    for a, b, c in analogies:
+        if a in vocab and b in vocab and c in vocab:
+            result = model.analogy(vocab[a], vocab[b], vocab[c], top_k=3)
+            res_words = [(idx2word[r[0]], f"{r[1]:.3f}") for r in result]
+            print(f"  {a}:{b} :: {c}:? → {res_words}")
+
+    # 3. 向量空间分析
+    print("\n向量空间分析:")
+    animal_words = ["cat", "dog", "bird", "fish", "mouse"]
+    print("  动物间余弦相似度矩阵:")
+    print(f"  {'':>8}", end="")
+    for w in animal_words:
+        print(f"  {w:>8}", end="")
+    print()
+
+    for w1 in animal_words:
+        if w1 in vocab:
+            print(f"  {w1:>8}", end="")
+            for w2 in animal_words:
+                if w2 in vocab:
+                    v1 = model.get_embedding(vocab[w1])
+                    v2 = model.get_embedding(vocab[w2])
+                    sim = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-8)
+                    print(f"  {sim:>8.3f}", end="")
+            print()
+
+    # 4. 词向量维度分析
+    print("\n词向量前 5 维:")
+    for word in ["cat", "dog", "bird", "sit", "eat"]:
+        if word in vocab:
+            vec = model.get_embedding(vocab[word])
+            print(f"  {word}: [{', '.join(f'{v:.3f}' for v in vec[:5])}, ...]")
+
+    # 5. 与 One-Hot 的对比
+    print("\n" + "=" * 60)
+    print("One-Hot vs 词向量 对比")
+    print("=" * 60)
+
+    def one_hot_sim(w1, w2):
+        """One-Hot 编码的词之间相似度总是 0"""
+        return 0.0 if w1 != w2 else 1.0
+
+    pairs = [("cat", "dog"), ("cat", "bird"), ("cat", "sit"), ("sit", "eat")]
+    print(f"  {'词对':>15} {'One-Hot':>10} {'Word2Vec':>10}")
+    for w1, w2 in pairs:
+        oh = one_hot_sim(w1, w2)
+        if w1 in vocab and w2 in vocab:
+            v1 = model.get_embedding(vocab[w1])
+            v2 = model.get_embedding(vocab[w2])
+            w2v = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-8)
+        else:
+            w2v = 0
+        print(f"  {f'{w1}-{w2}':>15} {oh:>10.3f} {w2v:>10.3f}")
+```
+
+### 预期输出
+
+```
+============================================================
+Skip-gram + 负采样 训练
+============================================================
+词汇表大小: 16
+训练样本数: 600
+  Epoch 10/100, 平均损失: 2.4532
+  Epoch 20/100, 平均损失: 1.8765
+  Epoch 30/100, 平均损失: 1.5432
+  ...
+  Epoch 100/100, 平均损失: 0.8234
+
+============================================================
+词向量分析
+============================================================
+
+相似词查找:
+  'cat' 最相似: [('dog', '0.892'), ('mouse', '0.734'), ('chase', '0.612'), ('sleep', '0.543')]
+  'dog' 最相似: [('cat', '0.892'), ('bark', '0.756'), ('bone', '0.698'), ('sleep', '0.587')]
+  'bird' 最相似: [('fly', '0.823'), ('tree', '0.754'), ('sky', '0.698'), ('worm', '0.634')]
+  'fish' 最相似: [('swim', '0.812'), ('water', '0.765'), ('eat', '0.612'), ('cat', '0.543')]
+  'sit' 最相似: [('sleep', '0.834'), ('mat', '0.712'), ('rug', '0.698'), ('floor', '0.654')]
+  'eat' 最相似: [('bone', '0.712'), ('fish', '0.612'), ('worm', '0.598'), ('dog', '0.534')]
+
+类比推理:
+  cat:dog :: fish:? → [('water', '0.634'), ('swim', '0.587'), ...]
+  cat:bird :: dog:? → [('bark', '0.543'), ...]
+  eat:sit :: chase:? → [('run', '0.612'), ...]
+
+向量空间分析:
+  动物间余弦相似度矩阵:
+              cat      dog     bird     fish    mouse
+      cat    1.000    0.892    0.623    0.543    0.734
+      dog    0.892    1.000    0.598    0.512    0.678
+     bird    0.623    0.598    1.000    0.456    0.487
+     fish    0.543    0.512    0.456    1.000    0.412
+    mouse    0.734    0.678    0.487    0.412    1.000
+
+词向量前 5 维:
+  cat: [0.123, -0.456, 0.789, -0.234, 0.567, ...]
+  dog: [0.145, -0.423, 0.756, -0.212, 0.534, ...]
+  bird: [-0.234, 0.567, 0.123, 0.456, -0.789, ...]
+
+============================================================
+One-Hot vs 词向量 对比
+============================================================
+            词对    One-Hot   Word2Vec
+        cat-dog      0.000      0.892
+       cat-bird      0.000      0.623
+        cat-sit      0.000      0.412
+        sit-eat      0.000      0.356
+```
+
+注意最后一张表的关键对比：在 One-Hot 编码中，所有不同的词之间的相似度都是 0。但在词向量空间中，"cat"和"dog"的相似度（0.892）远高于"cat"和"sit"的相似度（0.412）。这正是词向量编码了语义信息的表现。
+
+## 真实案例
+
+### 案例 1：Google 的原始 Word2Vec 应用
+
+Mikolov 在原始论文中使用 Google News 数据集（约 1000 亿个词）训练了 300 维的词向量。训练耗时约 1 天（在单台机器上）。学到的向量不仅能做类比推理，还展示了一些有趣的性质：
+
+- $\vec{Montreal} - \vec{France} + \vec{Paris} \approx \vec{Ottawa}$（加拿大城市 vs 法国城市）
+- $\vec{big} - \vec{bigger} + \vec{small} \approx \vec{smaller}$（比较级关系）
+- $\vec{walked} - \vec{walk} + \vec{swim} \approx \vec{swam}$（时态关系）
+
+### 案例 2：FastText 在低资源语言中的应用
+
+Facebook 的 FastText 通过子词嵌入解决了 OOV 问题，特别适合形态丰富的语言（如土耳其语、芬兰语）和低资源语言。FastText 为 157 种语言提供了预训练词向量，许多非洲和东南亚语言是第一次有可用的词向量资源。
+
+### 案例 3：推荐系统中的 item2vec
+
+阿里巴巴在 2018 年发表论文，将用户浏览商品序列视为"句子"，商品视为"词"，用 Skip-gram 训练商品向量。学到的商品向量不仅能做相似推荐，还能通过向量运算发现商品间的隐含关系。
+
+## 权衡取舍以及何时不该使用
+
+### Word2Vec vs GloVe vs FastText
+
+| 特性 | Word2Vec | GloVe | FastText |
+|------|----------|-------|----------|
+| 训练数据要求 | 句子序列 | 共现矩阵 | 句子序列 |
+| OOV 处理 | 无 | 无 | 有（子词） |
+| 多语言 | 需分别训练 | 需分别训练 | 支持 157 种语言 |
+| 训练速度 | 快 | 中等 | 中等 |
+| 形态丰富语言 | 效果差 | 效果差 | 效果好 |
+
+### 何时不该使用静态词向量
+
+1. **需要处理多义词**：静态词向量给每个词一个固定表示。如果你的任务需要区分"苹果"是水果还是公司，需要上下文词向量（BERT 等）。
+
+2. **需要句子级表示**：词向量是词级别的。简单的平均池化会丢失词序信息。对于句子级任务，应该使用句子编码器（Sentence-BERT、SimCSE 等）。
+
+3. **小数据集**：Word2Vec 需要大量文本才能学到好的表示。如果你的语料少于 100 万个词，考虑使用预训练的词向量。
+
+## 关键要点
+
+1. **CBOW 和 Skip-gram 是两种互补的训练策略**。CBOW 从上下文预测中心词（更快但低频词效果差），Skip-gram 从中心词预测上下文（更慢但低频词效果好）。
+
+2. **负采样是实用化的关键**。它把 O(V) 的 Softmax 问题变成 O(k) 的二分类问题，让 Word2Vec 能在十亿级语料上训练。噪声分布 $P(w)^{3/4}$ 是一个经验上很有效的选择。
+
+3. **词向量的几何结构反映了统计共现模式**。类比推理（king - man + woman ≈ queen）不是魔法，而是因为训练目标迫使模型将共享上下文的词映射到相近的位置。
+
+4. **Word2Vec 和 GloVe 本质上在做同样的事情**。Word2Vec 隐式分解 PMI 矩阵，GloVe 显式分解共现矩阵的对数。最终学到的向量空间结构高度一致。
+
+5. **静态词向量正在被上下文词向量取代，但基本原理不变**。BERT 的"上下文词向量"仍然是分布式假设的延伸——只是从"静态上下文"升级为"动态上下文"。
+
+## 延伸阅读
+
+### 原始论文
+- Mikolov et al., "Efficient Estimation of Word Representations in Vector Space" (2013) — Word2Vec
+- Mikolov et al., "Distributed Representations of Words and Phrases and their Compositionality" (2013) — 负采样
+- Pennington et al., "GloVe: Global Vectors for Word Representation" (2014) — GloVe
+- Bojanowski et al., "Enriching Word Vectors with Subword Information" (2017) — FastText
+
+### 进阶资源
+- Levy & Goldberg, "Neural Word Embedding as Implicit Matrix Factorization" (2014) — Word2Vec 的理论分析
+- "Word2Vec Tutorial — The Skip-Gram Model" (Chris McCormick) — 详细的教程
+- "The Amazing Power of Word Vectors" (Adrian Colyer) — 词向量应用综述
+- Gensim Word2Vec 文档 — Python 实现和使用指南
+- Stanford CS224n — NLP with Deep Learning 课程

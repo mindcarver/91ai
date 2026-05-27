@@ -1,0 +1,512 @@
+<!--
+调研来源：
+1. Radford et al., "Improving Language Understanding by Generative Pre-Training" (2018) — GPT-1 论文
+2. Radford et al., "Language Models are Unsupervised Multitask Learners" (2019) — GPT-2 论文
+3. Brown et al., "Language Models are Few-Shot Learners" (2020) — GPT-3 论文
+4. OpenAI, "GPT-4 Technical Report" (2023) — GPT-4 报告
+5. Sutskever et al., "Sequence to Sequence Learning with Neural Networks" (2014) — 自回归建模的早期工作
+6. "The Illustrated GPT-2" (Jay Alammar) — GPT-2 可视化教程
+
+核心发现：GPT 系列使用 Transformer 解码器做自回归语言建模——根据前面的所有词预测下一个词。GPT-1 证明了"预训练+微调"范式有效，GPT-2 证明了"足够大的语言模型可以在零样本下做多种任务"，GPT-3 证明了"规模化后语言模型展现涌现能力（in-context learning）"。自回归是生成任务的自然选择——因为生成本质上是"一步一步来"的过程，每一步根据已生成的内容决定下一个输出。
+-->
+
+# GPT 与自回归模型：因果语言模型、为什么生成用自回归
+
+**TL;DR：** GPT 用 Transformer 解码器做自回归语言建模：给定前面的 token 序列 $x_1, \ldots, x_{t-1}$，预测 $x_t$ 的概率分布。每一步生成一个 token，把生成的 token 加入序列，再预测下一个。这个过程就是"自回归"——用自己的输出作为下一步的输入。生成任务天然适合自回归：写作是一字一字写的，说话是一句一句说的，代码是一行一行写的。GPT 系列展示了自回归语言模型在规模化后的惊人能力——从 GPT-1 的"预训练+微调"，到 GPT-2 的"零样本学习"，到 GPT-3 的"上下文学习"，到 GPT-4 的"接近人类水平的表现"。
+
+## 为什么这很重要
+
+GPT 系列代表了 AI 领域最成功的技术路线之一：**把自回归语言模型做大，然后观察涌现行为。**
+
+这条路线的成功不是偶然的。语言建模（预测下一个词）是一个"通用"的预训练目标——要准确预测下一个词，模型需要理解语法、语义、事实知识、逻辑推理，甚至某种程度的"常识"。当你用足够大的模型、足够多的数据做这个任务时，模型学到的能力可以迁移到几乎所有语言任务上。
+
+从 GPT-1（2018，117M 参数）到 GPT-4（2023，估计约 1.8T 参数），参数量增加了约 15000 倍。与之对应的是能力的质变：
+- GPT-1：微调后能在特定任务上超过 baseline
+- GPT-2：零样本就能做一些任务（但效果不稳定）
+- GPT-3：少样本学习成为可能（通过 prompt）
+- GPT-4：在许多专业考试中达到人类水平
+
+## 核心概念
+
+### 自回归语言建模
+
+自回归（autoregressive）这个词来自统计学，意思是"用过去的值预测未来的值"。在语言模型中：
+
+$$P(x_1, x_2, \ldots, x_T) = \prod_{t=1}^{T} P(x_t | x_1, \ldots, x_{t-1})$$
+
+这就是"链式法则"——联合概率可以分解为条件概率的乘积。
+
+每一步 $P(x_t | x_{<t})$ 就是一个分类问题：给定前面的所有 token，预测当前 token 是词汇表中的哪一个。
+
+```
+自回归生成过程:
+  输入: [Start]
+  Step 1: P(x1 | [Start]) → "我"    → 输入: [Start, 我]
+  Step 2: P(x2 | [Start, 我]) → "喜欢" → 输入: [Start, 我, 喜欢]
+  Step 3: P(x3 | [Start, 我, 喜欢]) → "AI" → 输入: [Start, 我, 喜欢, AI]
+  Step 4: P(x4 | ...) → [End]
+```
+
+### 为什么生成用自回归
+
+**从左到右的因果关系**：文本生成是时间顺序的。你写文章时，第 3 个字是在第 1 和第 2 个字已经确定的情况下写的。自回归模型天然符合这个因果关系。
+
+**对比 BERT 的 MLM**：BERT 的 MLM 可以同时看到前后文，所以预测被遮蔽的词时信息更多。但 MLM 不能直接用于生成——因为它需要预先知道哪些位置被遮蔽，这在生成时是不可用的。
+
+**对比 BERT 的生成方式**：理论上可以用 BERT 做非自回归生成（一次生成所有 token，然后迭代精修）。但这种方式的效果不如自回归生成，因为 token 之间的依赖关系很复杂，一次性全部正确地生成很困难。
+
+### GPT vs BERT
+
+| 特性 | GPT | BERT |
+|------|-----|------|
+| 架构 | Transformer 解码器 | Transformer 编码器 |
+| 预训练目标 | 自回归（预测下一个词） | MLM（预测被遮蔽的词） |
+| 注意力 | 因果 mask（只看左边） | 双向（看左右两边） |
+| 生成能力 | 天然支持 | 需要额外设计 |
+| 微调方式 | 分类头 / prompt | 分类头 |
+| 输入格式 | 文本序列 | [CLS] A [SEP] B [SEP] |
+
+## 工作原理（简化的心智模型）
+
+### 给 12 岁孩子的解释
+
+**自回归生成**就像写作文。你写下第一个字，然后根据第一个字决定第二个字，根据前两个字决定第三个字，一直写下去。每一步你只看已经写好的内容，不看后面的——因为后面还没有写。
+
+**GPT**就像一个读了整个互联网的"自动写作机器"。它读过太多文章，以至于它可以根据前文的模式，高概率地预测出下一个字。
+
+**In-Context Learning**就像给这个写作机器看几个例子："这是数学题 2+3=5，这是数学题 4+1=5，那 3+3=？"机器不需要额外训练，只要看过这些例子，就能根据模式回答"6"。
+
+## 工作原理（详细机制）
+
+### 1. GPT 的架构
+
+GPT 使用 Transformer 解码器（没有编码器，没有 cross-attention）：
+
+```
+Token Embedding + Position Embedding
+  │
+  ▼
+┌──────────────────────────────┐
+│  Decoder Layer (×N)           │
+│                                │
+│  Masked Self-Attention         │ ← 因果 mask
+│  + Add & Norm                  │
+│                                │
+│  Feed-Forward Network          │
+│  + Add & Norm                  │
+└──────────────────────────────┘
+  │
+  ▼
+Layer Norm → Linear(V, d_model) → 输出 logits
+```
+
+与原始 Transformer 解码器的区别：
+- **没有 Cross-Attention**：因为 GPT 只有解码器，没有编码器可以关注
+- **只有因果 Masked Self-Attention**：每个位置只能看到自己和之前的 token
+
+#### 因果 Mask
+
+因果 mask 是一个下三角矩阵：
+
+```
+注意力 mask (4×4):
+  [[1, 0, 0, 0],
+   [1, 1, 0, 0],
+   [1, 1, 1, 0],
+   [1, 1, 1, 1]]
+
+位置 0 只能看到位置 0
+位置 1 可以看到位置 0, 1
+位置 2 可以看到位置 0, 1, 2
+位置 3 可以看到位置 0, 1, 2, 3
+```
+
+在注意力计算中，mask 为 0 的位置被设为 $-\infty$（在 Softmax 前加一个大的负数），这样 Softmax 后对应的权重接近 0。
+
+### 2. GPT-1：预训练+微调（2018）
+
+GPT-1 是第一个将 Transformer 解码器用于通用语言理解的模型。
+
+**预训练**：在 BooksCorpus（约 7000 本书，约 5GB 文本）上做自回归语言建模。
+
+$$\mathcal{L}_{pretrain} = -\sum_{i=1}^{T} \log P(x_i | x_1, \ldots, x_{i-1}; \theta)$$
+
+**微调**：在下游任务上加一个线性分类头。对于分类任务：
+
+$$P(y | x_1, \ldots, x_T) = \text{softmax}(W_h \cdot h_T)$$
+
+其中 $h_T$ 是最后一个 token 的隐藏状态。
+
+GPT-1 的参数量只有 117M。它在 12 个任务中的 9 个上达到了 SOTA，证明了"预训练+微调"范式的有效性。
+
+### 3. GPT-2：零样本学习（2019）
+
+GPT-2 的核心发现：**当语言模型足够大时，它可以在不做任何微调的情况下，通过适当的 prompt 完成多种任务。**
+
+"Translate to French: English text" = French text
+
+"Summarize: Long article TL;DR: summary"
+
+"Question: What is the capital of France? Answer: Paris"
+
+GPT-2 把这种能力称为"零样本任务转移"——模型在预训练时没有针对特定任务训练，但通过构造合适的 prompt，可以引导模型执行任务。
+
+**规模变化**：
+- GPT-1: 117M 参数, 5GB 训练数据
+- GPT-2: 1.5B 参数, 40GB 训练数据（WebText）
+- 参数量增加 13 倍，数据量增加 8 倍
+
+GPT-2 的生成质量在当时令人印象深刻。OpenAI 因此选择不发布完整模型（出于对滥用的担忧），只发布了较小的版本。这个决定引发了关于 AI 安全和开放性的广泛讨论。
+
+### 4. GPT-3：上下文学习（In-Context Learning）（2020）
+
+GPT-3 把模型规模推到了新高度：175B 参数，在 570GB 的文本上训练。
+
+GPT-3 的核心贡献是展示了**上下文学习（In-Context Learning）**能力：
+
+```
+Zero-shot:
+  Prompt: "Translate to French: cheese"
+  Output: "fromage"
+
+Few-shot (给几个例子):
+  Prompt: "cheese → fromage
+           bread → pain
+           water →"
+  Output: "eau"
+```
+
+模型不需要任何参数更新。它只是读入 prompt（包含任务描述和/或例子），然后继续生成。这种能力是"涌现"的——小模型（如 GPT-2）几乎没有这种能力，但 GPT-3 在规模化后突然展现了强大的 few-shot 性能。
+
+#### 涌现能力的关键数据
+
+GPT-3 论文中最引人注目的图表之一：随着模型规模增大，在多个任务上的 few-shot 性能呈现平滑但持续的提升。
+
+| 模型规模 | 参数量 | Few-shot 性能趋势 |
+|----------|--------|------------------|
+| GPT-3 Small | 125M | 几乎没有 |
+| GPT-3 Medium | 350M | 略有 |
+| GPT-3 Large | 760M | 在简单任务上有 |
+| GPT-3 XL | 1.3B | 开始有效 |
+| GPT-3 6.7B | 6.7B | 不错 |
+| GPT-3 175B | 175B | 在许多任务上接近 SOTA |
+
+### 5. 解码策略
+
+自回归模型生成文本时，每一步输出一个概率分布 $P(x_t | x_{<t})$。从这个分布中选择下一个 token 的方式叫"解码策略"。
+
+**贪心解码（Greedy Decoding）**：每步选概率最高的 token。
+
+$$x_t = \arg\max_{w} P(w | x_{<t})$$
+
+简单但容易陷入重复和不自然的输出。
+
+**Top-k 采样**：只从概率最高的 k 个 token 中随机采样。
+
+$$\text{candidates} = \text{top-}k(P(\cdot | x_{<t}))$$
+$$x_t \sim \text{softmax}(\text{logits}_{\text{candidates}} / T)$$
+
+$k$ 通常取 50 或 100。温度 $T$ 控制随机性：$T > 1$ 更随机，$T < 1$ 更确定。
+
+**Top-p（Nucleus）采样**：从概率最高的 token 开始累加，直到累计概率超过 $p$（如 0.9）。
+
+$$\text{candidates} = \min\{S \subseteq V : \sum_{w \in S} P(w) \geq p\}$$
+
+Top-p 比 Top-k 更灵活：在"确定"的上下文中（概率集中），候选集更小；在"不确定"的上下文中（概率分散），候选集更大。
+
+**Beam Search**：同时维护 $b$ 条候选序列（beam width），每步扩展所有 beam，保留得分最高的 $b$ 条。
+
+```python
+def beam_search(model, prompt, beam_width=5, max_len=50):
+    """Beam Search 解码"""
+    beams = [{'tokens': prompt, 'score': 0.0}]
+
+    for _ in range(max_len):
+        all_candidates = []
+        for beam in beams:
+            logits = model(beam['tokens'])
+            log_probs = F.log_softmax(logits[-1], dim=-1)
+            top_k_probs, top_k_ids = log_probs.topk(beam_width)
+
+            for i in range(beam_width):
+                new_tokens = beam['tokens'] + [top_k_ids[i].item()]
+                new_score = beam['score'] + top_k_probs[i].item()
+                all_candidates.append({
+                    'tokens': new_tokens,
+                    'score': new_score
+                })
+
+        # 保留得分最高的 beam_width 条
+        beams = sorted(all_candidates, key=lambda x: x['score'], reverse=True)[:beam_width]
+
+    return beams[0]['tokens']
+```
+
+## 代码示例（完整可运行的 Python）
+
+### 从零实现 GPT 语言模型
+
+```python
+"""
+GPT 自回归语言模型实现
+包含: 因果 mask, 自回归生成, 解码策略
+运行要求: pip install torch
+"""
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+
+class GPTConfig:
+    """GPT 配置"""
+    def __init__(self, vocab_size=50257, d_model=768, n_heads=12,
+                 n_layers=12, d_ff=3072, max_seq_len=1024, dropout=0.1):
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.d_ff = d_ff
+        self.max_seq_len = max_seq_len
+        self.dropout = dropout
+
+
+class CausalSelfAttention(nn.Module):
+    """带因果 mask 的自注意力"""
+    def __init__(self, config):
+        super().__init__()
+        assert config.d_model % config.n_heads == 0
+        self.n_heads = config.n_heads
+        self.d_k = config.d_model // config.n_heads
+
+        self.W_q = nn.Linear(config.d_model, config.d_model)
+        self.W_k = nn.Linear(config.d_model, config.d_model)
+        self.W_v = nn.Linear(config.d_model, config.d_model)
+        self.W_o = nn.Linear(config.d_model, config.d_model)
+
+        self.dropout = nn.Dropout(config.dropout)
+
+        # 预计算因果 mask
+        mask = torch.tril(torch.ones(config.max_seq_len, config.max_seq_len))
+        self.register_buffer('mask', mask.unsqueeze(0).unsqueeze(0))
+
+    def forward(self, x):
+        B, T, D = x.shape
+
+        Q = self.W_q(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        K = self.W_k(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+        V = self.W_v(x).view(B, T, self.n_heads, self.d_k).transpose(1, 2)
+
+        scores = Q @ K.transpose(-2, -1) / math.sqrt(self.d_k)
+        scores = scores.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        out = (attn_weights @ V).transpose(1, 2).contiguous().view(B, T, D)
+        return self.W_o(out)
+
+
+class GPTBlock(nn.Module):
+    """GPT 解码器层"""
+    def __init__(self, config):
+        super().__init__()
+        self.ln1 = nn.LayerNorm(config.d_model)
+        self.attn = CausalSelfAttention(config)
+        self.ln2 = nn.LayerNorm(config.d_model)
+        self.ff = nn.Sequential(
+            nn.Linear(config.d_model, config.d_ff),
+            nn.GELU(),
+            nn.Linear(config.d_ff, config.d_model),
+            nn.Dropout(config.dropout),
+        )
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x))
+        x = x + self.ff(self.ln2(x))
+        return x
+
+
+class GPT(nn.Module):
+    """GPT 语言模型"""
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
+        self.pos_embedding = nn.Embedding(config.max_seq_len, config.d_model)
+        self.dropout = nn.Dropout(config.dropout)
+
+        self.blocks = nn.ModuleList(
+            [GPTBlock(config) for _ in range(config.n_layers)]
+        )
+        self.ln_f = nn.LayerNorm(config.d_model)
+        self.head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
+        # 权重共享：输出层和 token embedding 共享参数
+        self.head.weight = self.token_embedding.weight
+
+        self._init_weights()
+
+    def _init_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, input_ids, targets=None):
+        B, T = input_ids.shape
+        positions = torch.arange(T, device=input_ids.device)
+
+        # Token + Position Embedding
+        x = self.token_embedding(input_ids) + self.pos_embedding(positions)
+        x = self.dropout(x)
+
+        # Transformer 层
+        for block in self.blocks:
+            x = block(x)
+
+        x = self.ln_f(x)
+        logits = self.head(x)  # (B, T, vocab_size)
+
+        # 计算损失（如果提供了目标）
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, self.config.vocab_size),
+                targets.view(-1),
+                ignore_index=-1
+            )
+
+        return logits, loss
+
+    @torch.no_grad()
+    def generate(self, input_ids, max_new_tokens=50, temperature=1.0,
+                 top_k=None, top_p=None):
+        """自回归生成"""
+        self.eval()
+        for _ in range(max_new_tokens):
+            # 截断到最大序列长度
+            idx = input_ids[:, -self.config.max_seq_len:]
+
+            logits, _ = self(idx)
+            logits = logits[:, -1, :] / temperature  # 只取最后一个位置
+
+            # Top-k 过滤
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = float('-inf')
+
+            # Top-p 过滤
+            if top_p is not None:
+                sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                sorted_indices_to_remove = cumulative_probs > top_p
+                sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+                sorted_indices_to_remove[:, 0] = False
+                indices_to_remove = sorted_indices_to_remove.scatter(
+                    1, sorted_indices, sorted_indices_to_remove
+                )
+                logits[indices_to_remove] = float('-inf')
+
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+
+        return input_ids
+
+
+# ============================================================
+# 验证代码
+# ============================================================
+if __name__ == "__main__":
+    torch.manual_seed(42)
+
+    print("=" * 60)
+    print("GPT 自回归语言模型测试")
+    print("=" * 60)
+
+    # 小型 GPT 配置
+    config = GPTConfig(
+        vocab_size=100,
+        d_model=64,
+        n_heads=4,
+        n_layers=2,
+        d_ff=256,
+        max_seq_len=128,
+        dropout=0.1,
+    )
+
+    model = GPT(config)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"\n模型配置: d={config.d_model}, h={config.n_heads}, "
+          f"L={config.n_layers}, d_ff={config.d_ff}")
+    print(f"参数量: {total_params:,}")
+
+    # 模拟训练
+    batch_size = 4
+    seq_len = 32
+    input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len))
+
+    # 自回归目标：输入右移一位
+    targets = torch.cat([
+        input_ids[:, 1:],
+        torch.zeros(batch_size, 1, dtype=torch.long)
+    ], dim=1)
+
+    logits, loss = model(input_ids, targets)
+    print(f"\n前向传播:")
+    print(f"  输入: {list(input_ids.shape)}")
+    print(f"  输出 logits: {list(logits.shape)}")
+    print(f"  损失: {loss.item():.4f}")
+    print(f"  随机猜测损失应为 -ln(1/{config.vocab_size}) = {math.log(config.vocab_size):.4f}")
+
+    # 生成测试
+    print(f"\n自回归生成:")
+    prompt = torch.randint(0, config.vocab_size, (1, 5))
+    print(f"  Prompt: {prompt[0].tolist()}")
+
+    for temp in [0.5, 1.0, 1.5]:
+        generated = model.generate(prompt, max_new_tokens=10, temperature=temp, top_k=10)
+        print(f"  Temperature={temp}: {generated[0].tolist()}")
+
+    # 对比不同规模的 GPT 配置
+    print(f"\n" + "=" * 60)
+    print("GPT 系列参数量对比")
+    print("=" * 60)
+
+    model_configs = [
+        ("GPT-1", 50257, 768, 12, 12, 3072),
+        ("GPT-2 Small", 50257, 768, 12, 12, 3072),
+        ("GPT-2 Medium", 50257, 1024, 16, 24, 4096),
+        ("GPT-2 Large", 50257, 1280, 20, 36, 5120),
+        ("GPT-2 XL", 50257, 1600, 25, 48, 6400),
+        ("GPT-3 175B", 50257, 12288, 96, 96, 49152),
+    ]
+
+    for name, v, d, h, n, d_ff in model_configs:
+        # 估算参数量（不含 embedding）
+        attn_per_layer = 4 * d * d
+        ff_per_layer = 2 * d * d_ff
+        ln_per_layer = 4 * d
+        per_layer = attn_per_layer + ff_per_layer + ln_per_layer
+        embed = v * d
+        total = embed + n * per_layer + d  # + final LN
+
+        print(f"  {name:>15}: d={d}, h={h}, L={n}, d_ff={d_ff} → "
+              f"{total/1e6:.0f}M ({total/1e9:.1f}B) 参数")
+
+    # 损失随训练步数的变化（模拟）
+    print(f"\n" + "=" * 60)
+    print("自回归损失的含义")
+    print("=" * 60)
+    print(f"  词汇表大小 V = {config.vocab_size}")
+    print(f"  随机猜测损失: -ln(1/V) = {math.log(config.vocab_size):.4f}")
+    print(f"  完美模型损失: ~0 (取决于数据的内在熵)")
+    print(f"  典型英语文本的熵: ~1-1.5 bits/word")
+    print(f"  GPT-2 在 WebText 上的损失: ~3.0 (nats)")
+    print(f"  GPT-3 的损失: ~2.7 (nats)")
+    print(f"  （损失越低，模型对下一个词的预测越准确）")

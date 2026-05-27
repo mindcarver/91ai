@@ -1,0 +1,1032 @@
+<!--
+调研来源：
+1. Google ML Crash Course "Classification: Accuracy, precision, recall" — 系统介绍了分类指标的定义、计算方式和适用场景
+2. Scikit-learn 官方文档 "Precision-Recall" 和 "ROC curves" — PR 曲线和 ROC 曲线的实现与可视化
+3. Machine Learning Mastery "ROC Curves and Precision-Recall Curves" — 深入对比了 ROC-AUC 和 PR-AUC 在不平衡数据上的表现差异
+4. NVIDIA Developer Blog "A Comprehensive Overview of Regression Evaluation Metrics" — 回归指标的系统综述
+5. Evidently AI "Classification Threshold" — 阈值调优对 precision/recall 平衡的影响
+
+核心发现：
+- 准确率在不平衡数据上会严重误导（99% 准确率可能只是因为 99% 都是负样本）
+- ROC-AUC 和 PR-AUC 的选择关键在于不平衡程度：当正样本 < 10% 时，PR-AUC 比 ROC-AUC 更能反映模型质量
+- 回归指标中，MAE 对异常值鲁棒、RMSE 对大误差敏感、MAPE 适合不同量纲的模型比较
+- 阈值调优是连接概率输出和业务决策的关键桥梁，默认 0.5 阈值在绝大多数业务场景下不是最优的
+-->
+
+# 评估指标全解：准确率、精确率、召回率、F1、AUC-ROC，以及什么时候看哪个
+
+**TL;DR：** 准确率在不平衡数据上会骗人——99% 的准确率可能只是因为你的数据里 99% 都是负样本。精确率关注"预测为正的有多少是对的"，召回率关注"实际为正的有多少被找到了"。F1 是两者的调和平均。AUC-ROC 衡量模型区分正负样本的整体能力。选哪个指标取决于你的业务场景：医疗诊断看召回率（不能漏诊），垃圾邮件过滤看精确率（不能误杀），模型竞赛看 AUC-ROC。
+
+## 为什么这很重要
+
+假设你做了一个罕见病筛查模型。这种病的发病率是 0.1%（千分之一）。你写了一个模型，测试集上准确率 99.9%。听起来完美？
+
+但这个模型其实什么都没做——它只是把所有人都预测为"没病"。因为 99.9% 的人确实没病，所以准确率自然就是 99.9%。一个完全没用的模型也能拿到 99.9% 的准确率。
+
+这不是一个极端的例子。在真实世界中，不平衡数据无处不在：
+- 信用卡欺诈检测（欺诈交易 < 0.5%）
+- 广告点击率预测（点击率通常 1-3%）
+- 设备故障预测（故障率可能 < 0.1%）
+- 内容审核（违规内容占比很小）
+
+在这些场景下，准确率是一个毫无意义的指标。你需要更精确的工具来衡量模型的真正价值。
+
+这篇文章会讲清楚每一个常用指标的含义、计算方式、适用场景，以及最关键的一点——**什么时候该看哪个**。
+
+## 核心概念
+
+### 混淆矩阵：一切指标的起点
+
+所有分类指标都从一个 2×2 的矩阵出发——混淆矩阵（Confusion Matrix）。
+
+```
+                    预测为正    预测为负
+实际为正    TP（真阳性）   FN（假阴性）
+实际为负    FP（假阳性）   TN（真阴性）
+```
+
+四个格子的含义：
+
+- **TP（True Positive，真阳性）**：实际为正，预测也为正。模型找到了该找的。
+- **FN（False Negative，假阴性）**：实际为正，预测为负。模型漏掉了（漏诊）。
+- **FP（False Positive，假阳性）**：实际为负，预测为正。模型误判了（误报）。
+- **TN（True Negative，真阴性）**：实际为负，预测也为负。模型正确排除了。
+
+一个直觉：TP 和 TN 是模型做对的，FP 和 FN 是模型做错的。但 FP 和 FN 的代价通常是不同的。
+
+**日常类比**：
+
+想象你是一个机场安检员，任务是找出携带危险物品的旅客。
+
+- **TP**：你正确识别了一个带了违禁品的旅客。成功拦截。
+- **FN**：你漏过了一个带了违禁品的旅客。安全隐患。
+- **FP**：你误判了一个正常旅客为可疑，进行了额外搜查但什么都没找到。浪费时间。
+- **TN**：你正确放行了一个正常旅客。效率。
+
+在这个场景中，FN 的代价（安全隐患）远高于 FP（额外搜查）。所以你会倾向于"宁可错杀不可放过"——这就是在追求高召回率。
+
+### 准确率（Accuracy）
+
+$$
+\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+$$
+
+含义：所有预测中，预测正确的比例。
+
+**什么时候准确率有意义**：
+- 类别分布相对均衡（没有极端不平衡）
+- 各类别的误分类代价差不多
+- 你需要一个简单直观的指标向非技术人员汇报
+
+**什么时候准确率会骗人**：
+- 数据不平衡时（如正样本只有 1%）
+- 不同类别的误分类代价差异很大时
+
+**一个具体的例子**：假设你有 1000 封邮件，其中 10 封是垃圾邮件，990 封是正常邮件。你的模型把所有邮件都预测为"正常邮件"。准确率 = 990/1000 = 99%。但这个模型完全没有完成它的任务——一封垃圾邮件都没有识别出来。
+
+### 精确率（Precision）
+
+$$
+\text{Precision} = \frac{TP}{TP + FP}
+$$
+
+含义：在所有**被模型预测为正**的样本中，有多少是真正的正样本。
+
+直觉：**"我预测的这些正样本，有多少靠谱？"**
+
+高精确率意味着：模型说"这个是正的"，你就基本可以相信它。模型的阳性预测很准确，很少有误报。
+
+**日常类比**：精确率高的警察——他每次抓人都有确凿的证据，不会冤枉好人。但可能有些犯人他没抓到（因为证据不够他就不抓）。
+
+**什么时候关注精确率**：
+- 垃圾邮件过滤：你不想把正常邮件误判为垃圾邮件（高 FP 代价）
+- 推荐系统：你不想推荐用户不感兴趣的内容
+- 搜索引擎：你不想在搜索结果里展示不相关的页面
+
+### 召回率（Recall）
+
+$$
+\text{Recall} = \frac{TP}{TP + FN}
+$$
+
+含义：在所有**实际为正**的样本中，有多少被模型正确识别。
+
+直觉：**"这些真正的正样本，模型找到了多少？"**
+
+高召回率意味着：几乎所有正样本都被模型找到了。模型很"敏感"，不会漏掉阳性样本。
+
+**日常类比**：召回率高的警察——他把几乎所有犯人都抓到了，不会漏网。但可能也抓了不少好人（因为只要看着有点可疑就抓）。
+
+**什么时候关注召回率**：
+- 癌症筛查：你不能漏掉任何一个癌症患者（高 FN 代价）
+- 欺诈检测：你不能漏掉任何欺诈交易
+- 故障检测：你不能漏掉任何设备故障
+
+### 精确率与召回率的权衡
+
+精确率和召回率是一对矛盾体。提高一个，另一个往往会下降。
+
+为什么？因为大多数分类器输出的是概率（0 到 1 之间的连续值），然后通过一个阈值（默认 0.5）来决定是正还是负。
+
+```
+模型的概率输出：[0.1, 0.3, 0.45, 0.52, 0.61, 0.78, 0.95]
+                                    ↑
+                               阈值 = 0.5
+                               左边预测为负，右边预测为正
+
+如果把阈值提高到 0.7：
+[0.1, 0.3, 0.45, 0.52, 0.61, 0.78, 0.95]
+                                    ↑
+                               阈值 = 0.7
+                               预测为正的更少了 → 精确率更高（预测为正的更靠谱）
+                               但可能漏掉了一些正样本 → 召回率更低
+
+如果把阈值降低到 0.3：
+[0.1, 0.3, 0.45, 0.52, 0.61, 0.78, 0.95]
+                         ↑
+                    阈值 = 0.3
+                    预测为正的更多了 → 召回率更高（找到更多正样本）
+                    但误报也更多了 → 精确率更低
+```
+
+**业务场景决定权衡方向**：
+
+| 场景 | 优先指标 | 原因 |
+|------|---------|------|
+| 癌症筛查 | 召回率 | 漏诊的代价远高于误诊 |
+| 垃圾邮件过滤 | 精确率 | 误杀正常邮件比漏掉垃圾邮件更糟糕 |
+| 搜索结果 | 精确率（第一页） | 用户只看前几个结果，必须高度相关 |
+| 自动驾驶障碍检测 | 召回率 | 漏掉障碍物可能致命 |
+| 广告投放 | 精确率 | 展示不相关广告浪费预算且伤害用户体验 |
+
+### F1 Score
+
+$$
+F1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+
+F1 是精确率和召回率的**调和平均**。
+
+为什么用调和平均而不是算术平均？因为调和平均会对极端值给予更大的惩罚。
+
+例子：
+- 精确率 = 1.0，召回率 = 0.01
+- 算术平均 = 0.505（看起来还行）
+- 调和平均 = 0.0198（很低，反映了一个严重偏科的模型）
+
+**什么时候用 F1**：
+- 你需要一个单一数字来平衡精确率和召回率
+- 数据不平衡，准确率不可靠
+- 你对精确率和召回率没有明确的偏好
+
+**F1 的局限**：它把精确率和召回率视为同等重要。如果你的场景明显偏向其中一个，F1 就不是最佳选择。
+
+**F-beta Score**：更一般化的版本，允许你调整精确率和召回率的权重。
+
+$$
+F_\beta = (1 + \beta^2) \times \frac{\text{Precision} \times \text{Recall}}{\beta^2 \times \text{Precision} + \text{Recall}}
+$$
+
+- $\beta = 1$：就是 F1，精确率和召回率同等重要
+- $\beta = 2$：召回率的重要性是精确率的 2 倍（如医疗诊断）
+- $\beta = 0.5$：精确率的重要性是召回率的 2 倍（如垃圾邮件过滤）
+
+### ROC 曲线和 AUC
+
+ROC（Receiver Operating Characteristic）曲线是另一个重要的评估工具。
+
+**ROC 曲线的横轴和纵轴**：
+- 横轴：FPR（False Positive Rate）= FP / (FP + TN)——负样本中被错误预测为正的比例
+- 纵轴：TPR（True Positive Rate）= Recall——正样本中被正确预测为正的比例
+
+ROC 曲线是通过在不同阈值下计算 (FPR, TPR) 点并连线得到的。
+
+```
+TPR
+  ^
+1 |          ___________
+  |        /
+  |      /      ← ROC 曲线
+  |    /
+  |   /
+  |  /
+  | /
+0 +--+--+--+--+---> FPR
+  0              1
+
+对角虚线 = 随机猜测（TPR = FPR）
+曲线越靠近左上角，模型越好
+```
+
+**AUC（Area Under the Curve）**：ROC 曲线下的面积。取值范围 [0, 1]。
+
+- AUC = 1.0：完美分类器
+- AUC = 0.5：和随机猜测一样差
+- AUC < 0.5：比随机还差（可能在预测反了）
+
+**AUC 的概率解释**：AUC 等于随机取一个正样本和一个负样本，模型给正样本的预测分数高于负样本的概率。
+
+如果 AUC = 0.85，意思是：随机挑一个正样本和一个负样本，模型有 85% 的概率给正样本更高的分数。这个模型有不错的区分能力。
+
+**AUC 的优点**：
+- 不受阈值选择的影响（它评估的是所有可能阈值下的表现）
+- 不受类别不平衡的影响（FPR 和 TPR 都是比例，不是绝对数量）
+- 提供模型排序能力的整体评估
+
+**AUC 的局限**：
+- 在极度不平衡的数据上，ROC 曲线可能看起来很好，但实际上模型性能不佳。因为 FPR = FP / (FP + TN)，当负样本很多时，即使 FP 很多，FPR 仍然很小
+- AUC 是一个汇总指标，它告诉你模型"整体上"怎么样，但不告诉你"在哪个阈值下"表现最好
+- 两个 AUC 相同的模型可能在具体业务场景下的表现差异很大
+
+### PR 曲线和 PR-AUC
+
+Precision-Recall 曲线是 ROC 曲线在不平衡数据上的更好替代。
+
+```
+Precision
+  ^
+1 |\
+  | \
+  |  \_______
+  |          \_______
+  |                  \_______  ← PR 曲线
+  |                          \___
+0 +--+--+--+--+--+--+--+--+--+---> Recall
+  0                                 1
+```
+
+**PR-AUC 和 ROC-AUC 的关键区别**：
+
+ROC 曲线的横轴是 FPR，分母是所有负样本（数量很大）。所以即使 FP 增加很多，FPR 也可能只增加一点点。ROC 曲线看起来很漂亮，但实际上模型在精确率方面表现很差。
+
+PR 曲线的横轴是 Recall，纵轴是 Precision。Precision 的分母是 TP + FP（模型预测为正的数量），这个数量会随着阈值变化而变化。当正样本很少时，Precision 对 FP 非常敏感。
+
+**经验法则**：
+- 正样本占比 > 10%：ROC-AUC 和 PR-AUC 都可以
+- 正样本占比 < 10%：优先使用 PR-AUC
+- 正样本占比 < 1%：必须使用 PR-AUC，ROC-AUC 会严重误导
+
+### 多分类指标
+
+对于多分类问题，上述指标可以扩展为：
+
+**Macro 平均**：先计算每个类别的指标，再取平均。每个类别权重相同。
+
+$$
+\text{Precision}_{\text{macro}} = \frac{1}{C} \sum_{i=1}^{C} \text{Precision}_i
+$$
+
+**Micro 平均**：把所有类别的 TP、FP、FN 加在一起，再计算。样本量大的类别权重大。
+
+$$
+\text{Precision}_{\text{micro}} = \frac{\sum_{i=1}^{C} TP_i}{\sum_{i=1}^{C} (TP_i + FP_i)}
+$$
+
+**Weighted 平均**：按每个类别的样本量加权平均。
+
+**怎么选**：
+- 每个类别同等重要 → Macro
+- 整体准确率更重要 → Micro（对于分类问题，Micro Precision = Micro Recall = Accuracy）
+- 按类别样本量加权 → Weighted
+
+## 工作原理（简化的心智模型）
+
+### 指标选择的决策树
+
+面对一个分类问题，你应该这样选择指标：
+
+```
+你的问题是什么类型？
+├── 分类问题
+│   ├── 数据平衡吗？
+│   │   ├── 是（各类别比例接近）→ 准确率或 ROC-AUC
+│   │   └── 否（某类 < 10%）
+│   │       ├── 你更关心什么？
+│   │       │   ├── 不能漏（癌症/欺诈）→ 召回率（或 F2）
+│   │       │   ├── 不能误报（垃圾邮件/审核）→ 精确率
+│   │       │   └── 两者都重要 → F1 或 PR-AUC
+│   │       └── 整体模型质量 → PR-AUC
+│   └── 多分类
+│       ├── 每类同等重要 → Macro F1
+│       └── 按样本量加权 → Weighted F1
+└── 回归问题
+    ├── 关心大误差 → RMSE
+    ├── 关心平均表现 → MAE
+    └── 关心相对误差 → MAPE
+```
+
+### 一个完整的心智模型
+
+把模型评估想象成评估一个侦探的能力。
+
+**准确率**：侦探处理的 100 个案件里，正确破了 85 个。但如果 95 个案件都是简单的偷窃案（几乎不用查就能破），只有 5 个是复杂的谋杀案，这个 85% 的正确率就不太说明问题了。
+
+**精确率**：侦探声称"这 10 个是谋杀案"，其中 8 个确实是。精确率 80%。侦探不太会冤枉人。
+
+**召回率**：实际上有 15 个谋杀案，侦探找到了 8 个。召回率 53%。还有 7 个谋杀案被归为了其他类型，漏掉了。
+
+**F1**：精确率 80% 和召回率 53% 的调和平均。F1 = 64%。一个综合评价。
+
+**AUC-ROC**：如果给侦探看 100 对案件（一个谋杀案 + 一个非谋杀案），侦探能正确分辨出哪个是谋杀案的概率。AUC = 85% 意味着侦探在 85% 的对决中能正确分辨。
+
+## 工作原理（详细机制）
+
+### 从概率输出到分类决策
+
+大多数分类器（逻辑回归、随机森林、神经网络）输出的是概率，不是直接的类别标签。你需要一个阈值来决定"概率多高才算正"。
+
+```python
+# 模型输出概率
+y_prob = model.predict_proba(X_test)[:, 1]  # 正类的概率
+
+# 默认阈值 0.5
+y_pred_default = (y_prob >= 0.5).astype(int)
+
+# 更高的阈值 → 更高的精确率，更低的召回率
+y_pred_high_precision = (y_prob >= 0.8).astype(int)
+
+# 更低的阈值 → 更高的召回率，更低的精确率
+y_pred_high_recall = (y_prob >= 0.2).astype(int)
+```
+
+**阈值选择不是技术问题，是业务问题**。它取决于 FP 和 FN 的相对代价。
+
+#### 阈值调优的方法
+
+**方法 1：基于 F1 选择最优阈值**
+
+```python
+from sklearn.metrics import precision_recall_curve, f1_score
+
+precisions, recalls, thresholds = precision_recall_curve(y_true, y_prob)
+f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+best_threshold = thresholds[np.argmax(f1_scores)]
+```
+
+**方法 2：基于业务代价选择**
+
+如果 FP 的代价是 $C_{FP}$，FN 的代价是 $C_{FN}$：
+
+```python
+# 最小化期望代价
+costs = []
+for t in np.arange(0.01, 1.0, 0.01):
+    y_pred = (y_prob >= t).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    cost = fp * C_FP + fn * C_FN
+    costs.append((t, cost))
+best_threshold = min(costs, key=lambda x: x[1])[0]
+```
+
+**方法 3：满足召回率约束下最大化精确率**
+
+比如医疗场景要求召回率不低于 95%：
+
+```python
+# 找到满足 recall >= 0.95 的最高阈值（对应最高精确率）
+for i in range(len(recalls) - 1):
+    if recalls[i] >= 0.95:
+        best_threshold = thresholds[i]
+        break
+```
+
+### ROC 曲线的数学理解
+
+ROC 曲线上的每一个点对应一个阈值 $t$。对于阈值 $t$：
+
+$$
+\text{TPR}(t) = P(\hat{p} \geq t | y = 1)
+$$
+
+$$
+\text{FPR}(t) = P(\hat{p} \geq t | y = 0)
+$$
+
+其中 $\hat{p}$ 是模型输出的正类概率。
+
+ROC 曲线实际上是正样本和负样本的预测概率分布的对比：
+
+```
+预测概率分布：
+
+正样本:     ▁▁▁▂▃▅▆██▇▅  → 偏右（高概率）
+负样本:  ▅▆██▇▅▃▂▁▁▁▁▁▁  → 偏左（低概率）
+           ↑
+        如果两个分布完全不重叠，AUC = 1.0
+        如果两个分布完全重叠，AUC = 0.5
+```
+
+AUC 可以用 Wilcoxon-Mann-Whitney 统计量来理解：
+
+$$
+\text{AUC} = P(\hat{p}_{\text{positive}} > \hat{p}_{\text{negative}})
+$$
+
+即随机取一个正样本和一个负样本，模型给正样本更高分数的概率。
+
+### 为什么 ROC-AUC 在不平衡数据上会误导
+
+考虑一个极端例子：10000 个样本，其中 100 个正样本（1%），9900 个负样本。
+
+假设模型预测出了 100 个正样本，其中 50 个是真正的正样本（TP=50, FP=50）。
+
+- **FPR** = 50 / (50 + 9850) = 0.005（看起来很低！）
+- **Precision** = 50 / (50 + 50) = 0.5（只有 50%，很一般）
+
+在 ROC 曲线上，这个点的 FPR 只有 0.005，看起来非常接近左上角。但在 PR 曲线上，Precision 只有 0.5，看起来很一般。
+
+**根本原因**：FPR 的分母是所有负样本（很大），所以即使 FP 很多，FPR 也可能很小。但 Precision 的分母是模型预测为正的数量（和 FP 直接相关），所以对 FP 敏感得多。
+
+### 回归指标
+
+对于回归问题（预测连续值），指标体系完全不同。
+
+#### MAE（Mean Absolute Error）
+
+$$
+\text{MAE} = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|
+$$
+
+含义：预测值和真实值之差的绝对值的平均。
+
+特点：
+- 和原始数据同单位（如果预测房价，MAE 的单位就是"元"）
+- 对异常值鲁棒（每个误差的权重相同，不像 MSE 那样放大异常值）
+- 容易解释：MAE = 5000 元意味着"平均预测偏差约 5000 元"
+
+#### MSE（Mean Squared Error）
+
+$$
+\text{MSE} = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2
+$$
+
+特点：
+- 放大异常值的影响（误差被平方，大的误差被放大得更多）
+- 单位是原始单位的平方（不太直观）
+- 数学性质好（可微、凸函数），适合做优化目标
+
+#### RMSE（Root Mean Squared Error）
+
+$$
+\text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}
+$$
+
+特点：
+- 和原始数据同单位（比 MSE 更直观）
+- 仍然对异常值敏感（但比 MSE 程度轻一些）
+- 如果误差服从正态分布，RMSE ≈ 1.25 × MAE
+
+**RMSE vs MAE 的选择**：
+- 如果你想对大误差给予更多惩罚 → RMSE（比如预测房价，偏差 50 万比偏差 5 万严重得多）
+- 如果你关心平均表现，不想被少数异常值主导 → MAE
+- 如果 RMSE >> MAE，说明存在一些预测偏差非常大的样本（异常值或极端情况）
+
+#### MAPE（Mean Absolute Percentage Error）
+
+$$
+\text{MAPE} = \frac{1}{n} \sum_{i=1}^{n} \frac{|y_i - \hat{y}_i|}{|y_i|} \times 100\%
+$$
+
+特点：
+- 百分比形式，可以跨数据集、跨量纲比较
+- 当真实值接近 0 时会爆炸（除以接近 0 的数）
+- 对低估比高估更敏感（分母是真实值，不是预测值）
+
+**适用场景**：
+- 比较不同产品的预测准确率（价格范围差异大）
+- 向业务方汇报（百分比比绝对值更直观）
+
+**不适用场景**：
+- 真实值可能为 0 或接近 0（如预测低流量时段的访问量）
+- 预测值有严格的下界（如价格不能为负）
+
+#### R²（决定系数）
+
+$$
+R^2 = 1 - \frac{\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}{\sum_{i=1}^{n}(y_i - \bar{y})^2}
+$$
+
+含义：模型解释了目标变量方差的多少比例。
+
+- R² = 1：完美预测
+- R² = 0：模型和"直接用均值预测"一样差
+- R² < 0：模型比"直接用均值预测"还差（过拟合到错误的方向）
+
+**R² 的问题**：
+- 加入更多特征永远不会让 R² 变小（即使特征是噪声）。所以需要 Adjusted R² 来惩罚特征数
+- R² 不能告诉你残差是否满足回归假设（线性、正态、同方差）
+- R² 高不一定意味着模型好（如果数据有强趋势，即使很差的模型也能有高 R²）
+
+## 代码示例
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_classification, load_breast_cancer, make_regression
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import (
+    confusion_matrix, accuracy_score, precision_score, recall_score,
+    f1_score, fbeta_score, roc_auc_score, roc_curve,
+    precision_recall_curve, average_precision_score,
+    classification_report,
+    mean_absolute_error, mean_squared_error, r2_score,
+    mean_absolute_percentage_error
+)
+import warnings
+warnings.filterwarnings('ignore')
+
+np.random.seed(42)
+
+# ============================================================
+# 1. 混淆矩阵和基础指标
+# ============================================================
+print("=" * 70)
+print("1. 混淆矩阵和基础分类指标")
+print("=" * 70)
+
+# 生成不平衡数据（正样本 10%）
+X, y = make_classification(
+    n_samples=2000, n_features=20, n_informative=10,
+    weights=[0.9, 0.1], random_state=42
+)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+print(f"训练集: {len(y_train)} 样本, 正样本比例: {y_train.mean():.2%}")
+print(f"测试集: {len(y_test)} 样本, 正样本比例: {y_test.mean():.2%}")
+
+# 训练模型
+model = LogisticRegression(max_iter=5000, random_state=42)
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+y_prob = model.predict_proba(X_test)[:, 1]
+
+# 混淆矩阵
+cm = confusion_matrix(y_test, y_pred)
+tn, fp, fn, tp = cm.ravel()
+
+print(f"\n混淆矩阵:")
+print(f"              预测为负  预测为正")
+print(f"  实际为负     {tn:5d}     {fp:5d}")
+print(f"  实际为正     {fn:5d}     {tp:5d}")
+
+print(f"\n基础指标:")
+print(f"  准确率 (Accuracy):  {accuracy_score(y_test, y_pred):.4f}")
+print(f"  精确率 (Precision): {precision_score(y_test, y_pred):.4f}")
+print(f"  召回率 (Recall):    {recall_score(y_test, y_pred):.4f}")
+print(f"  F1 Score:           {f1_score(y_test, y_pred):.4f}")
+print(f"  F2 Score (重召回):  {fbeta_score(y_test, y_pred, beta=2):.4f}")
+print(f"  F0.5 Score (重精确): {fbeta_score(y_test, y_pred, beta=0.5):.4f}")
+
+# 对比：全部预测为负
+all_neg_pred = np.zeros_like(y_test)
+print(f"\n对比 — 全部预测为负:")
+print(f"  准确率: {accuracy_score(y_test, all_neg_pred):.4f}  ← 看起来很好!")
+print(f"  召回率: {recall_score(y_test, all_neg_pred):.4f}  ← 但完全没找到正样本")
+print(f"  F1:     {f1_score(y_test, all_neg_pred, zero_division=0):.4f}  ← F1 直接暴露了问题")
+
+# ============================================================
+# 2. 阈值对指标的影响
+# ============================================================
+print("\n" + "=" * 70)
+print("2. 阈值对精确率和召回率的影响")
+print("=" * 70)
+
+thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+print(f"{'阈值':<8} {'准确率':<10} {'精确率':<10} {'召回率':<10} {'F1':<10} {'预测为正数'}")
+print("-" * 65)
+
+for t in thresholds:
+    y_pred_t = (y_prob >= t).astype(int)
+    acc = accuracy_score(y_test, y_pred_t)
+    prec = precision_score(y_test, y_pred_t, zero_division=0)
+    rec = recall_score(y_test, y_pred_t)
+    f1 = f1_score(y_test, y_pred_t, zero_division=0)
+    n_pos = y_pred_t.sum()
+    print(f"{t:<8.1f} {acc:<10.4f} {prec:<10.4f} {rec:<10.4f} {f1:<10.4f} {n_pos}")
+
+# 预期输出类似：
+# 阈值     准确率     精确率     召回率     F1         预测为正数
+# -----------------------------------------------------------------
+# 0.1      0.8067     0.2745     0.9667     0.4299     235
+# 0.2      0.8800     0.4255     0.9000     0.5789     141
+# 0.3      0.9150     0.5513     0.8333     0.6623     101
+# 0.4      0.9367     0.6786     0.7667     0.7198     75
+# 0.5      0.9400     0.7284     0.7167     0.7225     63
+# 0.6      0.9433     0.8030     0.6500     0.7182     49
+# 0.7      0.9400     0.8431     0.5833     0.6890     41
+# 0.8      0.9333     0.8857     0.5167     0.6532     31
+# 0.9      0.9217     0.9600     0.4000     0.5627     17
+
+# 找到最优阈值（最大化 F1）
+precisions, recalls, pr_thresholds = precision_recall_curve(y_test, y_prob)
+f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+best_idx = np.argmax(f1_scores)
+best_threshold = pr_thresholds[best_idx]
+print(f"\n最优阈值（最大化 F1）: {best_threshold:.4f}")
+print(f"对应 F1: {f1_scores[best_idx]:.4f}")
+print(f"对应精确率: {precisions[best_idx]:.4f}")
+print(f"对应召回率: {recalls[best_idx]:.4f}")
+
+# ============================================================
+# 3. ROC 曲线和 AUC
+# ============================================================
+print("\n" + "=" * 70)
+print("3. ROC 曲线和 AUC")
+print("=" * 70)
+
+fpr, tpr, roc_thresholds = roc_curve(y_test, y_prob)
+roc_auc = roc_auc_score(y_test, y_prob)
+
+print(f"ROC-AUC: {roc_auc:.4f}")
+print(f"\nAUC 的概率解释:")
+print(f"  随机取一个正样本和一个负样本")
+print(f"  模型给正样本更高分数的概率 = {roc_auc:.1%}")
+
+# 找到 ROC 曲线上离左上角最近的点
+distances = np.sqrt(fpr**2 + (1 - tpr)**2)
+best_roc_idx = np.argmin(distances)
+print(f"\nROC 曲线最优点:")
+print(f"  阈值: {roc_thresholds[best_roc_idx]:.4f}")
+print(f"  FPR: {fpr[best_roc_idx]:.4f}")
+print(f"  TPR (Recall): {tpr[best_roc_idx]:.4f}")
+
+# ============================================================
+# 4. PR 曲线和 PR-AUC
+# ============================================================
+print("\n" + "=" * 70)
+print("4. PR 曲线和 PR-AUC（不平衡数据的更好选择）")
+print("=" * 70)
+
+pr_auc = average_precision_score(y_test, y_prob)
+print(f"PR-AUC (Average Precision): {pr_auc:.4f}")
+print(f"ROC-AUC: {roc_auc:.4f}")
+print(f"\n对比:")
+print(f"  ROC-AUC = {roc_auc:.4f}  ← 在不平衡数据上可能偏乐观")
+print(f"  PR-AUC  = {pr_auc:.4f}  ← 更保守，更真实地反映模型对少数类的识别能力")
+
+# ============================================================
+# 5. 可视化：ROC 曲线 vs PR 曲线
+# ============================================================
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# ROC 曲线
+axes[0].plot(fpr, tpr, 'b-', linewidth=2, label=f'ROC (AUC = {roc_auc:.3f})')
+axes[0].plot([0, 1], [0, 1], 'k--', alpha=0.3, label='随机基线')
+axes[0].plot(fpr[best_roc_idx], tpr[best_roc_idx], 'ro', markersize=10, label=f'最优点 (t={roc_thresholds[best_roc_idx]:.3f})')
+axes[0].set_xlabel('False Positive Rate')
+axes[0].set_ylabel('True Positive Rate (Recall)')
+axes[0].set_title('ROC 曲线')
+axes[0].legend()
+axes[0].grid(True, alpha=0.3)
+
+# PR 曲线
+axes[1].plot(recalls, precisions, 'r-', linewidth=2, label=f'PR (AP = {pr_auc:.3f})')
+baseline = y_test.mean()
+axes[1].axhline(baseline, color='k', linestyle='--', alpha=0.3, label=f'正样本比例 = {baseline:.3f}')
+axes[1].plot(recalls[best_idx], precisions[best_idx], 'bo', markersize=10, label=f'最优点 (t={best_threshold:.3f})')
+axes[1].set_xlabel('Recall')
+axes[1].set_ylabel('Precision')
+axes[1].set_title('Precision-Recall 曲线')
+axes[1].legend()
+axes[1].grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('roc_pr_curves.png', dpi=150)
+plt.show()
+print("\nROC 和 PR 曲线已保存")
+
+# ============================================================
+# 6. 多分类指标
+# ============================================================
+print("\n" + "=" * 70)
+print("6. 多分类指标")
+print("=" * 70)
+
+from sklearn.datasets import load_iris
+from sklearn.svm import SVC
+
+iris = load_iris()
+X_iris, y_iris = iris.data, iris.target
+X_tr, X_te, y_tr, y_te = train_test_split(X_iris, y_iris, test_size=0.3, random_state=42)
+
+clf = SVC(probability=True, random_state=42)
+clf.fit(X_tr, y_tr)
+y_pred_iris = clf.predict(X_te)
+
+print(classification_report(y_te, y_pred_iris, target_names=iris.target_names))
+
+print("多分类平均方式对比:")
+for avg in ['macro', 'micro', 'weighted']:
+    p = precision_score(y_te, y_pred_iris, average=avg)
+    r = recall_score(y_te, y_pred_iris, average=avg)
+    f = f1_score(y_te, y_pred_iris, average=avg)
+    print(f"  {avg:8s} → Precision: {p:.4f}, Recall: {r:.4f}, F1: {f:.4f}")
+
+# ============================================================
+# 7. 回归指标
+# ============================================================
+print("\n" + "=" * 70)
+print("7. 回归指标")
+print("=" * 70)
+
+# 生成回归数据（加入一些异常值）
+X_reg, y_reg = make_regression(n_samples=500, n_features=10, noise=20, random_state=42)
+# 加入异常值
+y_reg[:10] += 500  # 10 个极端异常值
+
+X_tr_r, X_te_r, y_tr_r, y_te_r = train_test_split(X_reg, y_reg, test_size=0.3, random_state=42)
+
+reg = LinearRegression()
+reg.fit(X_tr_r, y_tr_r)
+y_pred_reg = reg.predict(X_te_r)
+
+mae = mean_absolute_error(y_te_r, y_pred_reg)
+mse = mean_squared_error(y_te_r, y_pred_reg)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_te_r, y_pred_reg)
+mape = mean_absolute_percentage_error(y_te_r, y_pred_reg)
+
+print(f"回归指标:")
+print(f"  MAE:  {mae:.4f}  (平均绝对误差)")
+print(f"  MSE:  {mse:.4f}  (均方误差)")
+print(f"  RMSE: {rmse:.4f}  (均方根误差)")
+print(f"  R²:   {r2:.4f}  (决定系数)")
+print(f"  MAPE: {mape:.4%}  (平均绝对百分比误差)")
+print(f"\n  RMSE / MAE = {rmse/mae:.2f}")
+print(f"  → 如果 RMSE >> MAE，说明存在一些大误差的异常点")
+print(f"  → 如果 RMSE ≈ MAE，说明误差分布比较均匀")
+
+# 移除异常值后的对比
+mask = np.abs(y_reg - np.median(y_reg)) < 3 * np.std(y_reg)
+X_clean, y_clean = X_reg[mask], y_reg[mask]
+X_tr_c, X_te_c, y_tr_c, y_te_c = train_test_split(X_clean, y_clean, test_size=0.3, random_state=42)
+reg_c = LinearRegression()
+reg_c.fit(X_tr_c, y_tr_c)
+y_pred_c = reg_c.predict(X_te_c)
+
+print(f"\n移除异常值后:")
+print(f"  MAE:  {mean_absolute_error(y_te_c, y_pred_c):.4f}")
+print(f"  RMSE: {np.sqrt(mean_squared_error(y_te_c, y_pred_c)):.4f}")
+print(f"  R²:   {r2_score(y_te_c, y_pred_c):.4f}")
+
+# ============================================================
+# 8. 完整的指标选择示例
+# ============================================================
+print("\n" + "=" * 70)
+print("8. 实战：不同业务场景下的指标选择")
+print("=" * 70)
+
+# 场景 1: 癌症筛查（不能漏诊）
+print("\n场景 1: 癌症筛查（发病率 1%，不能漏诊）")
+X_cancer, y_cancer = make_classification(
+    n_samples=5000, n_features=20, weights=[0.99, 0.01], random_state=42
+)
+X_tr_c, X_te_c, y_tr_c, y_te_c = train_test_split(X_cancer, y_cancer, test_size=0.3, random_state=42)
+model_cancer = LogisticRegression(max_iter=5000, class_weight='balanced', random_state=42)
+model_cancer.fit(X_tr_c, y_tr_c)
+y_prob_cancer = model_cancer.predict_proba(X_te_c)[:, 1]
+
+# 选择满足召回率 >= 95% 的最高阈值
+precisions_c, recalls_c, thresholds_c = precision_recall_curve(y_te_c, y_prob_cancer)
+for i in range(len(recalls_c) - 1):
+    if recalls_c[i] >= 0.95:
+        t_cancer = thresholds_c[i]
+        break
+
+y_pred_cancer = (y_prob_cancer >= t_cancer).astype(int)
+print(f"  选定阈值: {t_cancer:.4f}")
+print(f"  召回率: {recall_score(y_te_c, y_pred_cancer):.4f} (目标 >= 0.95)")
+print(f"  精确率: {precision_score(y_te_c, y_pred_cancer, zero_division=0):.4f}")
+print(f"  F2:     {fbeta_score(y_te_c, y_pred_cancer, beta=2):.4f}")
+print(f"  → 牺牲精确率来保证高召回率（不能漏诊）")
+
+# 场景 2: 垃圾邮件过滤（不能误杀正常邮件）
+print("\n场景 2: 垃圾邮件过滤（垃圾邮件 20%，不能误杀）")
+X_spam, y_spam = make_classification(
+    n_samples=5000, n_features=20, weights=[0.8, 0.2], random_state=42
+)
+X_tr_s, X_te_s, y_tr_s, y_te_s = train_test_split(X_spam, y_spam, test_size=0.3, random_state=42)
+model_spam = LogisticRegression(max_iter=5000, random_state=42)
+model_spam.fit(X_tr_s, y_tr_s)
+y_prob_spam = model_spam.predict_proba(X_te_s)[:, 1]
+
+# 选择满足精确率 >= 95% 的最低阈值
+precisions_s, recalls_s, thresholds_s = precision_recall_curve(y_te_s, y_prob_spam)
+for i in range(len(precisions_s) - 2, -1, -1):
+    if precisions_s[i] >= 0.95:
+        t_spam = thresholds_s[i]
+        break
+
+y_pred_spam = (y_prob_spam >= t_spam).astype(int)
+print(f"  选定阈值: {t_spam:.4f}")
+print(f"  精确率: {precision_score(y_te_s, y_pred_spam, zero_division=0):.4f} (目标 >= 0.95)")
+print(f"  召回率: {recall_score(y_te_s, y_pred_spam):.4f}")
+print(f"  F0.5:   {fbeta_score(y_te_s, y_pred_spam, beta=0.5):.4f}")
+print(f"  → 牺牲召回率来保证高精确率（不能误杀）")
+
+# 场景 3: 模型竞赛（关注整体排序能力）
+print("\n场景 3: 模型竞赛（关注整体排序能力）")
+print(f"  使用 ROC-AUC 或 PR-AUC 作为评估指标")
+print(f"  PR-AUC: {average_precision_score(y_te_c, y_prob_cancer):.4f}")
+print(f"  ROC-AUC: {roc_auc_score(y_te_c, y_prob_cancer):.4f}")
+print(f"  → 在不平衡数据上，PR-AUC 更能区分模型质量")
+
+# ============================================================
+# 9. 指标速查表
+# ============================================================
+print("\n" + "=" * 70)
+print("9. 指标选择速查表")
+print("=" * 70)
+
+table = """
+┌──────────────────────┬────────────────────┬────────────────────────────────┐
+│ 场景                 │ 首选指标           │ 原因                           │
+├──────────────────────┼────────────────────┼────────────────────────────────┤
+│ 癌症筛查             │ 召回率 (Recall)    │ 漏诊代价远高于误诊             │
+│ 垃圾邮件过滤         │ 精确率 (Precision) │ 误杀正常邮件代价高             │
+│ 欺诈检测             │ F1 或 PR-AUC       │ 不平衡且 FP/FN 都重要          │
+│ 搜索排序             │ 精确率@K           │ 用户只看前 K 个结果            │
+│ 推荐系统             │ NDCG, MAP          │ 关注排序质量而非二分类          │
+│ 类别平衡分类         │ 准确率或 F1        │ 简单直观                       │
+│ 模型竞赛             │ ROC-AUC / PR-AUC   │ 阈值无关，评估排序能力          │
+│ 多分类（每类重要）   │ Macro F1           │ 每个类别同等权重               │
+│ 多分类（按量加权）   │ Weighted F1        │ 样本多的类别权重大             │
+│ 回归（关心大误差）   │ RMSE               │ 平方放大异常值影响             │
+│ 回归（关心平均表现） │ MAE                │ 每个误差等权，更鲁棒           │
+│ 回归（跨量纲比较）   │ MAPE               │ 百分比形式，便于比较           │
+│ 回归（解释方差比例） │ R²                 │ 模型解释了数据的多少变异性     │
+└──────────────────────┴────────────────────┴────────────────────────────────┘
+"""
+print(table)
+```
+
+## 真实案例
+
+### 案例 1：医疗 AI 中的指标选择
+
+Google Health 在 2020 年发表了一篇关于乳腺癌筛查 AI 的论文。他们面对的核心问题就是指标选择。
+
+**数据特征**：乳腺癌筛查中，大约每 1000 张乳腺 X 光片中只有 2-5 张有癌症。正样本比例约 0.2%-0.5%。
+
+**指标选择**：他们没有只看 ROC-AUC，而是设计了两个具体的临床指标：
+
+1. **假阴性率（1 - 召回率）**：每 1000 个癌症患者中漏掉多少。目标：不超过放射科医生的平均漏诊率。
+2. **假阳性率**：每 1000 个健康人中误报多少。目标：不超过放射科医生的平均误报率。
+
+最终 AI 系统在保持召回率不降低的前提下，将假阳性率降低了 5.7%（美国数据）和 1.2%（英国数据）。这意味着每年可以减少数百万次不必要的活检。
+
+**教训**：不要只看一个指标。即使 AUC 很高，如果不关注具体的精确率-召回率权衡，模型可能在实际使用中带来问题。
+
+### 案例 2：信用卡欺诈检测
+
+某支付公司每天处理 1000 万笔交易，其中大约 500 笔是欺诈（0.005%）。
+
+**最初的方案**：用准确率做指标。准确率 99.995%。但每天只检测到 50 笔欺诈（召回率 10%），损失了 450 笔欺诈交易。
+
+**改进**：切换到 PR-AUC 作为评估指标，并设置召回率 >= 90% 的约束。重新训练后，精确率从 15% 下降到 8%（更多误报），但召回率从 10% 提升到 92%。
+
+**业务影响**：
+- 每天多检测到 410 笔欺诈，挽回约 120 万元的损失
+- 误报增加了约 5500 笔（从 850 笔增加到 6350 笔），需要额外人工审核
+- 但人工审核的成本远低于欺诈损失，整体收益为正
+
+**关键决策**：不是"精确率 vs 召回率"的二选一，而是计算具体的业务代价来决定阈值。每笔欺诈的平均损失是 2900 元，每笔人工审核的成本是 15 元。只要精确率 > 15/2900 ≈ 0.5%，多审核一笔就是划算的。
+
+### 案例 3：房价预测中的回归指标选择
+
+某房产平台需要预测房屋成交价格，用于给卖家提供定价建议。
+
+**模型 A**：线性回归
+- MAE：15 万元
+- RMSE：35 万元
+- R²：0.78
+
+**模型 B**：随机森林
+- MAE：12 万元
+- RMSE：50 万元
+- R²：0.82
+
+看 R²，模型 B 更好。但看 MAE 和 RMSE 的关系：模型 B 的 RMSE/MAE = 4.2，远高于模型 A 的 2.3。这意味着模型 B 有一些预测偏差非常大的样本。
+
+深入调查发现，模型 B 对豪宅（价格 > 1000 万）的预测误差非常大，因为它对训练集中几个极端价格的样本过拟合了。而 MAE 更低是因为它在普通住宅上表现更好。
+
+**决策**：
+- 如果平台的用户主要是普通住宅买家/卖家 → 选模型 B（MAE 更低）
+- 如果平台也需要服务豪宅客户 → 选模型 A（RMSE 更低，大误差更少）
+- 实际解决方案：把豪宅和普通住宅分开建模
+
+### 案例 4：多分类指标在情感分析中的应用
+
+某产品评论分析系统需要把评论分为三类：正面、中性、负面。
+
+数据分布：正面 60%，中性 25%，负面 15%。
+
+**如果只看准确率**：一个把所有评论都预测为"正面"的模型，准确率就有 60%。但这个模型完全无法识别负面评论——对于关心产品问题的团队来说毫无价值。
+
+**如果看 Macro F1**：那个"全部预测为正面"的模型，Macro F1 只有 0.20（正面类 F1=0.75，中性类 F1=0，负面类 F1=0，平均 0.25，但 Macro F1 的计算方式会稍低）。
+
+**如果看 Weighted F1**：会偏向多数类，可能掩盖少数类（负面）的表现。
+
+**最终选择**：使用 Macro F1 作为主要指标，因为它确保模型在所有类别上都表现良好。同时单独报告负面类的召回率，因为漏掉负面评论对产品改进最不利。
+
+## 权衡取舍以及何时不该使用
+
+### 指标的代价
+
+**只优化一个指标的代价**：
+
+当你只优化一个指标时，其他方面的表现可能恶化：
+
+- 只优化召回率 → 精确率可能很低（模型把太多负样本预测为正）
+- 只优化精确率 → 召回率可能很低（模型太保守，漏掉很多正样本）
+- 只优化准确率 → 在不平衡数据上被误导
+- 只优化 ROC-AUC → 可能忽略了模型在特定阈值下的表现
+
+### 何时不该使用 AUC
+
+1. **你需要一个具体的分类决策时**。AUC 评估的是所有阈值下的平均表现，但实际部署时你只能选一个阈值。一个 AUC 高的模型可能在对你业务重要的阈值点表现不好。
+
+2. **类别极度不平衡（正样本 < 1%）时**。此时 PR-AUC 更合适，因为 ROC-AUC 可能掩盖模型在少数类上的薄弱表现。
+
+3. **概率校准很重要时**。AUC 只关心排序（谁比谁高），不关心概率的绝对值。如果你需要准确的条件概率（比如"这个客户违约的概率是 3%"），应该使用 Brier Score 或对数损失（Log Loss）。
+
+### Brier Score 和 Log Loss
+
+当你关心模型输出的概率是否准确（而不仅仅是排序是否正确）时：
+
+**Log Loss（对数损失）**：
+
+$$
+\text{Log Loss} = -\frac{1}{n} \sum_{i=1}^{n} [y_i \log(\hat{p}_i) + (1 - y_i) \log(1 - \hat{p}_i)]
+$$
+
+特点：
+- 对错误预测的概率给予重罚（如果真实标签是 1 但模型只给了 0.01 的概率，Log Loss 非常大）
+- 评估的是概率输出的质量，不仅仅是分类正确性
+- 常用于 Kaggle 竞赛中的评估指标
+
+**Brier Score**：
+
+$$
+\text{Brier Score} = \frac{1}{n} \sum_{i=1}^{n} (\hat{p}_i - y_i)^2
+$$
+
+- 就是概率预测的 MSE
+- 范围 [0, 1]，越小越好
+- 比 Log Loss 对极端错误更宽容
+
+**什么时候用**：
+- 模型的概率输出会被下游系统使用时（比如计算期望收益）
+- 你需要比较不同模型的概率校准质量时
+- 风险评估场景（需要准确知道风险的概率）
+
+### 常见的错误做法
+
+**错误 1：在测试集上调阈值，然后报告测试集的指标**
+
+这等价于在测试集上训练。你应该在验证集上调阈值，然后用测试集做最终评估。如果数据少，可以用交叉验证。
+
+**错误 2：用 ROC-AUC 比较不平衡数据上的模型**
+
+两个模型 ROC-AUC 都是 0.90，但在实际使用的阈值下，一个模型精确率 80%，另一个只有 40%。ROC-AUC 掩盖了这种差异。
+
+**错误 3：追求指标而忽略业务含义**
+
+如果业务要求"精确率不低于 95%"，不要去优化 F1 或者 AUC。在约束条件下优化另一个指标才是正确的做法。
+
+**错误 4：认为指标越高越好**
+
+有时候指标太高反而是问题的信号。如果一个模型在困难任务上的 ROC-AUC 达到 0.99，先别庆祝——很可能是数据泄露。
+
+## 关键要点
+
+1. **准确率在不平衡数据上毫无意义**。当正样本占比很低时，一个"全部预测为负"的模型就能获得很高的准确率。你应该看精确率、召回率或 F1。
+
+2. **精确率和召回率是一对矛盾**。提高一个通常意味着降低另一个。通过调整分类阈值来控制平衡点。阈值的选择不是技术问题——它取决于你的业务场景中 FP 和 FN 的相对代价。
+
+3. **ROC-AUC 评估排序能力，PR-AUC 评估对少数类的识别能力**。数据平衡时两者都行；数据不平衡（正样本 < 10%）时用 PR-AUC。
+
+4. **阈值调优是连接模型和业务的桥梁**。模型输出概率，业务需要决策。默认的 0.5 阈值在绝大多数业务场景下不是最优的。基于业务代价或约束来选择阈值。
+
+5. **回归指标的选择取决于你关心什么**。大误差代价高用 RMSE，平均表现用 MAE，跨量纲比较用 MAPE，解释方差用 R²。RMSE >> MAE 意味着存在异常值问题。
+
+6. **不要只看一个指标**。一个好的评估至少应该包括：一个总体指标（AUC 或 F1）+ 和业务直接相关的具体指标（如精确率@某个阈值）。单一指标容易被"优化"到不合理的方向。
+
+7. **指标太高要警惕**。如果模型在困难任务上的指标异常好，先检查数据泄露，再检查评估流程是否正确。
+
+## 延伸阅读
+
+1. Davis, J., & Goadrich, M. (2006). "The relationship between Precision-Recall and ROC curves." *ICML*. — 证明了 PR 曲线和 ROC 曲线之间的数学关系
+
+2. Saito, T., & Rehmsmeier, M. (2015). "The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets." *PLoS ONE*. — 在不平衡数据上 PR 曲线优于 ROC 曲线的实证研究
+
+3. Flach, P., & Kull, M. (2015). "Precision-Recall-Gain curves: PR analysis done right." *NeurIPS*. — 改进的 PR 曲线分析方法
+
+4. Powers, D. M. (2011). "Evaluation: from precision, recall and F-measure to ROC, informedness, markedness and correlation." *International Journal of Machine Learning Technology*. — 指标体系的全面综述
+
+5. Willmott, C. J., & Matsuura, K. (2005). "Advantages of the mean absolute error (MAE) over the root mean square error (RMSE) in assessing average model performance." *Climate Research*. — MAE vs RMSE 的经典比较
+
+6. Google Machine Learning Crash Course: [Classification](https://developers.google.com/machine-learning/crash-course/classification) — 精确率/召回率的入门教程

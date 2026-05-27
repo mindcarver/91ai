@@ -1,0 +1,561 @@
+<!--
+调研来源：
+1. Vaswani et al., "Attention Is All You Need" (2017) — Transformer 原始论文
+2. "The Annotated Transformer" (Harvard NLP, Rush et al.) — 逐行代码注释
+3. Karpathy, "Let's build GPT: from scratch" — 从零构建 Transformer 的教程
+4. Phuong & Hutter, "Formal Algorithms for Transformers" (2022) — Transformer 的形式化描述
+5. Kazemnejad, "Transformer Architecture: The Positional Encoding" — 位置编码的详细分析
+6. Tay et al., "Efficient Transformers: A Survey" (2022) — 高效 Transformer 综述
+
+核心发现：Transformer 由编码器和解码器两部分组成。核心操作是 Scaled Dot-Product Attention，通过 Q/K/V 投影和 Softmax 实现全局信息交互。位置编码使用正弦/余弦函数为序列注入位置信息（因为 Attention 本身是位置无关的）。多头注意力让模型同时关注不同类型的关系。前馈网络为每个位置独立提供非线性变换能力。残差连接和 Layer Norm 是训练深层 Transformer 的关键。
+-->
+
+# Transformer 详解：自注意力、多头注意力、位置编码，逐层拆解
+
+**TL;DR：** Transformer 完全基于注意力机制，不使用 RNN 或 CNN。它的核心是 Scaled Dot-Product Attention：用 Query 和 Key 的点积（除以 $\sqrt{d_k}$）计算注意力权重，然后对 Value 做加权求和。多头注意力让模型同时学习多种关系模式。位置编码用正弦/余弦函数为模型注入位置信息。每个 Transformer 层 = 多头注意力 + 前馈网络 + 残差连接 + Layer Norm。整个架构可以高度并行计算，这是它取代 RNN 的关键优势。
+
+## 为什么这很重要
+
+Transformer 是现代 NLP（和越来越多的其他领域）的基础架构。BERT、GPT、T5、BLOOM、LLaMA——所有这些模型都是 Transformer 的变体。理解 Transformer 是理解大语言模型的前提。
+
+2017 年的原始论文标题是"Attention Is All You Need"。这个标题准确地概括了 Transformer 的核心主张：**只用注意力机制就够了**，不需要 RNN 的递归结构，也不需要 CNN 的局部卷积。
+
+这个主张被后来 7 年的研究充分验证了。Transformer 从机器翻译出发，征服了 NLP 的几乎所有任务，然后扩展到视觉（ViT）、语音（Whisper）、多模态（CLIP）、蛋白质结构预测（AlphaFold）——甚至数学推理和代码生成。
+
+## 核心概念
+
+### Transformer 的整体架构
+
+原始 Transformer 是一个编码器-解码器结构：
+
+```
+输入序列 "I love AI"
+  │
+  ▼
+[Token Embedding + Positional Encoding]
+  │
+  ▼
+┌──────────────────────────────┐
+│  Encoder (×N 层, N=6)         │
+│                                │
+│  Multi-Head Self-Attention     │ ← 编码器内部的自注意力
+│  + Add & Norm                  │
+│                                │
+│  Feed-Forward Network          │ ← 位置独立的前馈网络
+│  + Add & Norm                  │
+└──────────────────────────────┘
+  │
+  ▼ 编码器输出
+  │
+  ▼
+┌──────────────────────────────┐
+│  Decoder (×N 层, N=6)         │
+│                                │
+│  Masked Multi-Head Self-Attn  │ ← 解码器自注意力（带因果 mask）
+│  + Add & Norm                  │
+│                                │
+│  Cross-Attention               │ ← 解码器关注编码器输出
+│  + Add & Norm                  │
+│                                │
+│  Feed-Forward Network          │
+│  + Add & Norm                  │
+└──────────────────────────────┘
+  │
+  ▼
+Linear + Softmax → 输出概率分布
+```
+
+BERT 只使用编码器部分，GPT 只使用解码器部分。
+
+## 工作原理（简化的心智模型）
+
+### 给 12 岁孩子的解释
+
+想象一个会议室里坐着 10 个人，每人手里拿着一句话中的一个词。
+
+**自注意力**：每个人可以问其他所有人一个问题，然后根据回答整合信息。"猫"这个词的人可能会特别关注"坐"和"垫子"——因为它们是相关的。每轮讨论后，每个人都获得了一个"综合了全局信息的理解"。
+
+**多头注意力**：不是只有一轮讨论，而是同时进行 8 轮不同主题的讨论。一轮关注语法（谁做主语），一轮关注语义（谁和谁相关），一轮关注位置（相邻词的关系）等。最后把所有讨论的结果合并。
+
+**位置编码**：因为所有人同时说话（并行计算），没有人知道自己在句子中的"位置"。解决方案：给每个人一个独特的"座位号徽章"（位置编码），这样模型可以通过徽章区分第一个词和最后一个词。
+
+**前馈网络**：每轮讨论之后，每个人独立地"消化"刚才听到的信息——用一个小型神经网络来处理和整合。这个消化过程每个人是独立的（可以并行计算）。
+
+**多层堆叠**：整个"讨论-消化"过程重复 6 次（或更多）。每一层都能在上一层的基础上建立更抽象的理解。第一层可能学到词与词的关系，更深的层可能学到短语、从句甚至段落级别的关系。
+
+## 工作原理（详细机制）
+
+### 1. 输入表示：Embedding + Positional Encoding
+
+#### Token Embedding
+
+输入文本首先被分词（tokenization），然后每个 token 通过一个嵌入矩阵映射为 $d_{model}$ 维向量。
+
+$$\text{embedding}(x_i) = E_{x_i} \in \mathbb{R}^{d_{model}}$$
+
+其中 $E \in \mathbb{R}^{V \times d_{model}}$ 是可学习的嵌入矩阵，$V$ 是词汇表大小。
+
+#### Positional Encoding
+
+Attention 机制本身是"位置无关"的——如果你把输入序列的顺序打乱，Attention 的输出只是做同样的排列变换，不会"发现"顺序变了。这意味着 Attention 不知道"猫坐垫子"和"垫子坐猫"的区别。
+
+位置编码为每个位置注入唯一的位置信息：
+
+$$PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right)$$
+$$PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{model}}}\right)$$
+
+其中 $pos$ 是位置索引，$i$ 是维度索引。
+
+每个维度对应一个不同频率的正弦波。低维度（$i$ 小）的频率高（变化快），高维度（$i$ 大）的频率低（变化慢）。这就像给每个位置一个由多个不同频率的"音符"组成的独特"和弦"。
+
+为什么选择正弦/余弦？
+
+1. **每个位置有唯一的编码**：不同的 $pos$ 产生不同的正弦/余弦组合。
+2. **相对位置可计算**：对于任意固定的偏移 $k$，$PE_{pos+k}$ 可以表示为 $PE_{pos}$ 的线性函数。这让模型可以学习相对位置关系。
+3. **可以外推到更长的序列**：正弦函数的定义域是无限的，理论上可以对训练时未见过的位置生成编码。
+
+位置编码被加到 token embedding 上（不是拼接）：
+
+$$\text{input} = \text{embedding}(x) + PE$$
+
+为什么是相加而不是拼接？因为 $d_{model}$ 维空间足够大，可以同时容纳语义信息和位置信息而不产生严重干扰。相加也比拼接更节省参数。
+
+#### 其他位置编码方案
+
+原始的正弦位置编码后来被多种方案替代：
+
+- **可学习位置编码**：直接为每个位置学习一个向量（BERT 使用这种）。优点是灵活，缺点是不能外推到训练时未见过的长度。
+- **RoPE（Rotary Position Embedding）**：通过旋转矩阵编码相对位置（LLaMA、PaLM 使用）。优点是自然编码相对位置，在长序列上泛化更好。
+- **ALiBi**：在注意力分数上直接加上距离相关的偏置。简单且支持长序列外推。
+
+### 2. 多头自注意力（Multi-Head Self-Attention）
+
+这是 Transformer 的核心操作。详细公式：
+
+$$\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h) W^O$$
+
+$$\text{head}_i = \text{Attention}(X W_i^Q, X W_i^K, X W_i^V)$$
+
+$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V$$
+
+参数分析：
+- $W_i^Q \in \mathbb{R}^{d_{model} \times d_k}$，$d_k = d_{model} / h$
+- $W_i^K \in \mathbb{R}^{d_{model} \times d_k}$
+- $W_i^V \in \mathbb{R}^{d_{model} \times d_v}$，$d_v = d_{model} / h$
+- $W^O \in \mathbb{R}^{d_{model} \times d_{model}}$
+
+原始 Transformer 的配置：$d_{model} = 512$，$h = 8$，$d_k = d_v = 64$。
+
+总参数量（单层多头注意力）：
+- Q/K/V 投影：$3 \times 512 \times 512 = 786,432$
+- 输出投影：$512 \times 512 = 262,144$
+- 总计：1,048,576（约 100 万参数/层）
+
+### 3. 前馈网络（Feed-Forward Network）
+
+每个 Transformer 层的第二个子层是一个位置独立的前馈网络：
+
+$$\text{FFN}(x) = \max(0, xW_1 + b_1)W_2 + b_2$$
+
+或使用 ReLU 的变体：
+
+$$\text{FFN}(x) = W_2 \cdot \text{ReLU}(W_1 x + b_1) + b_2$$
+
+原始配置：$d_{model} = 512$，$d_{ff} = 2048$。
+
+这个 FFN 对每个位置独立应用同一个网络（参数共享）。它为模型提供了非线性变换能力——注意力层做"信息路由"（决定哪些信息流到哪里），FFN 做"信息处理"（对路由过来的信息做非线性变换）。
+
+FFN 的参数量：$512 \times 2048 + 2048 \times 512 = 2,097,152$（约 200 万参数/层），是注意力层的 2 倍。这也是 Transformer 的参数主要来源。
+
+后来的变体使用了不同的激活函数：
+- **GELU**（BERT、GPT-2 使用）：$\text{GELU}(x) = x \cdot \Phi(x)$
+- **SwiGLU**（LLaMA 使用）：$\text{SwiGLU}(x, W, V, b) = (\text{Swish}(xW + b) \otimes (xV))$
+- **GLU 变体**在性能上通常优于 ReLU。
+
+### 4. 残差连接和 Layer Normalization
+
+每个子层的输出经过残差连接和 Layer Norm：
+
+$$\text{output} = \text{LayerNorm}(x + \text{Sublayer}(x))$$
+
+残差连接（$x + \text{Sublayer}(x)$）的作用和 ResNet 中一样：提供梯度直通路径，防止梯度消失。
+
+Layer Normalization 对每个样本的每个位置独立归一化：
+
+$$\text{LayerNorm}(x) = \frac{x - \mu}{\sigma} \cdot \gamma + \beta$$
+
+其中 $\mu$ 和 $\sigma$ 是 $x$ 在 $d_{model}$ 维度上的均值和标准差，$\gamma$ 和 $\beta$ 是可学习的缩放和偏移参数。
+
+为什么用 Layer Norm 而不是 Batch Norm？因为序列长度可变，Batch Norm 在序列维度上的统计量不稳定。Layer Norm 在特征维度上归一化，不受序列长度影响。
+
+**Pre-Norm vs Post-Norm**：原始 Transformer 使用 Post-Norm（先加残差再做 Layer Norm），后来发现 Pre-Norm（先做 Layer Norm 再加残差）训练更稳定：
+
+- Post-Norm：$\text{output} = \text{LayerNorm}(x + \text{Sublayer}(x))$
+- Pre-Norm：$\text{output} = x + \text{Sublayer}(\text{LayerNorm}(x))$
+
+GPT-2 之后的大多数模型使用 Pre-Norm。
+
+### 5. 编码器（Encoder）
+
+编码器由 $N$ 个相同的层堆叠而成（原始论文 $N=6$）：
+
+```
+每层:
+  x → LayerNorm → Multi-Head Self-Attention → Add(residual) →
+  → LayerNorm → FFN → Add(residual) → output
+```
+
+编码器的自注意力没有 mask——每个位置可以看到所有位置。这对于理解整个输入序列是必要的（如 BERT 的双向编码）。
+
+### 6. 解码器（Decoder）
+
+解码器也由 $N$ 个相同的层堆叠，但每层有三个子层：
+
+```
+每层:
+  x → LayerNorm → Masked Self-Attention → Add(residual) →
+  → LayerNorm → Cross-Attention(Q=dec, K/V=enc) → Add(residual) →
+  → LayerNorm → FFN → Add(residual) → output
+```
+
+**Masked Self-Attention**：解码器的自注意力使用因果 mask（下三角矩阵），确保位置 $i$ 只能看到位置 $1, 2, \ldots, i$。这是因为在生成任务中，模型不能"偷看"未来的 token。
+
+**Cross-Attention**：Query 来自解码器，Key 和 Value 来自编码器。这让解码器的每个位置可以"回顾"输入序列的所有位置。
+
+### 7. 输出层
+
+$$P(y_t) = \text{softmax}(W_{out} \cdot \text{decoder\_output}_t)$$
+
+$W_{out} \in \mathbb{R}^{V \times d_{model}}$ 将解码器输出投影到词汇表大小的维度。在原始 Transformer 中，$W_{out}$ 与输入 embedding 矩阵共享参数（weight tying），减少参数量并可能提升效果。
+
+### 8. 训练目标
+
+原始 Transformer 使用交叉熵损失：
+
+$$\mathcal{L} = -\sum_{t=1}^{T} \log P(y_t | y_{<t}, x)$$
+
+训练时使用 teacher forcing：解码器的输入是真实的目标序列（shifted right，即向右移一位）。推理时使用自回归生成：每步用上一步的预测结果作为输入。
+
+### 9. 完整的参数量计算
+
+以原始 Transformer（$d_{model}=512$，$h=8$，$d_{ff}=2048$，$N=6$）为例：
+
+**编码器每层**：
+- 多头注意力：$4 \times 512 \times 512 = 1,048,576$
+- FFN：$512 \times 2048 + 2048 \times 512 = 2,097,152$
+- Layer Norm（×2）：$2 \times 512 \times 2 = 2,048$
+- 每层总计：$\approx 3.15M$
+
+**编码器 6 层**：$\approx 18.9M$
+
+**解码器每层**（多一个 Cross-Attention）：
+- Masked Self-Attention：$1,048,576$
+- Cross-Attention：$1,048,576$
+- FFN：$2,097,152$
+- 每层总计：$\approx 4.19M$
+
+**解码器 6 层**：$\approx 25.2M$
+
+**Embedding + 输出层**：$\approx V \times 512 \times 2$
+
+总参数量（不含 embedding）：$\approx 44M$。加上 embedding（$V = 37000$）：$\approx 82M$。
+
+## 代码示例（完整可运行的 Python）
+
+### 从零实现完整 Transformer
+
+```python
+"""
+完整 Transformer 实现：编码器-解码器架构
+运行要求: pip install torch
+"""
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+import copy
+
+
+def clones(module, N):
+    """克隆 N 个相同的层"""
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+
+
+class PositionalEncoding(nn.Module):
+    """正弦/余弦位置编码"""
+    def __init__(self, d_model, max_len=5000, dropout=0.1):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        # 预计算位置编码矩阵
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
+        )
+
+        pe[:, 0::2] = torch.sin(position * div_term)  # 偶数维度
+        pe[:, 1::2] = torch.cos(position * div_term)  # 奇数维度
+        pe = pe.unsqueeze(0)  # (1, max_len, d_model)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return self.dropout(x)
+
+
+class MultiHeadAttention(nn.Module):
+    """多头注意力"""
+    def __init__(self, d_model, n_heads, dropout=0.1):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.d_k = d_model // n_heads
+        self.n_heads = n_heads
+        self.linears = clones(nn.Linear(d_model, d_model), 4)  # Q, K, V, O
+        self.attn = None
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, query, key, value, mask=None):
+        batch_size = query.size(0)
+
+        # 投影并分头: (batch, seq, d_model) → (batch, heads, seq, d_k)
+        Q, K, V = [
+            lin(x).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
+            for lin, x in zip(self.linears[:3], (query, key, value))
+        ]
+
+        # Scaled Dot-Product Attention
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, -1e9)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        attn_output = torch.matmul(attn_weights, V)
+        self.attn = attn_weights
+
+        # 拼接多头并输出投影
+        attn_output = attn_output.transpose(1, 2).contiguous().view(
+            batch_size, -1, self.n_heads * self.d_k
+        )
+        return self.linears[-1](attn_output)
+
+
+class PositionwiseFeedForward(nn.Module):
+    """位置独立前馈网络"""
+    def __init__(self, d_model, d_ff, dropout=0.1):
+        super().__init__()
+        self.w_1 = nn.Linear(d_model, d_ff)
+        self.w_2 = nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.w_2(self.dropout(F.relu(self.w_1(x))))
+
+
+class EncoderLayer(nn.Module):
+    """编码器层"""
+    def __init__(self, d_model, n_heads, d_ff, dropout=0.1):
+        super().__init__()
+        self.self_attn = MultiHeadAttention(d_model, n_heads, dropout)
+        self.ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, x, mask=None):
+        # Pre-Norm 架构
+        x_norm = self.norm1(x)
+        attn_out = self.self_attn(x_norm, x_norm, x_norm, mask)
+        x = x + self.dropout1(attn_out)
+
+        x_norm = self.norm2(x)
+        ff_out = self.ff(x_norm)
+        x = x + self.dropout2(ff_out)
+        return x
+
+
+class DecoderLayer(nn.Module):
+    """解码器层"""
+    def __init__(self, d_model, n_heads, d_ff, dropout=0.1):
+        super().__init__()
+        self.self_attn = MultiHeadAttention(d_model, n_heads, dropout)
+        self.cross_attn = MultiHeadAttention(d_model, n_heads, dropout)
+        self.ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout)
+
+    def forward(self, x, enc_output, src_mask=None, tgt_mask=None):
+        # Masked Self-Attention
+        x_norm = self.norm1(x)
+        attn_out = self.self_attn(x_norm, x_norm, x_norm, tgt_mask)
+        x = x + self.dropout1(attn_out)
+
+        # Cross-Attention
+        x_norm = self.norm2(x)
+        cross_out = self.cross_attn(x_norm, enc_output, enc_output, src_mask)
+        x = x + self.dropout2(cross_out)
+
+        # FFN
+        x_norm = self.norm3(x)
+        ff_out = self.ff(x_norm)
+        x = x + self.dropout3(ff_out)
+        return x
+
+
+class Transformer(nn.Module):
+    """完整 Transformer 模型"""
+    def __init__(self, src_vocab_size, tgt_vocab_size, d_model=512,
+                 n_heads=8, d_ff=2048, N=6, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.d_model = d_model
+
+        # Embeddings
+        self.src_embed = nn.Embedding(src_vocab_size, d_model)
+        self.tgt_embed = nn.Embedding(tgt_vocab_size, d_model)
+        self.pos_enc = PositionalEncoding(d_model, max_len, dropout)
+
+        # Encoder & Decoder
+        self.encoder = clones(EncoderLayer(d_model, n_heads, d_ff, dropout), N)
+        self.decoder = clones(DecoderLayer(d_model, n_heads, d_ff, dropout), N)
+
+        # 输出层
+        self.norm = nn.LayerNorm(d_model)
+        self.output_proj = nn.Linear(d_model, tgt_vocab_size)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def encode(self, src, src_mask=None):
+        x = self.pos_enc(self.src_embed(src) * math.sqrt(self.d_model))
+        for layer in self.encoder:
+            x = layer(x, src_mask)
+        return self.norm(x)
+
+    def decode(self, tgt, enc_output, src_mask=None, tgt_mask=None):
+        x = self.pos_enc(self.tgt_embed(tgt) * math.sqrt(self.d_model))
+        for layer in self.decoder:
+            x = layer(x, enc_output, src_mask, tgt_mask)
+        return self.norm(x)
+
+    def forward(self, src, tgt, src_mask=None, tgt_mask=None):
+        enc_output = self.encode(src, src_mask)
+        dec_output = self.decode(tgt, enc_output, src_mask, tgt_mask)
+        logits = self.output_proj(dec_output)
+        return logits
+
+    @staticmethod
+    def make_causal_mask(size):
+        """创建因果 mask（下三角）"""
+        mask = torch.tril(torch.ones(size, size)).unsqueeze(0).unsqueeze(0)
+        return mask
+
+
+# ============================================================
+# 验证代码
+# ============================================================
+if __name__ == "__main__":
+    torch.manual_seed(42)
+
+    # 小型 Transformer 配置
+    src_vocab = 1000
+    tgt_vocab = 1000
+    d_model = 128
+    n_heads = 4
+    d_ff = 512
+    N = 2  # 2 层（用于测试）
+    batch_size = 4
+    src_len = 15
+    tgt_len = 12
+
+    print("=" * 60)
+    print("完整 Transformer 测试")
+    print("=" * 60)
+
+    model = Transformer(src_vocab, tgt_vocab, d_model, n_heads, d_ff, N)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"\n模型配置:")
+    print(f"  d_model={d_model}, n_heads={n_heads}, d_ff={d_ff}, N={N}")
+    print(f"  总参数量: {total_params:,}")
+
+    # 创建输入
+    src = torch.randint(1, src_vocab, (batch_size, src_len))
+    tgt = torch.randint(1, tgt_vocab, (batch_size, tgt_len))
+
+    # 创建 mask
+    tgt_mask = Transformer.make_causal_mask(tgt_len)
+
+    # 前向传播
+    logits = model(src, tgt, tgt_mask=tgt_mask)
+
+    print(f"\n前向传播:")
+    print(f"  源序列: {list(src.shape)}")
+    print(f"  目标序列: {list(tgt.shape)}")
+    print(f"  输出 logits: {list(logits.shape)}")
+    print(f"  输出范围: [{logits.min().item():.2f}, {logits.max().item():.2f}]")
+
+    # 位置编码可视化
+    print("\n" + "=" * 60)
+    print("位置编码分析")
+    print("=" * 60)
+
+    pe = PositionalEncoding(d_model)
+    pe_values = pe.pe[0, :20, :8].detach()  # 前 20 个位置，前 8 个维度
+
+    print("\n前 10 个位置的前 6 个维度:")
+    print(f"  {'Pos':>4}", end="")
+    for d in range(6):
+        print(f"  {'dim'+str(d):>8}", end="")
+    print()
+    for pos in range(10):
+        print(f"  {pos:>4}", end="")
+        for d in range(6):
+            print(f"  {pe_values[pos, d]:>8.4f}", end="")
+        print()
+
+    # 验证位置编码的唯一性
+    cos_sim = F.cosine_similarity(
+        pe_values.unsqueeze(0), pe_values.unsqueeze(1), dim=-1
+    )
+    print(f"\n位置编码余弦相似度（部分）:")
+    print(f"  Pos 0 vs Pos 1: {cos_sim[0, 1]:.4f}")
+    print(f"  Pos 0 vs Pos 5: {cos_sim[0, 5]:.4f}")
+    print(f"  Pos 0 vs Pos 10: {cos_sim[0, 10]:.4f}")
+    print(f"  Pos 5 vs Pos 6: {cos_sim[5, 6]:.4f}")
+
+    # 注意力权重分析
+    print("\n" + "=" * 60)
+    print("注意力权重分析")
+    print("=" * 60)
+
+    # 获取最后一层编码器的注意力权重
+    with torch.no_grad():
+        enc_output = model.encode(src)
+        print(f"  编码器输出: {list(enc_output.shape)}")
+        print(f"  输出范数: {enc_output.norm(dim=-1).mean().item():.4f}")
+
+    # 不同大小的 Transformer 参数量对比
+    print("\n" + "=" * 60)
+    print("不同配置的参数量")
+    print("=" * 60)
+
+    configs = [
+        ("Tiny", 128, 2, 2, 512),
+        ("Small", 512, 8, 6, 2048),
+        ("Base", 768, 12, 12, 3072),
+        ("Large", 1024, 16, 24, 4096),
+    ]
+
+    for name, d, h, n, d_ff in configs:
+        m = Transformer(30000, 30000, d, h, d_ff, n)
+        params = sum(p.numel() for p in m.parameters())
+        print(f"  {name:>8}: d={d}, h={h}, N={n}, d_ff={d_ff} → {params/1e6:.1f}M 参数")
