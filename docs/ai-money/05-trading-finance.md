@@ -1,0 +1,27 @@
+# 05 - AI 交易与金融
+
+使用开源交易机器人、AI 分析工具进行加密货币或股票交易。
+
+## 判断
+
+**高风险方向。** 开源工具提供框架，但不保证盈利。策略有效性需要大量回测和验证。建议仅用你能承受亏损的资金，不要把主要收入来源押在交易上。
+
+## 开源工具
+
+| 项目 | Stars | 说明 | 链接 |
+| --- | --- | --- | --- |
+| freqtrade | 高 | 最流行的开源加密货币交易机器人（Python），支持回测和 ML 策略 | [GitHub](https://github.com/freqtrade/freqtrade) |
+| OctoBot | - | 支持 15+ 交易所，AI/网格/DCA 策略 | [GitHub](https://github.com/drakkar-software/octobot) |
+| OpenTrader | - | 自托管交易机器人，完整 UI | [GitHub](https://github.com/Open-Trader/opentrader) |
+| intelligent-trading-bot | - | ML 算法自动交易信号 | [GitHub](https://github.com/asavinov/intelligent-trading-bot) |
+
+## 参考资源
+
+- [awesome-ai-in-finance](https://github.com/georgezouq/awesome-ai-in-finance) — 金融 AI 策略与工具精选列表
+- [12 GitHub Projects Making $10K-$50K/Month](https://osintteam.blog/i-analyzed-500-github-projects-these-12-are-quietly-making-developers-10k-50k-month-cb86a987f520)
+
+## 避坑
+
+- 回测盈利不代表实盘盈利，滑点和流动性是真实成本
+- 不要用借来的钱或生活必需资金交易
+- 开源机器人需要自己维护，策略需要持续优化

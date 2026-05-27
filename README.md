@@ -44,6 +44,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | [Machine Learning Path](./docs/machine-learning/) | 从经典 ML 到深度学习到前沿方向的 42 篇系列文章 |
 | [Agent Learning Path](./docs/agent/) | 从 LLM API 到可评测、可上线 Agent 系统的学习路线 |
 | [Project Collections](./docs/project-collections/) | AI 项目、Agent 框架、开发者工具、MCP 集成和垂直应用收藏 |
+| [AI 搞钱系列](./docs/ai-money/) | 用 AI 赚钱的实战资源：开源项目、教程、视频、商业模式和真实案例 |
 
 ## Featured
 
@@ -54,6 +55,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | [Claude Code](./docs/ai-coding/claude-code.md) | 官方资料、生态项目、CLAUDE.md、hooks、subagents、MCP、GitHub Actions、评测维度 | 资料整理中 |
 | [OpenAI Codex](./docs/ai-coding/openai-codex.md) | 官方资料、生态项目、AGENTS.md、Codex Action、MCP、横向评测资料 | 资料整理中 |
 | [Project Collections](./docs/project-collections/) | 443 个 AI 项目与能力条目，按 Agent、AI Coding、MCP、工作流、金融、设计等方向分类 | 持续扩充 |
+| [AI 搞钱系列](./docs/ai-money/) | 开源项目、教程、视频、商业模式和真实案例 | 已启动 |
 
 ## AI Coding
 
