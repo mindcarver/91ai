@@ -4,7 +4,18 @@
 
 ## 判断
 
-这是技术人的最佳路径。已有技术积累可以直接变现，不需要从零学新技能。核心模式：把开源工具包装成托管服务、垂直解决方案或咨询服务。成功案例显示独立创始人可在不招人的情况下达到 7 位数 ARR。
+这是技术人的最佳路径。已有技术积累可以直接变现，不需要从零学新技能。核心模式：把开源工具包装成托管服务、垂直解决方案或咨询服务。成功案例显示独立创始人可在不招人的情况下达到 7 位数 ARR。但 90% 的 AI Wrapper 会失败 — 差异化是关键。
+
+## 市场数据
+
+- SaaS 市场 2026 年预计达 $3000 亿
+- Micro SaaS 市场 $157 亿 → 2030 年 $596 亿（30% CAGR）
+- 成功 Micro SaaS 创始人月入 $10K-$60K
+- 盈利中位值 MRR ~$4,200
+- 70% Micro SaaS MRR 低于 $1K
+- 大多数创始人第一笔收入前投入 <$1K
+
+来源：[StartuPage](https://startupa.ge/blog/micro-saas-ideas-2026)、[TLDL](https://www.tldl.io/resources/ai-saas-business-ideas-2026)
 
 ## 变现模式
 
@@ -15,6 +26,7 @@
 | 垂直解决方案 | 针对特定行业包装 | 法律/房地产/合规 AI 工具 |
 | 咨询部署 | 帮企业部署和定制 | 5k-5 万美元/项目 |
 | 模板/插件 | 为平台构建扩展 | ComfyUI 工作流、n8n 模板 |
+| AI Newsletter | 付费 AI 资讯订阅 | Substack/Beehiiv |
 
 ## 成功案例
 
@@ -23,6 +35,8 @@
 | PDF.ai | ~10 万美元/月 | AI API 封装 |
 | SiteGPT | ~9.5 万美元/月 | 自定义 AI 聊天机器人 |
 | Chatbase | ~5 万美元/月 | URL 生成聊天机器人 |
+| Write With AI | ~33 万美元/年 | Substack 付费 AI 资讯 |
+| Lazy Millionaire | $60K/2 个月 | Substack 付费 Newsletter |
 
 ## 关键开源项目
 
@@ -33,5 +47,9 @@
 - [AI SaaS Solo Founder Success Stories](https://crazyburst.com/ai-saas-solo-founder-success-stories-2026/)
 - [From 0 to $10K MRR Guide](https://rethinklab.co/blog/from-0-to-10k-mrr-a-2026-indie-hacker-playbook)
 - [50 个微型 SaaS 想法（IdeaProof）](https://ideaproof.io/lists/micro-saas-ideas)
+- [Most Profitable AI Micro SaaS Ideas 2026（BigIdeasDB）](https://bigideasdb.com/guides/most-profitable-ai-micro-saas-ideas-2026)
 - [6 AI Wrapper Strategies $10K/Month](https://blog.startupstash.com/6-ai-wrapper-strategies-that-print-10k-month-even-if-you-arent-a-dev-f76ff5691ed3)
+- [15 AI SaaS Ideas Actually Making Money（TLDL）](https://www.tldl.io/resources/ai-saas-business-ideas-2026)
+- [20 Micro-SaaS Ideas That AI Won't Kill（StartuPage）](https://startupa.ge/blog/micro-saas-ideas-2026)
 - [Open SaaS 启动模板](https://github.com/wasp-lang/open-saas) — GitHub 12.4k stars
+- [12 Profitable SaaS Ideas for Solo Founders（BuildMVPFast）](https://www.buildmvpfast.com/blog/profitable-saas-ideas-solo-founders-2026)

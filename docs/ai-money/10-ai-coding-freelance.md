@@ -1,0 +1,91 @@
+# 10 - AI 编程接单与 Vibe Coding
+
+利用 AI 编程工具（Cursor、Claude、ChatGPT 等）大幅提升开发效率，通过接外包/项目变现。
+
+## 判断
+
+Vibe Coding（AI 辅助编程）是 2025 年由 Andrej Karpathy 提出的概念。程序员的角色从「写代码」变为「指挥 AI 写代码」。这极大降低了开发门槛，提升了交付速度。但也意味着竞争加剧 — 能用 AI 写代码的人越来越多，差异化在于理解需求和系统设计能力。
+
+## 变现路径
+
+| 路径 | 收入区间 | 说明 |
+| --- | --- | --- |
+| 企业官网/展示站 | 3k-2 万/单 | AI 快速生成前端页面 |
+| 微信小程序 | 5k-5 万/单 | AI 生成基础功能，适合标准化需求 |
+| AI 应用/ChatBot | 1 万-10 万/单 | 集成大模型 API，当前热门赛道溢价高 |
+| 工具类应用 | 3k-3 万/单 | 数据处理、批量操作等 |
+| 数据分析/爬虫 | 2k-2 万/单 | AI 擅长数据处理脚本 |
+| API 对接/集成 | 5k-5 万/单 | 第三方平台集成 |
+
+## AI 编程工具
+
+| 工具 | 特点 |
+| --- | --- |
+| Cursor | 当前最火的 AI IDE，支持多模型，代码上下文理解强 |
+| Claude (Anthropic) | 代码生成能力强，上下文窗口大 |
+| GitHub Copilot | 老牌 AI 编程助手，生态完善 |
+| Windsurf | Codeium 出品的新兴 AI IDE |
+| Bolt.new / Lovable | 一键生成全栈应用 |
+| v0.dev | Vercel 出品，专注前端 UI 生成 |
+| ChatGPT | 通用代码生成，适合脚本和工具 |
+| Aider | 开源 AI 结对编程工具（[GitHub](https://github.com/paul-gauthier/aider)） |
+
+## 接单渠道
+
+### 国内平台
+
+| 平台 | 特点 |
+| --- | --- |
+| 猪八戒网 | 项目多，但价格偏低 |
+| 程序员客栈 | 技术类项目为主 |
+| 码市 | Coding 旗下 |
+| 开源众包 | 通过开源社区接项目 |
+
+### 海外平台
+
+| 平台 | 特点 |
+| --- | --- |
+| Upwork | 最大海外自由职业平台，AI 项目单价高 |
+| Fiverr | 适合标准化 AI 服务 |
+| Freelancer | 项目制 |
+| Toptal | 高端，筛选严格 |
+
+### 其他渠道
+
+- **社交媒体**：小红书、抖音、Twitter/X 展示作品引流
+- **私域流量**：微信群、朋友圈、知识星球
+- **GitHub**：通过开源作品吸引客户
+- **即刻/V2EX**：技术社区接单
+
+## AI 咨询与高级服务
+
+| 服务 | 时薪 | 说明 |
+| --- | --- | --- |
+| AI 策略咨询 | $150-350/小时 | 帮企业制定 AI 落地方案 |
+| AI Agent 开发 | $80-250/小时 | 构建自动化 Agent 系统 |
+| AI 应用开发 | $50-200/小时 | 端到端 AI 应用交付 |
+| AI 集成服务 | $80-150/小时 | 将 AI 接入企业现有系统 |
+
+来源：[AI Freelancer Rates 2026（LinkedIn）](https://www.linkedin.com/pulse/ai-freelancer-rates-2026-what-specialists-charging-today-vxuff)、[AI Agent Freelance Rates（AI Agents Plus）](https://www.ai-agentsplus.com/blog/ai-agent-freelance-rates-2026)
+
+## 真实案例
+
+- AI 自由职业者从 0 到 $15K/月的路线图（[Medium](https://medium.com/@bhallaanuj69/the-ai-freelancers-playbook-15k-month-in-2026-without-writing-code-18f7d9096812)）
+- 简历写作副业：在 Fiverr 赚 $250K+（[Entrepreneur](https://www.entrepreneur.com/side-hustle/my-resume-side-hustle-hit-250k-on-fiverr-and-400k-total-clinchy-career-consulting)）
+- V2EX 用户分享：小红书分享 Claude Code 使用心得，约稿变现（[V2EX](https://v2ex.com/t/1206398)）
+
+## 学习资源
+
+- [If I Started AI Freelancing in 2026（YouTube）](https://www.youtube.com/watch?v=CRYea6gFWgk) — 构建自由职业 AI 生涯
+- [The AI Freelancer's Playbook: $15K/Month（Medium）](https://medium.com/@bhallaanuj69/the-ai-freelancers-playbook-15k-month-in-2026-without-writing-code-18f7d9096812)
+- [AI Resume Writing Side Hustle $3K+/Month（YouTube）](https://www.youtube.com/watch?v=fv8wke-DLDc)
+- [用 ChatGPT+爬虫搞钱（腾讯云）](https://cloud.tencent.com/developer/article/2281863) — AI 写爬虫接单
+
+## 避坑
+
+- AI 生成的代码必须审查和测试，不能盲目交付
+- 注意版权和合规问题，尤其是爬虫类项目
+- 客户沟通和项目管理能力同样重要
+- 不要过度依赖单一 AI 工具
+- 接单时做好需求确认，AI 快速出活不等于不需要沟通
+- 「会用 AI」不是核心竞争力，理解业务和系统设计才是

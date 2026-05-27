@@ -1,0 +1,71 @@
+# 08 - AI 音乐与有声内容变现
+
+使用 Suno、Udio、ElevenLabs 等 AI 工具生成音乐、播客、有声读物等内容进行变现。
+
+## 判断
+
+AI 音乐是 2024-2025 年新爆发的方向。Suno 和 Udio 让非音乐人也能创作完整歌曲。Spotify、Apple Music 等平台已有 AI 音乐上传通道，但版权和原创性问题仍在争议中。建议作为副业探索，不要押注全部精力。
+
+## 变现路径
+
+| 路径 | 收入区间 | 说明 |
+| --- | --- | --- |
+| AI 音乐上传流媒体 | 500-3 千美元/月 | Spotify/Apple Music/YouTube Music 版税 |
+| AI 有声读物制作 | 2k-2 万/月 | 用 ChatTTS/ElevenLabs 制作有声书 |
+| AI 配音接单 | 1k-1 万/月 | 广告配音、课件配音、短视频配音 |
+| AI 播客自动化 | 1k-5k/月 | AI 生成播客内容 + AI 配音 |
+| 原创音乐定制 | 500-5k/单 | 为企业/个人定制背景音乐、主题曲 |
+
+## 关键数据
+
+- AI 音乐生成市场规模预计 2033 年达 **$1.88B**（18.1% CAGR）
+- Spotify 上 AI 生成音乐占比持续增长，部分创作者月入 $3000+
+- B 站实测：AI 音乐频道月入 1 万+（需持续产出和运营）
+
+## AI 工具
+
+### 音乐生成
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| Suno | 商业平台 | 最流行的 AI 音乐生成，支持歌词自定义 |
+| Udio | 商业平台 | 高质量音乐生成，与 Suno 齐名 |
+| Stable Audio | 开源+商业 | Stability AI 出品，支持本地部署 |
+| MusicGen (Meta) | 开源 | Meta 开源音乐生成模型 |
+
+### 语音与配音
+
+| 工具 | Stars | 说明 | 链接 |
+| --- | --- | --- | --- |
+| ChatTTS | 37.9k | 中文语音合成，适合口播和有声读物 | [GitHub](https://github.com/2noise/ChatTTS) |
+| MockingBird | 36.7k | 语音克隆，几秒音频即可克隆 | [GitHub](https://github.com/babysor/MockingBird) |
+| CosyVoice | 11k+ | 阿里通义实验室语音合成 | [GitHub](https://github.com/FunAudioLLM/CosyVoice) |
+| fish-speech | 10k+ | 高质量多语言语音合成 | [GitHub](https://github.com/fishaudio/fish-speech) |
+
+### ElevenLabs 定价参考
+
+| 计划 | 价格 | 说明 |
+| --- | --- | --- |
+| Free | $0 | 有限字符试用 |
+| Starter | $5/月 | 30K 字符 |
+| Creator | $22/月 | 专业语音克隆 + 100K 字符 |
+| API | $0.05-0.22/千字符 | 按用量计费 |
+
+## 真实案例
+
+- AI 音乐频道：Spotify 月入 $3000+ 实测指南
+- B 站 AI 音乐博主实测月入 1 万+（[B 站搜索](https://www.bilibili.com)）
+- 网易云音乐 AI 歌单创作者，部分获得推荐位
+
+## 学习资源
+
+- [AI 音乐变现实测（B 站）](https://www.bilibili.com) — 搜索「AI音乐赚钱」
+- [How to Make $3000/Month with AI Music（YouTube）](https://www.youtube.com) — Spotify 流媒体版税
+- [ElevenLabs 定价与商业模式分析（FlexPrice）](https://flexprice.io/blog/elevenlabs-pricing-breakdown)
+
+## 避坑
+
+- Suno/Udio 生成的音乐版权归属需要仔细阅读平台条款
+- Spotify 已开始打击低质量 AI 批量上传行为
+- 音乐变现是长尾生意，需要大量曲目积累，短期内看不到收益
+- 配音接单需要音质过硬，免费工具效果有限

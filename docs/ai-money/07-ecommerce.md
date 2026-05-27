@@ -4,7 +4,7 @@
 
 ## 判断
 
-AI + 电商的结合是实打实的效率提升。顶级一件代发商已自动化 80% 业务。但不要把 AI 当成「不需要运营」的魔法 — 它是放大器，不是替代品。
+AI + 电商的结合是实打实的效率提升。顶级一件代发商已自动化 80% 业务。但不要把 AI 当成「不需要运营」的魔法 — 它是放大器，不是替代品。跨境电商独立站（Shopify）配合 AI 工具是当前热门组合。
 
 ## 变现路径
 
@@ -13,24 +13,64 @@ AI + 电商的结合是实打实的效率提升。顶级一件代发商已自动
 | AI 一件代发 | 5k-5 万/月 | AI 选品 + 自动化订单 |
 | AI 图片批量生成 | 2k-3 万/月 | 商品图/模特换装/场景图 |
 | AI 文案批量生成 | 1k-2 万/月 | 商品描述/广告文案 |
-| 跨境 AI 工具 | 5k-5 万/月 | 海外平台代运营 |
+| 跨境独立站 | 5k-5 万/月 | Shopify + AI 运营 |
+| 虚拟产品销售 | 5k-3 万/月 | 高利润、无需物流 |
 
 ## 真实案例
 
 - AI 一件代发 60 万美元（[YouTube](https://www.youtube.com/watch?v=V5voCDX8bZA)）
 - 30 天 18.8 万美元（[YouTube](https://www.youtube.com/watch?v=z9sXbI0XvcM)）
 - AI 自动化利润增加 3 倍
+- SHEIN：基于 Shopify 开发的全球最大服装时尚购物网站
 
 ## AI 工具
 
-- **选品**：SellTheTrend、Zendrop
-- **图片**：Stable Diffusion WebUI、ComfyUI
-- **文案**：ChatGPT、Claude
-- **客服**：Dify 聊天机器人
-- **广告**：AI 广告投放优化
+### 选品
+
+- **SellTheTrend**、**Zendrop** — AI 选品工具
+- **FastMoss**、**EchoTik** — 跨境选品数据（[工具对比](https://ecommerce.gotofreight.com/crossBorder/detail/418)）
+- **Page Pilot AI** — 生成高转化率产品页面
+- **AdsPower 选品工具推荐** — [15 款跨境选品工具](https://www.adspower.net/blog/ecommerce-product-research-tools)
+
+### 图片
+
+- Stable Diffusion WebUI、ComfyUI
+
+### 文案
+
+- ChatGPT、Claude
+
+### 客服
+
+- Dify 聊天机器人
+
+### 广告
+
+- AI 广告投放优化
+
+## 跨境电商选品工具（2026）
+
+| 工具 | 平台 | 说明 |
+| --- | --- | --- |
+| FastMoss | Amazon/TikTok | AI 驱动选品与数据 |
+| EchoTik | TikTok | 短视频电商数据 |
+| Google Trends | 全平台 | 趋势发现 |
+| Amazon Best Sellers | Amazon | 热销品追踪 |
+
+来源：[2025 跨境电商选品工具整合版](https://ecommerce.gotofreight.com/crossBorder/detail/418)、[2026 年 15 款跨境电商选品工具](https://www.adspower.net/blog/ecommerce-product-research-tools)
 
 ## 参考资源
 
 - [AI 一件代发终极指南（Dropship Spy）](https://dropship-spy.com/blog/ai-dropshipping-ultimate-guide-top-tools-2025)
 - [AI 变革一件代发（Drop Ship Lifestyle）](https://dropshiplifestyle.com/ai-and-dropshipping-future/)
 - [如何利用 AI 赚钱：17 种方法（Shopify）](https://www.shopify.com/zh/blog/how-to-make-money-using-ai)
+- [2026 年 Shopify 独立站建站平台对比](https://www.shopify.com/zh/blog/ecommerce-software)
+- [2025 跨境电商独立站建站工具选哪家（SHOPLINE）](https://shoplineapp.cn/blog/mainstream-ecommerce-platforms-guide)
+- [AI 赋能品牌出海（36 氪）](https://m.36kr.com/p/3507011439303560)
+
+## 避坑
+
+- Shopify 对灰色品类管控严格，违规易封店
+- AI 选品工具只提供数据参考，不保证选对品
+- 虚拟产品虽高利润，但需要解决支付和交付问题
+- 跨境需要考虑物流、关税、退货等成本
