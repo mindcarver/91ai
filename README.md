@@ -41,6 +41,7 @@ AI 资料已经足够多，真正缺的是判断力。
 | [AI Knowledge Map](./docs/knowledge-map.md) | 从身份、能力、工具、项目和风险串起完整学习图谱 |
 | [Role Learning Paths](./docs/paths/) | 前端、后端、AI 应用开发者、DevOps、产品经理和普通人的学习入口 |
 | [AI Coding](./docs/ai-coding/) | Claude Code、Codex、Cursor、Cline、Continue、Gemini CLI |
+| [Machine Learning Path](./docs/machine-learning/) | 从经典 ML 到深度学习到前沿方向的 42 篇系列文章 |
 | [Agent Learning Path](./docs/agent/) | 从 LLM API 到可评测、可上线 Agent 系统的学习路线 |
 | [Project Collections](./docs/project-collections/) | AI 项目、Agent 框架、开发者工具、MCP 集成和垂直应用收藏 |
 
