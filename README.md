@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./assets/awesome-ai-guide-cover.png" alt="Awesome AI Guide cover" width="100%" />
+  <img src="./assets/awesome-ai-guide-cover.png" alt="91ai cover" width="100%" />
 </p>
 
-<h1 align="center">Awesome AI Guide</h1>
+<h1 align="center">91ai</h1>
 
 <p align="center">
   面向技术人的 AI 工具评测、实战资料库与学习路线图
