@@ -13,14 +13,25 @@
 
 ## 构建、测试与开发命令
 
-当前不需要构建系统。常用的本地检查命令：
+当前不需要构建系统。项目提供校验脚本，用于检查文档质量和一致性：
+
+```sh
+./scripts/check.sh lint       # Markdown 格式检查（标题层级、列表风格、空行规则）
+./scripts/check.sh links      # 内部链接检查（文件/目录是否存在）
+./scripts/check.sh links-ext  # 内部 + 外部链接检查（较慢，需网络）
+./scripts/check.sh badges     # README badge 计数验证
+./scripts/check.sh all        # 运行 lint + links + badges
+./scripts/check.sh all-full   # 运行全部检查（含外部链接）
+```
+
+每次修改文档后，运行 `./scripts/check.sh all` 确认没有引入格式或链接问题。提交前确保所有检查通过。
+
+常用的本地辅助命令：
 
 ```sh
 git status --short
 find docs -maxdepth 2 -type f | sort
 ```
-
-提交变更前，请在 GitHub 或 Markdown 查看器中预览文档，并验证 `./docs/ai-coding/` 等相对链接是否可用。
 
 ## 写作风格与命名约定
 
@@ -50,7 +61,7 @@ find docs -maxdepth 2 -type f | sort
 
 ## 测试指南
 
-当前没有自动化测试。人工审查应检查：
+自动化校验通过 `./scripts/check.sh` 执行。人工审查应额外检查：
 
 - Markdown 渲染清晰。
 - 链接有效，且相对链接可用。
