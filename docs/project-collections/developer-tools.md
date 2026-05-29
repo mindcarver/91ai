@@ -49,13 +49,13 @@
 | portless - 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具 | 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具。 | tool, multi-agent, agent, 拿来就用, 部署运维 | [打开](https://github.com/vercel-labs/portless) |
 | proofshot - 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | multi-agent, agent, 自动化, 构建Agent | [打开](https://github.com/AmElmo/proofshot) |
 | public-apis - 公开 API 集合，开发者的必备参考 | 公开 API 集合，开发者的必备参考。 | ai, 学习参考, 需要开发 | [打开](https://github.com/public-apis/public-apis) |
-| re_gent - 专为 AI Agent 设计的版本控制系统 | 专为 AI Agent 设计的版本控制系统 | multi-agent, agent | [打开](https://github.com/regent-vcs/re_gent) |
-| react-doctor - 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | multi-agent, agent | [打开](https://github.com/millionco/react-doctor) |
-| resurf - AI 浏览器 Agent 的现实可复现测试框架 | AI 浏览器 Agent 的现实可复现测试框架 | multi-agent, framework, agent | [打开](https://github.com/lightfeed/resurf) |
-| Scrapling - 自适应网页爬虫框架，支持从单请求到大规模爬取 | 自适应网页爬虫框架，支持从单请求到大规模爬取 | framework | [打开](https://github.com/D4Vinci/Scrapling) |
-| semble - 为AI Agent设计的高效代码搜索库，静态嵌入实现0.854 NDCG@10准确率，索引250ms查询1.5ms | 为AI Agent设计的高效代码搜索库，静态嵌入实现0.854 NDCG@10准确率，索引250ms查询1.5ms | agent, multi-agent | [打开](https://github.com/MinishLab/semble) |
-| shark - 面向 AI Agent 的开源认证系统，Go 语言实现 | 面向 AI Agent 的开源认证系统，Go 语言实现 | multi-agent, open-source, agent | [打开](https://github.com/shark-auth/shark) |
-| spec-kit - GitHub官方Spec-Driven Development工具包 | GitHub官方Spec-Driven Development工具包 | tool | [打开](https://github.com/github/spec-kit) |
+| re_gent - 专为 AI Agent 设计的版本控制系统 | 专为 AI Agent 设计的版本控制系统 | multi-agent, agent, 构建Agent, 自动化 | [打开](https://github.com/regent-vcs/re_gent) |
+| react-doctor - 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | multi-agent, agent, 自动化, 拿来就用 | [打开](https://github.com/millionco/react-doctor) |
+| resurf - AI 浏览器 Agent 的现实可复现测试框架 | AI 浏览器 Agent 的现实可复现测试框架 | multi-agent, framework, agent, 需要开发, 自动化 | [打开](https://github.com/lightfeed/resurf) |
+| Scrapling - 自适应网页爬虫框架，支持从单请求到大规模爬取 | 自适应网页爬虫框架，支持从单请求到大规模爬取 | framework, 需要开发, 自动化 | [打开](https://github.com/D4Vinci/Scrapling) |
+| semble - 为AI Agent设计的高效代码搜索库，静态嵌入实现0.854 NDCG@10准确率，索引250ms查询1.5ms | 为AI Agent设计的高效代码搜索库，静态嵌入实现0.854 NDCG@10准确率，索引250ms查询1.5ms | agent, multi-agent, 需要开发, 构建Agent | [打开](https://github.com/MinishLab/semble) |
+| shark - 面向 AI Agent 的开源认证系统，Go 语言实现 | 面向 AI Agent 的开源认证系统，Go 语言实现 | multi-agent, open-source, agent, 构建Agent, 需要开发 | [打开](https://github.com/shark-auth/shark) |
+| spec-kit - GitHub官方Spec-Driven Development工具包 | GitHub官方Spec-Driven Development工具包 | tool, 拿来就用, 自动化 | [打开](https://github.com/github/spec-kit) |
 | stage-cli - 帮助开发者逐步审查 AI Agent 生成代码变更的 CLI 工具 | 帮助开发者逐步审查 AI Agent 生成代码变更的 CLI 工具 | tool, multi-agent, agent | [打开](https://github.com/ReviewStage/stage-cli) |
 | tessera - 多 Agent 编码工作空间 (Web+桌面) | 多 Agent 编码工作空间 (Web+桌面) | multi-agent, agent | [打开](https://github.com/horang-labs/tessera) |
 | thr - 本地语义记忆CLI工具，让编码Agent在本地存储和按语义检索记忆，无需服务器和API | 本地语义记忆CLI工具，让编码Agent在本地存储和按语义检索记忆，无需服务器和API | tool, agent, multi-agent | [打开](https://github.com/Chadi00/thr) |

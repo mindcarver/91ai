@@ -39,52 +39,52 @@
 | GhostTrack - OSINT/安全追踪工具 | OSINT/安全追踪工具。 | tool, 自动化 | [打开](https://github.com/HunxByts/GhostTrack) |
 | Google Gemini全栈LangGraph快速入门 | Google构建Gemini和LangGraph全栈应用的快速入门模板 | google, gemini, fullstack, langgraph, quickstart, ai | - |
 | goose-skills - 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | agent, open-source, multi-agent, 直接变现, 自动化 | [打开](https://github.com/athina-ai/goose-skills) |
-| hyperframes - 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | multi-agent, agent, tool | [打开](https://github.com/heygen-com/hyperframes) |
+| hyperframes - 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | multi-agent, agent, tool, 构建Agent, 需要开发 | [打开](https://github.com/heygen-com/hyperframes) |
 | Kotaemon - 文档问答系统 | 基于RAG的高级文档问答系统，支持多模态 | ai, knowledge, management, rag, document, qa | - |
-| langextract - Google 开源的语言提取工具 | Google 开源的语言提取工具。 | open-source, tool | [打开](https://github.com/google/langextract) |
-| langflow - 构建和部署 AI Agent 和工作流的强大工具平台 | 构建和部署 AI Agent 和工作流的强大工具平台 | tool, agent, multi-agent | [打开](https://github.com/langflow-ai/langflow) |
-| LibreChat - 增强版ChatGPT克隆，支持多智能体、MCP、多AI提供商集成 | 增强版ChatGPT克隆，支持多智能体、MCP、多AI提供商集成 | mcp | [打开](https://github.com/danny-avila/LibreChat) |
-| local-deep-research - 本地深度研究工具，支持 Ollama/Google/Anthropic 等多种 LLM，搜索 arXiv/PubMed 等多源 | 本地深度研究工具，支持 Ollama/Google/Anthropic 等多种 LLM，搜索 arXiv/PubMed 等多源 | tool, llm | [打开](https://github.com/LearningCircuit/local-deep-research) |
-| LTX-2 - LTX-2音视频生成模型推理和LoRA训练 | LTX-2音视频生成模型推理和LoRA训练 | ai | [打开](https://github.com/Lightricks/LTX-2) |
-| magic - Magicrew — 开源一体化 AI 生产力平台（Agent + 工作流 + IM + 协作） | Magicrew — 开源一体化 AI 生产力平台（Agent + 工作流 + IM + 协作） | agent, open-source, multi-agent | [打开](https://github.com/dtyq/magic) |
-| maigret - OSINT 工具，通过用户名在大量网站中收集信息 | OSINT 工具，通过用户名在大量网站中收集信息。 | tool | [打开](https://github.com/soxoj/maigret) |
-| manifest - Agent智能模型路由，降低成本最高70%，GitHub Trending项目 | Agent智能模型路由，降低成本最高70%，GitHub Trending项目 | agent, multi-agent | [打开](https://github.com/mnfst/manifest) |
-| MASPO - MASPO: LLM多智能体系统联合提示优化框架，ICML 2026接收 | MASPO: LLM多智能体系统联合提示优化框架，ICML 2026接收 | framework, llm | [打开](https://github.com/wangzx1219/MASPO) |
+| langextract - Google 开源的语言提取工具 | Google 开源的语言提取工具。 | open-source, tool, 需要开发 | [打开](https://github.com/google/langextract) |
+| langflow - 构建和部署 AI Agent 和工作流的强大工具平台 | 构建和部署 AI Agent 和工作流的强大工具平台 | tool, agent, multi-agent, 构建Agent, 需要开发 | [打开](https://github.com/langflow-ai/langflow) |
+| LibreChat - 增强版ChatGPT克隆，支持多智能体、MCP、多AI提供商集成 | 增强版ChatGPT克隆，支持多智能体、MCP、多AI提供商集成 | mcp, 拿来就用 | [打开](https://github.com/danny-avila/LibreChat) |
+| local-deep-research - 本地深度研究工具，支持 Ollama/Google/Anthropic 等多种 LLM，搜索 arXiv/PubMed 等多源 | 本地深度研究工具，支持 Ollama/Google/Anthropic 等多种 LLM，搜索 arXiv/PubMed 等多源 | tool, llm, 拿来就用, 学习参考 | [打开](https://github.com/LearningCircuit/local-deep-research) |
+| LTX-2 - LTX-2音视频生成模型推理和LoRA训练 | LTX-2音视频生成模型推理和LoRA训练 | ai, 需要开发 | [打开](https://github.com/Lightricks/LTX-2) |
+| magic - Magicrew — 开源一体化 AI 生产力平台（Agent + 工作流 + IM + 协作） | Magicrew — 开源一体化 AI 生产力平台（Agent + 工作流 + IM + 协作） | agent, open-source, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/dtyq/magic) |
+| maigret - OSINT 工具，通过用户名在大量网站中收集信息 | OSINT 工具，通过用户名在大量网站中收集信息。 | tool, 自动化, 拿来就用 | [打开](https://github.com/soxoj/maigret) |
+| manifest - Agent智能模型路由，降低成本最高70%，GitHub Trending项目 | Agent智能模型路由，降低成本最高70%，GitHub Trending项目 | agent, multi-agent, 构建Agent, 部署运维 | [打开](https://github.com/mnfst/manifest) |
+| MASPO - MASPO: LLM多智能体系统联合提示优化框架，ICML 2026接收 | MASPO: LLM多智能体系统联合提示优化框架，ICML 2026接收 | framework, llm, 需要开发, 学习参考 | [打开](https://github.com/wangzx1219/MASPO) |
 | MaxKB - 企业知识库 | 具有RAG功能的企业级AI知识库系统 | knowledge-base, ai, enterprise, rag, chinese | - |
-| mcp-memory-service - AI Agent 持久记忆服务，支持 LangGraph/CrewAI/AutoGen | AI Agent 持久记忆服务，支持 LangGraph/CrewAI/AutoGen | multi-agent, agent | [打开](https://github.com/doobidoo/mcp-memory-service) |
-| memoirs - 基于 SQLite 的本地 AI Agent 长期记忆引擎，支持 MCP/HTTP/CLI | 基于 SQLite 的本地 AI Agent 长期记忆引擎，支持 MCP/HTTP/CLI | mcp, multi-agent, agent | [打开](https://github.com/misaelzapata/memoirs) |
-| memvid - AI Agent 记忆层，用单文件替代复杂 RAG 管道 | AI Agent 记忆层，用单文件替代复杂 RAG 管道 | agent, rag, multi-agent | [打开](https://github.com/memvid/memvid) |
-| metorial - MCP 服务器部署平台，类似 Vercel for MCP | MCP 服务器部署平台，类似 Vercel for MCP | mcp | [打开](https://github.com/metorial/metorial) |
-| nanobrowser - 开源 Chrome 扩展，AI 驱动的多 Agent 网页自动化，BYOK 模式 | 开源 Chrome 扩展，AI 驱动的多 Agent 网页自动化，BYOK 模式 | agent, multi-agent, open-source | [打开](https://github.com/nanobrowser/nanobrowser) |
-| nexent - 模型引擎框架 | 模型引擎框架。 | framework | [打开](https://github.com/ModelEngine-Group/nexent) |
-| nocobase - 开源 AI + 无代码平台，快速构建业务系统 | 开源 AI + 无代码平台，快速构建业务系统 | open-source | [打开](https://github.com/nocobase/nocobase) |
-| omi - 开源 AI 可穿戴设备项目 | 开源 AI 可穿戴设备项目。 | open-source | [打开](https://github.com/BasedHardware/omi) |
-| omlx - 面向 Apple Silicon 的 LLM 推理服务器，支持连续批处理与 SSD 缓存，macOS 菜单栏管理 | 面向 Apple Silicon 的 LLM 推理服务器，支持连续批处理与 SSD 缓存，macOS 菜单栏管理 | llm | [打开](https://github.com/jundot/omlx) |
-| onyx - 开源AI聊天平台，支持所有LLM | 开源AI聊天平台，支持所有LLM | open-source, llm | [打开](https://github.com/onyx-dot-app/onyx) |
-| open-webui - 开源 Web UI for LLMs，支持 Ollama、OpenAI 兼容 API 等 | 开源 Web UI for LLMs，支持 Ollama、OpenAI 兼容 API 等。 | open-source, llm | [打开](https://github.com/open-webui/open-webui) |
-| openpets - AI 编码 Agent 的桌面宠物，MCP 连接 | AI 编码 Agent 的桌面宠物，MCP 连接 | multi-agent, mcp, agent | [打开](https://github.com/alvinunreal/openpets) |
+| mcp-memory-service - AI Agent 持久记忆服务，支持 LangGraph/CrewAI/AutoGen | AI Agent 持久记忆服务，支持 LangGraph/CrewAI/AutoGen | multi-agent, agent, 构建Agent | [打开](https://github.com/doobidoo/mcp-memory-service) |
+| memoirs - 基于 SQLite 的本地 AI Agent 长期记忆引擎，支持 MCP/HTTP/CLI | 基于 SQLite 的本地 AI Agent 长期记忆引擎，支持 MCP/HTTP/CLI | mcp, multi-agent, agent, 构建Agent | [打开](https://github.com/misaelzapata/memoirs) |
+| memvid - AI Agent 记忆层，用单文件替代复杂 RAG 管道 | AI Agent 记忆层，用单文件替代复杂 RAG 管道 | agent, rag, multi-agent, 构建Agent | [打开](https://github.com/memvid/memvid) |
+| metorial - MCP 服务器部署平台，类似 Vercel for MCP | MCP 服务器部署平台，类似 Vercel for MCP | mcp, 部署运维, 需要开发 | [打开](https://github.com/metorial/metorial) |
+| nanobrowser - 开源 Chrome 扩展，AI 驱动的多 Agent 网页自动化，BYOK 模式 | 开源 Chrome 扩展，AI 驱动的多 Agent 网页自动化，BYOK 模式 | agent, multi-agent, open-source, 自动化, 拿来就用 | [打开](https://github.com/nanobrowser/nanobrowser) |
+| nexent - 模型引擎框架 | 模型引擎框架。 | framework, 需要开发, 部署运维 | [打开](https://github.com/ModelEngine-Group/nexent) |
+| nocobase - 开源 AI + 无代码平台，快速构建业务系统 | 开源 AI + 无代码平台，快速构建业务系统 | open-source, 拿来就用 | [打开](https://github.com/nocobase/nocobase) |
+| omi - 开源 AI 可穿戴设备项目 | 开源 AI 可穿戴设备项目。 | open-source, 需要开发 | [打开](https://github.com/BasedHardware/omi) |
+| omlx - 面向 Apple Silicon 的 LLM 推理服务器，支持连续批处理与 SSD 缓存，macOS 菜单栏管理 | 面向 Apple Silicon 的 LLM 推理服务器，支持连续批处理与 SSD 缓存，macOS 菜单栏管理 | llm, 部署运维, 拿来就用 | [打开](https://github.com/jundot/omlx) |
+| onyx - 开源AI聊天平台，支持所有LLM | 开源AI聊天平台，支持所有LLM | open-source, llm, 拿来就用 | [打开](https://github.com/onyx-dot-app/onyx) |
+| open-webui - 开源 Web UI for LLMs，支持 Ollama、OpenAI 兼容 API 等 | 开源 Web UI for LLMs，支持 Ollama、OpenAI 兼容 API 等。 | open-source, llm, 拿来就用 | [打开](https://github.com/open-webui/open-webui) |
+| openpets - AI 编码 Agent 的桌面宠物，MCP 连接 | AI 编码 Agent 的桌面宠物，MCP 连接 | multi-agent, mcp, agent, 构建Agent, 拿来就用 | [打开](https://github.com/alvinunreal/openpets) |
 | Parlant - 对话AI框架 | 用于构建复杂对话系统的高级对话AI框架 | ai, conversation, nlp, chatbot, dialogue | - |
-| Personal_AI_Infrastructure - 增强人类能力的 Agentic AI 基础设施 | 增强人类能力的 Agentic AI 基础设施 | multi-agent, agent | [打开](https://github.com/danielmiessler/Personal_AI_Infrastructure) |
-| pi - AI Agent 工具包：编程 Agent CLI、统一 LLM API、TUI/Web UI 库、Slack Bot、vLLM 部署 | AI Agent 工具包：编程 Agent CLI、统一 LLM API、TUI/Web UI 库、Slack Bot、vLLM 部署 | multi-agent, llm, tool, agent, coding | [打开](https://github.com/earendil-works/pi) |
-| Pixelle-Video - AI 视频生成项目 | AI 视频生成项目。 | ai | [打开](https://github.com/AIDC-AI/Pixelle-Video) |
-| plur - AI Agent 本地优先、零成本的持久化记忆系统 | AI Agent 本地优先、零成本的持久化记忆系统 | multi-agent, agent | [打开](https://github.com/plur-ai/plur) |
-| pocket-tts - 可在CPU上运行的轻量级TTS语音合成 | 可在CPU上运行的轻量级TTS语音合成 | ai | [打开](https://github.com/kyutai-labs/pocket-tts) |
-| posthog - 开源产品分析平台，支持事件追踪、用户行为分析、功能开关等 | 开源产品分析平台，支持事件追踪、用户行为分析、功能开关等。 | open-source | [打开](https://github.com/PostHog/posthog) |
-| ppt-master - AI 从任何文档生成原生可编辑 PPTX | AI 从任何文档生成原生可编辑 PPTX | ai | [打开](https://github.com/hugohe3/ppt-master) |
-| Rapid-MLX - Apple Silicon最快本地AI推理引擎，比Ollama快4.2倍 | Apple Silicon最快本地AI推理引擎，比Ollama快4.2倍 | ai | [打开](https://github.com/raullenchai/Rapid-MLX) |
-| rf-detr - Roboflow 的实时目标检测模型 | Roboflow 的实时目标检测模型。 | ai | [打开](https://github.com/roboflow/rf-detr) |
-| sglang - 高性能 LLM 和多模态模型推理服务框架 | 高性能 LLM 和多模态模型推理服务框架 | llm, framework | [打开](https://github.com/sgl-project/sglang) |
-| Shadow - AI Agent 提示词变更调试工具，追踪导致 Agent 失败的 prompt 修改 | AI Agent 提示词变更调试工具，追踪导致 Agent 失败的 prompt 修改 | multi-agent, tool, agent | [打开](https://github.com/manav8498/Shadow) |
-| symbiopulse - MCP 优先的 AI 编程 Agent 上下文层，持久化项目记忆 | MCP 优先的 AI 编程 Agent 上下文层，持久化项目记忆 | mcp, coding, multi-agent, agent | [打开](https://github.com/lzk-gh/symbiopulse) |
-| TabPFN - 表格数据基础模型 | 表格数据基础模型 | ai | [打开](https://github.com/PriorLabs/TabPFN) |
-| thunderbolt - 强调用户自主控制的 AI 平台，自选模型、数据自主、消除供应商锁定 | 强调用户自主控制的 AI 平台，自选模型、数据自主、消除供应商锁定。 | ai | [打开](https://github.com/thunderbird/thunderbolt) |
-| TrendRadar - AI驱动舆情监控与热点筛选工具，支持多平台聚合 | AI驱动舆情监控与热点筛选工具，支持多平台聚合 | tool | [打开](https://github.com/sansan0/TrendRadar) |
-| unsloth - 本地训练/运行开源模型（Gemma 4、Qwen3.5、DeepSeek 等），新增 Web UI，降低本地训练门槛 | 本地训练/运行开源模型（Gemma 4、Qwen3.5、DeepSeek 等），新增 Web UI，降低本地训练门槛。 | open-source | [打开](https://github.com/unslothai/unsloth) |
-| vellum-assistant - 个人 AI 助手，能随用户成长，具备记忆、人格、主动联系能力，跨 macOS/Telegram/Slack | 个人 AI 助手，能随用户成长，具备记忆、人格、主动联系能力，跨 macOS/Telegram/Slack | ai | [打开](https://github.com/vellum-ai/vellum-assistant) |
-| vexa - 开源会议转录API，支持Google Meet/Teams/Zoom | 开源会议转录API，支持Google Meet/Teams/Zoom | open-source | [打开](https://github.com/Vexa-ai/vexa) |
-| VibeVoice - 统一语音转文本模型，单次处理 60 分钟长音频，自动生成结构化转录，支持 50+ 语言 | 统一语音转文本模型，单次处理 60 分钟长音频，自动生成结构化转录，支持 50+ 语言。 | ai | [打开](https://github.com/microsoft/VibeVoice) |
-| ViMax - Agentic 视频生成框架，集成导演、编剧、制片和视频生成于一体 | Agentic 视频生成框架，集成导演、编剧、制片和视频生成于一体 | multi-agent, agent, framework | [打开](https://github.com/HKUDS/ViMax) |
-| voicebox - 开源语音合成工作室，用于语音生成和编辑 | 开源语音合成工作室，用于语音生成和编辑。 | open-source | [打开](https://github.com/jamiepine/voicebox) |
-| VoxCPM - 无 Tokenizer 的多语言语音生成 TTS 模型，支持创意声音设计和语音克隆 | 无 Tokenizer 的多语言语音生成 TTS 模型，支持创意声音设计和语音克隆 | ai | [打开](https://github.com/OpenBMB/VoxCPM) |
+| Personal_AI_Infrastructure - 增强人类能力的 Agentic AI 基础设施 | 增强人类能力的 Agentic AI 基础设施 | multi-agent, agent, 构建Agent, 学习参考 | [打开](https://github.com/danielmiessler/Personal_AI_Infrastructure) |
+| pi - AI Agent 工具包：编程 Agent CLI、统一 LLM API、TUI/Web UI 库、Slack Bot、vLLM 部署 | AI Agent 工具包：编程 Agent CLI、统一 LLM API、TUI/Web UI 库、Slack Bot、vLLM 部署 | multi-agent, llm, tool, agent, coding, 构建Agent, 部署运维 | [打开](https://github.com/earendil-works/pi) |
+| Pixelle-Video - AI 视频生成项目 | AI 视频生成项目。 | ai, 拿来就用 | [打开](https://github.com/AIDC-AI/Pixelle-Video) |
+| plur - AI Agent 本地优先、零成本的持久化记忆系统 | AI Agent 本地优先、零成本的持久化记忆系统 | multi-agent, agent, 构建Agent | [打开](https://github.com/plur-ai/plur) |
+| pocket-tts - 可在CPU上运行的轻量级TTS语音合成 | 可在CPU上运行的轻量级TTS语音合成 | ai, 需要开发 | [打开](https://github.com/kyutai-labs/pocket-tts) |
+| posthog - 开源产品分析平台，支持事件追踪、用户行为分析、功能开关等 | 开源产品分析平台，支持事件追踪、用户行为分析、功能开关等。 | open-source, 拿来就用, 部署运维 | [打开](https://github.com/PostHog/posthog) |
+| ppt-master - AI 从任何文档生成原生可编辑 PPTX | AI 从任何文档生成原生可编辑 PPTX | ai, 拿来就用 | [打开](https://github.com/hugohe3/ppt-master) |
+| Rapid-MLX - Apple Silicon最快本地AI推理引擎，比Ollama快4.2倍 | Apple Silicon最快本地AI推理引擎，比Ollama快4.2倍 | ai, 拿来就用, 部署运维 | [打开](https://github.com/raullenchai/Rapid-MLX) |
+| rf-detr - Roboflow 的实时目标检测模型 | Roboflow 的实时目标检测模型。 | ai, 需要开发 | [打开](https://github.com/roboflow/rf-detr) |
+| sglang - 高性能 LLM 和多模态模型推理服务框架 | 高性能 LLM 和多模态模型推理服务框架 | llm, framework, 需要开发, 部署运维 | [打开](https://github.com/sgl-project/sglang) |
+| Shadow - AI Agent 提示词变更调试工具，追踪导致 Agent 失败的 prompt 修改 | AI Agent 提示词变更调试工具，追踪导致 Agent 失败的 prompt 修改 | multi-agent, tool, agent, 构建Agent, 部署运维 | [打开](https://github.com/manav8498/Shadow) |
+| symbiopulse - MCP 优先的 AI 编程 Agent 上下文层，持久化项目记忆 | MCP 优先的 AI 编程 Agent 上下文层，持久化项目记忆 | mcp, coding, multi-agent, agent, 构建Agent | [打开](https://github.com/lzk-gh/symbiopulse) |
+| TabPFN - 表格数据基础模型 | 表格数据基础模型 | ai, 需要开发 | [打开](https://github.com/PriorLabs/TabPFN) |
+| thunderbolt - 强调用户自主控制的 AI 平台，自选模型、数据自主、消除供应商锁定 | 强调用户自主控制的 AI 平台，自选模型、数据自主、消除供应商锁定。 | ai, 拿来就用 | [打开](https://github.com/thunderbird/thunderbolt) |
+| TrendRadar - AI驱动舆情监控与热点筛选工具，支持多平台聚合 | AI驱动舆情监控与热点筛选工具，支持多平台聚合 | tool, 自动化, 拿来就用 | [打开](https://github.com/sansan0/TrendRadar) |
+| unsloth - 本地训练/运行开源模型（Gemma 4、Qwen3.5、DeepSeek 等），新增 Web UI，降低本地训练门槛 | 本地训练/运行开源模型（Gemma 4、Qwen3.5、DeepSeek 等），新增 Web UI，降低本地训练门槛。 | open-source, 学习参考, 拿来就用 | [打开](https://github.com/unslothai/unsloth) |
+| vellum-assistant - 个人 AI 助手，能随用户成长，具备记忆、人格、主动联系能力，跨 macOS/Telegram/Slack | 个人 AI 助手，能随用户成长，具备记忆、人格、主动联系能力，跨 macOS/Telegram/Slack | ai, 拿来就用 | [打开](https://github.com/vellum-ai/vellum-assistant) |
+| vexa - 开源会议转录API，支持Google Meet/Teams/Zoom | 开源会议转录API，支持Google Meet/Teams/Zoom | open-source, 拿来就用, 自动化 | [打开](https://github.com/Vexa-ai/vexa) |
+| VibeVoice - 统一语音转文本模型，单次处理 60 分钟长音频，自动生成结构化转录，支持 50+ 语言 | 统一语音转文本模型，单次处理 60 分钟长音频，自动生成结构化转录，支持 50+ 语言。 | ai, 需要开发 | [打开](https://github.com/microsoft/VibeVoice) |
+| ViMax - Agentic 视频生成框架，集成导演、编剧、制片和视频生成于一体 | Agentic 视频生成框架，集成导演、编剧、制片和视频生成于一体 | multi-agent, agent, framework, 构建Agent, 需要开发 | [打开](https://github.com/HKUDS/ViMax) |
+| voicebox - 开源语音合成工作室，用于语音生成和编辑 | 开源语音合成工作室，用于语音生成和编辑。 | open-source, 拿来就用 | [打开](https://github.com/jamiepine/voicebox) |
+| VoxCPM - 无 Tokenizer 的多语言语音生成 TTS 模型，支持创意声音设计和语音克隆 | 无 Tokenizer 的多语言语音生成 TTS 模型，支持创意声音设计和语音克隆 | ai, 需要开发 | [打开](https://github.com/OpenBMB/VoxCPM) |
 | Weknora - AI知识管理 | AI驱动的知识管理和研究协作平台 | knowledge-management, ai, research, collaboration, productivity | - |
-| worldmonitor - 世界监控工具，AI 驱动的信息聚合 | 世界监控工具，AI 驱动的信息聚合。 | tool | [打开](https://github.com/koala73/worldmonitor) |
+| worldmonitor - 世界监控工具，AI 驱动的信息聚合 | 世界监控工具，AI 驱动的信息聚合。 | tool, 自动化, 拿来就用 | [打开](https://github.com/koala73/worldmonitor) |
