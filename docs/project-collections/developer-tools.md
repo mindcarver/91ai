@@ -6,49 +6,49 @@
 
 | 名称 | 概括 | 标签 | 链接 |
 | --- | --- | --- | --- |
-| 9router - 免费 AI 编码路由器，连接多种编码工具到免费 LLM | 免费 AI 编码路由器，连接多种编码工具到免费 LLM | tool, llm | [打开](https://github.com/decolua/9router) |
-| acpx - ACP协议无头CLI客户端，用于有状态Agent会话 | ACP协议无头CLI客户端，用于有状态Agent会话 | agent, multi-agent | [打开](https://github.com/openclaw/acpx) |
-| adamsreview - 面向Claude Code的多Agent PR代码审查工具，提升代码审查质量 | 面向Claude Code的多Agent PR代码审查工具，提升代码审查质量 | multi-agent, agent, tool | [打开](https://github.com/adamjgmiller/adamsreview) |
-| aerf - 为 AI Agent 操作提供加密签名的审计收据 | 为 AI Agent 操作提供加密签名的审计收据 | multi-agent, agent | [打开](https://github.com/aerf-spec/aerf) |
-| Agent - 原生 macOS AI 编码 IDE/Agent 框架，充分利用 macOS 系统能力 | 原生 macOS AI 编码 IDE/Agent 框架，充分利用 macOS 系统能力 | multi-agent, agent, framework | [打开](https://github.com/macOS26/Agent) |
-| agent-postmortem-skill - AI编码Agent的验尸技能，强制Agent证明其工作成果 | AI编码Agent的验尸技能，强制Agent证明其工作成果 | multi-agent, agent | [打开](https://github.com/plus8bit/agent-postmortem-skill) |
-| agent-sanbox - 隔离 Docker 容器内运行 AI 编码 Agent | 隔离 Docker 容器内运行 AI 编码 Agent | multi-agent, agent | [打开](https://github.com/marvincaspar/agent-sanbox) |
-| agentwrit - Go 语言的 AI Agent 凭证代理，任务级作用域凭证管理 | Go 语言的 AI Agent 凭证代理，任务级作用域凭证管理 | multi-agent, agent | [打开](https://github.com/devonartis/agentwrit) |
-| akmon - 用Rust编写的AI编码Agent，面向受监管的工程场景 | 用Rust编写的AI编码Agent，面向受监管的工程场景 | multi-agent, agent | [打开](https://github.com/radotsvetkov/akmon) |
-| Archon - 首个开源AI编码Harness构建器，使AI编码变得确定性和可重复 | 首个开源AI编码Harness构建器，使AI编码变得确定性和可重复 | open-source | [打开](https://github.com/coleam00/Archon) |
+| 9router - 免费 AI 编码路由器，连接多种编码工具到免费 LLM | 免费 AI 编码路由器，连接多种编码工具到免费 LLM | tool, llm, 拿来就用 | [打开](https://github.com/decolua/9router) |
+| acpx - ACP协议无头CLI客户端，用于有状态Agent会话 | ACP协议无头CLI客户端，用于有状态Agent会话 | agent, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/openclaw/acpx) |
+| adamsreview - 面向Claude Code的多Agent PR代码审查工具，提升代码审查质量 | 面向Claude Code的多Agent PR代码审查工具，提升代码审查质量 | multi-agent, agent, tool, 自动化 | [打开](https://github.com/adamjgmiller/adamsreview) |
+| aerf - 为 AI Agent 操作提供加密签名的审计收据 | 为 AI Agent 操作提供加密签名的审计收据 | multi-agent, agent, 构建Agent, 自动化 | [打开](https://github.com/aerf-spec/aerf) |
+| Agent - 原生 macOS AI 编码 IDE/Agent 框架，充分利用 macOS 系统能力 | 原生 macOS AI 编码 IDE/Agent 框架，充分利用 macOS 系统能力 | multi-agent, agent, framework, 构建Agent, 拿来就用 | [打开](https://github.com/macOS26/Agent) |
+| agent-postmortem-skill - AI编码Agent的验尸技能，强制Agent证明其工作成果 | AI编码Agent的验尸技能，强制Agent证明其工作成果 | multi-agent, agent, 构建Agent, 自动化 | [打开](https://github.com/plus8bit/agent-postmortem-skill) |
+| agent-sanbox - 隔离 Docker 容器内运行 AI 编码 Agent | 隔离 Docker 容器内运行 AI 编码 Agent | multi-agent, agent, 构建Agent, 部署运维 | [打开](https://github.com/marvincaspar/agent-sanbox) |
+| agentwrit - Go 语言的 AI Agent 凭证代理，任务级作用域凭证管理 | Go 语言的 AI Agent 凭证代理，任务级作用域凭证管理 | multi-agent, agent, 构建Agent, 部署运维 | [打开](https://github.com/devonartis/agentwrit) |
+| akmon - 用Rust编写的AI编码Agent，面向受监管的工程场景 | 用Rust编写的AI编码Agent，面向受监管的工程场景 | multi-agent, agent, 构建Agent, 拿来就用 | [打开](https://github.com/radotsvetkov/akmon) |
+| Archon - 首个开源AI编码Harness构建器，使AI编码变得确定性和可重复 | 首个开源AI编码Harness构建器，使AI编码变得确定性和可重复 | open-source, 构建Agent, 需要开发 | [打开](https://github.com/coleam00/Archon) |
 | BMAD-METHOD - 粒子加速器仿真 | 高级粒子加速器物理仿真库和工具包 | physics, particle-accelerator, simulation, research, scientific | - |
-| browsercode - 通过WebAssembly在浏览器中运行Claude Code | 通过WebAssembly在浏览器中运行Claude Code | coding | [打开](https://github.com/leaningtech/browsercode) |
-| chrome-devtools-mcp - Chrome DevTools MCP 服务，为编程 Agent 提供浏览器调试能力 | Chrome DevTools MCP 服务，为编程 Agent 提供浏览器调试能力 | mcp, multi-agent, tool, agent, coding | [打开](https://github.com/ChromeDevTools/chrome-devtools-mcp) |
-| claude-agent-sdk-python - Anthropic 官方 Claude Agent SDK Python 版，用于构建 Claude 驱动的 AI Agent | Anthropic 官方 Claude Agent SDK Python 版，用于构建 Claude 驱动的 AI Agent | multi-agent, agent | [打开](https://github.com/anthropics/claude-agent-sdk-python) |
-| cline - IDE内自主编程Agent，支持文件创建编辑、命令执行、浏览器操作 | IDE内自主编程Agent，支持文件创建编辑、命令执行、浏览器操作 | coding, multi-agent, agent | [打开](https://github.com/cline/cline) |
-| CloakBrowser - 隐身 Chromium 浏览器，通过所有机器人检测测试，可作为 Playwright 的直接替代品 | 隐身 Chromium 浏览器，通过所有机器人检测测试，可作为 Playwright 的直接替代品 | ai | [打开](https://github.com/CloakHQ/CloakBrowser) |
-| code-review-graph - 为 Claude Code 构建本地知识图谱，代码审查 token 消耗降低 6.8 倍 | 为 Claude Code 构建本地知识图谱，代码审查 token 消耗降低 6.8 倍 | coding | [打开](https://github.com/tirth8205/code-review-graph) |
-| codegraph - 为 Claude Code 预索引的代码知识图谱，减少 Token 和工具调用，100% 本地运行 | 为 Claude Code 预索引的代码知识图谱，减少 Token 和工具调用，100% 本地运行 | coding, tool | [打开](https://github.com/colbymchenry/codegraph) |
-| context-mode - AI编码代理上下文窗口优化，98%缩减率 | AI编码代理上下文窗口优化，98%缩减率 | ai | [打开](https://github.com/mksglu/context-mode) |
-| CopilotKit - Agent 前端技术栈和 AG-UI 协议，支持 React + Angular，3 万 Star | Agent 前端技术栈和 AG-UI 协议，支持 React + Angular，3 万 Star | multi-agent, agent | [打开](https://github.com/CopilotKit/CopilotKit) |
-| crush - CharmBracelet 出品的 AI 编码 Agent | CharmBracelet 出品的 AI 编码 Agent | agent, multi-agent | [打开](https://github.com/charmbracelet/crush) |
-| CubeSandbox - 开源 Agent 沙箱，延迟 <60ms | 开源 Agent 沙箱，延迟 <60ms | multi-agent, agent, open-source | [打开](https://github.com/Tencent/CubeSandbox) |
-| DeepCode - 开放编码 Agent (Paper2Code & Text2Web & Text2Backend) | 开放编码 Agent (Paper2Code & Text2Web & Text2Backend) | agent, coding, multi-agent | [打开](https://github.com/HKUDS/DeepCode) |
-| E2B - 开源安全沙箱执行环境，为 AI agent 提供真实世界工具，5k Star | 开源安全沙箱执行环境，为 AI agent 提供真实世界工具，5k Star | multi-agent, agent, open-source, tool | [打开](https://github.com/e2b-dev/E2B) |
-| gpt-engineer - 自主代码生成Agent，开创描述需求获取代码范式 | 自主代码生成Agent，开创描述需求获取代码范式 | agent, multi-agent | [打开](https://github.com/AntonOsika/gpt-engineer) |
-| gstack - Garry Tan的Claude Code配置：23个工具充当CEO/设计师/工程经理等角色 | Garry Tan的Claude Code配置：23个工具充当CEO/设计师/工程经理等角色 | tool | [打开](https://github.com/garrytan/gstack) |
-| InsForge - 基于 Postgres 的后端平台，为编程 Agent 设计，含认证/存储/AI 网关 | 基于 Postgres 的后端平台，为编程 Agent 设计，含认证/存储/AI 网关 | coding, multi-agent, agent | [打开](https://github.com/InsForge/InsForge) |
-| ios-simulator-skill - Claude Code 的 iOS 模拟器技能，优化 Claude 构建和测试 iOS 应用的能力 | Claude Code 的 iOS 模拟器技能，优化 Claude 构建和测试 iOS 应用的能力 | ai | [打开](https://github.com/conorluddy/ios-simulator-skill) |
-| jcode - 专注于多会话工作流、无限定制性和性能的 Coding Agent Harness | 专注于多会话工作流、无限定制性和性能的 Coding Agent Harness。Rust 编写。 | multi-agent, coding, agent | [打开](https://github.com/1jehuang/jcode) |
-| kiro-gateway - Kiro IDE/CLI的代理API网关，可使用免费Claude模型 | Kiro IDE/CLI的代理API网关，可使用免费Claude模型 | ai | [打开](https://github.com/jwadow/kiro-gateway) |
-| Martin-Loop - AI编码Agent的预算上限和审计追踪工具 | AI编码Agent的预算上限和审计追踪工具 | multi-agent, agent, tool | [打开](https://github.com/Keesan12/Martin-Loop) |
-| mlx-code - 基于MLX的Mac本地AI编码Agent，可在后院服务器上运行 | 基于MLX的Mac本地AI编码Agent，可在后院服务器上运行 | multi-agent, agent, coding | [打开](https://github.com/JosefAlbers/mlx-code) |
-| open-swe - LangChain 出品的异步编码 Agent | LangChain 出品的异步编码 Agent | agent, multi-agent | [打开](https://github.com/langchain-ai/open-swe) |
-| OpenCLI - 将任何网站和工具变为 CLI，AI 原生运行时 | 将任何网站和工具变为 CLI，AI 原生运行时 | tool | [打开](https://github.com/jackwener/OpenCLI) |
-| opencode - 开源 AI 编码 Agent | 开源 AI 编码 Agent。 | open-source, multi-agent, coding, agent | [打开](https://github.com/anomalyco/opencode) |
-| opengravity - 零安装BYOK的纯JS IDE克隆，AI Agent可在浏览器内Linux环境中操作 | 零安装BYOK的纯JS IDE克隆，AI Agent可在浏览器内Linux环境中操作 | multi-agent, agent | [打开](https://github.com/ab-613/opengravity) |
-| OpenHands - AI 驱动的软件开发平台 | AI 驱动的软件开发平台 | ai | [打开](https://github.com/OpenHands/OpenHands) |
-| OpenMonoAgent.ai - 开源无限 token 编码 agent，终端原生 | 开源无限 token 编码 agent，终端原生 | agent, open-source, multi-agent | [打开](https://github.com/StartupHakk/OpenMonoAgent.ai) |
-| OpenSpec - 面向 AI Coding Assistant 的规格驱动开发(SDD)框架 | 面向 AI Coding Assistant 的规格驱动开发(SDD)框架。通过先定义规格、再由 AI 实现代码的方式，提升 AI 编程的可靠性和可预测性。 | framework, coding | [打开](https://github.com/Fission-AI/OpenSpec) |
-| polpo - 从手机控制Claude Code及其他AI Agent的远程管理工具 | 从手机控制Claude Code及其他AI Agent的远程管理工具 | multi-agent, agent, tool | [打开](https://github.com/pugliatechs/polpo) |
-| portless - 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具 | 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具。 | tool, multi-agent, agent | [打开](https://github.com/vercel-labs/portless) |
-| proofshot - 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | multi-agent, agent | [打开](https://github.com/AmElmo/proofshot) |
-| public-apis - 公开 API 集合，开发者的必备参考 | 公开 API 集合，开发者的必备参考。 | ai | [打开](https://github.com/public-apis/public-apis) |
+| browsercode - 通过WebAssembly在浏览器中运行Claude Code | 通过WebAssembly在浏览器中运行Claude Code | coding, 拿来就用 | [打开](https://github.com/leaningtech/browsercode) |
+| chrome-devtools-mcp - Chrome DevTools MCP 服务，为编程 Agent 提供浏览器调试能力 | Chrome DevTools MCP 服务，为编程 Agent 提供浏览器调试能力 | mcp, multi-agent, tool, agent, coding, 需要开发, 构建Agent | [打开](https://github.com/ChromeDevTools/chrome-devtools-mcp) |
+| claude-agent-sdk-python - Anthropic 官方 Claude Agent SDK Python 版，用于构建 Claude 驱动的 AI Agent | Anthropic 官方 Claude Agent SDK Python 版，用于构建 Claude 驱动的 AI Agent | multi-agent, agent, 构建Agent, 需要开发 | [打开](https://github.com/anthropics/claude-agent-sdk-python) |
+| cline - IDE内自主编程Agent，支持文件创建编辑、命令执行、浏览器操作 | IDE内自主编程Agent，支持文件创建编辑、命令执行、浏览器操作 | coding, multi-agent, agent, 构建Agent, 拿来就用 | [打开](https://github.com/cline/cline) |
+| CloakBrowser - 隐身 Chromium 浏览器，通过所有机器人检测测试，可作为 Playwright 的直接替代品 | 隐身 Chromium 浏览器，通过所有机器人检测测试，可作为 Playwright 的直接替代品 | ai, 拿来就用, 自动化 | [打开](https://github.com/CloakHQ/CloakBrowser) |
+| code-review-graph - 为 Claude Code 构建本地知识图谱，代码审查 token 消耗降低 6.8 倍 | 为 Claude Code 构建本地知识图谱，代码审查 token 消耗降低 6.8 倍 | coding, 自动化, 需要开发 | [打开](https://github.com/tirth8205/code-review-graph) |
+| codegraph - 为 Claude Code 预索引的代码知识图谱，减少 Token 和工具调用，100% 本地运行 | 为 Claude Code 预索引的代码知识图谱，减少 Token 和工具调用，100% 本地运行 | coding, tool, 拿来就用, 自动化 | [打开](https://github.com/colbymchenry/codegraph) |
+| context-mode - AI编码代理上下文窗口优化，98%缩减率 | AI编码代理上下文窗口优化，98%缩减率 | ai, 需要开发, 构建Agent | [打开](https://github.com/mksglu/context-mode) |
+| CopilotKit - Agent 前端技术栈和 AG-UI 协议，支持 React + Angular，3 万 Star | Agent 前端技术栈和 AG-UI 协议，支持 React + Angular，3 万 Star | multi-agent, agent, 构建Agent, 需要开发 | [打开](https://github.com/CopilotKit/CopilotKit) |
+| crush - CharmBracelet 出品的 AI 编码 Agent | CharmBracelet 出品的 AI 编码 Agent | agent, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/charmbracelet/crush) |
+| CubeSandbox - 开源 Agent 沙箱，延迟 <60ms | 开源 Agent 沙箱，延迟 <60ms | multi-agent, agent, open-source, 需要开发, 构建Agent | [打开](https://github.com/Tencent/CubeSandbox) |
+| DeepCode - 开放编码 Agent (Paper2Code & Text2Web & Text2Backend) | 开放编码 Agent (Paper2Code & Text2Web & Text2Backend) | agent, coding, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/HKUDS/DeepCode) |
+| E2B - 开源安全沙箱执行环境，为 AI agent 提供真实世界工具，5k Star | 开源安全沙箱执行环境，为 AI agent 提供真实世界工具，5k Star | multi-agent, agent, open-source, tool, 需要开发, 构建Agent | [打开](https://github.com/e2b-dev/E2B) |
+| gpt-engineer - 自主代码生成Agent，开创描述需求获取代码范式 | 自主代码生成Agent，开创描述需求获取代码范式 | agent, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/AntonOsika/gpt-engineer) |
+| gstack - Garry Tan的Claude Code配置：23个工具充当CEO/设计师/工程经理等角色 | Garry Tan的Claude Code配置：23个工具充当CEO/设计师/工程经理等角色 | tool, 构建Agent, 学习参考 | [打开](https://github.com/garrytan/gstack) |
+| InsForge - 基于 Postgres 的后端平台，为编程 Agent 设计，含认证/存储/AI 网关 | 基于 Postgres 的后端平台，为编程 Agent 设计，含认证/存储/AI 网关 | coding, multi-agent, agent, 需要开发, 构建Agent | [打开](https://github.com/InsForge/InsForge) |
+| ios-simulator-skill - Claude Code 的 iOS 模拟器技能，优化 Claude 构建和测试 iOS 应用的能力 | Claude Code 的 iOS 模拟器技能，优化 Claude 构建和测试 iOS 应用的能力 | ai, 拿来就用, 自动化 | [打开](https://github.com/conorluddy/ios-simulator-skill) |
+| jcode - 专注于多会话工作流、无限定制性和性能的 Coding Agent Harness | 专注于多会话工作流、无限定制性和性能的 Coding Agent Harness。Rust 编写。 | multi-agent, coding, agent, 构建Agent, 拿来就用 | [打开](https://github.com/1jehuang/jcode) |
+| kiro-gateway - Kiro IDE/CLI的代理API网关，可使用免费Claude模型 | Kiro IDE/CLI的代理API网关，可使用免费Claude模型 | ai, 拿来就用, 部署运维 | [打开](https://github.com/jwadow/kiro-gateway) |
+| Martin-Loop - AI编码Agent的预算上限和审计追踪工具 | AI编码Agent的预算上限和审计追踪工具 | multi-agent, agent, tool, 自动化, 构建Agent | [打开](https://github.com/Keesan12/Martin-Loop) |
+| mlx-code - 基于MLX的Mac本地AI编码Agent，可在后院服务器上运行 | 基于MLX的Mac本地AI编码Agent，可在后院服务器上运行 | multi-agent, agent, coding, 构建Agent, 拿来就用 | [打开](https://github.com/JosefAlbers/mlx-code) |
+| open-swe - LangChain 出品的异步编码 Agent | LangChain 出品的异步编码 Agent | agent, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/langchain-ai/open-swe) |
+| OpenCLI - 将任何网站和工具变为 CLI，AI 原生运行时 | 将任何网站和工具变为 CLI，AI 原生运行时 | tool, 需要开发, 自动化 | [打开](https://github.com/jackwener/OpenCLI) |
+| opencode - 开源 AI 编码 Agent | 开源 AI 编码 Agent。 | open-source, multi-agent, coding, agent, 构建Agent, 拿来就用 | [打开](https://github.com/anomalyco/opencode) |
+| opengravity - 零安装BYOK的纯JS IDE克隆，AI Agent可在浏览器内Linux环境中操作 | 零安装BYOK的纯JS IDE克隆，AI Agent可在浏览器内Linux环境中操作 | multi-agent, agent, 构建Agent, 拿来就用 | [打开](https://github.com/ab-613/opengravity) |
+| OpenHands - AI 驱动的软件开发平台 | AI 驱动的软件开发平台 | ai, 构建Agent, 拿来就用 | [打开](https://github.com/OpenHands/OpenHands) |
+| OpenMonoAgent.ai - 开源无限 token 编码 agent，终端原生 | 开源无限 token 编码 agent，终端原生 | agent, open-source, multi-agent, 构建Agent, 拿来就用 | [打开](https://github.com/StartupHakk/OpenMonoAgent.ai) |
+| OpenSpec - 面向 AI Coding Assistant 的规格驱动开发(SDD)框架 | 面向 AI Coding Assistant 的规格驱动开发(SDD)框架。通过先定义规格、再由 AI 实现代码的方式，提升 AI 编程的可靠性和可预测性。 | framework, coding, 需要开发, 自动化 | [打开](https://github.com/Fission-AI/OpenSpec) |
+| polpo - 从手机控制Claude Code及其他AI Agent的远程管理工具 | 从手机控制Claude Code及其他AI Agent的远程管理工具 | multi-agent, agent, tool, 拿来就用, 构建Agent | [打开](https://github.com/pugliatechs/polpo) |
+| portless - 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具 | 用稳定的命名 URL 替代 localhost 端口号，面向人类和 Agent 的开发工具。 | tool, multi-agent, agent, 拿来就用, 部署运维 | [打开](https://github.com/vercel-labs/portless) |
+| proofshot - 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | 为AI编码Agent提供UI验证能力，让Agent能检查自己构建的界面 | multi-agent, agent, 自动化, 构建Agent | [打开](https://github.com/AmElmo/proofshot) |
+| public-apis - 公开 API 集合，开发者的必备参考 | 公开 API 集合，开发者的必备参考。 | ai, 学习参考, 需要开发 | [打开](https://github.com/public-apis/public-apis) |
 | re_gent - 专为 AI Agent 设计的版本控制系统 | 专为 AI Agent 设计的版本控制系统 | multi-agent, agent | [打开](https://github.com/regent-vcs/re_gent) |
 | react-doctor - 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | 检测 Agent 生成的 React 代码质量问题，自动诊断和修复建议 | multi-agent, agent | [打开](https://github.com/millionco/react-doctor) |
 | resurf - AI 浏览器 Agent 的现实可复现测试框架 | AI 浏览器 Agent 的现实可复现测试框架 | multi-agent, framework, agent | [打开](https://github.com/lightfeed/resurf) |

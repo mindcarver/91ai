@@ -6,39 +6,39 @@
 
 | 名称 | 概括 | 标签 | 链接 |
 | --- | --- | --- | --- |
-| A2UI - Google 出品的 Agent-to-UI 框架，将 AI Agent 输出转化为交互式用户界面 | Google 出品的 Agent-to-UI 框架，将 AI Agent 输出转化为交互式用户界面 | multi-agent, agent, framework | [打开](https://github.com/google/A2UI) |
-| ace-step-ui - 开源Suno替代品，ACE-Step AI音乐生成专业UI | 开源Suno替代品，ACE-Step AI音乐生成专业UI | open-source | [打开](https://github.com/fspecii/ace-step-ui) |
-| agent-lens - AI 编程 Agent 使用情况可视化仪表盘，追踪 Token 成本和工具调用 | AI 编程 Agent 使用情况可视化仪表盘，追踪 Token 成本和工具调用 | coding, multi-agent, tool, agent | [打开](https://github.com/naimjeem/agent-lens) |
-| agent-skills - 生产级 AI 编程 Agent 技能/提示词模式集合，30K+ Star | 生产级 AI 编程 Agent 技能/提示词模式集合，30K+ Star | coding, multi-agent, agent | [打开](https://github.com/addyosmani/agent-skills) |
-| agent-skills-eval - AI Agent 技能测试运行器 | AI Agent 技能测试运行器 | multi-agent, agent | [打开](https://github.com/darkrishabh/agent-skills-eval) |
-| agentic-inbox - Cloudflare 出品的自托管邮件客户端，内置 AI Agent，运行在 Workers 上 | Cloudflare 出品的自托管邮件客户端，内置 AI Agent，运行在 Workers 上 | multi-agent, agent | [打开](https://github.com/cloudflare/agentic-inbox) |
-| agentmemory - 基于真实基准测试的 AI 编程 Agent 持久化记忆方案，排名第一 | 基于真实基准测试的 AI 编程 Agent 持久化记忆方案，排名第一 | coding, multi-agent, agent | [打开](https://github.com/rohitg00/agentmemory) |
-| ai-cli - Vercel 出品终端 AI 生成工具 | Vercel 出品终端 AI 生成工具 | tool | [打开](https://github.com/vercel-labs/ai-cli) |
-| AI-Novel-Writing-Assistant - 面向长篇小说的 AI Native 开源系统，集成 Agent、世界观引擎、写作引擎、RAG | 面向长篇小说的 AI Native 开源系统，集成 Agent、世界观引擎、写作引擎、RAG。 | open-source, rag, multi-agent, agent | [打开](https://github.com/ExplosiveCoderflome/AI-Novel-Writing-Assistant) |
-| airllm - 单张 4GB GPU 推理 70B 大模型，极低显存推理方案 | 单张 4GB GPU 推理 70B 大模型，极低显存推理方案 | llm | [打开](https://github.com/lyogavin/airllm) |
-| AiToEarn - 用 AI 赚钱！AI 变现方法与实践合集 | 用 AI 赚钱！AI 变现方法与实践合集 | ai | [打开](https://github.com/yikart/AiToEarn) |
-| android-reverse-engineering-skill - Android 逆向工程 AI 技能 | Android 逆向工程 AI 技能。 | ai | [打开](https://github.com/SimoneAvogadro/android-reverse-engineering-skill) |
-| AngelSlim - 腾讯的 AI 模型压缩/加速框架 | 腾讯的 AI 模型压缩/加速框架。 | framework | [打开](https://github.com/Tencent/AngelSlim) |
-| autoresearch - Karpathy 的 AI 研究自动化 Agent，单 GPU 运行 | Karpathy 的 AI 研究自动化 Agent，单 GPU 运行 | agent, multi-agent | [打开](https://github.com/karpathy/autoresearch) |
-| BettaFish - 多智能体舆情分析助手(微舆)，预测趋势 | 多智能体舆情分析助手(微舆)，预测趋势 | ai | [打开](https://github.com/666ghj/BettaFish) |
-| byterover-cli - AI 编程 Agent 便携记忆层 | AI 编程 Agent 便携记忆层 | coding, multi-agent, agent | [打开](https://github.com/campfirein/byterover-cli) |
-| cherry-studio - AI生产力工作室，集成智能对话、自主Agent和300+助手 | AI生产力工作室，集成智能对话、自主Agent和300+助手 | agent, multi-agent | [打开](https://github.com/CherryHQ/cherry-studio) |
-| cocoindex - 面向长时间运行智能体的增量数据引擎 | 面向长时间运行智能体的增量数据引擎 | ai | [打开](https://github.com/cocoindex-io/cocoindex) |
-| codex-seo - Codex-first SEO Agent 技能套件，26 Agent + 24 TOML 工作流 | Codex-first SEO Agent 技能套件，26 Agent + 24 TOML 工作流 | coding, multi-agent, agent | [打开](https://github.com/AgriciDaniel/codex-seo) |
-| compliant-llm - AI Agent 合规审计工具 | AI Agent 合规审计工具 | agent, multi-agent, tool | [打开](https://github.com/fiddlecube/compliant-llm) |
+| A2UI - Google 出品的 Agent-to-UI 框架，将 AI Agent 输出转化为交互式用户界面 | Google 出品的 Agent-to-UI 框架，将 AI Agent 输出转化为交互式用户界面 | multi-agent, agent, framework, 构建Agent, 需要开发 | [打开](https://github.com/google/A2UI) |
+| ace-step-ui - 开源Suno替代品，ACE-Step AI音乐生成专业UI | 开源Suno替代品，ACE-Step AI音乐生成专业UI | open-source, 拿来就用 | [打开](https://github.com/fspecii/ace-step-ui) |
+| agent-lens - AI 编程 Agent 使用情况可视化仪表盘，追踪 Token 成本和工具调用 | AI 编程 Agent 使用情况可视化仪表盘，追踪 Token 成本和工具调用 | coding, multi-agent, tool, agent, 构建Agent, 部署运维 | [打开](https://github.com/naimjeem/agent-lens) |
+| agent-skills - 生产级 AI 编程 Agent 技能/提示词模式集合，30K+ Star | 生产级 AI 编程 Agent 技能/提示词模式集合，30K+ Star | coding, multi-agent, agent, 构建Agent, 学习参考 | [打开](https://github.com/addyosmani/agent-skills) |
+| agent-skills-eval - AI Agent 技能测试运行器 | AI Agent 技能测试运行器 | multi-agent, agent, 构建Agent | [打开](https://github.com/darkrishabh/agent-skills-eval) |
+| agentic-inbox - Cloudflare 出品的自托管邮件客户端，内置 AI Agent，运行在 Workers 上 | Cloudflare 出品的自托管邮件客户端，内置 AI Agent，运行在 Workers 上 | multi-agent, agent, 构建Agent, 自动化 | [打开](https://github.com/cloudflare/agentic-inbox) |
+| agentmemory - 基于真实基准测试的 AI 编程 Agent 持久化记忆方案，排名第一 | 基于真实基准测试的 AI 编程 Agent 持久化记忆方案，排名第一 | coding, multi-agent, agent, 构建Agent | [打开](https://github.com/rohitg00/agentmemory) |
+| ai-cli - Vercel 出品终端 AI 生成工具 | Vercel 出品终端 AI 生成工具 | tool, 拿来就用 | [打开](https://github.com/vercel-labs/ai-cli) |
+| AI-Novel-Writing-Assistant - 面向长篇小说的 AI Native 开源系统，集成 Agent、世界观引擎、写作引擎、RAG | 面向长篇小说的 AI Native 开源系统，集成 Agent、世界观引擎、写作引擎、RAG。 | open-source, rag, multi-agent, agent, 构建Agent, 需要开发 | [打开](https://github.com/ExplosiveCoderflome/AI-Novel-Writing-Assistant) |
+| airllm - 单张 4GB GPU 推理 70B 大模型，极低显存推理方案 | 单张 4GB GPU 推理 70B 大模型，极低显存推理方案 | llm, 需要开发, 部署运维 | [打开](https://github.com/lyogavin/airllm) |
+| AiToEarn - 用 AI 赚钱！AI 变现方法与实践合集 | 用 AI 赚钱！AI 变现方法与实践合集 | ai, 直接变现, 学习参考 | [打开](https://github.com/yikart/AiToEarn) |
+| android-reverse-engineering-skill - Android 逆向工程 AI 技能 | Android 逆向工程 AI 技能。 | ai, 构建Agent, 学习参考 | [打开](https://github.com/SimoneAvogadro/android-reverse-engineering-skill) |
+| AngelSlim - 腾讯的 AI 模型压缩/加速框架 | 腾讯的 AI 模型压缩/加速框架。 | framework, 需要开发, 部署运维 | [打开](https://github.com/Tencent/AngelSlim) |
+| autoresearch - Karpathy 的 AI 研究自动化 Agent，单 GPU 运行 | Karpathy 的 AI 研究自动化 Agent，单 GPU 运行 | agent, multi-agent, 构建Agent, 自动化 | [打开](https://github.com/karpathy/autoresearch) |
+| BettaFish - 多智能体舆情分析助手(微舆)，预测趋势 | 多智能体舆情分析助手(微舆)，预测趋势 | ai, 构建Agent | [打开](https://github.com/666ghj/BettaFish) |
+| byterover-cli - AI 编程 Agent 便携记忆层 | AI 编程 Agent 便携记忆层 | coding, multi-agent, agent, 构建Agent | [打开](https://github.com/campfirein/byterover-cli) |
+| cherry-studio - AI生产力工作室，集成智能对话、自主Agent和300+助手 | AI生产力工作室，集成智能对话、自主Agent和300+助手 | agent, multi-agent, 拿来就用 | [打开](https://github.com/CherryHQ/cherry-studio) |
+| cocoindex - 面向长时间运行智能体的增量数据引擎 | 面向长时间运行智能体的增量数据引擎 | ai, 构建Agent, 需要开发 | [打开](https://github.com/cocoindex-io/cocoindex) |
+| codex-seo - Codex-first SEO Agent 技能套件，26 Agent + 24 TOML 工作流 | Codex-first SEO Agent 技能套件，26 Agent + 24 TOML 工作流 | coding, multi-agent, agent, 构建Agent, 自动化 | [打开](https://github.com/AgriciDaniel/codex-seo) |
+| compliant-llm - AI Agent 合规审计工具 | AI Agent 合规审计工具 | agent, multi-agent, tool, 构建Agent, 部署运维 | [打开](https://github.com/fiddlecube/compliant-llm) |
 | CopyWeb.ai - AI内容生成器 | AI驱动的内容生成平台，用于营销文案、文章和创意写作 | ai, copywriting, content-generation, marketing, automation, web-tool | - |
-| crawl4ai - 面向LLM的开源友好网页爬虫与数据提取工具 | 面向LLM的开源友好网页爬虫与数据提取工具 | tool, llm, open-source | [打开](https://github.com/unclecode/crawl4ai) |
-| DeepSeek-TUI - DeepSeek模型的终端编码Agent，TUI界面，在终端中直接使用AI编程 | DeepSeek模型的终端编码Agent，TUI界面，在终端中直接使用AI编程 | coding, agent, multi-agent | [打开](https://github.com/Hmbown/DeepSeek-TUI) |
-| DeepTutor - 深度学习辅导工具 | 深度学习辅导工具。 | tool | [打开](https://github.com/HKUDS/DeepTutor) |
-| dflash - DFlash: 基于块扩散的Flash推测解码，加速LLM推理 | DFlash: 基于块扩散的Flash推测解码，加速LLM推理 | llm | [打开](https://github.com/z-lab/dflash) |
-| firecrawl - 为 AI 提供网页搜索、抓取和交互的 API 服务 | 为 AI 提供网页搜索、抓取和交互的 API 服务 | ai | [打开](https://github.com/firecrawl/firecrawl) |
-| formative-memory - 受心理学启发的 AI Agent 记忆系统，包含联想、遗忘和综合功能 | 受心理学启发的 AI Agent 记忆系统，包含联想、遗忘和综合功能 | multi-agent, agent | [打开](https://github.com/jarimustonen/formative-memory) |
-| free-claude-code - 免费使用 Claude Code 的工具，支持终端、VSCode 扩展和 Discord 等多种方式 | 免费使用 Claude Code 的工具，支持终端、VSCode 扩展和 Discord 等多种方式。 | tool, coding | [打开](https://github.com/Alishahryar1/free-claude-code) |
-| free-llm-api-resources - 免费 LLM API 资源列表 | 免费 LLM API 资源列表 | llm | [打开](https://github.com/cheahjs/free-llm-api-resources) |
-| freemocap - 开源免费动作捕捉系统 | 开源免费动作捕捉系统 | open-source | [打开](https://github.com/freemocap/freemocap) |
-| GhostTrack - OSINT/安全追踪工具 | OSINT/安全追踪工具。 | tool | [打开](https://github.com/HunxByts/GhostTrack) |
+| crawl4ai - 面向LLM的开源友好网页爬虫与数据提取工具 | 面向LLM的开源友好网页爬虫与数据提取工具 | tool, llm, open-source, 自动化, 需要开发 | [打开](https://github.com/unclecode/crawl4ai) |
+| DeepSeek-TUI - DeepSeek模型的终端编码Agent，TUI界面，在终端中直接使用AI编程 | DeepSeek模型的终端编码Agent，TUI界面，在终端中直接使用AI编程 | coding, agent, multi-agent, 拿来就用, 构建Agent | [打开](https://github.com/Hmbown/DeepSeek-TUI) |
+| DeepTutor - 深度学习辅导工具 | 深度学习辅导工具。 | tool, 学习参考 | [打开](https://github.com/HKUDS/DeepTutor) |
+| dflash - DFlash: 基于块扩散的Flash推测解码，加速LLM推理 | DFlash: 基于块扩散的Flash推测解码，加速LLM推理 | llm, 需要开发, 部署运维 | [打开](https://github.com/z-lab/dflash) |
+| firecrawl - 为 AI 提供网页搜索、抓取和交互的 API 服务 | 为 AI 提供网页搜索、抓取和交互的 API 服务 | ai, 自动化, 需要开发 | [打开](https://github.com/firecrawl/firecrawl) |
+| formative-memory - 受心理学启发的 AI Agent 记忆系统，包含联想、遗忘和综合功能 | 受心理学启发的 AI Agent 记忆系统，包含联想、遗忘和综合功能 | multi-agent, agent, 构建Agent | [打开](https://github.com/jarimustonen/formative-memory) |
+| free-claude-code - 免费使用 Claude Code 的工具，支持终端、VSCode 扩展和 Discord 等多种方式 | 免费使用 Claude Code 的工具，支持终端、VSCode 扩展和 Discord 等多种方式。 | tool, coding, 拿来就用 | [打开](https://github.com/Alishahryar1/free-claude-code) |
+| free-llm-api-resources - 免费 LLM API 资源列表 | 免费 LLM API 资源列表 | llm, 学习参考 | [打开](https://github.com/cheahjs/free-llm-api-resources) |
+| freemocap - 开源免费动作捕捉系统 | 开源免费动作捕捉系统 | open-source, 拿来就用 | [打开](https://github.com/freemocap/freemocap) |
+| GhostTrack - OSINT/安全追踪工具 | OSINT/安全追踪工具。 | tool, 自动化 | [打开](https://github.com/HunxByts/GhostTrack) |
 | Google Gemini全栈LangGraph快速入门 | Google构建Gemini和LangGraph全栈应用的快速入门模板 | google, gemini, fullstack, langgraph, quickstart, ai | - |
-| goose-skills - 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | agent, open-source, multi-agent | [打开](https://github.com/athina-ai/goose-skills) |
+| goose-skills - 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | 125个开源 GTM Skills，让 Claude Code/Codex/Cursor 等 AI 编码 agent 自动化销售和营销任务 | agent, open-source, multi-agent, 直接变现, 自动化 | [打开](https://github.com/athina-ai/goose-skills) |
 | hyperframes - 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | 用 HTML 编写、渲染为视频的工具，专为 Agent 设计 | multi-agent, agent, tool | [打开](https://github.com/heygen-com/hyperframes) |
 | Kotaemon - 文档问答系统 | 基于RAG的高级文档问答系统，支持多模态 | ai, knowledge, management, rag, document, qa | - |
 | langextract - Google 开源的语言提取工具 | Google 开源的语言提取工具。 | open-source, tool | [打开](https://github.com/google/langextract) |

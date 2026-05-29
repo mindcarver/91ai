@@ -6,14 +6,14 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 
 ## Tools
 
-| 工具 | 定位 | 适合场景 | 专题 |
-| --- | --- | --- | --- |
-| Claude Code | 终端 AI Coding Agent | 复杂代码任务、仓库级修改、hooks、subagents、MCP | [查看](./claude-code.md) |
-| OpenAI Codex | AI Coding Agent | 自动实现、调试、代码协作、GitHub Action、MCP | [查看](./openai-codex.md) |
-| Cursor | AI IDE | 日常开发、项目问答、inline edit、rules、MCP | [查看](./cursor.md) |
-| Cline | VS Code Agent 插件 | IDE 内 agent、命令审批、checkpoints、MCP marketplace | [查看](./cline.md) |
-| Continue | 开源 AI Coding 助手 | 可配置模型、source-controlled AI checks、团队规则 | [查看](./continue.md) |
-| Gemini CLI | 终端 AI Coding Agent | 开源 CLI、GitHub Actions、sandbox、extensions | [查看](./gemini-cli.md) |
+| 工具 | 定位 | 难度 | 费用 | 适合谁 | 就绪度 | 专题 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | 终端 AI Coding Agent | 中 | 付费 | 后端/DevOps/重度终端 | 生产可用 | [查看](./claude-code.md) |
+| OpenAI Codex | AI Coding Agent | 中 | 付费 | 全栈/GitHub 用户 | 生产可用 | [查看](./openai-codex.md) |
+| Cursor | AI IDE | 低 | 付费 | 全栈/IDE 用户 | 生产可用 | [查看](./cursor.md) |
+| Cline | VS Code Agent 插件 | 中 | 按 API 用量 | 前端/VS Code/MCP 用户 | 生产可用 | [查看](./cline.md) |
+| Continue | 开源 AI Coding 助手 | 高 | 免费 | 团队/开源偏好/CI | 生产可用 | [查看](./continue.md) |
+| Gemini CLI | 终端 AI Coding Agent | 中 | 免费额度 | 全栈/Google 生态 | 快速迭代中 | [查看](./gemini-cli.md) |
 
 ## 工程化实战系列
 

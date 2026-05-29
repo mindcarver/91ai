@@ -1,0 +1,136 @@
+# 按场景找项目
+
+481 个项目按使用场景重新组织。从场景进入，再到分类文件查看详情。
+
+每个场景精选 10-15 个代表性项目，完整列表见对应分类文件。
+
+## 拿来就用
+
+安装即用、有 GUI 或 API 直接可用的成品工具。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| Cursor | AI IDE，日常开发，inline edit + rules + MCP | [开发者工具](./developer-tools.md) | [打开](https://cursor.sh) |
+| open-webui | 开源 LLM Web UI，支持 Ollama、OpenAI 兼容 API | [AI 工具](./ai-tools.md) | [打开](https://github.com/open-webui/open-webui) |
+| cherry-studio | AI 生产力工作室，集成 300+ 助手和自主 Agent | [AI 工具](./ai-tools.md) | [打开](https://github.com/CherryHQ/cherry-studio) |
+| Flowise | 拖拽式 AI Agent 构建工具，低代码平台 | [Agent](./agents.md) | [打开](https://github.com/FlowiseAI/Flowise) |
+| langflow | 构建和部署 AI Agent 和工作流的可视化平台 | [AI 工具](./ai-tools.md) | [打开](https://github.com/langflow-ai/langflow) |
+| Kotaemon | 基于 RAG 的文档问答系统，支持多模态 | [AI 工具](./ai-tools.md) | [打开](https://github.com/cinnamon/kotaemon) |
+| LibreChat | 增强版 ChatGPT 克隆，支持多智能体和 MCP | [AI 工具](./ai-tools.md) | [打开](https://github.com/danny-avila/LibreChat) |
+| ppt-master | AI 从任何文档生成原生可编辑 PPTX | [AI 工具](./ai-tools.md) | [打开](https://github.com/hugohe3/ppt-master) |
+| vexa | 开源会议转录 API，支持 Meet/Teams/Zoom | [AI 工具](./ai-tools.md) | [打开](https://github.com/Vexa-ai/vexa) |
+| agency-agents-zh | 211 个即插即用 AI 专家角色，支持 16 种工具 | [Agent](./agents.md) | [打开](https://github.com/jnMetaCode/agency-agents-zh) |
+| nanobrowser | Chrome 扩展，AI 驱动的多 Agent 网页自动化 | [AI 工具](./ai-tools.md) | [打开](https://github.com/nanobrowser/nanobrowser) |
+| pocket-tts | CPU 上运行的轻量级 TTS 语音合成 | [AI 工具](./ai-tools.md) | [打开](https://github.com/kyutai-labs/pocket-tts) |
+
+## 构建智能体
+
+Agent 框架、运行时、编排工具和记忆系统。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| crewAI | 基于角色的自主 AI Agent 编排框架 | [Agent](./agents.md) | [打开](https://github.com/crewAIInc/crewAI) |
+| langgraph | 基于图的工作流构建弹性语言 Agent，行业标准 | [Agent](./agents.md) | [打开](https://github.com/langchain-ai/langgraph) |
+| autogen | 微软旗舰多智能体框架，支持 Agent 对话和复杂工作流 | [Agent](./agents.md) | [打开](https://github.com/microsoft/autogen) |
+| adk-python | Google 官方 Agent Development Kit，1.9 万 Star | [Agent](./agents.md) | [打开](https://github.com/google/adk-python) |
+| openai-agents-python | OpenAI 官方轻量级多 Agent 工作流框架 | [Agent](./agents.md) | [打开](https://github.com/openai/openai-agents-python) |
+| pydantic-ai | Pydantic 团队推出的类型安全 AI Agent 框架 | [Agent](./agents.md) | [打开](https://github.com/pydantic/pydantic-ai) |
+| mastra | TypeScript AI Agent 应用框架，Gatsby 团队出品 | [Agent](./agents.md) | [打开](https://github.com/mastra-ai/mastra) |
+| letta | 有状态 Agent 平台，支持高级记忆和自我改进 | [Agent](./agents.md) | [打开](https://github.com/letta-ai/letta) |
+| openai-agents-js | OpenAI 官方轻量级多智能体 TypeScript 框架 | [Agent](./agents.md) | [打开](https://github.com/openai/openai-agents-js) |
+| agentscope | 可观测可信赖的 Agent 构建平台，阿里达摩院出品，2.5 万 Star | [Agent](./agents.md) | [打开](https://github.com/agentscope-ai/agentscope) |
+| browser-use | 让网站对 AI Agent 可访问，自动化在线任务 | [Agent](./agents.md) | [打开](https://github.com/browser-use/browser-use) |
+| deer-flow | 字节跳动开源的多 Agent 工作流框架 | [Agent](./agents.md) | [打开](https://github.com/bytedance/deer-flow) |
+| astron-agent | 科大讯飞企业级 Agent 工作流平台 | [Agent](./agents.md) | [打开](https://github.com/iflytek/astron-agent) |
+| claude-agent-sdk-python | Anthropic 官方 Claude Agent SDK Python 版 | [开发者工具](./developer-tools.md) | [打开](https://github.com/anthropics/claude-agent-sdk-python) |
+
+## 自动化工作流
+
+工作流引擎、自动化平台和任务编排。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| AutoGPT | 自主 AI 智能体先驱，支持多模态任务自动化 | [Agent](./agents.md) | [打开](https://github.com/Significant-Gravitas/AutoGPT) |
+| gpt-researcher | 自主深度研究 Agent，支持多智能体研究管线 | [Agent](./agents.md) | [打开](https://github.com/assafelovic/gpt-researcher) |
+| MetaGPT | 多智能体框架，模拟软件公司角色协作 | [Agent](./agents.md) | [打开](https://github.com/FoundationAgents/MetaGPT) |
+| crawl4ai | 面向 LLM 的开源网页爬虫与数据提取工具 | [AI 工具](./ai-tools.md) | [打开](https://github.com/unclecode/crawl4ai) |
+| CopilotKit | Agent 前端技术栈和 AG-UI 协议，3 万 Star | [开发者工具](./developer-tools.md) | [打开](https://github.com/CopilotKit/CopilotKit) |
+| compose-for-agents | Docker 官方 Agent 编排方案 | [DevOps](./devops.md) | [打开](https://github.com/docker/compose-for-agents) |
+| mcp-use | 全栈 MCP 框架，为 Agent 开发 MCP 服务器 | [集成与 MCP](./integrations.md) | [打开](https://github.com/mcp-use/mcp-use) |
+| composio | Agent 集成 SDK，支持 Anthropic、OpenAI、MCP、OAuth | [集成与 MCP](./integrations.md) | [打开](https://github.com/warpdot-dev/composio) |
+| 12-factor-agents | LLM Agent 生产就绪的 12 个最佳实践原则 | [Agent](./agents.md) | [打开](https://github.com/humanlayer/12-factor-agents) |
+| pandaflow | 开源可视化 AI Agent 构建器，节点式工作流编辑器 | [Agent](./agents.md) | [打开](https://github.com/pandastack-io/pandaflow) |
+| mission-control | 自托管 AI 智能体编排仪表板，任务调度和成本追踪 | [Agent](./agents.md) | [打开](https://github.com/builderz-labs/mission-control) |
+
+## 需要二次开发
+
+SDK、框架、需要技术集成的库和平台。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| openai-agents-python | OpenAI 官方多 Agent 工作流 Python 框架 | [Agent](./agents.md) | [打开](https://github.com/openai/openai-agents-python) |
+| camel | 学术背景的多智能体框架，聚焦 Agent 通信和角色扮演 | [Agent](./agents.md) | [打开](https://github.com/camel-ai/camel) |
+| spring-ai-alibaba | 阿里巴巴 Java Agentic AI 框架 | [Agent](./agents.md) | [打开](https://github.com/alibaba/spring-ai-alibaba) |
+| voltagent | 开源可观测性优先的 TypeScript AI Agent 框架 | [Agent](./agents.md) | [打开](https://github.com/VoltAgent/voltagent) |
+| E2B | 开源安全沙箱执行环境，为 AI Agent 提供工具 | [开发者工具](./developer-tools.md) | [打开](https://github.com/e2b-dev/E2B) |
+| sglang | 高性能 LLM 和多模态模型推理服务框架 | [AI 工具](./ai-tools.md) | [打开](https://github.com/sgl-project/sglang) |
+| mcp-context-forge | IBM 的 AI 网关/注册中心，统一 MCP、A2A、REST/gRPC | [集成与 MCP](./integrations.md) | [打开](https://github.com/IBM/mcp-context-forge) |
+| playwright-mcp | 微软 Playwright MCP 服务器，让 AI Agent 控制浏览器 | [集成与 MCP](./integrations.md) | [打开](https://github.com/microsoft/playwright-mcp) |
+| servers | Model Context Protocol 官方服务器集合 | [集成与 MCP](./integrations.md) | [打开](https://github.com/modelcontextprotocol/servers) |
+| koog | JetBrains 出品 JVM Agent 框架，企业级容错 | [Agent](./agents.md) | [打开](https://github.com/JetBrains/koog) |
+| Upsonic | 构建 AI Agent 的 Python 框架，支持 MCP、RAG | [Agent](./agents.md) | [打开](https://github.com/Upsonic/Upsonic) |
+| swarms | 企业级生产就绪的多智能体编排框架 | [Agent](./agents.md) | [打开](https://github.com/kyegomez/swarms) |
+
+## 直接变现
+
+可以用来赚钱的工具、平台和项目。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| AiToEarn | AI 变现方法与实践合集 | [AI 工具](./ai-tools.md) | [打开](https://github.com/yikart/AiToEarn) |
+| bunny-agent | 通过原生 AI SDK UI 构建 Coding Agent SaaS 的开源框架 | [Agent](./agents.md) | [打开](https://github.com/buda-ai/bunny-agent) |
+| streetai-aaas | 用自然语言构建 AI Agent 部署到 WhatsApp/Telegram，支持 Stripe 支付 | [Agent](./agents.md) | [打开](https://github.com/Tem-Degu/streetai-aaas) |
+| gpt-engineer | 自主代码生成 Agent，描述需求获取代码 | [开发者工具](./developer-tools.md) | [打开](https://github.com/AntonOsika/gpt-engineer) |
+| ViMax | Agentic 视频生成框架，集成导演、编剧、制片于一体 | [AI 工具](./ai-tools.md) | [打开](https://github.com/HKUDS/ViMax) |
+| goose-skills | 125 个开源 GTM Skills，AI 编码 Agent 自动化销售和营销 | [AI 工具](./ai-tools.md) | [打开](https://github.com/athina-ai/goose-skills) |
+| AI-Novel-Writing-Assistant | 面向长篇小说的 AI Native 开源系统，集成 Agent 和 RAG | [AI 工具](./ai-tools.md) | [打开](https://github.com/ExplosiveCoderflome/AI-Novel-Writing-Assistant) |
+| nocobase | 开源 AI + 无代码平台，快速构建业务系统 | [AI 工具](./ai-tools.md) | [打开](https://github.com/nocobase/nocobase) |
+| InsForge | 基于 Postgres 的后端平台，为编程 Agent 设计 | [开发者工具](./developer-tools.md) | [打开](https://github.com/InsForge/InsForge) |
+| codegraph | Claude Code 预索引的代码知识图谱，减少 Token 消耗 | [开发者工具](./developer-tools.md) | [打开](https://github.com/colbymchenry/codegraph) |
+| pixocial/gfx | AI 照片增强和背景移除 SDK，适合电商场景集成 | [AI 工具](./ai-tools.md) | [打开](https://github.com/pixocial/gfx) |
+
+## 学习研究
+
+教程、课程、实践指南和知识资料。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| awesome-llm-apps | 100+ 可运行的 AI Agent & RAG 应用集合 | [Agent](./agents.md) | [打开](https://github.com/Shubhamsaboo/awesome-llm-apps) |
+| GenAI_Agents | 50+ 生成式 AI Agent 技术教程和实现，5k Star | [教程](./tutorial.md) | [打开](https://github.com/NirDiamant/GenAI_Agents) |
+| LLMs-from-scratch | PyTorch 中从零实现 ChatGPT 级别的 LLM | [教程](./tutorial.md) | [打开](https://github.com/rasbt/LLMs-from-scratch) |
+| dive-into-llms | 《动手学大模型》系列编程实践教程 | [教程](./tutorial.md) | [打开](https://github.com/Lordog/dive-into-llms) |
+| hello-agents | 《从零开始构建智能体》中文教程 | [教程](./tutorial.md) | [打开](https://github.com/datawhalechina/hello-agents) |
+| easy-vibe | Vibe Coding 2026 入门编程课程，面向零基础 | [教程](./tutorial.md) | [打开](https://github.com/datawhalechina/easy-vibe) |
+| minimind | 2 小时从零训练 64M 参数 LLM 的教学项目 | [教程](./tutorial.md) | [打开](https://github.com/jingyaogong/minimind) |
+| awesome-agentic-ai-zh | AI Agent 中文学习路线图（三语对照） | [教程](./tutorial.md) | [打开](https://github.com/WenyuChiou/awesome-agentic-ai-zh) |
+| learn-claude-code | 从零构建类 Claude Code Agent 的教学项目 | [教程](./tutorial.md) | [打开](https://github.com/shareAI-lab/learn-claude-code) |
+| 12-factor-agents | LLM Agent 生产就绪的 12 个最佳实践原则 | [Agent](./agents.md) | [打开](https://github.com/humanlayer/12-factor-agents) |
+| vibe-coding-cn | 中文 Vibe Coding 入门到精通教程 | [教程](./tutorial.md) | [打开](https://github.com/tukuaiai/vibe-coding-cn) |
+| unsloth | 本地训练开源模型，新增 Web UI，降低训练门槛 | [AI 工具](./ai-tools.md) | [打开](https://github.com/unslothai/unsloth) |
+
+## 部署运维
+
+DevOps、基础设施、监控和平台工程。
+
+| 项目 | 概括 | 来源 | 链接 |
+| --- | --- | --- | --- |
+| compose-for-agents | Docker 官方 Agent 编排方案 | [DevOps](./devops.md) | [打开](https://github.com/docker/compose-for-agents) |
+| kubeastra | 开源 AI Agent，自动调试和恢复 Kubernetes Pod | [DevOps](./devops.md) | [打开](https://github.com/kubeastra/kubeastra) |
+| kstack | K8s 监控排障 Claude Code 技能包 | [DevOps](./devops.md) | [打开](https://github.com/kubetail-org/kstack) |
+| opensre | 开源 SRE 平台 | [DevOps](./devops.md) | [打开](https://github.com/Tracer-Cloud/opensre) |
+| agent-scan | Snyk 推出的 AI Agent 安全扫描器 | [DevOps](./devops.md) | [打开](https://github.com/snyk/agent-scan) |
+| ProcMon-MCP | 进程监控 MCP，安全分析 Agent 辅助 | [DevOps](./devops.md) | [打开](https://github.com/0xhackerfren/ProcMon-MCP) |
+| klaw.sh | Kubernetes for AI agents，管理 Agent 部署和扩缩容 | [Agent](./agents.md) | [打开](https://github.com/klawsh/klaw.sh) |
+| officeos | 开源基础设施平台，用于扩展和管理 AI Agent | [Agent](./agents.md) | [打开](https://github.com/officeos-co/officeos) |
+| airflow-steward | Apache 基金会 AI 辅助维护 Agent | [DevOps](./devops.md) | [打开](https://github.com/apache/airflow-steward) |
+| shark | 面向 AI Agent 的开源认证系统，Go 语言实现 | [开发者工具](./developer-tools.md) | [打开](https://github.com/shark-auth/shark) |
