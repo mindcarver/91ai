@@ -6,6 +6,8 @@
 
 > 目标：帮助技术人从 LLM API 使用者，逐步成长为能设计、评测、上线 Agent 系统的开发者。
 
+**前置阅读：** 不确定自己需要 Agent、Workflow、RAG 还是 Fine-tune？先看 [AI 架构决策指南](../ai-architecture-decisions.md)，5 分钟确认方案方向。
+
 Agent 学习不要从“多 Agent 框架”开始。更合理的路线是先理解 LLM 应用基础，再进入工具调用、工作流、记忆、评测、权限和生产化。
 
 ## 资料筛选原则

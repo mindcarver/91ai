@@ -22,6 +22,7 @@
 | 身份路线图 | 我是谁，我应该先学什么 | [Role Learning Paths](./paths/) |
 | AI Coding 图谱 | 哪些工具能进入真实开发流程 | [AI Coding](./ai-coding/) |
 | Agent 学习图谱 | 如何从 API 走到可上线 Agent | [Agent Learning Path](./agent/) |
+| 架构决策图谱 | 面对需求该选 RAG / Fine-tune / Agent / Workflow | [AI 架构决策指南](./ai-architecture-decisions.md) |
 | 项目生态图谱 | 有哪些可研究、可试用、可二次整理的项目 | [Project Collections](./project-collections/) |
 | 评测图谱 | 如何判断工具和方案是否真的可用 | [Evaluation System](./README.md#evaluation-system) |
 | 技术雷达 | 哪些方向值得投入、观察或谨慎使用 | [Technology Radar](./README.md#technology-radar) |
