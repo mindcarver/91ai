@@ -1,0 +1,275 @@
+# Superpowers 进阶 · dispatching-parallel-agents：并行 subagent
+
+> 更新日期：2025/06
+
+**TL;DR：** 3+ 个独立失败时串行调查是浪费。每个失败独立，可以并行。每个 agent 分配一个问题域，精确定义范围和约束。不共享状态、不互相干扰。工程手段：独立范围、约束边界、验证无冲突后集成。和 SDD（subagent-driven-development）配合：SDD 串行执行任务，dispatching 并行调查问题。
+
+## 为什么要并行
+
+6 个测试失败，3 个文件。串行调查：修第一个（15 分钟），修第二个（20 分钟），修第三个（10 分钟）。总计 45 分钟。
+
+并行调查：同时派 3 个 agent，各负责一个文件。总计 15 分钟——最慢的那个的时间。
+
+Superpowers 的原则：**独立问题并行处理，相关问题串行调查。**
+
+关键判断是「独立性」。如果修 A 可能修好 B，它们相关，串行。如果 A 和 B 毫无关系，并行。
+
+## 什么时候能并行
+
+### 能并行的信号
+
+**3+ 个失败，满足以下条件：**
+
+- 不同文件/模块
+- 不同根因（不是连锁失败）
+- 无共享状态修改
+- 无依赖关系（不需要 A 的结果修 B）
+
+**示例：**
+```
+agent-tool-abort.test.ts: 3 失败（timing issues）
+batch-completion-behavior.test.ts: 2 失败（tools not executing）
+tool-approval-race-conditions.test.ts: 1 失败（execution count = 0）
+```
+
+这三个独立——修 abort logic 不影响 batch completion，修 completion 不影响 race conditions。并行。
+
+### 不能并行的信号
+
+**以下情况串行：**
+
+- **连锁失败** - 修第一个可能修复其他
+  - 示例：API 调用失败导致 5 个下游测试挂了。修 API 可能全修好。
+  
+- **需要全系统上下文** - 理解问题需要看整个系统
+  - 示例：性能问题、内存泄漏、架构级 bug
+  
+- **探索性调试** - 你不知道什么坏了
+  - 示例：生产故障，日志不足，需要边查边假设
+  
+- **共享状态** - Agent 会互相干扰
+  - 示例：两个 agent 要编辑同一个文件，或用同一个数据库
+
+**判断方法：** 问「如果修好 A，B 还会坏吗？」如果答案是「不一定或不会」，它们独立。如果答案是「很可能不会」，它们相关。
+
+## Agent Prompt 结构
+
+好 prompt 的三个要素：**聚焦、自包含、输出明确。**
+
+### 聚焦
+
+**❌ 错：** "Fix all the tests"
+**✅ 对：** "Fix agent-tool-abort.test.ts"
+
+太 broad 的 agent 会迷失方向。聚焦到单一文件或子系统。
+
+### 自包含
+
+**❌ 错：** "Fix the race condition"
+**✅ 对：**
+```markdown
+Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
+
+1. "should abort tool with partial output capture" - expects 'interrupted at' in message
+2. "should handle mixed completed and aborted tools" - fast tool aborted instead of completed
+3. "should properly track pendingToolCount" - expects 3 results but gets 0
+```
+
+Agent 需要**所有理解问题的上下文**。不要假设它能访问你的会话历史或错误日志。复制粘贴错误信息。
+
+### 输出明确
+
+**❌ 错：** "Fix it"
+**✅ 对：** "Return: Summary of what you found and what you fixed."
+
+**✅ 对：**
+```markdown
+Your task:
+1. Read the test file and understand what each test verifies
+2. Identify root cause - timing issues or actual bugs?
+3. Fix by:
+   - Replacing arbitrary timeouts with event-based waiting
+   - Fixing bugs in abort implementation if found
+   - Adjusting test expectations if testing changed behavior
+
+Return: Summary of what you found and what you fixed.
+```
+
+明确输出让集成更容易。你知道每个 agent 做了什么。
+
+## 避免冲突的工程手段
+
+并行最大的风险是 agent 冲突——两个 agent 改同一个文件、改同一行代码、或改出互相破坏的逻辑。
+
+### 手段 1：独立范围
+
+每个 agent 分配**互斥的范围**：
+
+```
+Agent 1: src/agents/agent-tool-abort.test.ts
+Agent 2: src/batch/batch-completion-behavior.test.ts
+Agent 3: src/approvals/tool-approval-race-conditions.test.ts
+```
+
+文件级隔离是最简单的方式。如果必须改同一个文件，用函数级或模块级隔离：
+
+```
+Agent 1: 修复 abortHandler() 函数
+Agent 2: 修复 completionTracker() 函数
+Agent 3: 修复 approvalRaceGuard() 函数
+```
+
+明确声明「只改这个函数，不动其他」。
+
+### 手段 2：约束边界
+
+在 prompt 里加**负向约束**：
+
+```markdown
+Constraints:
+- Do NOT change files outside src/agents/agent-tool-abort.test.ts
+- Do NOT modify production code in src/agents/abort.ts
+- Do NOT change test expectations without justification
+- If production code needs changes, state clearly what and why
+```
+
+负向约束防止 scope creep。Agent 收到明确「不能做什么」的信号。
+
+### 手段 3：验证无冲突后集成
+
+Agent 返回后，**不直接合并**：
+
+```
+1. Review each summary
+2. Check for conflicts
+3. Run full suite
+4. Integrate all changes
+```
+
+**检查冲突：**
+- 两个 agent 改同一行？
+- 一个 agent 删除另一个添加的代码？
+- 改动互相矛盾（一个加超时，一个删除超时）？
+
+**如果冲突：** 手动合并或重新派 agent 处理冲突。别自动合并——冲突暗示边界定义不够清晰。
+
+## 与 SDD 的组合方式
+
+**Subagent-Driven Development (SDD)** 和 **Dispatching Parallel Agents** 是互补模式，不是替代关系。
+
+### SDD - 串行执行任务
+
+```
+任务 1 → Subagent A → Review → 集成
+任务 2 → Subagent B → Review → 集成
+任务 3 → Subagent C → Review → 集成
+```
+
+**适用：** 执行计划中的任务。任务有依赖顺序——任务 2 可能依赖任务 1 的代码。
+
+### Dispatching - 并行调查问题
+
+```
+问题域 A → Agent 1
+问题域 B → Agent 2  （同时执行）
+问题域 C → Agent 3
+
+集成 → 验证
+```
+
+**适用：** 调查多个独立失败。调查无依赖顺序——A 的调查不影响 B。
+
+### 组合模式
+
+**场景：** 执行计划时遇到多个失败
+
+```
+SDD 执行任务 → 发现 3 个测试失败
+→ 切换到 Dispatching 模式
+  → 派 3 个 agent 并行调查
+  → 集成修复
+→ 回到 SDD 模式继续执行下一个任务
+```
+
+## 真实案例
+
+**场景：** 大重构后 6 个测试失败，3 个文件
+
+**失败：**
+- agent-tool-abort.test.ts: 3 失败（timing issues）
+- batch-completion-behavior.test.ts: 2 失败（tools not executing）
+- tool-approval-race-conditions.test.ts: 1 失败（execution count = 0）
+
+**决策：** 独立域——abort logic 独立于 batch completion 独立于 race conditions
+
+**派发：**
+```
+Agent 1 → Fix agent-tool-abort.test.ts
+Agent 2 → Fix batch-completion-behavior.test.ts
+Agent 3 → Fix tool-approval-race-conditions.test.ts
+```
+
+**结果：**
+- Agent 1: 用 event-based waiting 替换超时
+- Agent 2: 修 event structure bug（threadId 放错位置）
+- Agent 3: 加等待 async tool execution 完成
+
+**集成：** 所有修复独立，无冲突，全绿
+
+**节省时间：** 3 个问题并行解决 vs 串行
+
+## 关键收益
+
+1. **并行化** - 多个调查同时发生
+2. **聚焦** - 每个 agent 有窄范围，更少上下文跟踪
+3. **独立** - Agent 不互相干扰
+4. **速度** - 3 个问题在 1 个问题的时间里解决
+
+## 常见错误
+
+**太 broad**
+- 问题：Agent 迷失
+- 修复：聚焦到单一文件或子系统
+
+**无上下文**
+- 问题：Agent 不知道从哪开始
+- 修复：复制粘贴错误消息和测试名
+
+**无约束**
+- 问题：Agent 可能重构所有东西
+- 修复：加约束「Do NOT change production code」或「Fix tests only」
+
+**模糊输出**
+- 问题：不知道改了什么
+- 修复：明确「Return summary of root cause and changes」
+
+## 验证清单
+
+Agent 返回后：
+
+1. **读每个 summary** - 理解什么变了
+2. **检查冲突** - Agent 改同一代码了吗？
+3. **跑完整 suite** - 验证所有修复一起工作
+4. **Spot check** - Agent 可能犯系统性错误
+
+## 权衡与局限
+
+并行 dispatch 不是银弹。
+
+**管理复杂度：** 3 个 agent 比 1 个 agent 难管理。你需要跟踪 3 份输出、检查 3 组冲突、集成 3 组改变。复杂度是 O(n)，n 是 agent 数。超过 5 个 agent，管理成本超过并行收益。
+
+**边界定义成本：** 定义清晰的独立范围需要时间。如果你花 10 分钟分析失败独立性，只节省 5 分钟并行时间，优化失败。并行适合明显独立的失败（不同文件、不同模块）。
+
+**冲突解决成本：** 如果 agent 冲突，手动合并可能比串行更慢。冲突暗示边界定义失败——你需要花时间重新定义边界，然后重新派 agent。这个时间成本可能抵消并行节省。
+
+**资源竞争：** 并行 agent 可能同时访问同一资源（文件系统、数据库、API）。即使逻辑独立，物理资源共享可能导致竞态。测试阶段用临时资源（临时文件、测试数据库）可以避免。
+
+**平台限制：** 不是所有 AI 平台支持真正的并行。有些平台的 `Task` 工具是伪并行——实际是快速串行切换。这种情况下并行不会节省时间，只会增加管理复杂度。需要先验证平台能力。
+
+## 延伸阅读
+
+- [Superpowers GitHub 仓库](https://github.com/obra/superpowers) - 完整技能库和最新文档
+- [dispatching-parallel-agents SKILL.md](https://github.com/obra/superpowers/blob/master/skills/dispatching-parallel-agents/SKILL.md) - 并行 agent skill 完整实现
+- [subagent-driven-development SKILL.md](https://github.com/obra/superpowers/blob/master/skills/subagent-driven-development/SKILL.md) - SDD 串行执行模式
+- [systematic-debugging SKILL.md](https://github.com/obra/superpowers/blob/master/skills/systematic-debugging/SKILL.md) - 调查失败的系统方法
+- [requesting-code-review SKILL.md](https://github.com/obra/superpowers/blob/master/skills/requesting-code-review/SKILL.md) - Agent 完成后的审查

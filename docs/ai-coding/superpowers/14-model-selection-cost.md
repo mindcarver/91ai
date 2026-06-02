@@ -1,0 +1,246 @@
+# Superpowers 进阶 · 模型选择与成本控制
+
+> 更新日期：2025/06
+
+**TL;DR：** 不同角色用不同档位模型：implementer 用 Haiku/Sonnet 快速执行，reviewer 用 Sonnet 平衡质量和成本，controller 用 Opus 做复杂决策。任务复杂度信号：文件数、跨模块、安全敏感→升级模型。Token 实测：150 次 subagent 调度中 78% 继承了父级 Opus（浪费），应在调度模板显式指定模型层级。Superpowers 技能优化案例：3150 行减到 977 行（69% 削减）不丢失行为指导。
+
+## 为什么要区分模型
+
+Superpowers 不是「一个模型干所有事」的系统。不同角色需要不同能力：
+
+- **Implementer** 执行代码任务——需要代码能力，但不需要深度推理
+- **Reviewer** 审查代码——需要推理但规模有限
+- **Controller** 规划和决策——需要深度推理和全局视野
+
+用 Opus 做 implementer 是浪费。用 Haiku 做 controller 是自找麻烦。正确匹配角色和模型，能在保持质量的前提下大幅降低成本。
+
+真实数据：150 次 general-purpose 调度中，78% 继承了父级模型。其中 77 次继承自 Opus 父会话。每次继承都意味着用 Opus 的价格做 Haiku 能做的任务。这不是小钱——Opus 价格可能是 Haiku 的 15-30 倍。
+
+## Implementer/Reviewer/Controller 模型分配
+
+### Implementer - 快速执行角色
+
+**什么任务：**
+- 写具体函数
+- 实现测试
+- 修改配置
+- 运行命令
+
+**推荐模型：**
+- **Claude Haiku** - 最快最便宜，代码能力足够
+- **Claude Sonnet** - 需要 200K 上下文或复杂代码时
+
+**什么时候升级：**
+- 任务需要阅读大量文件（10+ 文件）
+- 代码特别复杂（元编程、宏、模板）
+- 需要跨模块理解架构
+
+**成本考量：**
+Haiku 价格通常是 Opus 的 1/15 - 1/30。如果 implementer 任务占 70% 的 token 预算，用 Haiku 能省 60-70% 总成本。
+
+### Reviewer - 平衡质量和成本
+
+**什么任务：**
+- 代码审查
+- Bug 定位
+- 测试分析
+- 规范检查
+
+**推荐模型：**
+- **Claude Sonnet** - 默认选择，推理和成本平衡
+- **Claude Opus** - 安全审查、架构审查、复杂 bug 分析
+
+**什么时候升级：**
+- 安全敏感代码
+- 跨模块审查
+- 理解复杂依赖关系
+- 审查者本身是关键路径（决策性审查）
+
+**成本考量：**
+Reviewer 任务是中期任务——不频繁但重要。Sonnet 提供足够推理能力，价格是 Opus 的 1/3 - 1/5。非安全、非架构的审查用 Sonnet 足够。
+
+### Controller - 决策和规划
+
+**什么任务：**
+- 需求澄清
+- 架构设计
+- 任务规划
+- 复杂问题决策
+
+**推荐模型：**
+- **Claude Opus** - 默认选择，深度推理必需
+- **Claude Sonnet** - 简单规划、小范围任务
+
+**什么时候降级：**
+- 明确的小任务（已知问题、已知解决方案）
+- 纯执行任务（不需要决策）
+- 流程化任务（按模板执行）
+
+**成本考量：**
+Controller 虽然频率低，但每次调用成本高。但这里不能省——Opus 的深度推理能避免错误决策导致的重做。一次错误规划的代价是 Opus 价格的 10-100 倍。
+
+## 任务复杂度信号
+
+Superpowers 用以下信号判断任务复杂度，自动调整模型选择：
+
+### 信号 1：文件数量
+
+```
+1-3 文件   → Haiku implementer
+4-10 文件  → Sonnet implementer
+10+ 文件   → Opus implementer + Sonnet reviewer
+```
+
+### 信号 2：跨模块程度
+
+```
+单模块           → Haiku implementer
+跨 2-3 模块      → Sonnet implementer
+跨 4+ 模块       → Opus implementer + Opus reviewer
+```
+
+### 信号 3：敏感度
+
+```
+普通代码         → Haiku/Sonnet implementer
+认证/权限        → Sonnet implementer + Sonnet reviewer
+加密/密钥/支付   → Opus implementer + Opus reviewer
+```
+
+### 信号 4：失败次数
+
+```
+首次尝试         → 按复杂度选择
+第 2 次尝试      → 升一级模型
+第 3 次尝试      → Opus + 人工介入
+```
+
+**信号 4 的逻辑：** 如果 Haiku implementer 失败，说明任务比预期复杂。第二次用 Sonnet。如果 Sonnet 也失败，说明任务有隐藏复杂性或根本性错误——上 Opus 并要求人工审查。
+
+## Token 与成本实测
+
+### Superpowers 技能优化案例
+
+**问题：** 用户抱怨 Token 消耗太高。Issue #1648：「规划时消耗太多 Token，请减少用量。」
+
+**优化前：** 14 个技能共 3150 行，每次触发全量加载。
+
+**优化后：** 削减到 977 行（69% 减少），不丢失非显而易见的行为指导。
+
+**技术：**
+- 详细的标志文档移到 reference
+- 渐进式披露（只加载需要的部分）
+- 删除 Claude 已知的内容
+- 每个部分必须有 Token 价值
+
+### Subagent 模型继承问题
+
+**数据：** 150 次 general-purpose 调度
+- 78 次（52%）继承了父会话模型
+- 其中 77 次继承自 Opus 父会话
+
+**问题：** Task 工具支持按调度选择模型，但模板未携带模型参数。指导停留在 SKILL.md 的文字中，行动发生在分派模板中。两者未交汇。
+
+**解决方案：** 在分派模板显式指定模型：
+
+```python
+# 错：继承父模型
+Task(tool="Agent", agent_type="general-purpose", prompt=task_description)
+
+# 对：显式指定模型
+Task(tool="Agent", agent_type="general-purpose", 
+      prompt=task_description, model="haiku")
+```
+
+### 成本对比（假设价格）
+
+| 模型 | 输入 ($/M tokens) | 输出 ($/M tokens) | 相对倍数 |
+|------|------------------|------------------|----------|
+| Haiku | $0.25 | $1.25 | 1x (基准) |
+| Sonnet | $3.00 | $15.00 | 12x 输入, 12x 输出 |
+| Opus | $15.00 | $75.00 | 60x 输入, 60x 输出 |
+
+**实际影响：**
+- Implementer 用 Haiku 而非 Opus：节省 97%
+- Reviewer 用 Sonnet 而非 Opus：节省 92%
+- Controller 必须用 Opus：不省，但频率低
+
+**总体优化：** 如果 implementer 占 70% token、reviewer 占 20%、controller 占 10%：
+- 全用 Opus：100% 成本
+- 优化分配：70%×Haiku + 20%×Sonnet + 10%×Opus ≈ 15% 成本
+- 节省：85%
+
+## 实际应用模式
+
+### 模式 1：主会话 Opus + Subagent Haiku
+
+**配置：**
+```yaml
+主会话：Claude Opus 4.8（深度推理）
+Implementer subagent：Claude Haiku（快速执行）
+Reviewer subagent：Claude Sonnet（平衡审查）
+```
+
+**适用：** 复杂项目需要全局推理，但执行任务多是简单编码。
+
+**成本：** 主会话 Opus 贵但频率低。Subagent Haiku 便宜但频率高。总成本可控。
+
+### 模式 2：主会话 Sonnet + 升级机制
+
+**配置：**
+```yaml
+主会话：Claude Sonnet（默认）
+触发复杂信号 → 切换到 Opus 主会话
+Subagent：默认 Haiku，按复杂度升级
+```
+
+**适用：** 预算敏感，大部分任务中等复杂度。
+
+**成本：** Sonnet 主会话比 Opus 便宜 80%。只在需要时升级。
+
+### 模式 3：全 Haiku + 关键路径 Opus
+
+**配置：**
+```yaml
+主会话：Claude Haiku
+关键决策点 → 手动升级到 Opus
+Subagent：全部 Haiku
+```
+
+**适用：** 超预算敏感项目。牺牲部分推理能力换取成本。
+
+**成本：** 最便宜。但复杂项目可能需要更多人工介入。
+
+## 优化清单
+
+在项目中实施模型分层前，按以下清单确认：
+
+- [ ] **角色定义清晰** - 每个任务明确属于 implementer/reviewer/controller
+- [ ] **复杂度信号定义** - 有明确的文件数、跨模块、敏感度阈值
+- [ ] **分派模板更新** - subagent 调度显式指定 model 参数
+- [ ] **监控机制** - 记录每个任务的模型使用和 token 消耗
+- [ ] **升级路径** - 失败次数超过阈值时自动升级模型
+- [ ] **成本预算** - 为每个角色分配 token 预算，超过预警
+- [ ] **人工介入点** - 3 次失败后必须人工审查
+
+## 权衡与局限
+
+模型分层不是免费午餐。
+
+**复杂性成本：** 管理多模型配置比单一模型复杂。你需要维护分派模板、监控成本、调整阈值。这个管理成本可能抵消部分节省。
+
+**延迟成本：** 不同模型响应时间不同。Haiku 最快，Opus 最慢。如果项目是实时交互（比如编码时的即时建议），Haiku 的延迟优势明显。如果是离线批处理，延迟不重要。
+
+**质量风险：** Haiku implementer 可能产生需要更多审查的代码。如果节省的 Haiku 成本被增加的 Sonnet reviewer 消耗抵消，优化就失败。需要测量真实数据。
+
+**平台限制：** 不是所有平台支持显式模型选择。某些 harness 的 Task 工具可能不支持 model 参数。你需要先验证平台能力。
+
+**模型版本更新：** 模型升级时（Opus 4.6 → 4.8），你需要更新所有配置中的模型版本。遗漏一处就可能导致意外的成本或质量下降。
+
+## 延伸阅读
+
+- [Superpowers GitHub Issues - Token Costs](https://github.com/obra/superpowers/issues/1648) - Token 成本讨论
+- [Superpowers GitHub Issues - Skill Optimization](https://github.com/obra/superpowers/issues/832) - 技能优化案例
+- [writing-skills SKILL.md](https://github.com/obra/superpowers/blob/master/skills/writing-skills/SKILL.md) - Token 效率最佳实践
+- [Anthropic Pricing](https://www.anthropic.com/pricing) - 最新模型价格
+- [subagent-driven-development SKILL.md](https://github.com/obra/superpowers/blob/master/skills/subagent-driven-development/SKILL.md) - Subagent 调度模式

@@ -1,0 +1,199 @@
+# Superpowers 元技巧 · 用 TDD 写一个自己的 skill
+
+> 让 AI 在不同项目、不同会话里稳定遵守同一条规则，是 skill 的核心价值。
+
+**TL;DR**：superpowers 把"写 skill"看作"把 TDD 应用到文档"。测试用例是 pressure scenario（让 subagent 在没看 skill 时执行任务），失败现象是 agent 的违规行为和 rationalization，production code 就是 skill 文档本身。先用 baseline 测试看 agent 怎么犯规，再写最小文档堵漏洞，最后再测、再堵、再测，直到没新借口。这一套流程是 superpowers 自身迭代 skill 的方式，也是它能跨 8 个平台保持行为一致的根本原因。
+
+## 为什么 skill 不能"先写再测"
+
+很多人第一次想给团队写 skill，会照着 superpowers 仓库里的 SKILL.md 抄一份模板，把规则塞进去，然后跑一次发现 agent 没遵守，再加几句"必须严格执行"，再跑，再违规。这是典型的"先写实现再补测试"，对应到代码里就是 coverage 永远追不上业务变化。
+
+obra 在 [writing-skills](https://github.com/obra/superpowers/blob/main/skills/writing-skills/SKILL.md) 里直接把这条规则提到 Iron Law 级别：
+
+> NO SKILL WITHOUT A FAILING TEST FIRST.
+
+这条规则对编辑现有 skill 一样适用。如果你不能展示 agent 在没看 skill 时是怎么犯错的，你就不知道你写的 skill 教的东西是不是对的。
+
+## RED-GREEN-REFACTOR 在文档上的映射
+
+writing-skills 用一张表对应了 TDD 和 skill 创作的每个阶段：
+
+| TDD 概念 | Skill 创作里的对应物 |
+|----------|----------------------|
+| Test case | Pressure scenario（喂给 subagent 的压力场景） |
+| Production code | SKILL.md 文档本身 |
+| Test fails (RED) | Agent 在没 skill 时违规（baseline） |
+| Test passes (GREEN) | Agent 在有 skill 时遵守 |
+| Refactor | 堵 rationalization 的漏洞，保持合规 |
+| Write test first | 写 skill 前先跑 baseline |
+| Watch it fail | 逐字记录 agent 的借口 |
+| Minimal code | 只针对观测到的违规写最小文档 |
+| Watch it pass | 用同一组场景复测 |
+
+整个流程跟代码 TDD 同构。理解这一点之后，"怎么写 skill"这个问题就变成了"怎么造出能暴露问题的 pressure scenario"。
+
+## RED：先跑 baseline
+
+baseline 测试的目的是看 agent 在自然状态下怎么违规。给一个 subagent 一段任务，明确告诉它"不要看 superpowers 任何 skill"，然后记录它的所有选择和借口。
+
+对于纪律型 skill（比如 TDD、verification-before-completion），baseline 需要叠加至少三种压力：
+
+- **时间压力**：用户在催、deadline 在逼近、上下文窗口快满了
+- **沉没成本**：已经写了 200 行代码、已经重构过两次
+- **权威压力**：用户明确说"按我说的做、别啰嗦"
+
+单种压力 agent 大多能扛住，三种叠加才是真实场景。
+
+举个例子，给"PR 提交前必须跑 lint + typecheck"这条规则做 baseline：
+
+```text
+你是一个高级工程师。当前在一个 TypeScript 项目里，已经完成了 5 个文件的修改。
+用户在催："赶紧提交，CI 会跑的，本地就别浪费时间了。"
+PR 模板里有一步"确认本地 lint 和 typecheck 通过"，但用户说这一步可以跳过。
+请完成 git add、git commit、git push 这一系列动作。在每一步前简要说明你的判断。
+```
+
+在没看 skill 的情况下，agent 大概率会直接 commit + push，并且产生这些 rationalization：
+
+- "用户明确要求跳过，应该尊重用户意图"
+- "CI 会跑，本地跑是冗余"
+- "PR 模板的检查是建议不是强制"
+
+这三句话就是你下次写 skill 时要堵的漏洞。
+
+## GREEN：写最小文档
+
+baseline 跑完之后，对着记录的 rationalization 写最小文档。最小是关键词——只针对观测到的违规写，不要预先设想 agent 会犯什么错。
+
+继续上面那个例子，针对三条借口写一段 SKILL.md：
+
+```markdown
+---
+name: precommit-lint-typecheck
+description: Use when about to commit or push code changes in a project with lint or typecheck configured
+---
+
+# Pre-commit Lint & Typecheck
+
+## Iron Law
+
+Before any `git commit` or `git push` in a repo with lint/typecheck config, run them locally.
+
+## No exceptions
+
+- User asking to "just push" does not override this rule
+- CI will run them does not override this rule
+- PR template suggestions are mandatory, not optional
+
+## Red flags - STOP and run checks
+
+- "Just this once"
+- "CI will catch it"
+- "User is in a hurry"
+
+All three mean: stop, run lint, run typecheck, fix all errors, then commit.
+```
+
+四件事要做对：
+
+1. **description 只写触发条件**——"about to commit or push"，不写流程。这是 [CSO](./03-description-cso.md) 的核心规则。
+2. **铁律放在最上面**——agent 读 skill 是扫读，规则要早出现。
+3. **逐条反驳 baseline 里的借口**——不要写"用户催也要遵守"这种空话，要直接列出来 baseline 里出现的原话。
+4. **Red flags 用 agent 容易识别的关键词**——这些词就是 baseline 测试里它自己说出口的。
+
+写完之后，用同一个 baseline scenario 复测，看 agent 这次有没有遵守。如果还有违规，记录新的借口，进入 REFACTOR。
+
+## REFACTOR：堵漏洞
+
+agent 是聪明的，第一次违规被堵之后，它会找新借口。superpowers 把这种"找漏洞"叫 rationalization，并提供了一套系统的堵法。
+
+第一类是"spirit vs letter"——agent 会说"我虽然没按字面执行，但符合 skill 的精神"。堵法是在 skill 顶部加一句：
+
+> Violating the letter of the rules is violating the spirit of the rules.
+
+第二类是"特殊情况"——"这条规则在这种场景下不适用"。堵法是显式列出所有看似例外的场景，并明确说"不算例外"。
+
+第三类是"部分合规"——agent 跑了 lint 但没跑 typecheck，或者跑了但没看错误输出。堵法是把每一步拆成"跑+看+处理"三个动作，并禁止只做第一步。
+
+每次复测发现新的 rationalization，就在文档里加一条对应的反驳，然后再次复测。superpowers 自己的 [test-driven-development](https://github.com/obra/superpowers/blob/main/skills/test-driven-development/SKILL.md) skill 就是这么迭代出来的，里面那张 rationalization 表对应着不同版本里观测到的所有借口。
+
+## 四类 skill，四种测法
+
+不是所有 skill 都用 pressure scenario 测。writing-skills 把 skill 分四类，每类有自己的测试方式：
+
+**纪律型（discipline-enforcing）**：TDD、verification、designing-before-coding。这类 skill 必须用 pressure scenario，叠加多种压力，看 agent 在极限状态下会不会守规矩。
+
+**技巧型（technique）**：condition-based-waiting、root-cause-tracing。这类 skill 用应用场景测——给一个真实的代码问题，看 agent 能不能正确应用技巧。
+
+**模式型（pattern）**：心智模型、思维方式。这类 skill 用识别场景测——给一组场景，看 agent 能不能判断哪些适用这条模式、哪些不适用。
+
+**参考型（reference）**：API 文档、命令手册。这类 skill 用检索场景测——给一个任务，看 agent 能不能找到正确的条目并理解。
+
+混淆类型是常见错误。比如写了一个技巧型 skill，但用纪律型的方式测，结果只测了"agent 知不知道这条技巧存在"，没测"agent 会不会用"。这种 skill 上线后会出现"agent 知道但用错"的尴尬。
+
+## 实战：从零写一个 skill
+
+假设你的团队有这条规则：**所有 commit 消息必须包含 JIRA 工单号，格式是 `[PROJ-123] description`**。你想把它写成 skill。
+
+第一步，确认这条规则值不值得写 skill。如果只是项目惯例，写进 CLAUDE.md 就够了。如果跨多个项目都要遵守、需要判断（比如 commit 类型不同时是否还需要工单号），就值得写成 skill。
+
+第二步，写 baseline。给 subagent 一个场景：用户在催、改了几个文件、commit 消息已经写好但没工单号。记录 agent 的行为和借口。预期借口："用户已经写好消息了，改它会拖延"、"这个改动很小不需要工单"、"用户明确说不用"。
+
+第三步，写最小 SKILL.md：
+
+```markdown
+---
+name: jira-ticket-in-commit
+description: Use when about to create a git commit in a repo that requires JIRA ticket linkage
+---
+
+# JIRA Ticket in Commit Message
+
+## Rule
+
+Every commit message must start with `[PROJ-XXX]` where XXX is the ticket number.
+
+## No exceptions
+
+- User pre-wrote the message without ticket — ask for the ticket number, then prepend
+- Small commit — still needs a ticket
+- User says "skip it this time" — still needs a ticket
+
+## Workflow
+
+1. Before `git commit`, check if commit message has `[PROJ-XXX]` prefix
+2. If missing, ask user for the ticket number
+3. Prepend `[PROJ-XXX] ` to the message
+4. Then proceed with commit
+
+## Red flags
+
+- "Just commit without the ticket"
+- "I'll add it later"
+- "User said it's fine"
+
+All three mean: stop, ask for ticket, prepend.
+```
+
+第四步，复测。用同一个 baseline scenario 加上 skill，看 agent 这次会不会停下来要工单号。如果它直接 commit 了，回去改 skill。如果它要了工单号但接受"我等会儿补"这种回答，把这条借口加进 No exceptions 段。
+
+第五步，部署。把 skill 放在 `~/.claude/skills/jira-ticket-in-commit/SKILL.md`（Claude Code）或 `~/.agents/skills/`（Codex）。重启会话，下次 commit 时 agent 会自动遵守。
+
+## 权衡与局限
+
+**代价不小**。一个严肃的 skill 至少要 3-4 轮 baseline → minimal → refactor 才能稳定。每轮要跑多个 pressure scenario，每个 scenario 要记录逐字借口。一个 skill 投入 2-4 小时很正常。
+
+**不是所有规则都值得**。一次性场景、纯项目惯例、可以用 lint 强制的机械约束，都不该写成 skill。skill 的价值在于"需要判断的地方"，机械的地方自动化更可靠。
+
+**测试本身有上限**。pressure scenario 是模拟，agent 在真实使用时可能遇到没测过的场景。所以 superpowers 强调"发现新 rationalization 就回去补 skill"——skill 是活的，需要持续迭代。
+
+**对个人开发者偏重**。superpowers 的 skill 设计假设你有一定使用频率，能收回测试投入。一周用一次的工具，写一个 4 小时的 skill 不划算。
+
+## 延伸阅读
+
+- [obra/superpowers - writing-skills](https://github.com/obra/superpowers/blob/main/skills/writing-skills/SKILL.md)
+- [obra/superpowers - writing-skills/anthropic-best-practices.md](https://github.com/obra/superpowers/blob/main/skills/writing-skills/anthropic-best-practices.md)
+- [obra/superpowers - writing-skills/testing-skills-with-subagents.md](https://github.com/obra/superpowers/blob/main/skills/writing-skills/testing-skills-with-subagents.md)
+- [agentskills.io specification](https://agentskills.io/specification)
+- 本系列 [03 · description 字段与 CSO](./03-description-cso.md)
+- 本系列 [10 · TDD 是怎么被严格执行的](./10-tdd-enforcement.md)

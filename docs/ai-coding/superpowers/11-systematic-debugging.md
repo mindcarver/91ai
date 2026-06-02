@@ -1,0 +1,434 @@
+# Superpowers 工作流 · systematic-debugging 根因分析四阶段
+
+> 更新日期：2025/06
+
+**TL;DR：** Superpowers 把 debug 拆成四个强制阶段：先查根因、再找模式、然后假设测试、最后实现。不允许没查根因就修 bug，不允许「试试这个先」，不允许 3 次修复失败后继续修——3 次失败说明是架构问题，不是实现问题。多组件系统加诊断日志找断裂点，根因用 backward tracing，修复后加多层防御让 bug 结构性不可能。
+
+## 为什么要强制四阶段
+
+随机修 bug 是时间黑洞。你「试试这个」花了 10 分钟，没生效；再「试试那个」又花 15 分钟，还是不行。一小时后你试了 8 个修复，引入了 3 个新 bug，原问题还在。
+
+系统化 debug 不是仪式，是效率。从真实会话数据看：系统化方法 15-30 分钟解决，随机尝试 2-3 小时还在打转。首次修复成功率 95% vs 40%，新 bug 引入率接近零 vs 常见。
+
+但知道系统化好和做到系统化是两回事。压力之下谁都想「试试这个快速修复」。Superpowers 的解决方案是强制执行——AI 在修 bug 前必须走完四个阶段。跳过任何一个阶段，skill 都会拦截并要求回到第一阶段。
+
+## 铁律
+
+```
+NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
+```
+
+不完成阶段一，不允许提出修复。
+
+这不是「建议」，是强制规则。AI 说「我觉得可能是 X」，skill 回：「阶段一是什么？」AI 说「我直接修这个试试」，skill 回：「回到阶段一，查根因。」
+
+## 四阶段流程
+
+### 阶段一：根因调查
+
+**在尝试任何修复前：**
+
+#### 1. 仔细读错误信息
+
+别跳过错误或警告。它们经常包含精确解决方案。完整读栈跟踪，注意行号、文件路径、错误代码。
+
+#### 2. 稳定复现
+
+你能可靠触发吗？精确步骤是什么？每次都发生？不能稳定复现？收集更多数据，别猜。
+
+#### 3. 检查最近变更
+
+什么变了可能导致这个？git diff、最近提交、新依赖、配置变更、环境差异。
+
+#### 4. 多组件系统收集证据
+
+**当系统有多个组件（CI → build → signing，API → service → database）：**
+
+**在提出修复前，加诊断工具：**
+
+```
+对每个组件边界：
+  - 记录进入组件的数据
+  - 记录离开组件的数据
+  - 验证环境/配置传播
+  - 检查每层状态
+
+跑一次收集证据显示在哪断裂
+然后分析证据识别失败组件
+然后调查那个特定组件
+```
+
+**示例（多层系统）：**
+```bash
+# 层 1：Workflow
+echo "=== Secrets available in workflow: ==="
+echo "IDENTITY: ${IDENTITY:+SET}${IDENTITY:-UNSET}"
+
+# 层 2：Build script
+echo "=== Env vars in build script: ==="
+env | grep IDENTITY || echo "IDENTITY not in environment"
+
+# 层 3：Signing script
+echo "=== Keychain state: ==="
+security list-keychains
+security find-identity -v
+
+# 层 4：Actual signing
+codesign --sign "$IDENTITY" --verbose=4 "$APP"
+```
+
+**揭示：** 哪层失败（secrets → workflow ✓，workflow → build ✗）
+
+#### 5. 追踪数据流
+
+**当错误在调用栈深处时：**
+
+用 backward tracing 技术（见下文「根因追踪」）：
+- 坏值从哪来？
+- 什么调了这个传坏值？
+- 一直往上追直到找到源头
+- 在源头修，别在症状处修
+
+### 阶段二：模式分析
+
+**修复前找模式：**
+
+#### 1. 找工作示例
+
+在同一个代码库里定位类似的工作代码。什么工作的和坏的类似？
+
+#### 2. 对照参考
+
+如果实现模式，完整读完参考实现。别略读——逐行读。应用前完全理解模式。
+
+#### 3. 识别差异
+
+工作和坏之间有什么不同？列出每个差异，无论多小。别假设「这不可能有关系」。
+
+#### 4. 理解依赖
+
+这需要其他什么组件？什么设置、配置、环境？它做什么假设？
+
+### 阶段三：假设和测试
+
+**科学方法：**
+
+#### 1. 形成单一假设
+
+清楚说：「我认为 X 是根因因为 Y」。写下来。具体，别模糊。
+
+#### 2. 最小化测试
+
+做最小可能改变测试假设。一次一个变量。别一次修多个东西。
+
+#### 3. 继续前验证
+
+生效了？→ 阶段四。没生效？形成新假设。别在上面叠加更多修复。
+
+#### 4. 你不知道时
+
+说「我不理解 X」。别假装知道。求助。继续研究。
+
+### 阶段四：实现
+
+**修根因，不修症状：**
+
+#### 1. 创建失败测试用例
+
+最简单可能复现。可能的话自动化测试。没框架就一次性测试脚本。**修复前必须有。**
+
+用 `superpowers:test-driven-development` skill 写正确的失败测试。
+
+#### 2. 实现单一修复
+
+处理识别的根因。一次一个改变。没有「顺便改进」，没有打包重构。
+
+#### 3. 验证修复
+
+测试现在通过了？其他测试没坏？问题真的解决了？
+
+#### 4. 修复不生效
+
+**停止。** 计数：你试了几个修复？
+
+- 如果 < 3：回到阶段一，用新信息重分析
+- **如果 ≥ 3：停止并质疑架构（步骤 5）**
+- **别不问架构就尝试修复 #4**
+
+#### 5. 如果 3+ 修复失败：质疑架构
+
+**表明架构问题的模式：**
+- 每个修复在不同地方揭示新共享状态/耦合/问题
+- 修复需要「大规模重构」才能实现
+- 每个修复在其他地方创造新症状
+
+**停止并质疑基础：**
+- 这个模式从根本上合理吗？
+- 我们是「靠惯性坚持」吗？
+- 我们应该重构架构 vs 继续修症状？
+
+**尝试更多修复前和人类伙伴讨论**
+
+这不是失败的假设——这是错的架构。
+
+## 根因追踪技术
+
+Bug 经常在调用栈深处表现（git init 在错误目录、文件在错误位置创建、数据库用错误路径打开）。直觉是在错误出现处修，但那是治症状。
+
+**核心原则：** 向后追踪调用链直到找到原始触发器，然后在源头修。
+
+### 追踪过程
+
+#### 1. 观察症状
+```
+Error: git init failed in ~/project/packages/core
+```
+
+#### 2. 找直接原因
+**什么代码直接导致这个？**
+```typescript
+await execFileAsync('git', ['init'], { cwd: projectDir });
+```
+
+#### 3. 问：什么调用了这个？
+```typescript
+WorktreeManager.createSessionWorktree(projectDir, sessionId)
+  → called by Session.initializeWorkspace()
+  → called by Session.create()
+  → called by test at Project.create()
+```
+
+#### 4. 继续往上追踪
+**传了什么值？**
+- `projectDir = ''` （空字符串！）
+- 空字符串作为 `cwd` 解析为 `process.cwd()`
+- 那是源代码目录！
+
+#### 5. 找原始触发器
+**空字符串从哪来？**
+```typescript
+const context = setupCoreTest(); // Returns { tempDir: '' }
+Project.create('name', context.tempDir); // beforeEach 前访问！
+```
+
+### 添加栈跟踪
+
+不能手动追踪时加工具：
+
+```typescript
+// 问题操作前
+async function gitInit(directory: string) {
+  const stack = new Error().stack;
+  console.error('DEBUG git init:', {
+    directory,
+    cwd: process.cwd(),
+    nodeEnv: process.env.NODE_ENV,
+    stack,
+  });
+
+  await execFileAsync('git', ['init'], { cwd: directory });
+}
+```
+
+**关键：** 测试里用 `console.error()`（不是 logger - 可能不显示）
+
+**运行并捕获：**
+```bash
+npm test 2>&1 | grep 'DEBUG git init'
+```
+
+**分析栈跟踪：**
+- 找测试文件名
+- 找触发调用的行号
+- 识别模式（同一个测试？同一个参数？）
+
+## Defense-in-Depth 验证
+
+当你修了一个由无效数据引起的 bug，在一个地方加验证感觉够了。但那个单一检查能被不同代码路径、重构、mock 绕过。
+
+**核心原则：** 数据经过的每一层都验证。让 bug 结构性不可能。
+
+### 四层防御
+
+**层 1：入口点验证**
+目的：在 API 边界拒绝明显无效输入
+
+```typescript
+function createProject(name: string, workingDirectory: string) {
+  if (!workingDirectory || workingDirectory.trim() === '') {
+    throw new Error('workingDirectory cannot be empty');
+  }
+  if (!existsSync(workingDirectory)) {
+    throw new Error(`workingDirectory does not exist: ${workingDirectory}`);
+  }
+  // ... proceed
+}
+```
+
+**层 2：业务逻辑验证**
+目的：确保数据对这个操作合理
+
+```typescript
+function initializeWorkspace(projectDir: string, sessionId: string) {
+  if (!projectDir) {
+    throw new Error('projectDir required for workspace initialization');
+  }
+  // ... proceed
+}
+```
+
+**层 3：环境守卫**
+目的：在特定上下文阻止危险操作
+
+```typescript
+async function gitInit(directory: string) {
+  // 测试中，拒绝 tmpdir 外的 git init
+  if (process.env.NODE_ENV === 'test') {
+    const normalized = normalize(resolve(directory));
+    const tmpDir = normalize(resolve(tmpdir()));
+
+    if (!normalized.startsWith(tmpDir)) {
+      throw new Error(
+        `Refusing git init outside temp dir during tests: ${directory}`
+      );
+    }
+  }
+  // ... proceed
+}
+```
+
+**层 4：调试工具**
+目的：捕获上下文取证
+
+```typescript
+async function gitInit(directory: string) {
+  const stack = new Error().stack;
+  logger.debug('About to git init', {
+    directory,
+    cwd: process.cwd(),
+    stack,
+  });
+  // ... proceed
+}
+```
+
+## Condition-Based Waiting
+
+Flaky 测试经常用任意延迟猜时机。这创造竞态条件——快机器通过但 CI 或负载下失败。
+
+**核心原则：** 等你真正关心的条件，不是猜它要多久。
+
+### 核心模式
+
+```typescript
+// ❌ 之前：猜时机
+await new Promise(r => setTimeout(r, 50));
+const result = getResult();
+expect(result).toBeDefined();
+
+// ✅ 之后：等条件
+await waitFor(() => getResult() !== undefined);
+const result = getResult();
+expect(result).toBeDefined();
+```
+
+### 快速模式
+
+| 场景 | 模式 |
+|------|------|
+| 等事件 | `waitFor(() => events.find(e => e.type === 'DONE'))` |
+| 等状态 | `waitFor(() => machine.state === 'ready')` |
+| 等计数 | `waitFor(() => items.length >= 5)` |
+| 等文件 | `waitFor(() => fs.existsSync(path))` |
+| 复杂条件 | `waitFor(() => obj.ready && obj.value > 10)` |
+
+### 实现
+
+通用轮询函数：
+```typescript
+async function waitFor<T>(
+  condition: () => T | undefined | null | false,
+  description: string,
+  timeoutMs = 5000
+): Promise<T> {
+  const startTime = Date.now();
+
+  while (true) {
+    const result = condition();
+    if (result) return result;
+
+    if (Date.now() - startTime > timeoutMs) {
+      throw new Error(`Timeout waiting for ${description} after ${timeoutMs}ms`);
+    }
+
+    await new Promise(r => setTimeout(r, 10)); // 每 10ms 轮询
+  }
+}
+```
+
+## find-polluter.sh 用法
+
+如果有东西在测试期间出现但你不知道哪个测试引起的：
+
+用二分脚本 `find-polluter.sh`：
+
+```bash
+./find-polluter.sh '.git' 'src/**/*.test.ts'
+```
+
+逐个跑测试，停在第一个 polluter。见脚本用法。
+
+**工作原理：** 二分法测试执行。第一次跑一半测试，如果有污染跑那半的一半，直到定位单个测试文件。
+
+##红旗标志
+
+抓到自己在想这些时：
+
+- 「先快速修复，回头调查」
+- 「试试改 X 看是否生效」
+- 「加多个改变，跑测试」
+- 「跳过测试，我手动验证」
+- 「可能是 X，让我修那个」
+- 「我不完全理解但这可能生效」
+- 「模式说 X 但我要不同适配」
+- 「主要问题是这些：[列出修复但没调查]」
+- 追踪数据流前提解决方案
+- **「再试一次修复」（已经试了 2+ 次）**
+- **每次修复在不同地方揭示新问题**
+
+**所有这些意味着：停止。回到阶段一。**
+
+**如果 3+ 修复失败：** 质疑架构（见阶段四步骤 5）
+
+## 合理化借口表
+
+| 借口 | 现实 |
+|------|------|
+| 「问题简单，不需要流程」 | 简单问题也有根因。流程对简单 bug 快。 |
+| 「紧急，没时间走流程」 | 系统化 debug 比猜-检查打转快。 |
+| 「先试试这个，再调查」 | 首个修复设定模式。从开始就做对。 |
+| 「确认修复生效后我再写测试」 | 未测试修复不持久。测试先证明它。 |
+| 「一次多个修复省时间」 | 无法分离什么生效。导致新 bug。 |
+| 「参考太长，我要适配模式」 | 部分理解保证 bug。完整读。 |
+| 「我看到问题，让我修它」 | 看到症状 ≠ 理解根因。 |
+| 「再试一次修复」（2+ 失败后） | 3+ 失败 = 架构问题。质疑模式，别再修。 |
+
+## 权衡与局限
+
+Superpowers 的系统化 debug 不是免费午餐。
+
+**时间感知：** 走完四个阶段感觉比「试试这个」慢。第一个 10 分钟在调查而不是修代码。但真实数据表明：系统化 15-30 分钟解决，随机尝试 2-3 小时还在打转。慢是错觉。
+
+**学习曲线：** 新人觉得「为什么不能直接改那行？」但经验丰富后知道：改那行经常破坏别的东西。系统化预防「一修多坏」。
+
+**紧急情况压力：** 生产故障时管理层要「现在就修」。但紧急时系统化更关键——随机修复会导致中断更长。解释给管理层听：15 分钟调查 vs 2 小时中断扩展。
+
+**95% 的「无根因」是不完整调查：** 有时你真的找不到根因——时序依赖、外部服务、环境特定。但绝大多数「无根因」是调查没做完。当你想放弃时，问自己：「我真的查了数据流在每个层的状态吗？」
+
+## 延伸阅读
+
+- [Superpowers GitHub 仓库](https://github.com/obra/superpowers) - 完整技能库和最新文档
+- [systematic-debugging SKILL.md](https://github.com/obra/superpowers/blob/master/skills/systematic-debugging/SKILL.md) - 系统 debug skill 完整实现
+- [root-cause-tracing.md](https://github.com/obra/superpowers/blob/master/skills/systematic-debugging/root-cause-tracing.md) - 根因追踪技术
+- [defense-in-depth.md](https://github.com/obra/superpowers/blob/master/skills/systematic-debugging/defense-in-depth.md) - 多层防御模式
+- [condition-based-waiting.md](https://github.com/obra/superpowers/blob/master/skills/systematic-debugging/condition-based-waiting.md) - 条件等待替代任意延迟

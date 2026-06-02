@@ -1,0 +1,363 @@
+# Superpowers 原理 · Hooks / CLAUDE.md / Skill / Command 的边界
+
+> 更新日期：2026/06
+
+**TL;DR：** 四件套各司其职。Hooks 在会话启动时自动执行，负责注入技能系统。CLAUDE.md/AGENTS.md/GEMINI.md 是项目配置层，定义偏好和规则。Skills 是工作流层，自动触发的流程规范。Commands 是工具层，用户显式调用的快捷方式。优先级：用户指令（MD 文件）> 技能 > 默认行为。
+
+## 四件套的定义
+
+### Hooks：自动化启动脚本
+
+**是什么：** Shell 脚本，在特定事件时自动执行。
+
+**什么时候用：** 需要在会话启动时自动注入内容（比如加载 Superpowers 技能系统）。
+
+**典型场景：**
+
+```bash
+# hooks/session-start
+#!/usr/bin/env bash
+# 会话启动时自动执行
+
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+using_superpowers_content=$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md")
+
+# 注入到会话上下文
+echo "{\"additional_context\": \"$using_superpowers_content\"}"
+```
+
+**能干什么：**
+- 在会话启动时自动注入内容
+- 执行 Shell 命令（环境检查、依赖安装）
+- 跨平台兼容处理（Windows vs macOS/Linux）
+
+**不能干什么：**
+- 定义工作流程（用 Skills）
+- 定义项目偏好（用 CLAUDE.md）
+- 提供用户快捷方式（用 Commands）
+
+### CLAUDE.md / AGENTS.md / GEMINI.md：项目配置层
+
+**是什么：** 项目根目录的 Markdown 配置文件，定义项目偏好和规则。
+
+**什么时候用：** 需要告诉 AI 项目的工作方式、代码风格、工具选择。
+
+**典型内容：**
+
+```markdown
+# My Project
+
+We use:
+- Python 3.11
+- Black for formatting
+- pytest for testing
+
+Please always:
+- Write type hints
+- Keep functions under 20 lines
+- Add docstrings to public APIs
+
+We don't use:
+- TDD (write tests after implementation)
+- Type checking with mypy
+```
+
+**能干什么：**
+- 定义技术栈和工具选择
+- 设置代码风格偏好
+- 覆盖技能的默认行为（比如"我们不用 TDD"）
+- 项目特定的规则和约定
+
+**不能干什么：**
+- 定义工作流程（用 Skills）
+- 提供快捷命令（用 Commands）
+- 执行自动化操作（用 Hooks）
+
+**优先级：** 这些文件中的指令优先级最高。如果 CLAUDE.md 说"不用 TDD"，Superpowers 的 TDD 技能就不会强制执行。
+
+### Skills：工作流层
+
+**是什么：** 可组合的工作流技能，自动触发的流程规范。
+
+**什么时候用：** 需要强制执行某个开发流程（比如"先设计、后实现"）。
+
+**典型技能：**
+
+- `brainstorming`：在写代码前先问问题、设计方案
+- `writing-plans`：把设计拆成小任务
+- `test-driven-development`：强制 TDD 流程
+- `systematic-debugging`：系统性调试流程
+
+**能干什么：**
+- 定义多步骤的工作流程
+- 自动触发（基于意图匹配）
+- 渐进式加载（节省 token）
+- 跨平台兼容
+
+**不能干什么：**
+- 项目特定配置（用 CLAUDE.md）
+- 用户快捷命令（用 Commands）
+- 会话启动时的操作（用 Hooks）
+
+**触发方式：** 系统自动匹配，用户无需知道技能存在。
+
+### Commands：工具层
+
+**是什么：** 用户显式调用的快捷命令。
+
+**什么时候用：** 需要提供常用操作的快捷方式。
+
+**典型命令：**
+
+```bash
+/test          # 运行测试套件
+/review        # Code review 当前改动
+/commit        # 生成 commit message
+/deploy        # 部署到生产环境
+```
+
+**能干什么：**
+- 提供常用操作的快捷方式
+- 简化复杂命令的输入
+- 用户显式调用（确定性）
+
+**不能干什么：**
+- 自动触发的流程（用 Skills）
+- 项目配置（用 CLAUDE.md）
+- 会话启动操作（用 Hooks）
+
+**触发方式：** 用户显式输入命令名称（比如 `/review`）。
+
+## 决策矩阵：什么时候用哪个
+
+| 需求 | 用什么 | 为什么 |
+|------|--------|--------|
+| **会话启动时自动注入内容** | Hooks | Hooks 在会话启动时自动执行 |
+| **定义项目的代码风格** | CLAUDE.md | MD 文件是配置层，专门存偏好 |
+| **强制执行 TDD 流程** | Skills | Skills 是工作流层，可自动触发 |
+| **提供测试快捷命令** | Commands | Commands 是工具层，用户显式调用 |
+| **覆盖技能的默认行为** | CLAUDE.md | MD 文件优先级最高 |
+| **跨平台兼容的自动化** | Hooks | Hooks 可以处理不同 Shell 环境 |
+
+## 组合使用模式
+
+### 模式 1：Hooks + Skills
+
+**场景：** 启动时自动加载技能系统。
+
+```bash
+# hooks/session-start（自动执行）
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+using_superpowers_content=$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md")
+echo "{\"additional_context\": \"$using_superpowers_content\"}"
+
+# 效果：技能系统自动注入，用户无需手动加载
+```
+
+**为什么这么组合：** Hooks 负责自动化（会话启动时执行），Skills 负责工作流（定义怎么用技能）。
+
+### 模式 2：CLAUDE.md + Skills
+
+**场景：** 项目有特定偏好，但需要技能的工作流程。
+
+```markdown
+# CLAUDE.md
+We use FastAPI and follow its conventions.
+We don't use TDD for simple CRUD operations.
+```
+
+```yaml
+# skills/test-driven-development/SKILL.md
+---
+name: test-driven-development
+description: Use when implementing any feature or bugfix, before writing implementation code
+---
+# 如果 CLAUDE.md 说不用 TDD，技能会尊重这个配置
+```
+
+**为什么这么组合：** CLAUDE.md 定义偏好，技能定义流程。技能会读取并尊重 CLAUDE.md 的配置。
+
+### 模式 3：Skills + Commands
+
+**场景：** 需要自动触发的流程，也需要用户快捷命令。
+
+```yaml
+# skills/requesting-code-review/SKILL.md
+---
+name: requesting-code-review
+description: Use when between tasks to review against plan
+---
+# 自动触发：任务完成后自动进入 code review 流程
+```
+
+```markdown
+# commands/review.md
+# /review
+Review the current diff for correctness, security, and maintainability.
+# 用户显式调用：任何时候想 review 时输入 /review
+```
+
+**为什么这么组合：** Skills 处理流程中的自动 review，Commands 提供随时可用的快捷方式。
+
+### 模式 4：Hooks + CLAUDE.md
+
+**场景：** 启动时检查环境，项目有特定配置。
+
+```bash
+# hooks/session-start
+# 检查 Python 版本
+if ! command -v python3.11 &> /dev/null; then
+  echo "Python 3.11 not found"
+fi
+```
+
+```markdown
+# CLAUDE.md
+This project requires Python 3.11
+We use Black for formatting
+We use pytest for testing
+```
+
+**为什么这么组合：** Hooks 做环境检查（自动化），CLAUDE.md 定义工作偏好（配置）。
+
+## 优先级处理
+
+当多个配置冲突时，优先级顺序是：
+
+1. **用户指令（CLAUDE.md / AGENTS.md / GEMINI.md）** - 最高优先级
+2. **Skills** - 覆盖默认系统行为
+3. **默认系统提示** - 最低优先级
+
+**示例：**
+
+如果 `CLAUDE.md` 写了"我们不用 TDD"，但 `test-driven-development` 技能说"必须用 TDD"：
+
+- AI 会**遵循 CLAUDE.md**，不强制 TDD
+- 用户始终在控制
+
+**为什么这样设计：** 不同项目有不同的需求。某个项目可能确实不需要 TDD（比如快速原型），强制执行反而会拖慢速度。用户应该有最终决定权。
+
+## 常见错误
+
+### 错误 1：在 Hooks 里写工作流程
+
+```bash
+# ❌ 不好：在 Hooks 里写工作流程
+# hooks/session-start
+echo "Follow this process: 1) Design 2) Plan 3) Implement"
+```
+
+**问题：** Hooks 应该只做自动化操作，工作流程应该用 Skills 定义。
+
+**修复：**
+
+```bash
+# ✅ 好：Hooks 只注入技能系统
+# hooks/session-start
+using_superpowers_content=$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md")
+echo "{\"additional_context\": \"$using_superpowers_content\"}"
+```
+
+### 错误 2：在 CLAUDE.md 里写技能内容
+
+```markdown
+# ❌ 不好：在 CLAUDE.md 里写工作流程
+# CLAUDE.md
+When implementing features, follow TDD:
+1. Write failing test
+2. Write minimal code
+3. Refactor
+```
+
+**问题：** 工作流程应该用 Skills 定义，CLAUDE.md 只存偏好。
+
+**修复：**
+
+```markdown
+# ✅ 好：CLAUDE.md 只存偏好
+# CLAUDE.md
+We use TDD for all new features.
+We don't use TDD for simple config changes.
+```
+
+工作流程交给 `test-driven-development` 技能处理。
+
+### 错误 3：用 Commands 做自动触发的工作流
+
+```markdown
+# ❌ 不好：用 Command 做自动触发的工作流
+# commands/tdd.md
+# /tdd
+Follow TDD process: write test, watch fail, write code, watch pass
+```
+
+**问题：** Command 需要用户显式调用，不能自动触发。工作流应该用 Skills。
+
+**修复：**
+
+```yaml
+# ✅ 好：用 Skill 实现自动触发
+---
+name: test-driven-development
+description: Use when implementing any feature or bugfix, before writing implementation code
+---
+```
+
+### 错误 4：在 Skills 里写项目特定配置
+
+```yaml
+# ❌ 不好：在 Skills 里写项目特定配置
+# skills/my-project-style/SKILL.md
+---
+name: my-project-style
+description: Use this for all work in my project
+---
+This project uses FastAPI, Python 3.11, and Black formatting.
+```
+
+**问题：** 项目配置应该放在 CLAUDE.md，Skills 应该是通用的。
+
+**修复：**
+
+```markdown
+# ✅ 好：CLAUDE.md 存项目配置
+# CLAUDE.md
+This project uses:
+- FastAPI
+- Python 3.11
+- Black for formatting
+```
+
+## 权衡与局限
+
+### Hooks 的局限
+
+- **平台特定**：不同平台（Claude Code vs Cursor vs Copilot）的 hooks 格式不同
+- **调试困难**：Shell 脚本出错时不容易调试
+- **Token 消耗**：每次会话启动都会执行，如果注入内容太大会浪费 token
+
+### CLAUDE.md 的局限
+
+- **文件位置固定**：必须在项目根目录
+- **不是真正的配置文件**：只是 Markdown，无法做复杂配置
+- **优先级过高可能造成问题**：如果设置错误，可能覆盖所有技能的默认行为
+
+### Skills 的局限
+
+- **触发准确性依赖 description 质量**：description 写不好会导致技能无法触发或误触发
+- **调试困难**：技能没触发时，很难知道是为什么
+- **需要测试**：写完技能需要测试是否正确触发
+
+### Commands 的局限
+
+- **需要用户记忆**：用户需要记住有哪些命令可用
+- **全量加载**：每次调用都加载完整文件，无法按需加载
+- **无法自动触发**：用户必须显式输入
+
+## 延伸阅读
+
+- [02 - Skills 系统原理](02-skills-system.md) — Skills 的加载和触发机制
+- [03 - Description 与 CSO](03-description-cso.md) — 如何写高质量的 description
+- [05 - brainstorming 工作流](05-brainstorming.md) — 如何把模糊需求拆成 spec
+- [Claude Code 官方文档 - Hooks](https://docs.anthropic.com/claude/docs/settings#hooks) — Hooks 的完整规范
+- [Claude Code 官方文档 - Skills](https://docs.anthropic.com/claude/skills) — Skills 的完整规范

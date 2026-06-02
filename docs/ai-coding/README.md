@@ -32,6 +32,32 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | --- | --- | --- |
 | [Codex 工程化实战系列](./codex-engineering/) | 想系统掌握 Codex 工程化实践的人 | 38 篇独立文章 + 系列总览，覆盖 AGENTS.md、沙箱隔离、Starlark Rules、MCP 安全、Agent Loop 架构、codex exec、GitHub Actions、SDK 和团队治理。 |
 
+### Superpowers 系列
+
+基于 [obra/superpowers](https://github.com/obra/superpowers) 的 18 篇工程化解构。从 skill 系统原理、CSO 检索优化、四件套边界，到 brainstorming / writing-plans / Subagent-Driven Development / TDD / systematic-debugging 的核心工作流，再到模型成本、并行 subagent、跨平台落地与边界避坑。适合想用 superpowers 把 AI 编码变成可治理工程系统的团队。
+
+| # | 文章 | 主题 |
+| --- | --- | --- |
+| — | [Superpowers 系列总览](./superpowers/README.md) | 18 篇导读、阅读路径、来源说明 |
+| 01 | [Superpowers 入门：给 AI 装上一套开发方法论](./superpowers/01-overview.md) | 整体导览、完整任务生命周期、与 SuperClaude/CLAUDE.md 的差别 |
+| 02 | [Skills 系统是什么](./superpowers/02-skills-system.md) | skill 物理形态、加载与触发、与 slash command 的本质区别 |
+| 03 | [description 字段与 CSO](./superpowers/03-description-cso.md) | description 反直觉写法、obra 实验数据、关键词覆盖 |
+| 04 | [hooks / CLAUDE.md / skill / slash command 的边界](./superpowers/04-hooks-md-skill-command-boundary.md) | 四件套各自能干什么、组合使用模式 |
+| 05 | [brainstorming：把模糊需求拆成 spec](./superpowers/05-brainstorming.md) | 苏格拉底式追问、分段确认设计、spec 文档结构 |
+| 06 | [writing-plans：2-5 分钟一颗任务](./superpowers/06-writing-plans.md) | 颗粒度原则、任务要素、真实计划逐行解读 |
+| 07 | [git worktrees：隔离工作区](./superpowers/07-git-worktrees.md) | 为什么强制 worktree、与 branch 的差别、并行基础 |
+| 08 | [Subagent-Driven Development 整体流程](./superpowers/08-subagent-driven-development.md) | 控制器 vs 三角色、上下文隔离、四种状态处理 |
+| 09 | [三种 subagent prompt 详解](./superpowers/09-subagent-prompts.md) | implementer / spec-reviewer / code-quality-reviewer 逐段拆解 |
+| 10 | [TDD 是怎么被严格执行的](./superpowers/10-tdd-enforcement.md) | RED-GREEN-REFACTOR 执行细节、Iron Law、rationalization 表 |
+| 11 | [systematic-debugging 根因分析四阶段](./superpowers/11-systematic-debugging.md) | root-cause-tracing / defense-in-depth / condition-based-waiting |
+| 12 | [verification-before-completion 与 code review](./superpowers/12-verification-and-code-review.md) | 完成独立成段、双段 review、Critical issue 阻断 |
+| 13 | [finishing-a-development-branch：合并、PR、清理](./superpowers/13-finishing-branch.md) | 四选项决策树、worktree 清理、团队 Git 衔接 |
+| 14 | [模型选择与成本控制](./superpowers/14-model-selection-cost.md) | 各角色模型档位、任务复杂度信号、token 实测 |
+| 15 | [dispatching-parallel-agents：并行 subagent](./superpowers/15-dispatching-parallel-agents.md) | 何时能并行、避免冲突、与 SDD 组合 |
+| 16 | [用 TDD 写一个自己的 skill](./superpowers/16-writing-skills.md) | writing-skills 元技巧、pressure scenario、堵 rationalization |
+| 17 | [跨平台：在 Cursor / Codex / Copilot / Gemini 上跑起来](./superpowers/17-cross-platform.md) | 8 平台安装差异、工具名映射、功能失效点 |
+| 18 | [边界、避坑与最佳实践](./superpowers/18-boundaries-pitfalls.md) | 不擅长场景、token 代价、踩坑、何时只用一两个 skill |
+
 ### OpenSpec 系列
 
 Spec-Driven Development 框架的完整中文指南，从入门到实战。覆盖工作流、Delta Spec、自定义 Schema、AI 工具集成、Brownfield 引入、CI/CD 和团队协作。

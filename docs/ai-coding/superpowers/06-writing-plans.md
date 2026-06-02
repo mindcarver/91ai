@@ -1,0 +1,451 @@
+# Superpowers 工作流 · writing-plans：2-5 分钟一颗任务
+
+> 更新日期：2026/06
+
+**TL;DR：** writing-plans 把 spec 拆成 2-5 分钟可完成的任务。每个任务包含精确文件路径、完整代码、运行命令、预期输出。没有 "TBD"、"TODO"、"后续补充"。目标是让一个零上下文的工程师能照着计划完成所有工作。
+
+## 为什么要 writing-plans
+
+没有 writing-plans 的 AI 会：
+
+- **直接跳到实现**：spec 确认后就开始写代码，没有中间步骤
+- **任务太大**：一个任务"实现用户登录"，实际需要 2 小时
+- **缺少细节**：只说"实现密码验证"，没说用什么算法、怎么测试
+
+writing-plans 强制要求：每个任务 2-5 分钟可完成，所有细节都写清楚。
+
+## 核心原则：2-5 分钟一颗任务
+
+### 什么是"一颗任务"
+
+一颗任务 = 一个独立的、可验证的、2-5 分钟内完成的改动。
+
+**Bad（太大）：**
+
+```markdown
+### Task 1: 实现用户登录
+
+实现邮箱密码登录，包括验证、session 生成、错误处理。
+```
+
+**Good（拆成小任务）：**
+
+```markdown
+### Task 1: Create User model
+
+创建 User 模型，包含 email 和 password_hash 字段。
+
+### Task 2: Password hashing
+
+实现 bcrypt 密码哈希。
+
+### Task 3: Login endpoint
+
+实现 /login 端点。
+
+### Task 4: JWT generation
+
+实现 JWT 生成。
+
+### Task 5: Error handling
+
+添加错误处理（用户不存在、密码错误）。
+```
+
+### 为什么 2-5 分钟
+
+- **上下文隔离**：子代理只做一件事，不会混乱
+- **容易验证**：每个任务完成后，立即检查是否正确
+- **容易回滚**：如果出错，只需要回滚一个小任务
+- **节奏清晰**：每 2-5 分钟完成一件事，有明确进度
+
+### 如何判断任务大小
+
+问自己：一个零上下文的工程师看这个任务，能在 2-5 分钟内完成吗？
+
+如果不确定，就拆得更细。
+
+## 每颗任务的四要素
+
+每个任务必须包含四个要素：
+
+### 1. 精确文件路径
+
+**Bad：**
+
+```markdown
+### Task 1: Create User model
+
+修改模型文件，添加 User 类。
+```
+
+**Good：**
+
+```markdown
+### Task 1: Create User model
+
+**Files:**
+- Create: `src/models/user.py`
+- Test: `tests/models/test_user.py`
+```
+
+### 2. 完整代码
+
+**Bad：**
+
+```markdown
+### Task 2: Password hashing
+
+实现密码哈希函数。
+```
+
+**Good：**
+
+```markdown
+### Task 2: Password hashing
+
+**Files:**
+- Create: `src/models/user.py:45-60`
+- Test: `tests/models/test_user.py:20-35`
+
+- [ ] **Step 1: Write failing test**
+
+```python
+def test_hash_password():
+    hashed = User.hash_password("password123")
+    assert hashed != "password123"
+    assert User.verify_password("password123", hashed)
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/models/test_user.py::test_hash_password -v`
+Expected: FAIL with "User has no attribute 'hash_password'"
+
+- [ ] **Step 3: Implement minimal code**
+
+```python
+import bcrypt
+
+class User:
+    @staticmethod
+    def hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    @staticmethod
+    def verify_password(password: str, hashed: str) -> bool:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pytest tests/models/test_user.py::test_hash_password -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/models/user.py tests/models/test_user.py
+git commit -m "feat: add password hashing"
+```
+```
+
+### 3. 运行命令
+
+每个步骤必须有对应的运行命令：
+
+```markdown
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/models/test_user.py::test_hash_password -v`
+Expected: FAIL with "User has no attribute 'hash_password'"
+```
+
+### 4. 预期输出
+
+每个命令必须有明确的预期输出：
+
+```markdown
+Expected: FAIL with "User has no attribute 'hash_password'"
+```
+
+如果命令成功了怎么办？说明测试写错了，需要修复测试。
+
+## 真实计划逐行解读
+
+### Plan Header
+
+每个计划必须以这个头部开始：
+
+```markdown
+# User Login Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Implement email-password login with JWT session and password reset
+
+**Architecture:** LoginController validates credentials, UserService handles authentication, JWT for sessions, bcrypt for password hashing
+
+**Tech Stack:** FastAPI, bcrypt, PyJWT, pytest
+
+---
+```
+
+### File Structure（任务定义前）
+
+在定义任务之前，先规划文件结构：
+
+```markdown
+## File Structure
+
+**Files to create:**
+- `src/models/user.py` - User model with password hashing
+- `src/controllers/login_controller.py` - Login endpoint
+- `src/services/user_service.py` - Authentication logic
+- `tests/models/test_user.py` - User model tests
+- `tests/controllers/test_login_controller.py` - Login endpoint tests
+
+**Files to modify:**
+- `src/main.py:45-50` - Register login route
+```
+
+这决定了任务的分解方式。每个任务应该产生自包含的改动。
+
+### Task 1: Complete Example
+
+```markdown
+### Task 1: Create User model
+
+**Files:**
+- Create: `src/models/user.py`
+- Test: `tests/models/test_user.py`
+
+- [ ] **Step 1: Write failing test**
+
+```python
+def test_create_user():
+    user = User(email="test@example.com", password="password123")
+    assert user.email == "test@example.com"
+    assert user.password_hash != "password123"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/models/test_user.py::test_create_user -v`
+Expected: FAIL with "User not defined"
+
+- [ ] **Step 3: Implement minimal code**
+
+```python
+import bcrypt
+
+class User:
+    def __init__(self, email: str, password: str):
+        self.email = email
+        self.password_hash = self.hash_password(password)
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pytest tests/models/test_user.py::test_create_user -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/models/user.py tests/models/test_user.py
+git commit -m "feat: add User model with password hashing"
+```
+```
+
+## 红灯区：绝对不能写的东西
+
+### "TBD"、"TODO"、"后续补充"
+
+**Bad：**
+
+```markdown
+### Task 3: JWT generation
+
+实现 JWT 生成（TODO: 添加过期时间配置）
+```
+
+**Good：**
+
+```markdown
+### Task 3: JWT generation
+
+实现 JWT 生成，过期时间设置为 24 小时。
+```
+
+如果还没决定，不要写计划。先问清楚，再写计划。
+
+### "实现细节后续补充"
+
+**Bad：**
+
+```markdown
+### Task 4: Error handling
+
+添加错误处理。
+```
+
+**Good：**
+
+```markdown
+### Task 4: Error handling
+
+添加错误处理：
+- 用户不存在：返回 404
+- 密码错误：返回 401
+- 服务器错误：返回 500
+```
+
+### "类似 Task N"
+
+**Bad：**
+
+```markdown
+### Task 5: OAuth login
+
+类似 Task 4（密码登录），但用 OAuth。
+```
+
+**Good：**
+
+```markdown
+### Task 5: OAuth login
+
+- [ ] **Step 1: Write failing test**
+
+```python
+def test_oauth_login():
+    # OAuth login flow
+```
+
+[完整步骤，不引用 Task 4]
+```
+
+子代理可能乱序读任务，不能假设他们读了 Task 4。
+
+### "参考某个文档"
+
+**Bad：**
+
+```markdown
+### Task 6: Password reset
+
+实现密码重置，参考 RFC 规范。
+```
+
+**Good：**
+
+```markdown
+### Task 6: Password reset
+
+实现密码重置流程：
+1. 用户请求重置，输入邮箱
+2. 系统发送重置邮件（包含 token）
+3. 用户点击邮件链接，输入新密码
+4. 系统验证 token，更新密码
+```
+
+如果 RFC 规范很重要，把关键部分写在计划里。
+
+## Self-Review 检查清单
+
+写完计划后，AI 会自我审查：
+
+### 1. Spec Coverage
+
+检查 spec 中的每个需求是否都有对应任务：
+
+```
+For each section in spec:
+  - Can I point to a task that implements it?
+  - List any gaps
+```
+
+如果发现需求没有对应任务，添加任务。
+
+### 2. Placeholder Scan
+
+搜索计划的 "红灯区"：
+- "TBD"、"TODO"
+- "实现细节后续补充"
+- "类似 Task N"
+- "参考某个文档"
+
+如果发现，修复它们。
+
+### 3. Type Consistency
+
+检查类型、方法签名、属性名称的一致性：
+
+```python
+# Task 3: clearLayers()
+def clearLayers():  # ← 注意这里是驼峰
+
+# Task 7: clearFullLayers()  # ← 怎么变成另一个名字了？
+def clearFullLayers():
+```
+
+修复：统一命名。
+
+## 执行移交
+
+写完计划后，AI 会问：
+
+```
+AI: Plan complete and saved to docs/superpowers/plans/2026-06-02-login-plan.md.
+
+Two execution options:
+
+1. Subagent-Driven (recommended) - I dispatch a fresh subagent per task, review between tasks, fast iteration
+
+2. Inline Execution - Execute tasks in this session using executing-plans, batch execution with checkpoints
+
+Which approach?
+```
+
+**选项 1：Subagent-Driven（推荐）**
+- AI 派一个全新子代理执行每个任务
+- 每个任务完成后，审查产出
+- 快速迭代
+
+**选项 2：Inline Execution**
+- AI 在当前会话直接执行
+- 批量执行，批次间有检查点
+
+你选择后，AI 开始执行。
+
+## 权衡与局限
+
+### 开销
+
+- **计划时间**：可能需要 30-60 分钟写计划
+- **细节要求**：所有代码都要提前写出来
+- **修改成本**：如果计划写错，修改计划比直接写代码慢
+
+### 局限
+
+- **不适合非常灵活的任务**：探索性编程无法提前计划
+- **不适合快速原型**：原型需要快速迭代，不需要详细计划
+- **依赖 spec 质量**：如果 spec 不清楚，计划也会不清楚
+
+### 什么时候收益 < 成本
+
+- **一次性脚本**：写完就扔，不需要计划
+- **紧急修复**：生产环境挂了，先修复再计划
+- **实验性功能**：就是想试试，不确定要做什么
+
+## 延伸阅读
+
+- [07 - git worktrees 原理](07-git-worktrees.md) — 执行计划前，创建隔离工作区
+- [08 - Subagent-Driven Development](08-subagent-driven-development.md) — 计划的两种执行方式
+- [writing-plans 技能原文](https://github.com/obra/superpowers/blob/master/skills/writing-plans/SKILL.md) — 完整的计划写法规范
+- [01 - Superpowers 入门](01-overview.md) — 一个完整任务的从头到尾流程

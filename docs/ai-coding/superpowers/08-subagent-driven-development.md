@@ -1,0 +1,360 @@
+# Superpowers 工作流 · Subagent-Driven Development 整体流程
+
+> 更新日期：2026/06
+
+**TL;DR：** Subagent-Driven Development（SDD）通过派子代理执行任务，每任务两阶段审查（spec 合规性 → 代码质量）。核心是上下文隔离：每个子代理只拿到完成任务的必要信息，不继承主会话的历史。四种状态处理：DONE（继续）、DONE_WITH_CONCERNS（审查关切）、NEEDS_CONTEXT（补充信息）、BLOCKED（无法完成）。
+
+## 为什么用子代理
+
+### 问题：AI 直接执行计划
+
+假设主 AI（Controller）直接执行计划中的 Task 1：
+
+```
+Controller: 开始执行 Task 1: Create User model
+[Controller 读取代码、写代码、测试、提交]
+Controller: 完成，进入 Task 2
+```
+
+**问题：**
+- **上下文污染**：Controller 累积了 Task 1 的所有细节，执行 Task 2 时可能混淆
+- **无法并行**：Controller 只有一个，无法同时执行多个任务
+- **难以审查**：Controller 自己检查自己的工作，容易遗漏问题
+
+### 解决方案：派子代理
+
+SDD 的做法是：
+
+```
+Controller: 派子代理 A 执行 Task 1
+Subagent A: [执行 Task 1]
+Subagent A: 完成，报告结果
+Controller: 派子代理 B 审查 Task 1 的 spec 合规性
+Subagent B: [审查代码]
+Subagent B: ✅ Spec compliant
+Controller: 派子代理 C 审查 Task 1 的代码质量
+Subagent C: [审查代码]
+Subagent C: ✅ Approved
+Controller: Task 1 完成，进入 Task 2
+```
+
+**优势：**
+- **上下文隔离**：每个子代理只拿到自己的任务，不会被其他任务干扰
+- **专业审查**：独立的审查者更客观
+- **可并行**：可以派多个子代理同时执行不同任务（当然 SDD 默认串行，避免冲突）
+
+## 核心架构：四种角色
+
+SDD 包含四种角色，各司其职：
+
+### 1. Controller：协调者
+
+**职责：**
+- 读取计划，提取所有任务
+- 为每个任务派一个 implementer 子代理
+- 为每个任务派两个 reviewer 子代理（spec 合规性、代码质量）
+- 维护 TodoWrite，跟踪进度
+- 处理子代理的报告和状态
+
+**关键点：**
+- **不执行代码**：Controller 只协调，不写代码
+- **提供完整上下文**：给子代理提供完成任务的所有必要信息
+- **处理状态**：根据子代理的报告决定下一步
+
+### 2. Implementer：实施者
+
+**职责：**
+- 读取任务描述和上下文
+- 实现功能（遵循 TDD）
+- 写测试
+- 提交代码
+- 自我审查
+- 报告状态
+
+**关键点：**
+- **只拿到必要信息**：Implementer 只知道当前任务，不知道其他任务
+- **可以问问题**：如果任务描述不清楚，Implementer 会问 Controller
+- **自我审查**：报告前先自我检查
+
+### 3. Spec Compliance Reviewer：Spec 合规性审查者
+
+**职责：**
+- 读取 spec（任务要求）
+- 读取 implementer 写的代码
+- 对比：实现了什么 vs 要求实现什么
+- 报告：✅ Spec compliant 或 ❌ Issues found
+
+**关键点：**
+- **不信任 implementer 的报告**：Spec reviewer 必须读实际代码
+- **只看 spec 合规性**：不关心代码质量，只关心是否符合 spec
+- **第一个质量门**：spec 合规性审查通过后，才进行代码质量审查
+
+### 4. Code Quality Reviewer：代码质量审查者
+
+**职责：**
+- 读取 implementer 写的代码
+- 评估代码质量（命名、结构、测试覆盖等）
+- 报告：Strengths, Issues (Critical/Important/Minor), Assessment
+
+**关键点：**
+- **只在 spec 合规性通过后执行**：顺序固定，不能颠倒
+- **关注代码质量**：不关心是否符合 spec（已经验证过了）
+- **第二个质量门**：代码质量审查通过后，任务标记完成
+
+## 工作流程：一个任务的完整流程
+
+以 Task 1: Create User model 为例：
+
+### Step 1: Controller 派 Implementer
+
+```
+Controller: 派 Implementer 执行 Task 1
+
+Implementer: 读任务描述
+Implementer: 有问题：User 模型需要 email 验证吗？
+Controller: 不需要，只存储 email 字符串
+Implementer: 明白，开始实现...
+[Implementer 写代码、写测试、提交]
+Implementer: 自我审查完成
+Implementer: 报告：DONE
+```
+
+### Step 2: Controller 派 Spec Compliance Reviewer
+
+```
+Controller: 派 Spec Compliance Reviewer 审查 Task 1
+
+Spec Reviewer: 读任务要求
+Spec Reviewer: 读实际代码（src/models/user.py）
+Spec Reviewer: 对比：要求 vs 实现
+Spec Reviewer: ✅ Spec compliant - 所有要求都实现了，没有多余的
+```
+
+**如果发现问题：**
+
+```
+Spec Reviewer: ❌ Issues found:
+  - Missing: password_hash field (spec says "User must have password_hash")
+  - Extra: email_validation field (not in spec)
+```
+
+### Step 3: Implementer 修复（如果需要）
+
+```
+Controller: Implementer, spec reviewer 发现了问题，修复
+Implementer: [修复缺失的 password_hash，删除多余的 email_validation]
+Implementer: 重新提交
+Implementer: 报告：DONE
+```
+
+然后重新进入 Step 2，直到 spec 合规性审查通过。
+
+### Step 4: Controller 派 Code Quality Reviewer
+
+```
+Controller: 派 Code Quality Reviewer 审查 Task 1
+
+Code Reviewer: 读代码（src/models/user.py, tests/models/test_user.py）
+Code Reviewer: 评估质量
+Code Reviewer: 报告：
+  Strengths: Good test coverage, clean code
+  Issues (Minor): password_hash could be a property for encapsulation
+  Assessment: Approved
+```
+
+**如果发现问题：**
+
+```
+Code Reviewer: Issues (Important): Magic number in bcrypt.gensalt() - should use constant
+```
+
+### Step 5: Implementer 修复（如果需要）
+
+```
+Controller: Implementer, code reviewer 发现了问题，修复
+Implementer: [提取常量 BCRYPT_SALT_ROUNDS]
+Implementer: 重新提交
+Implementer: 报告：DONE
+```
+
+然后重新进入 Step 4，直到代码质量审查通过。
+
+### Step 6: Controller 标记任务完成
+
+```
+Controller: TodoWrite 标记 Task 1 完成
+Controller: 进入 Task 2
+```
+
+## 核心思想：上下文隔离
+
+### 什么是上下文隔离
+
+上下文隔离 = 每个子代理只拿到完成任务的信息，不继承主会话的所有历史。
+
+**Bad（上下文不隔离）：**
+
+```
+Controller: 你有整个会话的所有上下文（包括之前所有任务的细节）
+Implementer: [继承 Controller 的所有上下文]
+```
+
+**问题：**
+- Implementer 可能被无关信息干扰
+- Implementer 可能看到其他任务的实现，被带偏
+- 上下文过大，降低推理质量
+
+**Good（上下文隔离）：**
+
+```
+Controller: 只给 Implementer 当前任务的描述和必要上下文
+Implementer: [只知道当前任务，不知道其他任务]
+```
+
+**优势：**
+- Implementer 专注当前任务
+- 子代理的上下文小，推理质量高
+- 每个子代理可独立验证
+
+### Controller 如何提供上下文
+
+Controller 派 Implementer 时，提供：
+
+```markdown
+## Task Description
+
+[完整任务描述，从计划文件粘贴过来]
+
+## Context
+
+[场景设置：这个任务在整体架构中的位置、依赖关系、架构上下文]
+```
+
+**示例：**
+
+```markdown
+## Task Description
+
+### Task 3: Login endpoint
+
+**Files:**
+- Create: `src/controllers/login_controller.py`
+- Modify: `src/main.py:45-50`
+- Test: `tests/controllers/test_login_controller.py`
+
+- [ ] **Step 1: Write failing test**
+...
+
+## Context
+
+This task implements the HTTP endpoint for user login. It depends on:
+- Task 1 (User model) - already implemented
+- Task 2 (UserService) - already implemented
+
+The endpoint should:
+- Accept POST /login with {email, password}
+- Call UserService.authenticate()
+- Return {token, user} on success
+- Return 401 on failure
+```
+
+**关键点：**
+- **提供依赖信息**：Implementer 知道可以依赖什么
+- **不提供实现细节**：Implementer 不知道 Task 1 和 Task 2 的具体实现
+- **只提供架构上下文**：Implementer 知道自己的任务在整体中的位置
+
+## 四种状态处理
+
+Implementer 完成任务后，报告四种状态之一：
+
+### 1. DONE：完成
+
+**定义：** 任务完成，没有问题。
+
+**Controller 处理：** 派 Spec Compliance Reviewer 审查。
+
+### 2. DONE_WITH_CONCERNS：完成但有关切
+
+**定义：** 任务完成了，但 Implementer 有疑虑。
+
+**示例：**
+
+```
+Implementer: 报告：DONE_WITH_CONCERNS
+  Concerns:
+  - src/models/user.py 文件已经很大了（300 行），可能需要拆分
+  - 测试覆盖了正常路径，但可能还有边界情况没测
+```
+
+**Controller 处理：**
+- 读关切内容
+- 如果关切是关于正确性或范围的，在审查前处理
+- 如果关切只是观察（比如"文件越来越大"），记下来继续审查
+
+### 3. NEEDS_CONTEXT：需要上下文
+
+**定义：** Implementer 缺少完成任务的信息。
+
+**示例：**
+
+```
+Implementer: 报告：NEEDS_CONTEXT
+  Missing context:
+  - User 模型需要支持多种认证方式吗（邮箱、OAuth、手机号）？
+  - 密码重置流程是这个任务的一部分，还是单独的任务？
+```
+
+**Controller 处理：**
+- 提供缺失的上下文
+- 重新派 Implementer（用相同的 model 或更 capable 的 model）
+
+### 4. BLOCKED：被阻塞
+
+**定义：** Implementer 无法完成任务。
+
+**示例：**
+
+```
+Implementer: 报告：BLOCKED
+  Blocker:
+  - Task 1 (User model) 的实现与我假设的不同，我无法继续
+  - 我需要重构 User 模型，但这超出了当前任务的范围
+```
+
+**Controller 处理：**
+1. **评估 blocker 类型：**
+   - 上下文问题？提供更多信息，重新派 Implementer
+   - 推理能力问题？重新派更 capable 的 model
+   - 任务太大？拆成更小的任务
+   - 计划本身错了？升级给人类
+
+**关键点：**
+- **不要忽略升级**：Implementer 说被阻塞，必须有东西改变
+- **不要用同一个 model 重试**：如果 Implementer 说卡住了，重试不会有用
+
+## 权衡与局限
+
+### 开销
+
+- **子代理调用次数多**：每个任务 3 次子代理调用（implementer + 2 reviewers）
+- **审查循环**：如果审查发现问题，需要重新审查
+- **Controller 准备工作多**：需要提前提取所有任务的完整文本
+
+### 局限
+
+- **串行执行**：默认串行执行任务，避免冲突
+- **不能跳过审查**：即使很小的改动，也必须走两阶段审查
+- **依赖 Controller 质量**：如果 Controller 提供的上下文不够，Implementer 会 NEEDS_CONTEXT 或 BLOCKED
+
+### 什么时候收益 < 成本
+
+- **单个简单任务**：只改一行代码，SDD 太重
+- **快速原型**：原型不需要严格审查
+- **探索性编程**：你都不知道要做什么，无法规划任务
+
+## 延伸阅读
+
+- [09 - 三种 subagent prompt 详解](09-subagent-prompts.md) — Implementer、Spec Reviewer、Code Reviewer 的 prompt 逐段拆解
+- [subagent-driven-development 技能原文](https://github.com/obra/superpowers/blob/master/skills/subagent-driven-development/SKILL.md) — 完整的 SDD 规范
+- [01 - Superpowers 入门](01-overview.md) — SDD 在整体工作流中的位置
+- [06 - writing-plans 工作流](06-writing-plans.md) — 如何写 SDD 执行的计划

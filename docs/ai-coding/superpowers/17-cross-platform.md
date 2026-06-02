@@ -1,0 +1,180 @@
+# Superpowers 跨平台 · 在 Cursor / Codex / Copilot / Gemini 上跑起来
+
+> 同一份 skill 文档，8 个平台共用。差异只在那一层薄薄的 hook。
+
+**TL;DR**：superpowers 不是 Claude Code 独占。它支持 Claude Code、Codex CLI、Codex App、Factory Droid、Gemini CLI、OpenCode、Cursor、GitHub Copilot CLI 共 8 个平台。秘诀不在"为每个平台写一份代码"，而在一个 bash hook 检测当前运行时环境，吐出对应格式的 JSON。skill 内容本身是 Markdown，跨平台无需改动。这篇文章拆解这个适配层是怎么做的、各平台的差异在哪、哪些功能会失效。
+
+## 一个 hook，三种格式
+
+整个跨平台机制的核心是 [`hooks/session-start`](https://github.com/obra/superpowers/blob/main/hooks/session-start) 这个 bash 脚本。它做三件事：
+
+1. 读 `skills/using-superpowers/SKILL.md` 的全文
+2. 检测当前在哪个平台（通过环境变量）
+3. 按对应平台的 JSON schema 输出
+
+平台检测逻辑就 10 行：
+
+```bash
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+  # Cursor sets CURSOR_PLUGIN_ROOT (may also set CLAUDE_PLUGIN_ROOT)
+  printf '{ "additional_context": "%s" }\n' "$session_context"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+  # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI
+  printf '{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "%s" } }\n' "$session_context"
+else
+  # Copilot CLI (sets COPILOT_CLI=1) or unknown platform — SDK standard format
+  printf '{ "additionalContext": "%s" }\n' "$session_context"
+fi
+```
+
+三个分支对应三种 JSON schema：
+
+| 平台 | 字段 | 结构 |
+|------|------|------|
+| Cursor | `additional_context` | 顶层，snake_case |
+| Claude Code | `hookSpecificOutput.additionalContext` | 嵌套 |
+| Copilot CLI / SDK 标准 | `additionalContext` | 顶层，camelCase |
+
+注意 Claude Code 同时会读 `additional_context`（SDK 标准字段），所以必须只输出 `hookSpecificOutput` 那一份，否则会重复注入。
+
+这个 hook 在每次 SessionStart 触发——开始会话、`/clear`、`/compact` 三种事件。每次都把 using-superpowers 的全文塞进上下文，后续 skill 调用都基于这份注入的内容。
+
+## 安装：8 个平台，8 种姿势
+
+每个平台的 plugin 系统都不一样，superpowers 在 README 里给了 8 套安装指令：
+
+**Claude Code**：通过官方 plugin marketplace
+```bash
+/plugin install superpowers@claude-plugins-official
+```
+
+**Codex CLI**：通过 OpenAI 官方 plugin marketplace
+```bash
+/plugins
+# 搜索 superpowers，点 Install
+```
+
+**Codex App**：GUI 操作，在侧栏 Plugins 里找到 Superpowers，点 `+`
+
+**Factory Droid**：
+```bash
+droid plugin marketplace add https://github.com/obra/superpowers
+droid plugin install superpowers@superpowers
+```
+
+**Gemini CLI**：
+```bash
+gemini extensions install https://github.com/obra/superpowers
+```
+
+**OpenCode**：让 agent 自己去读安装指南
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
+```
+
+**Cursor**：在 Agent chat 里
+```text
+/add-plugin superpowers
+```
+
+**GitHub Copilot CLI**：
+```bash
+copilot plugin marketplace add obra/superpowers-marketplace
+copilot plugin install superpowers@superpowers-marketplace
+```
+
+每个平台用的都是同一份 superpowers 代码，只是入口不同。
+
+## Skill 加载机制差异
+
+每个平台调用 skill 的工具名不一样。superpowers 在 using-superpowers 文档里专门列了一节"Platform Adaptation"：
+
+| 平台 | 调用 skill 的工具 |
+|------|-------------------|
+| Claude Code | `Skill` |
+| Copilot CLI | `skill` |
+| Gemini CLI | `activate_skill` |
+| Codex / OpenCode | 各自的 plugin loader |
+
+skill 的内容是同一份 Markdown，但调用方式必须按平台来。这也是为什么 superpowers 的 skill 文档里从不说"调用 Skill 工具"，而是说"invoke skill"——保持平台中立。
+
+工具名映射在 [`references/`](https://github.com/obra/superpowers/blob/main/skills/using-superpowers/references/) 目录下有专门文档：`copilot-tools.md` 把 Claude Code 的工具名映射到 Copilot CLI 的等价物，`codex-tools.md` 同理。这些映射文档让 skill 作者写一份文档就能跨平台用。
+
+## Hooks 在不同平台的对应
+
+Claude Code 的 hooks 系统是 26 个拦截点（PreToolUse、PostToolUse、Stop 等）。superpowers 在不同平台用不同方式实现等价行为：
+
+**Claude Code**：原生 hooks.json，26 个事件都能挂
+**Cursor / Codex / Copilot**：通过 plugin manifest 注册 SessionStart 钩子，其他事件支持度不一
+**Gemini CLI**：通过 extension 的 GEMINI.md 注入元规则，没有显式 hook 概念
+
+这导致一个现实问题：依赖 PostToolUse 或 Stop 钩子的 skill（比如 verification-before-completion 在某些场景下想自动触发），在非 Claude Code 平台可能没有等价机制。superpowers 的处理方式是把这类 skill 写成"agent 显式调用"而不是"hook 自动触发"，牺牲一些自动化换取跨平台兼容。
+
+## Windows 的特殊处理
+
+bash hook 在 Windows 上不能直接跑。superpowers 在 [`docs/windows/polyglot-hooks.md`](https://github.com/obra/superpowers/blob/main/docs/windows/polyglot-hooks.md) 里给了 polyglot 解决方案——同一个文件既是 bash 又是 cmd，靠语法交集实现。
+
+简化的思路：脚本头部用 cmd 能识别但 bash 当成注释的语法，bash 部分用 `exit 0` 结尾前完成所有工作，cmd 部分在 `exit /b 0` 后跑。这种写法在 Claude Code 官方 plugin marketplace 上的 superpowers 包里已经预置好了，普通用户感知不到，但如果你要在 Windows + 自建 plugin 环境跑，就要自己处理这一层。
+
+## 各平台功能对照
+
+| 功能 | Claude Code | Cursor | Codex CLI | Codex App | Gemini CLI | Copilot CLI | OpenCode | Factory Droid |
+|------|-------------|--------|-----------|-----------|------------|-------------|----------|---------------|
+| SessionStart hook | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| 其他 hook 事件 | 26 个 | 部分 | 部分 | 部分 | ❌ | 部分 | 部分 | 部分 |
+| Skill 工具 | ✅ | ✅ | ✅ | ✅ | ✅ (activate_skill) | ✅ | ✅ | ✅ |
+| Subagent dispatch | Task 工具 | Task 工具 | 类似 | 类似 | 类似 | 类似 | 类似 | 类似 |
+| 工具名映射 | 原生 | references/ | references/ | references/ | 内置 GEMINI.md | references/ | references/ | references/ |
+
+"类似"的意思是平台有等价机制，但 API 细节不一致，需要在 writing-skills 阶段做 platform testing。
+
+## 哪些功能会失效
+
+**完全依赖 Claude Code 原生 hook 的 skill** 在其他平台会降级。比如某个团队在 PostToolUse 钩子里跑了自动 lint，迁到 Cursor 上发现没有等价钩子，只能在 skill 文档里加一条"在每次编辑后显式跑 lint"，把自动化降级成半自动。
+
+**Subagent 隔离强度差异**。Claude Code 的 Task 工具能给 subagent 严格隔离上下文。Cursor 的 subagent 实现细节不同，隔离强度可能弱一些。dispatching-parallel-agents 在 Claude Code 上很稳，在 Cursor 上偶尔会出现 subagent 看到主会话内容的情况。
+
+**Worktree 在 Windows CMD 下的兼容性**。git worktree 命令本身跨平台，但 superpowers 的 worktree skill 用了一些 bash 风格的 path 处理，在 Windows 上需要 Git Bash 或 WSL。
+
+**Skill 自动更新机制不同**。Claude Code 通过 plugin marketplace 自动更新；Codex CLI 也支持；Cursor 需要手动 `/update-plugin`；Gemini 用 `gemini extensions update`；其他平台要看各自的 plugin 系统。这也是为什么 superpowers README 里专门写了"Updating"一节，提醒用户不同平台的更新策略。
+
+## 实战：在 Cursor 上跑通第一次
+
+Cursor 用户最常踩的坑是：装了 superpowers 之后，发现 agent 行为没变化。原因通常是 hook 没注册成功。
+
+排查顺序：
+
+1. 在 Cursor Agent chat 里跑 `/add-plugin superpowers`
+2. 重启 Cursor（不是 reload window，是彻底退出再开）
+3. 新开一个 chat，问 agent "Do you have superpowers?"
+4. 如果回答 yes 并能复述 using-superpowers 的核心规则，hook 已注入
+5. 如果回答 no 或不知道，检查 Cursor 的 plugin 配置里有没有 superpowers
+6. 实在不行，看 Cursor 的日志（Settings → Developer → Open Logs），找 SessionStart 钩子的输出
+
+第二个常见问题是 skill 触发率低。Cursor 的 skill 调用工具叫 `skill`（小写），不是 Claude Code 的 `Skill`。如果你在 CLAUDE.md 里写了"调用 Skill 工具"，要改成中性的"invoke skill"或者直接不指定工具名。
+
+## 实战：在 Codex 上配出完整流程
+
+Codex CLI 装好 superpowers 之后，要做的第一件事是检查 AGENTS.md（Codex 的项目指令文件）有没有冲突。如果你之前在 AGENTS.md 里写过自己的工作流规则，superpowers 的 brainstorming → writing-plans → SDD 流程可能会和它打架。
+
+正确做法是把 AGENTS.md 里跟 superpowers 流程冲突的部分删掉，让 superpowers 接管。如果你的 AGENTS.md 里有项目特定规则（比如"所有 PR 必须 link 到 Linear 工单"），这部分保留，superpowers 会和它共存。
+
+Codex 的 subagent 隔离机制和 Claude Code 不一样。subagent-driven-development skill 在 Codex 上跑时，需要用 Codex 自己的 subagent API。superpowers 的 SKILL.md 里写了平台差异，但具体的 prompt 模板（implementer-prompt.md 等）在不同平台细节会调整。
+
+## 权衡与局限
+
+**跨平台要付出语义损失**。superpowers 选择写一份 skill 跑 8 个平台，必然要找最大公约数。某些平台特有的能力（比如 Claude Code 的 26 个 hook 点）会被牺牲掉，换成对所有平台都安全的等价物。如果你只在 Claude Code 上用，理论上可以写出更激进的 skill 用满 hook 系统——但这就放弃了跨平台。
+
+**平台版本依赖**。superpowers 依赖 Cursor、Codex、Copilot 等平台的 plugin 系统和 hook 机制，这些机制在快速演进。某个平台的 plugin API breaking change 会让 superpowers 在那个平台暂时失效，直到下次 superpowers 版本跟进。
+
+**文档同步成本**。8 个平台的安装方式都在 README 里，每个平台升级都要更新。如果你看的是过期的 README，可能会按旧命令装错。
+
+**不是真正等价**。即使 superpowers 在 8 个平台都能跑，不同平台上 agent 的能力上限不同。Sonnet 4.5 在 Claude Code 里和 Cursor 里调用的可能是同一个模型，但工具调用、subagent 隔离、上下文窗口等机制差异，会让同样的 skill 在不同平台表现差异显著。"装上就能用"是真的，"用得一样好"是夸张。
+
+## 延伸阅读
+
+- [obra/superpowers - README installation section](https://github.com/obra/superpowers#installation)
+- [obra/superpowers - hooks/session-start](https://github.com/obra/superpowers/blob/main/hooks/session-start)
+- [obra/superpowers - docs/windows/polyglot-hooks.md](https://github.com/obra/superpowers/blob/main/docs/windows/polyglot-hooks.md)
+- [obra/superpowers - docs/README.opencode.md](https://github.com/obra/superpowers/blob/main/docs/README.opencode.md)
+- [agentskills.io specification](https://agentskills.io/specification)

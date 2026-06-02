@@ -1,0 +1,399 @@
+# Superpowers 工作流 · brainstorming：把模糊需求拆成 spec
+
+> 更新日期：2026/06
+
+**TL;DR：** brainstorming 技能在写任何代码前强制执行。它通过苏格拉底式追问把模糊需求变成明确设计，分段展示设计让你确认，最后保存为 spec 文档。不是"聊几句"，而是系统的需求工程流程。
+
+## 为什么要 brainstorming
+
+没有 brainstorming 的 AI 会直接开始写代码。这会导致：
+
+- **假设代替确认**：AI 猜测你想要什么，往往猜错
+- **设计漏洞**：写到一半发现需求不明确，返工
+- **过度工程**：AI 加上"可能需要"的功能，浪费开发时间
+- **缺少文档**：设计决策没有记录，后续无法回溯
+
+brainstorming 强制执行"先理解、再设计"的流程。
+
+## 核心机制：苏格拉底式追问
+
+brainstorming 不是一次问完所有问题，而是一个一个问，每个问题等你的答案。
+
+### 一个一个问，不是批量问
+
+**Bad：**
+
+```
+AI: 我需要知道：
+1. 用什么登录方式？
+2. 需要记住我吗？
+3. 密码重置怎么做？
+4. 登录失败次数限制吗？
+5. session 还是 JWT？
+
+请回答以上问题。
+```
+
+**Good：**
+
+```
+AI: 用户登录用什么方式？邮箱密码、OAuth、还是手机号？
+
+You: 邮箱密码。
+
+AI: 好的。需要"记住我"功能吗？
+
+You: 需要。
+
+AI: 明白。密码重置流程怎么做？
+```
+
+### 为什么一个一个问
+
+- **减少认知负担**：一次回答一个问题，比一次回答 5 个问题容易
+- **渐进式理解**：AI 根据你的前一个答案调整下一个问题
+- **自然对话**：更像真实的讨论，而不是填表
+
+### 问题类型：开放式 vs 选择题
+
+**开放式问题：**
+
+```
+AI: 密码重置流程怎么做？
+```
+
+适合：设计决策、流程定义。
+
+**选择题：**
+
+```
+AI: 用户登录用什么方式？
+A. 邮箱密码
+B. OAuth（Google/GitHub）
+C. 手机号验证码
+```
+
+适合：明确的选项、技术栈选择。
+
+brainstorming 更倾向于选择题，因为更容易回答。
+
+## 设计确认：分段展示
+
+问完问题后，AI 会给你看设计文档。但不是一次扔给你 50 页文档，而是分段展示。
+
+### 为什么分段展示
+
+假设 AI 生成了 2000 字的设计文档：
+
+- **一次性展示**：你很难全部消化，容易遗漏细节
+- **分段展示**：每段 200-300 字，逐段确认，容易消化
+
+### 展示顺序
+
+典型分段顺序：
+
+1. **架构概述**（2-3 句话）
+2. **组件设计**（200-300 字）
+3. **数据流**（200-300 字）
+4. **错误处理**（200-300 字）
+5. **测试策略**（200-300 字）
+
+每段展示后，AI 会问："这样对吗？" 等你确认再继续。
+
+### 实际例子
+
+```
+AI: 好的，我来总结一下设计方案。
+
+【架构概述】
+用户登录采用邮箱密码方式，支持"记住我"功能。
+密码使用 bcrypt 加密存储，session 用 JWT。
+登录失败 5 次后锁定账户 30 分钟。
+
+这样对吗？
+
+You: 是的。
+
+AI: 【组件设计】
+- LoginController：处理登录请求，验证邮箱密码
+- UserService：查询用户、验证密码、生成 JWT
+- AuthService：封装认证逻辑，处理"记住我"
+- PasswordResetService：处理密码重置流程
+
+这个组件划分合理吗？
+
+You: UserService 和 AuthService 的职责有点模糊，能不能合并？
+
+AI: 好的，那我把 AuthService 的职责合并到 UserService：
+- UserService：查询用户、验证密码、生成 JWT、处理"记住我"
+- PasswordResetService：处理密码重置流程（保持独立）
+
+现在可以吗？
+
+You: 可以。
+
+AI: 【数据流】
+登录流程：
+1. 前端发送 POST /login {email, password, rememberMe}
+2. LoginController 验证参数，调用 UserService
+3. UserService 查询用户，验证密码，生成 JWT
+4. 返回 {token, user} 给前端
+...
+
+这个流程对吗？
+```
+
+注意：AI 根据你的反馈实时调整设计。不是"展示即完成"，而是"迭代确认"。
+
+## Spec 文档结构
+
+确认完成后，AI 把设计保存为 spec 文档。典型结构：
+
+```markdown
+# 2026-06-02 User Login Design
+
+## Architecture Overview
+[架构概述]
+
+## Components
+[组件设计]
+
+## Data Flow
+[数据流]
+
+## Error Handling
+[错误处理]
+
+## Testing Strategy
+[测试策略]
+
+## Open Questions
+[未决问题 - 如果有]
+```
+
+### 文件位置
+
+默认位置：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+
+示例：`docs/superpowers/specs/2026-06-02-login-design.md`
+
+### 提交到 git
+
+写完 spec 后，AI 会自动提交：
+
+```bash
+git add docs/superpowers/specs/2026-06-02-login-design.md
+git commit -m "spec: add user login design"
+```
+
+这确保设计决策有版本历史。
+
+## Spec Self-Review
+
+写完 spec 后，AI 会做自我审查：
+
+### 1. Placeholder Scan
+
+扫描 spec 中的占位符：
+- "TBD"、"TODO"、"待定"
+- 不完整的章节
+- 模糊的需求描述
+
+如果发现，AI 会修复或问你。
+
+### 2. Internal Consistency
+
+检查内部一致性：
+- 架构概述是否与组件设计一致？
+- 数据流是否与错误处理一致？
+- 测试策略是否覆盖了所有组件？
+
+如果发现矛盾，AI 会修正。
+
+### 3. Scope Check
+
+检查范围：
+- 这个 spec 是否太大，需要拆分？
+- 是否有多个独立子系统？
+- 如果是，建议拆成多个 spec
+
+### 4. Ambiguity Check
+
+检查模糊性：
+- 是否有可以有两种解释的需求？
+- 如果有，选择一种并明确写出来
+
+## 用户审查门控
+
+自我审查完成后，AI 会让你审查 spec：
+
+```
+AI: Spec written and committed to docs/superpowers/specs/2026-06-02-login-design.md.
+
+Please review it and let me know if you want to make any changes before we start writing the implementation plan.
+```
+
+**这是硬门控。** AI 会等你确认 spec 后才会进入下一个阶段（writing-plans）。
+
+如果你要求修改，AI 会修改 spec，重新运行自我审查，再次让你审查。循环直到你满意。
+
+## 关键原则
+
+### YAGNI（You Aren't Gonna Need It）
+
+ ruthlessly 删除不必要的功能。
+
+**Bad：**
+
+```
+AI: 【功能清单】
+- 邮箱密码登录
+- OAuth 登录（Google、GitHub、Facebook）
+- 手机号验证码登录
+- 双因素认证
+- 生物识别登录
+```
+
+**Good：**
+
+```
+AI: 【功能清单】
+- 邮箱密码登录
+- OAuth 登录（Google、GitHub）
+
+[双因素认证和生物识别以后需要再加，现在不做]
+```
+
+### 多方案选择
+
+不要只给一个方案，给 2-3 个方案并说明权衡。
+
+**Bad：**
+
+```
+AI: 我们用 JWT 做 session。
+
+You: 我不知道 JWT 是什么，还有别的选择吗？
+
+AI: （被动解释）
+```
+
+**Good：**
+
+```
+AI: Session 存储有两种方案：
+
+**方案 A：JWT**
+- 优点：无需服务器存储，跨域友好
+- 缺点：无法撤销，payload 大小有限制
+
+**方案 B：Redis session**
+- 优点：可撤销，灵活性强
+- 缺点：需要服务器存储，跨域需要特殊处理
+
+我推荐方案 A（JWT），因为这个项目不需要撤销 session，而且 JWT 跨域更方便。
+
+你倾向哪个方案？
+
+You: 方案 A。
+```
+
+### 增量确认
+
+不要等所有问题都问完再展示设计。每几个问题后，给出一个阶段性设计，让你确认方向没错。
+
+## 反模式
+
+### 反模式 1：跳过"太简单"的项目
+
+**场景：** 写一个 20 行的脚本。
+
+**想法：** 这么简单，不需要 brainstorming。
+
+**问题：** 20 行的脚本也有需求：
+- 输入是什么？
+- 输出是什么？
+- 错误怎么处理？
+- 边界情况？
+
+**正确做法：** brainstorming 可以很短（几句话），但必须执行。
+
+### 反模式 2：批量问问题
+
+**Bad：**
+
+```
+AI: 我需要知道以下问题：
+1. 登录方式？
+2. 记住我？
+3. 密码重置？
+4. 失败锁定？
+
+请一次性回答。
+```
+
+**Good：**
+
+```
+AI: 用户登录用什么方式？
+
+You: 邮箱密码。
+
+AI: 好的。需要"记住我"功能吗？
+
+You: 需要。
+```
+
+### 反模式 3：一次性展示完整设计
+
+**Bad：**
+
+```
+AI: 好的，这是完整设计文档（2000 字）。
+[一次性展示]
+
+你看完告诉我行不行。
+```
+
+**Good：**
+
+```
+AI: 好的，我来分块展示设计。
+
+【架构概述】
+用户登录采用...
+
+这样对吗？
+
+You: 是的。
+
+AI: 【组件设计】
+...
+```
+
+## 权衡与局限
+
+### 开销
+
+- **前期时间投入**：可能需要 30-60 分钟才能开始写代码
+- **对话式**：需要你的参与，不能完全自动
+- **迭代次数**：可能需要 2-3 轮修改才能确定 spec
+
+### 局限
+
+- **不适合非常简单的改动**：改一行配置，走完整流程有点重
+- **不适合探索性编程**：你都不知道要做什么，无法设计
+- **依赖你的回答质量**：如果你的回答模糊，spec 也会模糊
+
+### 什么时候收益 < 成本
+
+- **一次性脚本**：写完就扔，不需要 spec
+- **紧急修复**：生产环境挂了，先修复再设计
+- **学习实验**：就是想试试某个技术，不需要正式设计
+
+## 延伸阅读
+
+- [06 - writing-plans 工作流](06-writing-plans.md) — brainstorming 完成后，把 spec 拆成实施计划
+- [brainstorming 技能原文](https://github.com/obra/superpowers/blob/master/skills/brainstorming/SKILL.md) — 完整的工作流程规范
+- [01 - Superpowers 入门](01-overview.md) — 一个完整任务的从头到尾流程
+- [writing-skills 技能](https://github.com/obra/superpowers/blob/master/skills/writing-skills/SKILL.md) — 如何创建和测试新技能

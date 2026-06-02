@@ -1,0 +1,308 @@
+# Superpowers 原理 · Skills 系统是什么
+
+> 更新日期：2026/06
+
+**TL;DR：** Skills 是 Superpowers 的核心机制。每个技能是一个 YAML + Markdown 文件，定义了特定场景下的强制工作流。系统在会话启动时扫描所有技能的 frontmatter，根据任务自动匹配和触发。不是建议，是必须执行的流程。
+
+## 技能的物理形态
+
+每个技能是一个单一的 Markdown 文件，文件名固定为 `SKILL.md`。文件结构由两部分组成：YAML frontmatter 和 Markdown 内容。
+
+### YAML Frontmatter
+
+文件头部（前 3 行）是 YAML 格式的元数据：
+
+```yaml
+---
+name: test-driven-development
+description: Use when implementing any feature or bugfix, before writing implementation code
+---
+```
+
+**两个字段：**
+
+- **name**：技能名称，用连字符分隔（如 `test-driven-development`）
+- **description**：触发条件描述，告诉 AI 什么时候该用这个技能
+
+**description 的关键规则：**
+
+```yaml
+# ✅ 好的 description：只描述触发条件
+description: Use when implementing any feature or bugfix, before writing implementation code
+
+# ❌ 坏的 description：总结了工作流
+description: Use for TDD - write test first, watch it fail, write minimal code, refactor
+```
+
+为什么不能总结工作流？实验数据表明，当 description 包含工作流总结时，AI 会只看 description 而跳过技能完整内容。一个真实案例：某技能的 description 说"code review between tasks"，AI 就只做了一次审查，但技能的流程图明确要求两次审查（先 spec 合规性，再代码质量）。后来 description 改成"Use when executing implementation plans with independent tasks"，去掉了工作流总结，AI 才正确执行了两次审查。
+
+### Markdown 内容
+
+frontmatter 之后是技能的完整内容，用 Markdown 写。典型结构：
+
+```markdown
+# Test-Driven Development
+
+## Overview
+Write the test first. Watch it fail. Write minimal code to pass.
+
+## When to Use
+- New features
+- Bug fixes
+- Refactoring
+
+## The Iron Law
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+
+## Red-Green-Refactor
+### RED - Write Failing Test
+[详细步骤]
+### GREEN - Minimal Code
+[详细步骤]
+```
+
+没有固定格式要求，但大多数技能会包含：概述、使用场景、核心原则、步骤、常见错误。
+
+### 文件位置
+
+技能文件存放在项目的 `skills/` 目录下：
+
+```text
+project-root/
+  .claude/
+    skills/
+      test-driven-development/
+        SKILL.md
+      brainstorming/
+        SKILL.md
+      writing-plans/
+        SKILL.md
+```
+
+每个技能一个子目录，子目录名称与技能的 `name` 字段对应。
+
+## 加载机制
+
+Superpowers 的技能加载是渐进式的，不是一次性全量加载。
+
+### 会话启动：扫描 Frontmatter
+
+当 AI 会话启动时，系统会：
+
+1. 扫描 `skills/` 下所有的 `SKILL.md` 文件
+2. 提取每个文件的 YAML frontmatter（name + description）
+3. 把这些 frontmatter 保存在内存中
+
+**这一步的代价很小**。frontmatter 只有几十个字符，扫描几十个技能文件的开销几乎可以忽略。
+
+### 任务执行时：匹配和按需加载
+
+当用户发出请求（比如"加个搜索功能"）时，系统会：
+
+1. 用用户的请求去匹配所有技能的 `description` 字段
+2. 找到匹配的技能
+3. 加载该技能的完整 Markdown 内容
+
+**关键点：** 只加载匹配到的技能完整内容，其他技能只保留 frontmatter 在内存中。
+
+### 渐进式加载的优势
+
+对比全量加载：
+
+| 加载方式 | 开销 | Token 消耗 |
+|---------|------|------------|
+| **全量加载** | 所有技能完整内容每次都加载 | 固定，高 |
+| **渐进式加载** | 只加载用到的技能 | 可变，平均节省 40-60% |
+
+**真实案例：**
+
+一个包含 20 个技能的项目：
+
+- **全量加载**：每次会话加载所有 20 个技能的完整内容，约 15,000 tokens
+- **渐进式加载**：每次会话只加载 frontmatter（约 500 tokens）+ 用到的 2-3 个技能完整内容（约 2,000-3,000 tokens），总计 2,500-3,500 tokens
+
+平均节省 **70%+** 的 token 消耗。
+
+## 触发机制
+
+技能的触发不是用户显式调用的，而是系统自动匹配的。
+
+### 匹配逻辑
+
+当用户发送一条消息时：
+
+1. 系统解析用户的意图（比如"创建新功能"）
+2. 用这个意图去匹配所有技能的 `description` 字段
+3. 找到匹配的技能后，**必须**加载并执行
+
+**示例：**
+
+用户说："我想给项目加个用户登录功能。"
+
+1. 系统判断这是"creating features"
+2. 匹配到 `brainstorming` 技能的 description：`"You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior"`
+3. 系统自动加载 `brainstorming/SKILL.md` 的完整内容
+4. AI 严格按照技能定义的流程执行（问问题、设计方案、写文档）
+
+不是用户说"用 brainstorming"，也不是 AI 选择性使用，而是系统强制执行。
+
+### 强制执行的规则
+
+`using-superpowers` 技能（这个技能本身也定义了技能系统的核心规则）明确写了：
+
+> **IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.**
+>
+> This is not negotiable. This is not optional.
+
+这不是建议，是系统级的强制要求。
+
+### 优先级：用户指令 > 技能 > 默认行为
+
+如果项目的 `CLAUDE.md` 文件写了"我们不用 TDD"，但 Superpowers 的 `test-driven-development` 技能说"必须用 TDD"，这时怎么办？
+
+答案是：**用户指令最高**。
+
+优先级顺序是：
+
+1. **用户的明确指令**（CLAUDE.md、GEMINI.md、AGENTS.md、直接请求）
+2. **Superpowers 技能**（覆盖默认系统行为）
+3. **默认系统提示**
+
+如果 `CLAUDE.md` 写了"我们不用 TDD"，Superpowers 就不会强制 TDD。用户始终在控制。
+
+## 与 Slash Commands 的本质区别
+
+很多人会把 Superpowers 的技能和 Slash Commands 混淆。它们在工作方式上有根本区别。
+
+### Slash Commands：用户显式调用
+
+Slash Commands（比如 `/review`）是用户主动输入的：
+
+```text
+用户: /review
+系统: 找到 commands/review.md，加载完整内容，执行
+```
+
+**特点：**
+- 用户显式输入命令名称
+- 系统确定性地加载对应文件
+- 全量加载整个文件内容
+- 每次调用消耗相同的 token 数
+
+### Skills：系统自动触发
+
+Skills 是系统自动匹配的：
+
+```text
+用户: 我觉得这段代码有点问题，能不能帮我看看？
+系统: 判断意图 = code review，匹配到 pr-review 技能的 description
+系统: 自动加载 pr-review/SKILL.md，执行
+```
+
+**特点：**
+- 用户不知道技能的存在，只是正常说话
+- 系统根据意图匹配技能
+- 渐进式加载（frontmatter → 按需加载完整内容）
+- 只加载用到的技能
+
+### 对比表格
+
+| 维度 | Slash Commands | Skills |
+|------|----------------|--------|
+| **触发方式** | 用户显式输入 | 系统自动匹配 |
+| **确定性** | 100%（用户输入 `/review` 必定加载 review.md） | 概率性（取决于 description 匹配） |
+| **加载方式** | 全量加载 | 渐进式加载 |
+| **Token 效率** | 固定开销 | 平均节省 40-60% |
+| **用户体验** | 需要记住命令名称 | 自然对话，无需记忆 |
+| **适用场景** | 明确的工具操作（运行、测试、部署） | 流程化工作（设计、调试、审查） |
+
+### 实际例子
+
+**用 Slash Command：**
+
+```text
+用户: /tdd
+系统: [加载 test-driven-development.md 的完整内容]
+系统: 按照 TDD 流程执行
+```
+
+**用 Skill：**
+
+```text
+用户: 我准备加个新功能来处理用户注册
+系统: [检测到 "adding functionality"，匹配到 test-driven-development 技能]
+系统: [自动加载 TDD 技能]
+系统: 我会用 TDD 来实现这个功能。先写失败的测试...
+```
+
+用户甚至不知道 Superpowers 存在，只是正常说话，系统就自动执行了正确的工作流。
+
+## 为什么需要技能系统
+
+为什么不直接把所有工作流写在系统提示里，而是要做一套技能系统？
+
+### 1. 按需加载节省 Token
+
+如果所有工作流都写在系统提示里：
+
+- 20 个工作流 × 平均 500 字 = 10,000 字
+- 每次会话都加载 10,000 字，不管用不用
+- Token 消耗巨大
+
+用技能系统：
+
+- 每次只加载 2-3 个用到的技能
+- 平均只消耗 2,000-3,000 字
+- 节省 70%+ token
+
+### 2. 可组合性
+
+技能是独立的、可组合的模块。比如：
+
+- `brainstorming` 完成后调用 `writing-plans`
+- `writing-plans` 完成后调用 `subagent-driven-development`
+- `subagent-driven-development` 中每个任务调用 `test-driven-development`
+
+每个技能定义好自己的输入输出，就可以像搭积木一样组合。
+
+### 3. 可维护性
+
+每个技能一个文件，修改某个工作流只需要改对应的 `SKILL.md`。如果都写在系统提示里：
+
+- 文件会变得巨大
+- 修改某个工作流可能影响其他部分
+- 难以定位和调试
+
+### 4. 跨平台兼容
+
+技能文件是纯 Markdown + YAML，不依赖特定平台。Claude Code、Cursor、Copilot CLI、Gemini CLI 都可以用同一套技能系统。
+
+## 权衡与局限
+
+技能系统不是银弹，有自己的成本：
+
+### 开销
+
+- **需要设计触发条件**：description 写不好会导致技能无法触发或误触发
+- **需要测试**：写新技能后需要验证它是否正确触发和执行
+- **增加文件数量**：每个技能一个目录和文件，项目会多很多文件
+
+### 局限
+
+- **触发准确性依赖 description 质量**：description 写得太宽会误触发，写得太窄会欠触发
+- **无法处理复杂逻辑**：匹配是基于文本相似度，不能做复杂判断
+- **需要定期维护**：技能内容需要随着项目和实践更新
+
+### 什么时候不值得用
+
+- **单一场景的工具**：比如"运行测试"这种简单操作，用 slash command 更直接
+- **不需要组合的工作流**：如果某个流程是独立的、不会被其他流程调用，写在系统提示里可能更简单
+- **触发条件难以描述**：如果无法用清晰的 description 表达什么时候该用，技能系统可能不适合
+
+## 延伸阅读
+
+- [03 - Description 与 CSO](03-description-cso.md) — 如何写高质量的 description，让 AI 准确找到你的技能
+- [04 - Hooks/CLAUDE.md/Skill/Command 的边界](04-hooks-md-skill-command-boundary.md) — 四件套各自的职责和使用场景
+- [writing-skills 技能原文](https://github.com/obra/superpowers/blob/master/skills/writing-skills/SKILL.md) — 如何创建和测试新技能
+- [Claude Code Skills 规范](https://agentskills.io/specification) — 技能文件的官方规范
+- [using-superpowers 技能原文](https://github.com/obra/superpowers/blob/master/skills/using-superpowers/SKILL.md) — 技能系统的完整规则
