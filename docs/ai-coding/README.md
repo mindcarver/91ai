@@ -32,6 +32,24 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | --- | --- | --- |
 | [Codex 工程化实战系列](./codex-engineering/) | 想系统掌握 Codex 工程化实践的人 | 38 篇独立文章 + 系列总览，覆盖 AGENTS.md、沙箱隔离、Starlark Rules、MCP 安全、Agent Loop 架构、codex exec、GitHub Actions、SDK 和团队治理。 |
 
+### OpenSpec 系列
+
+Spec-Driven Development 框架的完整中文指南，从入门到实战。覆盖工作流、Delta Spec、自定义 Schema、AI 工具集成、Brownfield 引入、CI/CD 和团队协作。
+
+| # | 文章 | 主题 |
+| --- | --- | --- |
+| — | [OpenSpec 总览](./openspec/openspec.md) | 5 分钟了解 OpenSpec 是什么、怎么用、跟其他方案比怎么样 |
+| 01 | [Vibe Coding 的终结者？](./openspec/01-introduction.md) | Vibe Coding 11 个问题、SDD 演进、OpenSpec 定位与对比 |
+| 02 | [核心概念全解](./openspec/02-core-concepts.md) | Specs、Changes、Deltas、Archive、四大哲学原则 |
+| 03 | [OPSX 工作流完全指南](./openspec/03-opsx-workflow.md) | propose 到 archive 每一步、core vs expanded 模式、完整实战 |
+| 04 | [Delta Spec 深度解析](./openspec/04-delta-spec.md) | 增量规范写法、合并机制、并行变更与冲突处理 |
+| 05 | [自定义 Schema 与工作流定制](./openspec/05-custom-schemas.md) | config.yaml、自定义 schema、Fork、社区扩展、三个实战示例 |
+| 06 | [AI 工具集成实战](./openspec/06-ai-tool-integration.md) | Claude Code、Cursor、Copilot 集成详解、多工具切换 |
+| 07 | [Brownfield 项目实战](./openspec/07-brownfield-practice.md) | 已有代码库引入 OpenSpec、explore/onboard 实战、渐进策略 |
+| 08 | [Workspace 与多仓库协作](./openspec/08-workspace-multi-repo.md) | 多仓库和大 monorepo 的协调层、context store、initiative |
+| 09 | [进阶实践](./openspec/09-advanced-practices.md) | CI/CD 集成、Code Review、团队纪律、避坑指南 |
+| 10 | [实战复盘](./openspec/10-retrospective.md) | 三个真实项目的数据：个人博客、SaaS 后台、订单系统 |
+
 ### 两个系列的关系
 
 两个系列独立阅读，但互为参照。核心差异：
