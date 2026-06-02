@@ -1,0 +1,946 @@
+# OPSX 工作流完全指南：从 propose 到 archive 的每一步
+
+> 更新日期：2026/06
+
+## TL;DR
+
+OPSX 是 OpenSpec 内置在 AI 编程工具（Claude Code、Cursor 等）中的命令集，把 Spec-Driven Development 的理念落地成可操作的步骤。它有两种模式：core 模式（4 条命令覆盖完整流程）和 expanded 模式（8 条命令，更细粒度的控制）。本文逐条拆解每个命令的输入输出、适用场景和实际操作细节，最后用一个完整的"给博客加搜索功能"案例走一遍全流程。读完本文，你应该能直接在项目中使用 OPSX 工作流。
+
+## 前置知识
+
+本文假设你已经读过：
+
+- 01-introduction.md：了解 OpenSpec 是什么、为什么需要它
+- 02-core-concepts.md：了解 Spec、Change、Delta Spec、Archive 的概念
+
+如果你已经安装了 OpenSpec（`npm install -g @fission-ai/openspec@latest`，然后 `openspec init`），就可以跟着操作了。
+
+## 两种 Profile：core 和 expanded
+
+OpenSpec 的命令集通过 profile 配置来切换。Profile 决定了你看到的命令数量和工作流的复杂度。
+
+### core 模式
+
+core 模式是默认配置，适合大多数人和大多数场景。它提供 4 条核心命令：
+
+| 命令 | 作用 | 类比 |
+|------|------|------|
+| `/opsx:propose` | 一键创建变更并生成所有规划 artifact | 提交一份完整的变更申请 |
+| `/opsx:explore` | 探索想法，不做任何变更 | 在草图本上画画 |
+| `/opsx:apply` | 按任务清单执行实现 | 照图纸施工 |
+| `/opsx:sync` | 把 delta spec 合并到主 spec | 更新正式图纸 |
+| `/opsx:archive` | 归档已完成的变更 | 把施工记录存档 |
+
+core 模式的核心假设是：大多数变更可以用一次 propose 完成规划，然后直接 apply。中间不需要反复切换。
+
+### expanded 模式
+
+expanded 模式暴露了更多命令，提供了更细的控制粒度。适合以下场景：
+
+- 你的团队有严格的 artifact 审查流程
+- 你想要逐个生成 artifact，每个都审核后再继续
+- 你需要批量归档多个变更
+
+expanded 模式在 core 基础上新增的命令：
+
+| 命令 | 作用 | 和 core 命令的关系 |
+|------|------|-------------------|
+| `/opsx:new` | 只创建变更的脚手架（空文件夹） | `/opsx:propose` 的第一步 |
+| `/opsx:continue` | 生成下一个 artifact（逐个） | `/opsx:propose` 的逐步版本 |
+| `/opsx:ff` | 快速生成所有剩余 artifact | 等同于补完 `/opsx:new` 创建的脚手架 |
+| `/opsx:verify` | 三维度验证实现质量 | apply 之后的质量门 |
+| `/opsx:bulk-archive` | 批量归档多个变更 | 多次 `/opsx:archive` 的批处理版 |
+| `/opsx:onboard` | 引导教程，帮你上手 | 独立的入门命令 |
+
+### 切换方式
+
+通过 `openspec config` 命令切换 profile：
+
+```bash
+# 查看当前 profile
+openspec config profile
+
+# 切换到 expanded
+openspec config profile expanded
+
+# 切回 core（默认）
+openspec config profile core
+```
+
+实际上，即使使用 core 模式，你也可以手动调用 expanded 模式的命令。Profile 更多是影响 AI 编程工具的命令面板展示，而不是硬性限制。
+
+### 怎么选
+
+简单判断：如果你是一个人用，或者团队没有 artifact 审查流程，用 core。如果你需要同事审查每个 artifact，或者你想要更严格的过程控制，用 expanded。
+
+大多数情况下，core 模式就够了。不要为了"更专业"而用 expanded——额外的命令意味着额外的认知负担，没有对应的收益就是浪费。
+
+---
+
+## `/opsx:propose` 详解
+
+这是整个工作流的起点，也是使用频率最高的命令。
+
+### 输入什么
+
+`/opsx:propose` 接收一个自然语言描述。这个描述应该包含：
+
+1. **你想做什么**（必须）
+2. **为什么做**（建议提供，不提供的话 AI 会自己推断）
+3. **大致的范围边界**（可选，但很有用）
+
+输入示例：
+
+```text
+/opsx:propose 给博客加全文搜索功能。用户可以在搜索框输入关键词，
+搜索标题和正文内容，结果按相关性排序。不需要高级搜索语法，
+简单的关键词匹配就行。用 SQLite FTS5 实现索引。
+```
+
+不推荐的做法——太模糊：
+
+```text
+/opsx:propose 加个搜索
+```
+
+也不推荐——太细节，把设计决策都写了：
+
+```text
+/opsx:propose 创建 SearchService 类，用 SQLite FTS5 虚拟表，
+表名叫 posts_fts，用分词器 unicode61，搜索 API 返回
+{ results: Array<{id: string, title: string, snippet: string}> }
+格式，前端用 React 的 useState 管理搜索状态...
+```
+
+`propose` 的输入应该描述意图和范围，不应该包含实现细节。实现细节由 AI 根据 proposal 和项目上下文来决定。
+
+### 生成什么
+
+`/opsx:propose` 一步生成所有规划 artifact。对于一个使用默认 `spec-driven` schema 的项目，它会生成：
+
+```
+openspec/changes/add-blog-search/
+├── proposal.md     # 变更提案
+├── specs/          # Delta specs
+│   └── blog/
+│       └── spec.md # 博客模块的行为变化
+├── design.md       # 技术方案
+└── tasks.md        # 实现检查清单
+```
+
+每个 artifact 的内容和 02-core-concepts.md 中的定义一致：
+
+- **proposal.md**：Intent（为什么做）、Scope（范围）、Approach（大致方案）
+- **specs/**：Delta Spec，用 ADDED/MODIFIED/REMOVED 描述行为变化
+- **design.md**：Technical Approach、Architecture Decisions、Data Flow、File Changes
+- **tasks.md**：带 checkbox 的实现检查清单
+
+生成过程中，AI 会读取 `openspec/config.yaml` 中的 `context` 和 `rules`：
+
+- `context` 注入到每个 artifact 的生成 prompt 中，包裹在 `<context>` 标签内
+- `rules` 只注入到匹配的 artifact，包裹在 `<rules>` 标签内
+
+这意味着你可以在 config.yaml 中控制生成的质量：
+
+```yaml
+context: |
+  Tech stack: TypeScript, Astro, SQLite
+  Blog posts are in src/content/blog/ as Markdown files
+  Build output is static HTML
+
+rules:
+  proposal:
+    - Always include performance impact assessment
+  specs:
+    - Use Given/When/Then format for all scenarios
+  design:
+    - List all new files and modified files separately
+  tasks:
+    - Each task should be completable in under 30 minutes
+```
+
+### 怎么审查
+
+生成完成之后，不要直接 apply。先花几分钟审查生成的 artifact。
+
+审查的重点按优先级排序：
+
+**1. proposal.md 的 Scope**
+
+检查 in-scope 和 out-of-speck 是否和你想的一致。AI 可能"自作主张"扩展了范围。比如你想做"关键词搜索"，AI 把"高级搜索语法"、"搜索建议"、"搜索历史"都加进了 in-scope。这种情况下，直接编辑 proposal.md，把多余的范围移到 out-of-scope。
+
+**2. specs/ 的 Delta Spec**
+
+检查 Delta Spec 的标记是否正确。常见问题：
+
+- 该用 MODIFIED 的用了 ADDED（说明 AI 不了解当前 spec 的内容）
+- 场景不够具体（比如只有正常路径没有异常路径）
+- 缺少边界情况（空搜索、超长输入、特殊字符）
+
+**3. design.md 的技术方案**
+
+检查方案是否合理。特别是：
+
+- 引入的新依赖是否必要
+- 文件变更列表是否合理（AI 可能遗漏需要修改的文件）
+- 架构决策有没有明显的缺陷
+
+**4. tasks.md 的粒度**
+
+检查任务粒度是否合适。好的任务列表应该满足：
+
+- 每个任务可以在一次 AI 会话中完成（大约 15-30 分钟的工作量）
+- 任务之间有清晰的依赖关系（先建基础设施，再做 UI）
+- 没有遗漏的步骤（比如忘了写测试、忘了处理错误情况）
+
+### 审查后修改
+
+审查后直接手动编辑文件。OpenSpec 的哲学是"流动不僵化"——你可以随时修改任何 artifact，没有门控机制阻止你。
+
+修改完之后继续 apply 就行，不需要重新 propose。
+
+### propose 失败的常见原因
+
+**1. 项目没有 openspec/ 目录**
+
+```
+Error: openspec directory not found
+```
+
+解决：先运行 `openspec init`。
+
+**2. config.yaml 中没有 context**
+
+propose 生成的 artifact 质量会明显下降，因为 AI 缺少项目上下文。建议在 config.yaml 中至少写清楚技术栈和项目结构。
+
+**3. 同名 change 已存在**
+
+```
+Error: change "add-blog-search" already exists
+```
+
+解决：要么先 archive 已有的同名 change，要么在 propose 时用不同的名称。
+
+**4. AI 模型能力不足**
+
+低质量模型可能生成模糊的 spec、缺少场景的设计、粒度过大的任务。OpenSpec 官方推荐使用高推理能力的模型（如 Claude Sonnet/Opus、GPT-4o）。
+
+---
+
+## `/opsx:apply` 详解
+
+`/opsx:apply` 是执行阶段的核心命令。它读取 tasks.md 中的检查清单，逐条执行。
+
+### 工作机制
+
+apply 的执行逻辑：
+
+1. 读取指定 change 的 `tasks.md`
+2. 找到第一个未完成的任务（`- [ ]`）
+3. 按任务描述执行代码变更
+4. 完成后将 `- [ ]` 改为 `- [x]`
+5. 继续下一个未完成的任务
+6. 所有任务完成后提示用户
+
+apply 不是"一次性跑完所有任务"的自动脚本。它更像是一个 AI 助手，按照任务清单逐步工作。每完成一个任务，它都会把进度记录在 tasks.md 中。
+
+### 中断恢复
+
+apply 最大的实用特性是中断恢复。
+
+假设你的 tasks.md 有 8 个任务，apply 执行到第 5 个时你中断了（关闭了终端、AI 会话超时、或者你手动停止了）。下次运行 apply 时，它会从第 5 个未完成的任务继续，不会从头开始。
+
+原因是进度记录在 `tasks.md` 文件中，而不是在 AI 的会话记忆里。文件是持久的，会话不是。
+
+```markdown
+# Tasks（apply 执行到一半的状态）
+
+## 1. Theme Infrastructure
+- [x] 1.1 Create ThemeContext with light/dark state
+- [x] 1.2 Add CSS custom properties for colors
+- [x] 1.3 Implement localStorage persistence
+- [ ] 1.4 Add system preference detection      ← 下次从这里继续
+
+## 2. UI Components
+- [ ] 2.1 Create ThemeToggle component
+- [ ] 2.2 Add toggle to settings page
+- [ ] 2.3 Update Header to include quick toggle
+```
+
+### 多变更切换
+
+你可以同时有多个进行中的 change。apply 通过指定 change 名称来决定执行哪个：
+
+```text
+/opsx:apply add-dark-mode
+```
+
+如果省略名称，apply 会尝试使用当前"活跃"的 change（最近创建或操作的 change）。
+
+多变更切换的工作流：
+
+1. `/opsx:propose add-search` → 创建搜索功能的变更
+2. `/opsx:apply add-search` → 做了几个任务
+3. 临时接到一个 bug 修复：`/opsx:propose fix-login-bug`
+4. `/opsx:apply fix-login-bug` → 修复 bug
+5. `/opsx:archive fix-login-bug` → 归档
+6. `/opsx:apply add-search` → 回来继续做搜索功能
+
+每个 change 的进度独立保存在各自的 tasks.md 中。
+
+### apply 过程中的动态调整
+
+apply 不是"死板地按清单执行"。你可以：
+
+- **跳过任务**：手动编辑 tasks.md，把某个任务标记为 `[x]` 并加上注释说明跳过原因
+- **新增任务**：实现过程中发现遗漏的步骤，直接在 tasks.md 中添加
+- **修改任务描述**：如果某个任务的描述不够准确，直接编辑
+- **修改 design**：发现方案行不通，先更新 design.md 再继续 apply
+
+这些操作不需要"重新 propose"。OpenSpec 的 artifact 不是写死的合同，是活的工作文档。
+
+### apply 什么时候不适用
+
+- 任务非常简单（改一个 CSS 颜色值）——直接改代码更快
+- 你还在探索阶段，不确定怎么做——用 `/opsx:explore` 先讨论
+- 任务列表需要大改——先手动调整 tasks.md，再 apply
+
+---
+
+## `/opsx:sync` 和 `/opsx:archive`
+
+这两个命令处理变更的后半段：合并和归档。
+
+### `/opsx:sync`：合并 delta spec
+
+`/opsx:sync` 把当前 change 的 delta spec 合并到主 spec 中，但不归档 change。
+
+**合并做了什么**：
+
+1. 读取 change 的 `specs/` 目录下的所有 delta spec 文件
+2. 对每个 delta spec 文件，找到主 spec 中对应的 spec 文件
+3. 按规则执行合并：
+   - ADDED Requirements → 追加到主 spec 的 Requirements 末尾
+   - MODIFIED Requirements → 替换主 spec 中同名的 Requirement
+   - REMOVED Requirements → 从主 spec 中删除同名的 Requirement
+4. 更新主 spec 文件
+
+**和 archive 的区别**：
+
+- sync 只合并 spec，不移动 change 文件夹
+- archive 合并 spec 后，把整个 change 文件夹移到 archive 目录
+- sync 适合"我想更新主 spec 看看效果，但 change 还没完全做完"的场景
+
+**什么时候用 sync 而不是直接 archive**：
+
+- 你想在 apply 过程中就更新主 spec，让其他并行变更能看到最新的行为变化
+- 你不确定合并结果是否正确，想先合并检查一下
+- 你需要把部分变更提前合并到主 spec，因为另一个变更依赖这些行为
+
+**sync 之后 change 还在**。你可以继续修改 delta spec、继续 apply、甚至再次 sync（幂等操作，重复 sync 不会重复合并已经处理过的变更）。
+
+### `/opsx:archive`：归档变更
+
+`/opsx:archive` 是变更的终点站。它做两件事：
+
+1. 执行 sync（合并 delta spec 到主 spec）
+2. 把 change 文件夹移到 `openspec/changes/archive/` 目录，加上日期前缀
+
+归档后的目录结构：
+
+```
+openspec/
+├── specs/
+│   └── blog/
+│       └── spec.md                   ← 已合并搜索功能的需求
+└── changes/
+    └── archive/
+        └── 2026-06-02-add-blog-search/  ← 归档的变更
+            ├── proposal.md
+            ├── design.md
+            ├── tasks.md
+            └── specs/
+                └── blog/
+                    └── spec.md
+```
+
+**归档的前提条件**：
+
+archive 不强制检查 tasks.md 是否全部完成。它会提示你"还有 N 个任务未完成，确定要归档吗？"。如果你确认，它就执行归档。这给了你灵活性——有些任务可能不需要做，或者你想分批处理。
+
+**归档后能做什么**：
+
+归档目录完整保留了所有 artifact。你可以随时回去看某次变更的完整上下文。但它不应该被再次修改——如果要撤回归档，需要手动把文件夹从 archive 移回 changes 目录，并手动回退主 spec 中的合并。
+
+---
+
+## 可选命令详解
+
+### `/opsx:explore`：探索想法
+
+explore 是一个轻量级的讨论命令，不创建任何文件，不修改任何 spec。
+
+**用途**：
+
+- 你有一个模糊的想法，想和 AI 讨论可行性
+- 你遇到了一个技术问题，想先调查原因再决定怎么改
+- 你想评估几个方案的优劣
+
+**输入什么**：
+
+```text
+/opsx:explore 博客搜索应该用 SQLite FTS5 还是 Meilisearch？
+数据量大概在 1000-5000 篇文章。
+```
+
+**输出什么**：
+
+AI 基于项目上下文（从 config.yaml 读取）和你提供的信息，给出分析和建议。输出是纯文本，不会写入任何文件。
+
+**explore 不会做什么**：
+
+- 不会创建 change
+- 不会修改 spec
+- 不会生成任何文件
+
+它就是一个和 AI 的对话入口，但 AI 会读取你的项目上下文，所以回答比普通的 AI 聊天更有针对性。
+
+**什么时候用 explore**：
+
+- 还不确定要不要做一个变更
+- 想先了解技术方案的可行性
+- 需要调查一个 bug 的根因
+
+### `/opsx:verify`：三维度验证
+
+verify 在 apply 完成后运行，从三个维度检查实现质量。
+
+| 维度 | 英文 | 检查内容 |
+|------|------|----------|
+| 完整性 | Completeness | 所有任务都完成了？所有 spec 需求都有对应代码？所有场景都被覆盖？ |
+| 正确性 | Correctness | 实现和 spec 的意图一致？边界情况都处理了？ |
+| 一致性 | Coherence | 设计决策反映在代码中了？命名和项目风格一致？ |
+
+**verify 的工作方式**：
+
+1. 读取 change 的所有 artifact（proposal、specs、design、tasks）
+2. 扫描项目中相关的代码文件
+3. 逐项检查三个维度
+4. 输出检查报告，标明通过和不通过的项目
+
+**verify 的输出示例**：
+
+```text
+Verification Report: add-blog-search
+
+Completeness:
+  ✅ All tasks completed (6/6)
+  ✅ All requirements have corresponding code
+  ⚠️ Scenario "empty search query" not covered in tests
+
+Correctness:
+  ✅ Search results match FTS5 relevance ranking
+  ✅ Special characters are properly escaped
+  ⚠️ Search on empty database not tested
+
+Coherence:
+  ✅ File structure follows project conventions
+  ✅ TypeScript types match existing patterns
+  ✅ API response format consistent with other endpoints
+```
+
+**什么时候用 verify**：
+
+- apply 完成后、archive 之前，作为质量门
+- 团队协作中，作为 code review 的前置检查
+- 你不确定实现是否完整时
+
+### `/opsx:onboard`：引导教程
+
+onboard 是给新用户设计的引导命令。它会：
+
+1. 扫描你的项目代码库
+2. 分析项目结构、技术栈、已有模块
+3. 生成初始的 spec 文件（放入 `openspec/specs/`）
+4. 指导你完成第一个变更
+
+**onboard 的价值**：
+
+对于已有项目（棕地项目），onboard 解决了"从零写 spec 太痛苦"的问题。AI 帮你生成初始 spec，你只需要审核和修正，不需要从空白文件开始写。
+
+**什么时候用 onboard**：
+
+- 第一次在已有项目中引入 OpenSpec
+- 项目已经比较复杂，手动写 spec 工作量太大
+
+**什么时候不需要 onboard**：
+
+- 新项目（还没有代码）
+- 项目很简单（只有几个模块）
+
+---
+
+## Expanded 模式详解
+
+如果你切换到了 expanded 模式，会多出几个命令。它们的本质是把 core 模式的 `/opsx:propose` 拆成了更细的步骤。
+
+### `/opsx:new`：只创建脚手架
+
+`/opsx:new` 创建一个空的 change 文件夹：
+
+```text
+/opsx:new add-blog-search
+```
+
+生成的目录结构：
+
+```
+openspec/changes/add-blog-search/
+└── (空目录)
+```
+
+它不生成任何 artifact。你可以把它理解为"占位"——先声明"我要做一个叫 add-blog-search 的变更"，但还没有开始规划。
+
+### `/opsx:continue`：逐个生成 artifact
+
+`/opsx:continue` 根据依赖图，生成下一个可以创建的 artifact。
+
+依赖关系（DAG）：
+
+```
+                    proposal
+                   (root node)
+                       │
+         ┌─────────────┴─────────────┐
+         │                           │
+         ▼                           ▼
+      specs                       design
+   (requires:                  (requires:
+    proposal)                   proposal)
+         │                           │
+         └─────────────┬─────────────┘
+                       │
+                       ▼
+                    tasks
+                (requires:
+                specs, design)
+```
+
+执行流程：
+
+1. 第一次 `/opsx:continue`：proposal 是 root，没有依赖，生成 `proposal.md`
+2. 第二次 `/opsx:continue`：specs 和 design 都只依赖 proposal，生成其中一个（通常优先 specs）
+3. 第三次 `/opsx:continue`：生成另一个（design）
+4. 第四次 `/opsx:continue`：tasks 依赖 specs 和 design，现在都已满足，生成 `tasks.md`
+
+**continue 的价值在于控制权**。每生成一个 artifact，你可以审查、修改，然后再继续。如果在审查 proposal 时发现方向不对，你可以直接修改 proposal 或者放弃这个 change，而不需要等所有 artifact 都生成完。
+
+### `/opsx:ff`：快速生成所有剩余 artifact
+
+`/opsx:ff`（fast-forward）等同于"把所有未生成的 artifact 一次性生成"。
+
+如果你已经用 `/opsx:new` 创建了脚手架，然后用 `/opsx:continue` 生成了 proposal，但觉得 specs、design、tasks 不需要逐个审查，可以直接 `/opsx:ff` 一次性生成剩余的三个 artifact。
+
+`/opsx:ff` 和 `/opsx:propose` 的区别：
+
+- propose 是从零开始，一步到位
+- ff 是在已有的部分 artifact 基础上，补完剩余部分
+
+### `/opsx:bulk-archive`：批量归档
+
+当你有多个已完成的 change 需要归档时，bulk-archive 比逐个 archive 更高效。
+
+它的工作流程：
+
+1. 扫描所有进行中的 change
+2. 检测哪些 change 的任务已全部完成
+3. 检查 change 之间是否有 spec 冲突
+4. 按创建时间排序，依次归档
+5. 冲突时让 AI 检查实际代码来裁决
+
+**冲突处理**是 bulk-archive 最有价值的功能。当两个 change 修改了同一个 spec 文件时：
+
+- 如果修改的是不同的 Requirement，不冲突，先后归档即可
+- 如果修改的是同一个 Requirement，bulk-archive 会检查实际代码实现，决定最终结果
+
+详细的冲突处理机制在 04-delta-spec.md 中有专门分析。
+
+---
+
+## 完整实战：给博客加搜索功能
+
+用一个具体的案例走一遍完整的工作流。假设你有一个 Astro + SQLite 的博客项目，想加全文搜索。
+
+### 第零步：项目准备
+
+```bash
+# 已经安装 OpenSpec
+npm install -g @fission-ai/openspec@latest
+
+# 在项目根目录初始化
+cd my-blog
+openspec init
+```
+
+初始化后的目录：
+
+```
+my-blog/
+├── openspec/
+│   ├── specs/
+│   ├── changes/
+│   │   └── archive/
+│   ├── config.yaml
+│   └── schemas/
+├── src/
+├── package.json
+└── ...
+```
+
+编辑 `config.yaml`：
+
+```yaml
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript, Astro, SQLite (better-sqlite3)
+  Blog posts: Markdown files in src/content/blog/
+  Build: Static site generation with Astro
+  No server-side rendering
+
+rules:
+  proposal:
+    - Include performance impact estimate
+  specs:
+    - Use Given/When/Then format
+  design:
+    - Show data flow diagram
+  tasks:
+    - Group related tasks under headings
+```
+
+### 第一步：propose
+
+在 AI 编程工具中输入：
+
+```text
+/opsx:propose 给博客加全文搜索功能。搜索范围是文章标题和正文，
+结果按相关性排序。搜索框放在页面顶部导航栏里。用 SQLite FTS5
+实现索引，索引在构建时生成。不需要搜索建议或搜索历史。
+```
+
+AI 生成的 `proposal.md`：
+
+```markdown
+# Proposal: Add Blog Search
+
+## Intent
+Add full-text search to the blog so readers can find posts by keyword.
+Index covers post titles and body content. Results are ranked by relevance.
+
+## Scope
+In scope:
+- FTS5 virtual table for search index
+- Search API endpoint (build-time data access)
+- Search input component in navigation bar
+- Search results page with relevance ranking
+- Index rebuild during Astro build process
+
+Out of scope:
+- Search suggestions / autocomplete
+- Search history
+- Advanced query syntax (boolean operators, phrase matching)
+- Search analytics / tracking
+
+## Approach
+Use SQLite FTS5 virtual table to index post title and body content.
+Build the index during Astro's build step. Search at runtime queries the
+index via better-sqlite3. Results are displayed on a dedicated search
+results page.
+
+## Performance Impact
+- Build time: +1-3 seconds (FTS index creation)
+- Runtime: Search queries should complete in <50ms for up to 10K posts
+- Bundle size: Minimal (better-sqlite3 already in use)
+```
+
+审查 proposal：scope 看起来合理，没有多余的东西。out-of-scope 明确排除了高级功能。方案描述清晰。继续。
+
+AI 生成的 delta spec `specs/blog/spec.md`：
+
+```markdown
+# Delta for Blog
+
+## ADDED Requirements
+
+### Requirement: Full-Text Search
+The system SHALL provide full-text search across blog post titles and body content.
+
+#### Scenario: Search with matching results
+- GIVEN a blog with 10 posts, 3 containing the word "typescript"
+- WHEN the user searches for "typescript"
+- THEN 3 results are displayed
+- AND results are ordered by relevance score (descending)
+
+#### Scenario: Search with no matching results
+- GIVEN a blog with 10 posts, none containing "xyz123"
+- WHEN the user searches for "xyz123"
+- THEN a "no results found" message is displayed
+
+#### Scenario: Empty search query
+- GIVEN the search page is loaded
+- WHEN the user submits an empty search query
+- THEN no search is performed
+- AND a prompt to enter a search term is displayed
+
+### Requirement: Search Index
+The system SHALL maintain a full-text search index using SQLite FTS5,
+rebuilt during each Astro build.
+
+#### Scenario: Index rebuild during build
+- GIVEN blog post content has been modified
+- WHEN the Astro build process runs
+- THEN the FTS5 index is fully rebuilt with current content
+- AND the previous index is replaced atomically
+```
+
+审查 delta spec：场景覆盖了正常路径、空结果、空查询。要求索引在构建时重建，符合静态站点的约束。继续。
+
+AI 生成的 `design.md`：
+
+```markdown
+# Design: Add Blog Search
+
+## Technical Approach
+SQLite FTS5 virtual table for full-text indexing. Index is populated during
+Astro's build step. Search queries hit the pre-built SQLite database at runtime.
+
+## Architecture Decisions
+
+### Decision: FTS5 over external search service
+- Blog is a static site, no server for external service callbacks
+- FTS5 is built into SQLite (already a dependency)
+- Data volume is small (< 10K posts), no need for distributed search
+
+### Decision: Build-time index over runtime index
+- Static site has no server to maintain a running index
+- Build-time index is always consistent with published content
+- Trade-off: search won't reflect unpublished drafts (acceptable)
+
+## Data Flow
+```
+Markdown files → Astro build → FTS5 index (SQLite)
+                                    ↓
+User types query → Search API → SQLite query → Results page
+```
+
+## File Changes
+- `scripts/build-search-index.ts` (new) — Build-time index creation
+- `src/pages/search.astro` (new) — Search results page
+- `src/components/SearchBox.astro` (new) — Search input component
+- `src/lib/search.ts` (new) — Search query logic
+- `astro.config.mjs` (modified) — Add build hook for index
+```
+
+审查 design：方案合理，FTS5 适合静态博客。文件变更列表看起来合理。
+
+AI 生成的 `tasks.md`：
+
+```markdown
+# Tasks
+
+## 1. Search Index Infrastructure
+- [ ] 1.1 Create FTS5 virtual table schema in scripts/build-search-index.ts
+- [ ] 1.2 Write index population logic (read Markdown, insert into FTS5)
+- [ ] 1.3 Add build hook in astro.config.mjs to run index creation
+- [ ] 1.4 Test index rebuild with sample posts
+
+## 2. Search Query Logic
+- [ ] 2.1 Create src/lib/search.ts with search function
+- [ ] 2.2 Implement relevance-ranked query using FTS5 MATCH
+- [ ] 2.3 Add result snippet extraction (highlight matching text)
+- [ ] 2.4 Handle edge cases (empty query, special characters)
+
+## 3. UI Components
+- [ ] 3.1 Create SearchBox component with input and submit
+- [ ] 3.2 Add SearchBox to navigation bar
+- [ ] 3.3 Create search results page (src/pages/search.astro)
+- [ ] 3.4 Style search results (title, snippet, relevance indicator)
+
+## 4. Integration & Testing
+- [ ] 4.1 Test full build pipeline (build → index → search)
+- [ ] 4.2 Test with empty database, single post, 100+ posts
+- [ ] 4.3 Test special characters in search query
+- [ ] 4.4 Verify accessibility (keyboard navigation, ARIA labels)
+```
+
+审查 tasks：4 组 16 个任务，粒度合适。没有遗漏测试和边界情况。可以开始 apply 了。
+
+### 第二步：apply
+
+```text
+/opsx:apply add-blog-search
+```
+
+AI 开始按任务清单逐条执行。假设执行过程中：
+
+- 任务 1.1-1.4 顺利完成（索引基础设施）
+- 任务 2.1-2.4 顺利完成（查询逻辑）
+- 任务 3.1-3.4 顺利完成（UI 组件）
+
+到任务 4.2 时，你发现测试 100+ 篇文章的性能数据不错，但想额外加一个任务。你手动在 tasks.md 中添加：
+
+```markdown
+## 4. Integration & Testing
+- [x] 4.1 Test full build pipeline (build → index → search)
+- [x] 4.2 Test with empty database, single post, 100+ posts
+- [x] 4.3 Test special characters in search query
+- [ ] 4.4 Verify accessibility (keyboard navigation, ARIA labels)
+- [ ] 4.5 Test Chinese content search (CJK tokenization)     ← 新增
+```
+
+继续 apply：
+
+```text
+/opsx:apply add-blog-search
+```
+
+AI 从 4.4 开始继续执行。
+
+### 第三步：verify
+
+```text
+/opsx:verify add-blog-search
+```
+
+AI 检查实现质量：
+
+```text
+Verification Report: add-blog-search
+
+Completeness:
+  ✅ All tasks completed (17/17)
+  ✅ All requirements have corresponding code
+  ✅ All scenarios covered
+
+Correctness:
+  ✅ FTS5 MATCH query works correctly
+  ✅ Empty query returns prompt message
+  ✅ Special characters are escaped
+  ✅ CJK content searchable with unicode61 tokenizer
+
+Coherence:
+  ✅ New files follow project directory structure
+  ✅ TypeScript types consistent with existing code
+  ✅ Component naming follows Astro conventions
+  ⚠️ search.ts uses console.log for error logging,
+     project uses a custom logger in src/lib/logger.ts
+```
+
+有一个 warning：搜索模块没有用项目的自定义 logger。你决定修复这个小问题。直接让 AI 改一下，不需要重新走 propose 流程。
+
+### 第四步：archive
+
+```text
+/opsx:archive add-blog-search
+```
+
+AI 确认：
+
+```text
+All 17 tasks completed. Archiving change "add-blog-search"...
+
+Merging delta specs:
+  specs/blog/spec.md: 2 ADDED requirements merged
+
+Archived to: openspec/changes/archive/2026-06-02-add-blog-search/
+```
+
+归档完成。主 spec `openspec/specs/blog/spec.md` 现在包含了搜索功能的需求。下次做"加搜索建议"或"加搜索历史"的变更时，AI 会读取到这些需求作为上下文。
+
+### 回顾整个流程
+
+| 步骤 | 耗时（估算） | 做了什么 |
+|------|-------------|---------|
+| propose | 2-3 分钟 | 生成了 4 个 artifact |
+| 审查 | 5-10 分钟 | 手动审查和修改 |
+| apply | 30-60 分钟 | AI 按清单实现了 17 个任务 |
+| verify | 3-5 分钟 | 发现 1 个 warning |
+| archive | 30 秒 | 合并 spec、归档变更 |
+
+总计约 40-80 分钟，产出了搜索功能 + 完整的行为规范 + 归档记录。
+
+不使用 OpenSpec 的情况下，你可能花 30 分钟让 AI 写代码，但因为没有明确的行为规范，AI 可能引入不需要的功能（搜索建议、搜索历史），代码可能不符合项目架构（用了项目里没有的 Elasticsearch），测试可能不完整（忘了边界情况）。省下来的 propose + 审查时间，最终会花在返工上。
+
+---
+
+## 命令速查表
+
+### Core 模式
+
+| 命令 | 输入 | 输出 | 什么时候用 |
+|------|------|------|-----------|
+| `/opsx:propose <描述>` | 自然语言描述 | proposal + specs + design + tasks | 要做一个新变更 |
+| `/opsx:explore <问题>` | 自然语言问题 | 纯文本讨论 | 还不确定要不要做变更 |
+| `/opsx:apply [change名]` | change 名称（可选） | 代码变更 + tasks.md 进度更新 | 开始实现 |
+| `/opsx:sync [change名]` | change 名称（可选） | 更新主 spec | 想提前合并 delta spec |
+| `/opsx:archive [change名]` | change 名称（可选） | 合并 spec + 移到 archive | 变更完成 |
+
+### Expanded 模式（额外命令）
+
+| 命令 | 输入 | 输出 | 什么时候用 |
+|------|------|------|-----------|
+| `/opsx:new <名称>` | change 名称 | 空的 change 目录 | 先占位，稍后规划 |
+| `/opsx:continue` | 无 | 下一个 artifact | 逐步生成，每个都审查 |
+| `/opsx:ff` | 无 | 所有剩余 artifact | 跳过逐步审查 |
+| `/opsx:verify [change名]` | change 名称 | 三维度检查报告 | apply 后、archive 前 |
+| `/opsx:bulk-archive` | 无 | 批量归档 | 多个 change 同时完成 |
+| `/opsx:onboard` | 无 | 初始 spec + 引导 | 第一次在已有项目上用 |
+
+---
+
+## 常见问题
+
+### propose 生成的 artifact 质量不好怎么办
+
+三个可能的原因：
+
+1. **config.yaml 的 context 不够详细**。AI 缺少项目上下文，只能"猜"。补充技术栈、项目结构、关键约定。
+2. **输入描述太模糊**。"加个搜索"和"给博客加全文搜索，搜索标题和正文，用 SQLite FTS5"产出的 artifact 质量差距很大。
+3. **AI 模型能力不足**。换一个更强的模型。
+
+### apply 中途发现方案行不通
+
+停下来。更新 design.md 和 tasks.md，然后继续 apply。不需要从头开始。如果你只是想先讨论一下替代方案，用 `/opsx:explore`。
+
+### 同时做多个 change 会不会乱
+
+不会。每个 change 是独立目录，tasks.md 独立跟踪进度。apply 时指定 change 名称就行。唯一需要注意的是 spec 冲突——如果两个 change 修改了同一个 Requirement，归档顺序会影响最终结果。
+
+### core 和 expanded 能混用吗
+
+可以。即使在 core 模式下，你也可以手动调用 expanded 的命令（比如 `/opsx:verify`）。Profile 只是影响默认展示的命令集，不是限制。
+
+### 能不能跳过 propose 直接 apply
+
+技术上可以——你可以手动创建 change 目录和 tasks.md，然后 apply。但这失去了 OpenSpec 的核心价值：在写代码之前先对齐意图。如果你觉得 propose 太重了，考虑用自定义 schema 创建一个更轻量的工作流（见 05-custom-schemas.md）。
+
+### archive 之后想改怎么办
+
+归档是单向操作。如果需要修改已经归档的行为：
+
+1. 创建一个新的 change（比如 `modify-search-ranking`）
+2. 在 delta spec 中用 MODIFIED 标记修改对应的 Requirement
+3. apply + archive
+
+不要手动编辑 archive 目录中的文件。那些是历史记录。
+
+---
+
+## 小结
+
+OPSX 工作流把 Spec-Driven Development 从理念变成了可执行的步骤。core 模式用 4 条命令覆盖了从规划到归档的完整流程，expanded 模式提供了更细粒度的控制。核心价值不是命令本身，而是命令背后的工作方式：先想清楚做什么（propose），再动手做（apply），做完后记录下来（archive）。
+
+这套工作流不完美。它增加了前期的时间投入（propose + 审查），不适合一行代码的修改，也不适合紧急 hotfix。但对于任何涉及多个文件、多个功能的变更，前期投入带来的回报远大于成本——减少了返工、减少了 AI 幻觉、形成了可追溯的变更历史。
+
+下一篇（04-delta-spec.md）会深入分析 Delta Spec 的合并机制和并行变更策略，这是理解 OpenSpec 如何处理复杂变更的关键。

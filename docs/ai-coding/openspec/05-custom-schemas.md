@@ -1,0 +1,943 @@
+# 自定义 Schema 与工作流定制：让 OpenSpec 适配你的团队
+
+> 更新日期：2026/06
+
+## TL;DR
+
+OpenSpec 默认的 `spec-driven` schema 包含四个 artifact（proposal → specs + design → tasks），覆盖大多数场景。但你的团队可能需要更轻量的流程（跳过 design），或更严格的流程（加 review 步骤），或完全不同的工作方式。OpenSpec 提供三层定制体系：Project Config（config.yaml 中的 context 和 rules）调整 AI 生成行为；Custom Schemas（schema.yaml + templates/）定义不同的 artifact 组合和依赖关系；Global Overrides（~/.local/share/openspec/schemas/）跨项目共享自定义 schema。本文逐层拆解每种定制方式，给出三个完整的实战 Schema 示例，并介绍社区 Schema 的使用方式。
+
+## 前置知识
+
+本文假设你已经读过 03-opsx-workflow.md，了解 OPSX 命令的工作方式。你应该熟悉 proposal、specs、design、tasks 四个 artifact 的作用和依赖关系。
+
+---
+
+## 为什么需要自定义 Schema
+
+默认的 `spec-driven` schema 对很多项目够用。但以下场景需要定制：
+
+**1. 太重了**。你的团队做的是快速迭代的 SaaS 产品，每周发布 2-3 次。每次变更都走 proposal → specs → design → tasks 四步，前期规划时间占比太高。你想跳过 specs 和 design，只留 proposal 和 tasks。
+
+**2. 不够重**。你的团队做的是金融系统，合规要求严格。默认流程没有 code review 步骤，没有安全审查环节。你需要在 tasks 之后加 review 和 security-check 两个 artifact。
+
+**3. 流程不同**。你的团队习惯先做技术调研再出 proposal。你想在 proposal 之前加一个 research artifact，记录调研结果和可行性分析。
+
+**4. 命名不同**。你的团队不叫"proposal"，叫"RFC"。不叫"design"，叫"技术方案"。你想让 artifact 的名称和文件名匹配团队习惯。
+
+这些都不是 OpenSpec 的设计缺陷，而是预期内的定制场景。Schema 机制的存在就是为了让你在不修改源码的情况下适配不同的工作方式。
+
+---
+
+## 第一层：Project Config（config.yaml）
+
+这是最轻量的定制方式。不改 Schema，只改 AI 生成 artifact 时的行为。
+
+### config.yaml 的完整结构
+
+```yaml
+# openspec/config.yaml
+
+schema: spec-driven          # 使用的 schema 名称
+
+context: |                   # 项目上下文，注入到所有 artifact 的生成过程
+  Tech stack: TypeScript, React, Node.js, PostgreSQL
+  API style: RESTful
+  Testing: Jest + React Testing Library
+  Code style: ESLint + Prettier, 2-space indent
+  Architecture: Feature-based directory structure
+  Key patterns: Repository pattern for data access,
+    CQRS for read/write separation
+
+rules:                       # 针对特定 artifact 的规则
+  proposal:
+    - Include performance impact assessment
+    - List affected teams and required communication
+    - Include rollback plan for high-risk changes
+  specs:
+    - Use Given/When/Then format for all scenarios
+    - Reference existing patterns before inventing new ones
+    - Each requirement must have at least 2 scenarios
+  design:
+    - Show data flow diagram using ASCII art
+    - List all new files and modified files separately
+    - Justify every new dependency
+  tasks:
+    - Group related tasks under headings
+    - Each task should be completable in under 30 minutes
+    - Include testing tasks for every feature task
+```
+
+### context 注入机制
+
+`context` 字段的内容会被注入到每个 artifact 的 AI 生成 prompt 中。注入方式是包裹在 `<context>` 标签内：
+
+```text
+<context>
+Tech stack: TypeScript, React, Node.js, PostgreSQL
+API style: RESTful
+...
+</context>
+```
+
+AI 在生成任何 artifact 时都能看到这些信息。这意味着：
+
+- proposal 生成时知道项目的技术栈，不会建议不兼容的方案
+- specs 生成时知道项目的架构模式，不会描述不符合约定的行为
+- design 生成时知道项目的目录结构，不会把文件放在奇怪的位置
+- tasks 生成时知道项目的测试框架，会生成正确的测试任务
+
+**context 应该写什么**：
+
+写那些"AI 不看代码就无法知道的"信息。比如：
+
+- 技术栈和版本（TypeScript 5.x、React 18）
+- 项目架构约定（feature-based、CQRS）
+- 关键的业务约束（"支付模块不能用第三方服务"、"用户数据必须留在本地"）
+- 代码风格约定（命名规范、错误处理模式）
+
+**context 不应该写什么**：
+
+- AI 能从代码中直接看出来的东西（比如"项目用了 React"——AI 读 import 就知道了）
+- 和项目无关的个人偏好
+- 过于详细的实现指导（那是 rules 的工作）
+
+### rules 注入机制
+
+`rules` 是按 artifact 类型分组的规则列表。只有匹配的 artifact 才会收到对应的 rules。注入方式是包裹在 `<rules>` 标签内：
+
+```text
+<rules>
+- Include performance impact assessment
+- List affected teams and required communication
+- Include rollback plan for high-risk changes
+</rules>
+```
+
+如果 AI 在生成 proposal，它会收到 proposal 的 rules。如果生成 specs，它会收到 specs 的 rules。不同 artifact 的 rules 互不干扰。
+
+**rules 应该写什么**：
+
+写那些"AI 容易忘记或忽略的"要求。比如：
+
+- proposal 必须包含回滚计划（AI 默认不会考虑回滚）
+- specs 的每个 requirement 至少 2 个场景（AI 可能只写 1 个）
+- design 要列出所有新依赖并说明理由（AI 可能不加说明就引入新库）
+- tasks 的每个功能任务都要配测试任务（AI 可能忘了写测试）
+
+**rules 的局限性**：
+
+rules 是"建议"不是"强制"。AI 会尝试遵守，但不保证 100% 遵守。如果你需要强制检查（比如"没有回滚计划的 proposal 不能进入下一步"），应该在 CI/CD 流水线中加验证步骤，而不是依赖 rules。
+
+### Schema 优先级
+
+config.yaml 中的 `schema` 字段只是 Schema 解析链的一环。完整的优先级：
+
+| 优先级 | 来源 | 示例 |
+|--------|------|------|
+| 1（最高） | CLI 参数 | `openspec new change feat --schema rapid` |
+| 2 | 变更元数据 | `.openspec.yaml` 中的 `schema: rapid` |
+| 3 | 项目配置 | `config.yaml` 中的 `schema: spec-driven` |
+| 4 | 用户目录 | `~/.local/share/openspec/schemas/` |
+| 5（最低） | 内置默认 | `spec-driven` |
+
+大多数情况下，你在 config.yaml 中设置 schema 就够了。只有当你需要"同一个项目中不同变更使用不同的 schema"时，才会用 CLI 参数或变更元数据来覆盖。
+
+查看当前生效的 schema 来源：
+
+```bash
+openspec schema which
+openspec schema which --all    # 列出所有可用的 schema
+```
+
+---
+
+## 第二层：Custom Schemas
+
+当 Project Config 的调整不够用——你需要不同的 artifact 组合、不同的依赖关系、不同的文件命名——就需要创建自定义 Schema。
+
+### schema.yaml 结构详解
+
+一个完整的 schema.yaml：
+
+```yaml
+name: my-workflow             # Schema 名称（必填）
+version: 1                    # 版本号（必填）
+description: 描述这个 schema  # 可选但建议提供
+
+artifacts:                    # Artifact 定义列表（必填）
+  - id: proposal              # Artifact ID（用于依赖引用）
+    generates: proposal.md    # 生成的文件名或 glob
+    template: proposal.md     # 模板文件名（在 templates/ 目录中）
+    description: 变更提案      # 可选，给 AI 的描述
+    instruction: |            # 可选，给 AI 的生成指令
+      创建一份变更提案，包含动机、范围和方案概述。
+    requires: []              # 依赖的 artifact ID 列表
+
+  - id: design
+    generates: design.md
+    template: design.md
+    description: 技术方案
+    instruction: |
+      基于提案，创建技术方案文档。
+      包含架构决策、数据流和文件变更列表。
+    requires: [proposal]
+
+  - id: tasks
+    generates: tasks.md
+    template: tasks.md
+    description: 实现检查清单
+    instruction: |
+      基于设计方案，创建带 checkbox 的实现检查清单。
+      每个任务应在 30 分钟内可完成。
+    requires: [design]
+
+apply:                        # apply 命令的配置
+  requires: [tasks]           # apply 需要哪些 artifact 已完成
+  tracks: tasks.md            # apply 跟踪哪个文件的进度
+```
+
+### 字段说明
+
+**name**：Schema 名称。用于 CLI 参数和 config.yaml 引用。命名建议用小写字母和连字符：`my-workflow`、`rapid`、`research-first`。
+
+**version**：整数版本号。目前只有一个版本格式（`1`）。未来如果 schema 格式变化，这个数字用于兼容性检查。
+
+**artifacts**：Artifact 列表。每个 artifact 有以下字段：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | Artifact 唯一标识符，用于依赖引用 |
+| generates | 是 | 生成的文件名或 glob 模式 |
+| template | 是 | 模板文件名（位于 templates/ 目录） |
+| description | 否 | 给 AI 的简要描述 |
+| instruction | 否 | 给 AI 的详细生成指令 |
+| requires | 是 | 依赖的 artifact ID 列表（无依赖填 `[]`） |
+
+**apply**：控制 `/opsx:apply` 命令的行为。
+
+| 字段 | 说明 |
+|------|------|
+| requires | apply 前必须已完成的 artifact |
+| tracks | apply 跟踪进度的文件 |
+
+### DAG 约束
+
+artifacts 的 `requires` 形成一个有向无环图（DAG）。OpenSpec 会验证这个图：
+
+- **不能有环**：如果 A requires B、B requires C、C requires A，验证失败
+- **所有引用必须存在**：如果 A requires B，但 B 不在 artifacts 列表中，验证失败
+- **至少有一个根节点**：至少有一个 artifact 的 requires 为空
+
+`/opsx:continue` 命令利用 DAG 来决定下一个可以生成的 artifact：所有 requires 已满足的 artifact 标记为 ready，用户选择一个生成。
+
+### 模板文件
+
+每个 artifact 对应一个模板文件，放在 `templates/` 目录中。模板是 Markdown 文件，包含 AI 生成时会遵循的结构骨架。
+
+模板示例（`templates/proposal.md`）：
+
+```markdown
+# Proposal: {{title}}
+
+## Intent
+{{describe why this change is needed}}
+
+## Scope
+In scope:
+- {{list what's included}}
+
+Out of scope:
+- {{list what's excluded}}
+
+## Approach
+{{brief description of how to approach this change}}
+```
+
+模板中的 `{{...}}` 是占位符。AI 生成 artifact 时会参考模板结构，但不会严格按占位符填充——它理解模板的意图，用自己的输出来替换。
+
+如果你不提供模板文件，验证会失败。模板文件是必须的。
+
+### 创建自定义 Schema 的两种方式
+
+**从零创建**：
+
+```bash
+openspec schema init my-workflow
+```
+
+这会在 `openspec/schemas/my-workflow/` 下创建初始的 schema.yaml 和 templates/ 目录，包含一些基本的占位文件。你需要手动编辑 schema.yaml 和模板文件。
+
+**从现有 schema 派生**：
+
+```bash
+openspec schema fork spec-driven my-workflow
+```
+
+这会复制 `spec-driven` schema 的完整结构（schema.yaml + 所有模板文件）到 `openspec/schemas/my-workflow/`。你只需要修改和增删，不需要从头写。
+
+派生比从零创建更省事，特别是当你只想做小幅调整时（比如加一个 artifact、改一个模板）。
+
+### 验证自定义 Schema
+
+```bash
+openspec schema validate my-workflow
+```
+
+验证检查：
+
+1. **YAML 语法**：schema.yaml 是否是合法的 YAML
+2. **必填字段**：name、version、artifacts 是否都存在
+3. **artifact 完整性**：每个 artifact 是否有 id、generates、template、requires
+4. **模板存在性**：所有 template 引用的文件是否存在于 templates/ 目录
+5. **DAG 完整性**：requires 引用的 artifact 是否存在
+6. **DAG 无环**：依赖关系是否有循环
+
+验证通过后才能使用。如果验证失败，错误信息会告诉你哪个字段有问题。
+
+### 使用自定义 Schema
+
+方式一：在 config.yaml 中设置默认 schema：
+
+```yaml
+schema: my-workflow
+```
+
+方式二：在命令行中临时指定：
+
+```bash
+openspec new change feature-x --schema my-workflow
+```
+
+方式三：在变更元数据中设置（`.openspec.yaml`）：
+
+```yaml
+schema: my-workflow
+```
+
+---
+
+## 第三层：Global Overrides
+
+前两层（Project Config 和 Custom Schemas）是项目级别的——定义在项目的 `openspec/` 目录中，跟着 Git 走。如果你想跨项目共享一个 schema，用 Global Overrides。
+
+### 位置
+
+```
+~/.local/share/openspec/schemas/
+├── my-team-standard/
+│   ├── schema.yaml
+│   └── templates/
+│       ├── proposal.md
+│       ├── design.md
+│       └── tasks.md
+└── rapid/
+    ├── schema.yaml
+    └── templates/
+        ├── proposal.md
+        └── tasks.md
+```
+
+放在 `~/.local/share/openspec/schemas/` 下的 schema 对所有项目可用。不需要在每个项目中复制一份。
+
+### 什么时候用 Global Overrides
+
+- 你有多个项目使用相同的工作流
+- 你的团队有统一的标准 schema，需要所有成员使用
+- 你有一个个人偏好的 schema，想在所有项目中使用
+
+### Schema 解析的完整优先级
+
+```
+1. CLI 参数（--schema <name>）
+2. 变更元数据（.openspec.yaml）
+3. 项目配置（openspec/config.yaml）
+4. 项目 Schema（openspec/schemas/<name>/）
+5. 用户目录 Schema（~/.local/share/openspec/schemas/<name>/）
+6. 内置 Schema（spec-driven）
+```
+
+当你指定 `schema: my-workflow` 时，OpenSpec 按以下顺序查找：
+
+1. 先在项目的 `openspec/schemas/my-workflow/` 中查找
+2. 如果没找到，在 `~/.local/share/openspec/schemas/my-workflow/` 中查找
+3. 如果还没找到，在内置 schema 中查找
+4. 都没找到，报错
+
+这意味着项目级 schema 可以覆盖全局 schema。你可以有一个全局的团队标准 schema，某个特殊项目在本地覆盖它。
+
+### 查看当前解析结果
+
+```bash
+openspec schema which my-workflow
+```
+
+输出示例：
+
+```text
+Schema: my-workflow
+Source: project (openspec/schemas/my-workflow/)
+Path: /Users/you/project/openspec/schemas/my-workflow/schema.yaml
+```
+
+或：
+
+```text
+Schema: my-team-standard
+Source: user (~/.local/share/openspec/schemas/my-team-standard/)
+Path: /Users/you/.local/share/openspec/schemas/my-team-standard/schema.yaml
+```
+
+---
+
+## 实战 Schema 1：快速模式（rapid）
+
+**场景**：你的团队做的是快速迭代的 SaaS 产品。每周发布 2-3 次，每个变更都不大。默认的 spec-driven schema 太重了，你想跳过 specs 和 design，只留 proposal 和 tasks。
+
+### schema.yaml
+
+```yaml
+name: rapid
+version: 1
+description: 快速迭代工作流，最小规划开销
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    template: proposal.md
+    description: 简短变更提案
+    instruction: |
+      创建一份简短的变更提案。聚焦于"做什么"和"为什么"。
+      不需要详细的 spec 或设计方案。一段话描述意图，
+      几条列出范围，够了。
+    requires: []
+
+  - id: tasks
+    generates: tasks.md
+    template: tasks.md
+    description: 实现检查清单
+    instruction: |
+      基于提案和项目上下文，创建实现检查清单。
+      每个任务要小到可以在 15 分钟内完成。
+      不需要分组，扁平列表就行。
+    requires: [proposal]
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+```
+
+### 模板文件
+
+`templates/proposal.md`：
+
+```markdown
+# {{title}}
+
+## What
+{{what to do, one paragraph}}
+
+## Why
+{{why this change is needed}}
+
+## Scope
+- In: {{what's included}}
+- Out: {{what's excluded}}
+```
+
+`templates/tasks.md`：
+
+```markdown
+# Tasks
+
+- [ ] {{task 1}}
+- [ ] {{task 2}}
+- [ ] {{task 3}}
+```
+
+### 和 spec-driven 的对比
+
+| 维度 | spec-driven | rapid |
+|------|------------|-------|
+| artifact 数量 | 4 | 2 |
+| 有 spec | 有 | 无 |
+| 有 design | 有 | 无 |
+| propose 生成文件 | 4 个 | 2 个 |
+| 适用场景 | 中大型变更 | 小型快速迭代 |
+
+### 什么时候用 rapid
+
+- 变更影响 1-3 个文件
+- 变更的风险低（不涉及安全、支付、数据迁移）
+- 你对方案很有信心，不需要 spec 和 design 来约束 AI
+
+### 什么时候不要用 rapid
+
+- 变更涉及多个模块的协调
+- 变更有安全或合规风险
+- 你需要在团队中审查行为变化
+- 你需要记录"系统为什么这样行为"的历史
+
+### config.yaml 配合 rapid
+
+```yaml
+schema: rapid
+
+context: |
+  Tech stack: TypeScript, Next.js, Prisma, PostgreSQL
+  Deploy: Vercel, auto-deploy on push to main
+  CI: GitHub Actions, lint + test on PR
+
+rules:
+  proposal:
+    - Keep it under 10 lines total
+  tasks:
+    - Each task is one checkbox, no sub-tasks
+    - Include a verification task at the end
+```
+
+rapid 模式的 config.yaml 也更简洁。rules 只有两条，context 也只写关键信息。整个配置的维护成本很低。
+
+---
+
+## 实战 Schema 2：增加 review 步骤（review-driven）
+
+**场景**：你的团队有 code review 流程。你想在 tasks 完成后加一个 review artifact，记录 review 意见和修改计划。
+
+### schema.yaml
+
+```yaml
+name: review-driven
+version: 1
+description: 带 review 步骤的工作流
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    template: proposal.md
+    description: 变更提案
+    instruction: |
+      创建变更提案，包含 Intent、Scope、Approach。
+      Scope 必须明确列出 in-scope 和 out-of-scope。
+    requires: []
+
+  - id: specs
+    generates: specs/**/*.md
+    template: spec.md
+    description: Delta specs
+    instruction: |
+      基于 proposal 创建 Delta Spec。
+      使用 ADDED/MODIFIED/REMOVED 标记。
+      每个 requirement 必须包含至少 2 个 scenario。
+    requires: [proposal]
+
+  - id: design
+    generates: design.md
+    template: design.md
+    description: 技术方案
+    instruction: |
+      基于 proposal 和 specs 创建技术方案。
+      包含架构决策（附理由）、数据流、文件变更列表。
+    requires: [proposal]
+
+  - id: tasks
+    generates: tasks.md
+    template: tasks.md
+    description: 实现检查清单
+    instruction: |
+      基于 design 创建实现检查清单。
+      每个任务 30 分钟内可完成。
+      功能任务和测试任务分组。
+    requires: [specs, design]
+
+  - id: review
+    generates: review.md
+    template: review.md
+    description: 代码审查记录
+    instruction: |
+      审查已实现的代码，记录：
+      1. 发现的问题（按严重程度分级）
+      2. 改进建议（按优先级排序）
+      3. 需要修改的文件和具体修改建议
+      4. 安全和性能方面的检查结果
+    requires: [tasks]
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+```
+
+### review 模板
+
+`templates/review.md`：
+
+```markdown
+# Code Review: {{change_name}}
+
+## Summary
+{{brief summary of what was implemented}}
+
+## Issues
+
+### Critical
+- {{issues that must be fixed before merge}}
+
+### Important
+- {{issues that should be fixed}}
+
+### Minor
+- {{style issues, naming suggestions, etc.}}
+
+## Security Check
+- {{security concerns found or "No security issues"}}
+
+## Performance Check
+- {{performance concerns found or "No performance issues"}}
+
+## Verdict
+- [ ] Approved
+- [ ] Approved with minor changes
+- [ ] Needs re-review after changes
+```
+
+### 工作流
+
+使用 review-driven schema 时，完整的工作流是：
+
+1. `/opsx:propose` → 生成 proposal + specs + design + tasks（跳过 review）
+2. `/opsx:apply` → 按任务清单执行
+3. `/opsx:continue` → 生成 review artifact（这是最后一个未生成的 artifact）
+4. 审查 review.md 中的问题
+5. 如果有问题需要修复，更新 tasks.md 并再次 apply
+6. `/opsx:archive`
+
+review artifact 不是自动生成的。你需要在 apply 完成后显式运行 `/opsx:continue` 或 `/opsx:ff` 来生成它。这是因为 review 需要基于实际代码来做——代码没写完就生成 review 没有意义。
+
+### config.yaml 配合 review-driven
+
+```yaml
+schema: review-driven
+
+context: |
+  Tech stack: TypeScript, React, Node.js, PostgreSQL
+  Security: All data access must use parameterized queries
+  Performance: API response time must be under 200ms
+
+rules:
+  proposal:
+    - Include risk level assessment (low/medium/high)
+  specs:
+    - Use Given/When/Then format
+    - Include error scenarios for every happy path
+  design:
+    - Show data flow diagram
+    - List new dependencies with justification
+  tasks:
+    - Group by: infrastructure, feature, testing
+    - Every feature task must have a corresponding test task
+  review:
+    - Check for SQL injection vulnerabilities
+    - Check for missing error handling
+    - Check for hardcoded secrets or credentials
+    - Verify API response time targets are met
+```
+
+review-driven 的 rules 中，review artifact 有 4 条安全检查规则。这些规则会注入到 review artifact 的生成过程中，让 AI 特别关注这些方面。
+
+---
+
+## 实战 Schema 3：research-first（调研优先）
+
+**场景**：你的团队做的是数据密集型应用，很多变更需要先做技术调研。你想在 proposal 之前加一个 research artifact，记录调研结果。
+
+### schema.yaml
+
+```yaml
+name: research-first
+version: 1
+description: 调研优先的工作流，适合需要技术预研的变更
+
+artifacts:
+  - id: research
+    generates: research.md
+    template: research.md
+    description: 技术调研报告
+    instruction: |
+      进行技术调研，记录：
+      1. 问题和背景
+      2. 调研了哪些方案（至少 2 个）
+      3. 每个方案的优缺点
+      4. 推荐方案和理由
+      5. 风险和不确定点
+    requires: []
+
+  - id: proposal
+    generates: proposal.md
+    template: proposal.md
+    description: 基于调研结果的变更提案
+    instruction: |
+      基于调研结果创建变更提案。
+      Approach 部分必须引用 research.md 中的推荐方案。
+      如果推荐方案和 Approach 不一致，必须说明原因。
+    requires: [research]
+
+  - id: specs
+    generates: specs/**/*.md
+    template: spec.md
+    description: Delta specs
+    instruction: |
+      基于 proposal 创建 Delta Spec。
+    requires: [proposal]
+
+  - id: tasks
+    generates: tasks.md
+    template: tasks.md
+    description: 实现检查清单
+    instruction: |
+      基于 specs 创建实现检查清单。
+    requires: [specs]
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+```
+
+### research 模板
+
+`templates/research.md`：
+
+```markdown
+# Research: {{topic}}
+
+## Problem
+{{what problem are we trying to solve}}
+
+## Background
+{{relevant context, constraints, requirements}}
+
+## Options Considered
+
+### Option A: {{name}}
+- Description: {{what this approach involves}}
+- Pros: {{advantages}}
+- Cons: {{disadvantages}}
+- Effort: {{estimated effort}}
+
+### Option B: {{name}}
+- Description: {{what this approach involves}}
+- Pros: {{advantages}}
+- Cons: {{disadvantages}}
+- Effort: {{estimated effort}}
+
+## Recommendation
+{{recommended option and reasoning}}
+
+## Risks
+- {{identified risks and mitigations}}
+
+## Open Questions
+- {{things we're still unsure about}}
+```
+
+### 工作流
+
+使用 research-first schema 时：
+
+1. `/opsx:new add-recommendation-engine` → 创建空 change
+2. `/opsx:continue` → 生成 research.md（根节点，无依赖）
+3. 审查 research.md，确认调研结果合理
+4. `/opsx:continue` → 生成 proposal.md（依赖 research）
+5. 审查 proposal.md
+6. `/opsx:ff` → 生成 specs 和 tasks
+7. `/opsx:apply` → 执行
+8. `/opsx:archive` → 归档
+
+research-first 的价值在于：调研阶段可能发现"这个方案行不通"，此时还没有投入 proposal、spec、design 的成本。如果在 spec-driven 的流程中，你可能在 design 阶段才发现方案行不通，浪费了 spec 的编写成本。
+
+### 什么时候用 research-first
+
+- 变更涉及你不太熟悉的技术领域
+- 有多个可选方案，需要比较优劣
+- 变更的技术风险较高，需要先验证可行性
+- 需要评估引入新依赖的成本
+
+---
+
+## 社区 Schema
+
+OpenSpec 支持社区维护的 schema，通过独立仓库分发。
+
+### superpowers-bridge
+
+`superpowers-bridge` 是目前最知名的社区 Schema。它集成了 OpenSpec 的 artifact 治理和 obra/superpowers 的执行技能。
+
+superpowers 的执行技能包括：
+
+- 头脑风暴（brainstorming）
+- 测试驱动开发（TDD）
+- 代码审查（code review）
+- 系统化调试（systematic debugging）
+- 并行代理（parallel agents）
+
+bridge schema 把这些技能作为 artifact 的生成步骤，而不是独立的命令。比如在生成 design 时，AI 会先用 brainstorming 技能探索可能的方案，然后选出最优方案写入 design.md。
+
+### 安装社区 Schema
+
+社区 schema 不打包在 OpenSpec 核心包里。安装方式是手动复制到项目的 `openspec/schemas/` 目录：
+
+```bash
+# 克隆社区 schema 仓库
+git clone https://github.com/example/openspec-community-schemas /tmp/community-schemas
+
+# 复制到项目
+cp -r /tmp/community-schemas/superpowers-bridge/ \
+  your-project/openspec/schemas/superpowers-bridge/
+
+# 验证
+openspec schema validate superpowers-bridge
+```
+
+或者复制到用户目录，跨项目使用：
+
+```bash
+mkdir -p ~/.local/share/openspec/schemas/
+cp -r /tmp/community-schemas/superpowers-bridge/ \
+  ~/.local/share/openspec/schemas/superpowers-bridge/
+```
+
+### 使用社区 Schema
+
+和自定义 schema 一样：
+
+```yaml
+# config.yaml
+schema: superpowers-bridge
+```
+
+或命令行指定：
+
+```bash
+openspec new change feature --schema superpowers-bridge
+```
+
+### 创建你自己的社区 Schema
+
+如果你创建了一个好用的 schema 并想分享给社区：
+
+1. 把 schema 目录（schema.yaml + templates/）整理好
+2. 确保通过 `openspec schema validate`
+3. 写一份 README 说明 schema 的适用场景和使用方法
+4. 发布到 GitHub，让其他人可以 clone 安装
+
+OpenSpec 目前没有内置的 schema 分发机制（没有类似 npm install 的命令）。社区 schema 通过 Git 仓库 + 手动安装的方式分发。
+
+---
+
+## Schema 定制的决策树
+
+```
+需要定制？
+├── 只想调整 AI 生成质量
+│   └── 用 Project Config（config.yaml 的 context 和 rules）
+│       不需要创建新 schema
+│
+├── 想增删 artifact 或改依赖关系
+│   ├── 改动小（加 1-2 个 artifact）
+│   │   └── Fork 内置 schema，修改
+│   └── 改动大（完全不同的流程）
+│       └── 从零创建 schema
+│
+├── 需要跨项目共享
+│   └── 放到 ~/.local/share/openspec/schemas/
+│
+└── 想分享给社区
+    └── 发布到 GitHub，让其他人手动安装
+```
+
+### 定制过程中的常见问题
+
+**Q：Schema 能不能动态切换？**
+
+可以。同一个项目中，不同变更可以用不同的 schema。通过 CLI 参数 `--schema <name>` 或变更元数据来指定。config.yaml 中的 schema 只是默认值。
+
+**Q：模板文件用什么格式？**
+
+Markdown。模板是 AI 生成 artifact 时的结构参考，不是严格填写的表单。AI 会理解模板的意图，用自己的输出替换占位符。
+
+**Q：一个 artifact 能生成多个文件吗？**
+
+能。`generates` 字段支持 glob 模式。比如 `specs/**/*.md` 表示这个 artifact 会生成 specs 目录下的多个文件。
+
+**Q：apply 之外的命令受 schema 影响吗？**
+
+`/opsx:propose`、`/opsx:continue`、`/opsx:ff` 都基于 schema 的 artifact 列表和依赖图。`/opsx:explore`、`/opsx:verify`、`/opsx:archive` 不受 schema 影响——它们操作的是已有的文件，不生成新 artifact。
+
+**Q：能不能在 apply 过程中切换 schema？**
+
+不建议。apply 依赖 `tasks.md` 的结构。如果切换了 schema，新的 schema 可能不生成 `tasks.md`，apply 会找不到跟踪文件。
+
+**Q：全局 schema 和项目 schema 同名怎么办？**
+
+项目 schema 优先。解析链是先项目后全局。如果你需要强制使用全局 schema，删掉项目中同名的 schema 目录。
+
+---
+
+## Schema 设计的最佳实践
+
+### 1. 从 spec-driven 开始
+
+除非你非常确定自己需要完全不同的流程，否则先 fork `spec-driven` 再修改。从零创建容易遗漏重要的配置。
+
+### 2. Artifact 数量控制在 3-6 个
+
+太少（1-2 个）失去了结构化规划的价值。太多（7+ 个）增加了认知负担和审查成本。3-6 个是合适的范围。
+
+### 3. 每个 artifact 有明确的单一职责
+
+一个 artifact 只回答一个问题。proposal 回答"为什么做"，specs 回答"行为变化是什么"，design 回答"怎么做"，tasks 回答"具体步骤"。不要创建一个"什么都包含"的 artifact。
+
+### 4. 模板文件保持简洁
+
+模板是骨架，不是填空题。5-10 行的模板比 50 行的模板更好用。太详细的模板会限制 AI 的灵活性。
+
+### 5. instruction 写具体的指令
+
+`instruction` 字段是给 AI 的生成指令。写具体的指令，不写模糊的描述。
+
+好的：`每个 requirement 必须包含至少 2 个 scenario，一个正常路径一个异常路径。`
+
+不好的：`写出高质量的 spec。`
+
+### 6. 验证后再使用
+
+每次修改 schema.yaml 或模板文件后，运行 `openspec schema validate`。不要等到 propose 失败了才发现配置有问题。
+
+### 7. 把 schema 纳入版本控制
+
+项目的 `openspec/schemas/` 目录应该纳入 Git。这样团队成员使用的 schema 是一致的。全局 schema 不在 Git 中，容易出现"在我机器上能跑"的问题。
+
+---
+
+## 三种定制方式的完整对比
+
+| 维度 | Project Config | Custom Schemas | Global Overrides |
+|------|---------------|----------------|-----------------|
+| 改什么 | AI 生成行为 | Artifact 组合和依赖 | 跨项目共享 schema |
+| 存储位置 | openspec/config.yaml | openspec/schemas/ | ~/.local/share/openspec/schemas/ |
+| 版本控制 | 是（跟着项目走） | 是（跟着项目走） | 否（用户目录） |
+| 影响范围 | 当前项目 | 当前项目 | 所有项目 |
+| 学习成本 | 低 | 中 | 中 |
+| 适合谁 | 所有人 | 需要定制流程的团队 | 管理多个项目的团队 |
+
+三层可以叠加使用。比如你的项目用 Custom Schema 定义了 review-driven 工作流，同时用 Project Config 的 context 注入技术栈信息、用 rules 控制生成质量。三层协同工作，不冲突。
+
+---
+
+## 小结
+
+OpenSpec 的三层定制体系从轻到重：Project Config 调整 AI 生成质量（不改结构），Custom Schemas 改变 artifact 组合和依赖关系（改结构），Global Overrides 跨项目共享自定义 schema。
+
+定制不需要从最复杂的开始。大多数人只需要在 config.yaml 中写好 context 和 rules，就能显著提升 artifact 质量。只有当默认的四 artifact 流程不适合你的工作方式时，才需要创建自定义 schema。
+
+三个实战 schema 覆盖了常见的定制需求：rapid（砍掉 spec 和 design，快速迭代）、review-driven（加 review 步骤）、research-first（加调研步骤）。fork 其中的任何一个作为起点，比从零创建更省事。
+
+Schema 的核心原则：不是为了流程而流程，而是让流程服务于你的工作方式。如果一个 schema 增加了你的认知负担但没有带来对应的价值，它就是过度设计。减少 artifact 数量、简化模板、精简 rules——直到你觉得"刚好够用"为止。

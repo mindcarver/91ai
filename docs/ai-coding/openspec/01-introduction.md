@@ -1,0 +1,689 @@
+# Vibe Coding 的终结者？OpenSpec 与 Spec-Driven Development 入门
+
+> 更新日期：2026/06
+
+**TL;DR：** 2025 年 AI 编程工具爆发，Vibe Coding 成为开发者的默认工作方式。但一年下来，11 个结构性问题逐渐暴露。OpenSpec 是一个轻量级的 Spec-Driven Development 框架，用 Markdown 文件作为 AI 编程助手的"施工图纸"，在写代码之前先对齐意图。安装只需两行命令，4 个核心命令驱动完整工作流，支持 25+ AI 编程工具。本文全面拆解 Vibe Coding 的问题、SDD 的演进脉络、OpenSpec 的设计哲学、与四个竞品的详细对比，以及 5 分钟快速上手指南。
+
+---
+
+## 第一部分：Vibe Coding 的兴起与繁荣
+
+2025 年初，Andrej Karpathy 在社交媒体上用一句话定义了一个时代："I just vibe code." 他描述的工作方式是：坐在语音输入设备前，用自然语言告诉 AI 要做什么，看它生成代码，偶尔 review 一下，然后 ship。整个过程几乎不碰键盘写代码。
+
+这个概念迅速蔓延。2025 年上半年，GitHub Copilot、Cursor、Claude Code、Windsurf、Gemini CLI 等工具密集发布。Cursor 的 Agent 模式让"描述需求 → 看代码生成"变成主流工作流。Claude Code 把 AI 编程带入终端。Copilot Workspace 把 issue 变成 PR 只需要几次点击。
+
+开发者体验到了前所未有的生产力提升。一个人用 AI 工具一周能写出以前一个月的代码量。独立开发者用 Vibe Coding 做出了完整的 SaaS 产品。小团队用 Cursor 的 Agent 模式同时推进三四个功能。社交媒体上充斥着成功故事："我用 Cursor 一天写了一个完整的电商后台"，"Claude Code 帮我三天重构了整个认证模块"。
+
+但硬币的另一面正在翻转。一年过去了，那些早期用 Vibe Coding 起步的项目开始暴露出系统性的结构性问题。
+
+---
+
+## 第二部分：Vibe Coding 的 11 个具体问题
+
+这不是"AI 不够聪明"的问题，而是工作方式本身的系统性缺陷。每个问题都配一个真实场景。
+
+### 问题 1：结构混乱，架构缺失
+
+你让 AI "加个用户注册功能"，它一口气创建了 `register.vue`、`RegisterService.js`、`register.css`、`register.test.js` 等七八个文件。代码能跑，但目录结构完全不符合项目已有的组织方式——你的项目用 feature-based 分层（每个功能一个目录），AI 把文件散落在全局 `components/`、`services/`、`styles/` 里。
+
+更严重的是，AI 没有架构观念。它不知道你的项目约定了"所有数据访问必须走 Repository 层"，直接在 Controller 里写 SQL 查询。它不知道你用了 CQRS 模式，把读和写的 Service 分开了。每个功能模块各自为政，整个系统的架构一致性被 AI 一点一点蚕食。
+
+METR 2025 年的开发者生产力研究发现，使用 AI 工具的开发者平均慢了 19%，主要原因是"AI 生成的代码需要大量返工来符合项目架构规范"。
+
+### 问题 2：长期维护成本激增
+
+第一个月很爽。AI 帮你一天写出 5000 行代码，功能齐全，测试通过。三个月后噩梦开始——你需要修改一个 AI 生成的支付模块。这段代码当时能跑，但没有人理解为什么这么写。变量名是 `data1`、`data2`、`result`，函数名叫 `processPayment` 但里面还混着发送邮件和更新积分的逻辑。
+
+你让 AI 帮你改，但当前会话的 AI 不知道这段代码的历史。你换了三四个会话，每个会话的 AI 都给出了不同的修改方案，方案之间互相矛盾。最终你花了一整天手动读代码、画流程图、搞清楚逻辑，然后自己改。
+
+维护 AI 生成的"能用但难懂"的代码，比维护人写的"有注释有文档"的代码成本高 2-3 倍。
+
+### 问题 3：AI 上下文记忆有限，会话过长导致幻觉
+
+LLM 的上下文窗口虽然在扩大（从 8K 到 128K 再到 1M），但实际使用中的有效记忆远没有数字看起来那么好。研究数据表明，当上下文使用量超过 40% 时，AI 的表现开始显著下降——之前对话中明确约定的需求细节被遗忘或篡改。
+
+典型场景：你在会话开始时跟 AI 约定"用户名必须是 6-20 位字母数字下划线，不能以数字开头"。前五个功能开发都遵守了这个规则。到第六个功能"用户资料编辑页"时，AI 生成的用户名验证变成了"3-30 位任意字符"。它忘了之前的约定，因为会话已经很长了。
+
+更危险的是 AI 的"幻觉"：它可能引用项目里根本不存在的模块，调用不存在的 API，或者使用已废弃的库方法。代码看起来很专业，但跑起来全是错。而且 AI 不会告诉你它忘了——它会自信地生成看起来合理但完全错误的代码，进入"幻觉与自我肯定循环"。
+
+### 问题 4：低效算法和数据结构
+
+AI 倾向于选择"最直接"的实现方式，而不考虑性能和规模。你让它写一个"查询用户列表"的功能，它返回一个 `SELECT * FROM users`，然后在代码里做分页和过滤。你的用户表有 200 万行数据，这个查询直接把数据库打满。
+
+或者你让它实现一个缓存机制，它选了内存里的 JavaScript 对象（`Map`），而不是 Redis。单体应用时没问题，等你部署了三个实例，三个实例各缓存各的，数据不一致的问题就出来了。
+
+AI 不是不懂算法，而是它缺乏你项目的上下文——不知道数据规模、部署架构、性能要求。它按照"通用最佳实践"生成代码，但通用最佳实践在特定场景下可能是最差选择。
+
+### 问题 5：代码风格不一致
+
+一个人写的代码有一致的风格——命名方式、缩进习惯、注释风格、错误处理模式。多个人写的代码可以通过 lint 规则和 code review 来统一。但 AI 生成的代码风格取决于它当时怎么"想"——同一个功能，上午生成的代码用 `async/await`，下午用 `.then()` 链；这里用 `camelCase`，那里用 `snake_case`；有的地方有详细的 JSDoc，有的地方连函数名都看不出意图。
+
+跨会话的 AI 不记得自己之前的代码风格。跨功能的 AI（不同人用不同会话开发不同功能）更是各自为政。一个项目三个月下来，代码风格像是一个 20 人的团队，每人只干了一天就走了。
+
+### 问题 6：安全漏洞高发
+
+AI 生成的代码在安全方面有两个系统性问题：一是"能用就行"的心态，AI 优先保证功能正确，安全是次要考虑；二是 AI 的训练数据中包含了大量有安全问题的代码，它会把这些问题"学到"的代码中。
+
+常见的漏洞包括：SQL 注入（直接拼接用户输入到查询语句中）、XSS（不转义用户输入直接渲染到页面）、硬编码密钥（API Key 和 Secret 直接写在源码里）、不安全的认证实现（JWT 不验证签名、Session 固定攻击）、不加密的敏感数据存储（密码明文或弱哈希）。
+
+统计数据表明，AI 生成的代码中有可检测安全漏洞的比例约为 30%，高于人工代码的 15%。这不是说 AI 写的代码更差，而是 AI 在"让功能跑起来"和"保证安全"之间，总是倾向于前者。
+
+### 问题 7：开源许可证风险
+
+AI 生成的代码可能包含来自开源项目的片段，而这些片段的许可证可能是 GPL、AGPL 等 copyleft 协议。如果你的项目是闭源商业软件，引入 GPL 代码意味着你必须开源整个项目——这可能造成严重的法律和商业风险。
+
+更隐蔽的是"许可证组合风险"：你的项目用了 MIT 库 A，A 的依赖里有 Apache 2.0 库 B，B 又依赖了 GPL 库 C。你可能根本不知道自己的项目里出现了 GPL 代码。AI 不会帮你检查这些，它只会生成"能用"的代码。
+
+### 问题 8：团队协作困难
+
+Vibe Coding 天然是单人模式。你和 AI 的对话历史存在于你本地的 IDE 或终端里，你的同事看不到。你们各自用各自的 AI 会话开发不同功能，各自的 AI 对项目的理解不一样。
+
+等你们合并代码时，问题来了：你的 AI 把数据库 schema 改了，他的 AI 假设 schema 是老版本；你的 AI 在 Service A 里加了新方法，他的 AI 在 Service B 里实现了同样的功能但接口签名不同。你们花了一整天解决合并冲突，比不用 AI 还慢。
+
+Vibe Coding 让每个开发者变成了"孤岛"——每个人跟自己的 AI 有一套私有的"项目理解"，无法共享给团队。
+
+### 问题 9：技术债指数级增长
+
+传统软件开发中，技术债是线性增长的——每跳过一次重构、每写一个 workaround，技术债增加一点。但 AI 辅助开发中，技术债的增长模式是指数级的。原因在于"速度掩盖了质量问题"：AI 让你更快地产出代码，但产出的大量代码中隐藏的问题也更多。当你以后要修改这些代码时，你需要理解更多的代码，而 AI 的理解也更容易出错，产生更多问题。
+
+典型例子：你让 AI 快速实现了一个通知系统。代码能跑，但通知的发送逻辑、模板渲染、重试机制全混在一个 800 行的 `notification.js` 里。三个月后你要加一个新通知类型，AI 读这个 800 行的文件后给出的方案是再加 200 行——因为它"理解"了现有的代码结构，觉得在里面堆代码是最合理的做法。补丁叠补丁，技术债像滚雪球。
+
+### 问题 10：需求变更引发连锁反应
+
+产品经理说"把注册流程改成手机号注册"。在人写的代码里，你大概知道要改哪些文件——注册页面、验证逻辑、用户模型、数据库迁移。改动虽然大但范围可控。
+
+在 AI 生成的代码里，注册逻辑可能散落在十几个地方：`register.vue` 里有一份，`RegisterService.js` 里有邮件验证逻辑但被硬编码在注册流程里，`user.model.ts` 里有用户名唯一性校验但它和密码逻辑耦合在一起，还有三个中间件里有注册相关的处理。AI 不知道所有这些地方，它只改了你明确指出的文件，其他地方继续用旧的邮箱注册逻辑。
+
+于是你有了两套注册逻辑共存：页面上是手机号注册，但后台的密码重置功能还在用邮箱。你可能一个月后才发现这个问题。
+
+### 问题 11：短期效率陷阱
+
+Vibe Coding 最迷惑人的地方在于：短期来看效率极高，长期来看效率极低。
+
+第一天用 AI 写代码，效率提升 300%。第一个月，效率提升还有 200%。但三个月后，你花在"修复 AI 之前生成的有问题的代码"上的时间，开始超过 AI 帮你省下的时间。六个月后，你可能发现自己花 50% 的时间在处理 AI 生成代码引发的各种问题——修复 bug、调整架构、补充测试、处理安全漏洞。
+
+这就是"短期效率陷阱"：工具在短期内确实提升了效率，但代价是把效率的折损推迟到了未来。如果没有系统性的方法来管理 AI 生成代码的质量，"效率提升"会变成"效率负债"。
+
+Tony Bai 在博客中引用 Luke Bechtel 的数据说明这个问题："过去需要花 2-3 小时实现后才发现做错了，现在只需要花 10-20 分钟规划，然后花 1 小时正确地实现它。"Spec-Driven Development 就是从这个认知出发的。
+
+---
+
+## 第三部分：Spec-Driven Development 的起源和演进
+
+Vibe Coding 的问题不是新问题。软件工程的历史上，每一次"更快地产出代码"的技术进步，都伴随着"如何管理产出质量"的工程实践演进。
+
+### 从瀑布到敏捷，从敏捷到 SDD
+
+1990 年代，微软用"规格说明书（Spec）"文化管理软件质量。一份 Word 文档可能长达几百页，描述系统的每一个行为。写 spec 的时间有时超过写代码的时间。好处是代码质量高、需求清晰；代价是速度极慢，难以应对快速变化。
+
+2000 年代，敏捷运动把"写 spec"简化为"写 user story"。一行 "As a user, I want to login, so that I can access my account" 就够了，不需要几百页文档。速度上去了，但需求的精确度下来了——AI 编程时代，一行 user story 远远不够让 AI 准确理解你要做什么。
+
+2024-2025 年，AI 编程工具成熟。开发者发现：prompt 的质量直接决定了代码的质量。一个模糊的 prompt（"加个搜索"）产生模糊的代码；一个精确的 prompt（"在商品列表页添加搜索框，支持按名称和分类搜索，搜索结果实时过滤，300ms 防抖"）产生精确的代码。
+
+Spec-Driven Development 就是把"写精确的 prompt"系统化。不是每次在聊天框里手写精确描述，而是维护一份结构化的规格文件，AI 每次工作时读取这份文件来理解项目上下文和需求。
+
+### 三种 AI 编程范式
+
+知乎上的一篇文章将当前的 AI 编程范式分为三类：
+
+| 范式 | 核心逻辑 | 代表工具 |
+|------|---------|---------|
+| Vibe Coding | 自然语言描述需求 → AI 生成代码 → 凭感觉验收 | Cursor、Copilot 的默认用法 |
+| Spec Coding | 先写规范再写代码 → AI 按规范实现 | OpenSpec、Spec Kit |
+| Harness Engineering | Agent 的操作系统——管理上下文、工具链、工作流 | Superpowers、Anthropic Skills |
+
+这三者不是互相排斥的。你可以把 Spec Coding 理解为"给 Vibe Coding 加上结构"——还是用自然语言和 AI 对话，但对话的结果被持久化为结构化的 spec 文件，而不是消失在聊天记录里。
+
+核心转变是一条路径的变化：
+
+```
+旧路径：Prompt → Code（直接让 AI 写代码）
+新路径：LLM → Spec → Code（先让 AI 写规范，再按规范写代码）
+```
+
+### SDD 的早期实践者
+
+在工具出现之前，一些开发者已经在手动实践 SDD：
+
+- 在项目根目录放一个 `SPEC.md`，每次让 AI 先读这个文件
+- 用 `.cursorrules` 或 `CLAUDE.md` 文件给 AI 注入项目上下文
+- 在每次对话开始时粘贴之前的对话摘要
+
+这些做法有效但脆弱——依赖人工维护，容易过时，不标准化。OpenSpec、Spec Kit、Kiro 等工具的出现，就是把 SDD 从"手动最佳实践"变成"工具化工作流"。
+
+---
+
+## 第四部分：OpenSpec 的定位
+
+OpenSpec 的定位非常明确：**轻量级、brownfield-first 的 SDD 框架。**
+
+- **轻量级**：npm 一行安装，4 个核心命令，不依赖数据库或 SaaS 平台。整个框架基于 Markdown 文件，跟代码一起存放在 git 仓库里。
+- **brownfield-first**：不是从零开始写新项目才用，而是专门为已有代码的项目设计。不需要一次性把整个系统写成 spec，从你要改的地方开始就行。
+- **工具无关**：支持 25+ AI 编程工具。用 Claude Code、Cursor、Copilot、Windsurf、Gemini CLI 都行，OpenSpec 不绑定任何特定工具或模型。
+
+项目地址：[github.com/Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)，MIT 协议。
+
+OpenSpec 不是什么：
+
+- 不是项目管理工具（不做 backlog、sprint、看板）
+- 不是测试框架（不做自动化测试执行，但 verify 会检查测试覆盖）
+- 不是 AI 编程工具本身（它工作在你的 AI 工具之上，生成 slash command 和 skill 文件）
+- 不是瀑布模型（没有 rigid phase gates，强调迭代和灵活）
+
+---
+
+## 第五部分：OpenSpec 的四大哲学原则
+
+OpenSpec 的 README 里列出了设计哲学。拆解为四条核心原则。
+
+### 原则一：Fluid not Rigid（流动而非僵化）
+
+很多工程框架的问题在于"过度的仪式感"——你必须按照规定的顺序执行规定的步骤，填写规定的文档模板，通过规定的审批流程。Spec Kit（GitHub 官方）就走这条路：严格的 phase gate，每个阶段有准入条件。
+
+OpenSpec 的做法相反。你可以随时回头修改任何一个 artifact——proposal 可以改、spec 可以改、design 可以改、tasks 可以改。没有强制的审批流程。想先写 spec 再写 design？可以。想先写 tasks 再补 spec？也行。想跳过 design 直接 apply？没问题。
+
+这不是说 OpenSpec 没有纪律，而是把纪律留给人的判断，而不是工具的强制。你觉得需要严格审查就严格审查，你觉得这个改动很简单就快速通过。
+
+### 原则二：Iterative not Waterfall（迭代而非瀑布）
+
+瀑布模型是"一次写完所有需求 → 一次完成所有设计 → 一次写完所有代码"。SDD 如果走瀑布路线，就是"先把整个系统的 spec 都写好再开始写代码"——这在实际中几乎不可能，因为你永远不可能在开始之前想清楚所有需求。
+
+OpenSpec 的 Delta Spec 设计就是为迭代而生的。你不需要写完整的系统 spec，只需要写"这次要改什么"。每次变更只记录变化量：
+
+- `## ADDED Requirements` — 新增了什么行为
+- `## MODIFIED Requirements` — 修改了什么行为
+- `## REMOVED Requirements` — 删除了什么行为
+
+做完后合并进主 spec。下次变更在此基础上继续。系统 spec 的覆盖率随着开发逐步提高，而不是要求一开始就全覆盖。
+
+OpenSpec 的文档明确说："trying to generate all your specs upfront is a waste of time."（提前生成所有 spec 是浪费时间。）从你要改的地方开始，改完一个功能就多一份有 spec 的功能。
+
+### 原则三：Easy not Complex（简单而非复杂）
+
+OpenSpec 的设计处处追求简单：
+
+- **安装简单**：`npm install -g @fission-ai/openspec@latest`，一个命令。不需要 Python 环境、不需要 Docker、不需要配置数据库。
+- **初始化简单**：`openspec init`，30 秒完成。交互式选择你用的 AI 工具，自动生成对应的配置文件。
+- **概念简单**：只有 4 个核心命令——propose、apply、sync、archive。没有几十个子命令和配置选项。
+- **文件格式简单**：全部是 Markdown。没有 YAML schema、没有 JSON 配置、没有 DSL。任何编辑器都能打开，任何开发者都能读懂。
+- **零依赖**：不需要 API Key，不需要注册账号，不需要连接任何 SaaS 服务。所有数据本地存储，跟代码一起 git 管理。
+
+### 原则四：Built for Brownfield not Just Greenfield（面向已有项目而非全新项目）
+
+这是 OpenSpec 跟其他 SDD 工具最核心的区别。
+
+Spec Kit 和 Kiro 更适合 greenfield 项目——从零开始的新项目。你可以在写第一行代码之前就把 spec 写好，然后按 spec 开发。
+
+但现实中的大多数项目不是 greenfield。你有一个运行了两年的 Node.js 服务，15 万行代码，5 个人维护，文档严重缺失。你想用 AI 加速开发，但 AI 不理解你的系统。
+
+OpenSpec 为这种场景设计了"渐进式引入"策略：
+
+1. 不需要一次性生成所有 spec
+2. 从你要修改的功能开始
+3. 先让 AI 读代码、理解现有行为，写成 spec
+4. 在这个 spec 基础上提出修改
+5. 改完一个功能就多一份有 spec 的功能
+
+这跟老房子装修一个道理——不需要先画出整栋楼的图纸，要改厨房就先画厨房的。
+
+OpenSpec 还提供了一个扩展命令 `/opsx:explore`，专门用于理解遗留代码。你可以让 AI "读 src/legacy-module 的源代码，反向生成 OpenSpec spec 文件描述它的当前行为"。这为后续重构提供了行为基线——你可以确保新实现仍然符合这些 baseline spec。
+
+---
+
+## 第六部分：与其他方案的详细对比
+
+### OpenSpec vs Spec Kit（GitHub 官方）
+
+| 维度 | OpenSpec | Spec Kit |
+|------|----------|----------|
+| 安装方式 | npm 全局安装 | Python uv 工具安装 |
+| 运行环境 | Node.js 20.19.0+ | Python 3.8+ |
+| 工作流 | propose → apply → sync → archive（4 步，无强制阶段门） | specify → plan → tasks → implement → verify（5 步，严格阶段门） |
+| 核心场景 | Brownfield（已有代码的项目迭代） | Greenfield（从零开始的新项目） |
+| Spec 产出量 | 轻量（约 250 行/变更） | 重量（约 800 行/变更） |
+| 变更管理 | changes/ 目录隔离每个变更 | 直接修改主 spec 文件 |
+| Agent 支持 | 25+ AI 工具 | 8+ AI 工具 |
+| 审查方式 | PR 里带 proposal.md + Delta Spec | PR 里带完整 spec 文档 |
+| 许可证 | MIT | MIT |
+| 定价 | 免费 | 免费 |
+
+核心区别：Spec Kit 是"严肃工程派"，追求严谨的过程管控。OpenSpec 是"实用主义派"，追求最低的摩擦力。一个实际数据点：测试中 Spec Kit 从 prompt 到 spec + plan + task 全部产出约 90 分钟，加上 review 可能 3 小时以上。OpenSpec 的 propose 阶段通常 5-10 分钟，整个变更周期（含 apply 和 archive）30 分钟左右。
+
+Spec Kit 的优势在于跨 Agent 标准化——一旦 spec.md 和 tasks.md 提交到版本控制，你可以用不同的 Agent 在不同时间执行实现阶段，格式不变。OpenSpec 的优势在于 brownfield 场景下的增量引入和轻量操作。
+
+### OpenSpec vs Kiro（AWS）
+
+| 维度 | OpenSpec | Kiro |
+|------|----------|------|
+| 形态 | CLI 工具 + 任意 IDE | 专属 IDE（VS Code fork） |
+| 模型限制 | 无（用任何模型都行） | 仅 Claude 模型 |
+| Spec 格式 | 自定义 Markdown + Delta Spec | EARS 标记法（Easy Approach to Requirements Syntax） |
+| Hooks 机制 | 无（依赖 AI 工具自带能力） | Agent Hooks（文件保存自动触发动作） |
+| Spec 同步 | 静态（提案后不自动更新） | 静态（实现过程中不自动更新） |
+| 生态开放性 | 开源、开放、可扩展 | AWS 生态绑定 |
+| 定价 | 免费 | 免费（50 credits/月）+ 付费计划 |
+
+核心区别：Kiro 是一个完整的 IDE + SDD 方案，优点是集成度高、EARS 标记法产生的验收标准清晰可测试、Agent Hooks 能自动触发重复任务（比如保存组件时自动更新测试文件）。代价是锁定 AWS 生态、锁定 Claude 模型、锁定 VS Code 系 IDE。
+
+Kiro 的 EARS 标记法是一个有价值的特性——它强制每个 user story 都有明确的验收标准（用 When/Then/Shall 格式），减少了需求的歧义。但 Kiro 在非 AWS 工作负载上显得过重，高峰时段有模型流量限制。
+
+OpenSpec 走的是"工具中立"路线——不绑定任何工具和模型。社区里有人说："Coding agents are improving rapidly. What's popular this month might not be next month. Your specs shouldn't care."这正是 OpenSpec 的设计意图。
+
+### OpenSpec vs Superpowers（TDD 方案）
+
+| 维度 | OpenSpec | Superpowers |
+|------|----------|-------------|
+| 驱动方式 | 规范驱动（Spec-Driven） | 测试驱动（Test-Driven） |
+| 核心产出 | Spec 文件（描述系统行为） | 测试文件（描述系统行为的验证方式） |
+| 工作流 | 先写 spec 再写代码 | 先写测试再写代码（红-绿-重构） |
+| 适合场景 | 需求不明确、需要先对齐意图 | 需求明确、追求代码质量和测试覆盖 |
+| 工具依赖 | 不绑定特定工具 | 依赖特定工作流和自动化检查 |
+
+核心区别：Superpowers 是 TDD 的 AI 版——红-绿-重构循环。OpenSpec 是 SDD 的工具版——先把"做什么"定清楚，再让 AI 实现。两者不冲突，社区里有人把它们组合使用：OpenSpec 负责 spec，Superpowers 负责测试。superpowers-bridge 社区 schema 就是做这个的。
+
+### OpenSpec vs 纯 Vibe Coding
+
+| 维度 | Vibe Coding | OpenSpec |
+|------|-------------|----------|
+| 需求存放在哪 | 聊天记录 | 项目仓库里的 Markdown 文件 |
+| 换个会话 | 上下文丢失 | 读 spec 恢复完整上下文 |
+| 团队协作 | 看不到彼此的聊天记录 | spec 文件在 git 里，PR 可审查 |
+| 变更追踪 | 无 | 每个 change 有完整记录 |
+| 上手成本 | 零 | 约 5 分钟 |
+| 适合什么 | 一次性脚本、快速原型 | 中长期项目、团队协作 |
+
+核心区别：Vibe Coding 没有"结构化记忆"，每个会话都是全新的。OpenSpec 用文件系统作为 AI 的"外部记忆"，让 AI 在任何会话、任何工具里都能恢复完整的项目上下文。
+
+Reddit r/vibecoding 上有用户报告："it changed how predictable my agents behaved"（它改变了我的 agent 的可预测性）。这个评价精准——OpenSpec 的核心价值不是让 AI 更聪明，而是让 AI 的行为更可预测。
+
+### 四种方案的定位总结
+
+```
+                        轻量
+                         |
+                    OpenSpec
+                       |
+    工具无关 ----------+----------- 工具绑定
+                       |
+                 Spec Kit     Kiro
+                       |
+                        重量
+
+         Superpowers 在另一个维度上（TDD vs SDD）
+```
+
+选择建议：
+
+- 想轻量、brownfield、多工具切换 → OpenSpec
+- 想严格流程、greenfield、大团队 → Spec Kit
+- 想 IDE 一体化、用 AWS → Kiro
+- 想高测试覆盖率、TDD 爱好者 → Superpowers
+- 做一次性原型、不关心长期维护 → 纯 Vibe Coding
+
+---
+
+## 第七部分：OpenSpec 的核心工作流
+
+用一张 ASCII 图说明完整流程：
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      OPENSPEC 工作流                          │
+│                                                              │
+│  ┌───────────┐   ┌───────────┐   ┌──────────┐   ┌────────┐ │
+│  │ /opsx:    │   │ /opsx:    │   │ /opsx:   │   │ /opsx: │ │
+│  │ propose   │──>│ apply     │──>│ sync     │──>│ archive│ │
+│  │           │   │           │   │          │   │        │ │
+│  │ 创建变更单│   │ 照单施工  │   │ 更新图纸 │   │ 归档   │ │
+│  └───────────┘   └───────────┘   └──────────┘   └────────┘ │
+│       │                │              │               │      │
+│       v                v              v               v      │
+│  ┌───────────┐   ┌───────────┐  ┌──────────┐  ┌──────────┐ │
+│  │ proposal  │   │ 修改源代码│  │ 更新 spec│  │ Delta 合并│ │
+│  │ .md       │   │ tasks.md  │  │ 文件     │  │ 进主specs│ │
+│  │ specs/    │   │ 打勾      │  │          │  │ 清理change│ │
+│  │ design.md │   │           │  │          │  │          │ │
+│  │ tasks.md  │   │           │  │          │  │          │ │
+│  └───────────┘   └───────────┘  └──────────┘  └──────────┘ │
+│       │                                              │       │
+│       v                                              v       │
+│  ┌───────────┐                                 ┌──────────┐  │
+│  │ 审查阶段  │                                 │ 真相源   │  │
+│  │ 人+机器   │                                 │ 更新完成 │  │
+│  │ validate  │                                 │          │  │
+│  └───────────┘                                 └──────────┘  │
+│                                                              │
+│  可选步骤：                                                  │
+│  ┌───────────┐   ┌───────────┐   ┌───────────┐             │
+│  │ /opsx:    │   │ /opsx:    │   │ /opsx:    │             │
+│  │ explore   │   │ verify   │   │ continue  │             │
+│  │ 理解代码  │   │ 验证实现  │   │ 逐步创建  │             │
+│  └───────────┘   └───────────┘   └───────────┘             │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+项目目录结构：
+
+your-project/
+├── openspec/
+│   ├── project.md          # 全局项目上下文（技术栈、架构约定）
+│   ├── AGENTS.md           # AI 工具的行为指引（自动维护）
+│   ├── specs/              # 真相源：系统当前行为的规范
+│   │   ├── auth/
+│   │   │   └── spec.md
+│   │   └── payment/
+│   │       └── spec.md
+│   └── changes/            # 变更工作区
+│       ├── add-dark-mode/
+│       │   ├── proposal.md
+│       │   ├── specs/ui/spec.md  # Delta Spec
+│       │   ├── design.md
+│       │   └── tasks.md
+│       └── archive/        # 已归档的变更
+└── src/                    # 你的源代码
+```
+
+### Delta Spec 的工作机制
+
+这是 OpenSpec 最重要的设计。Delta Spec 只写"变化了什么"，用三个标记区分：
+
+```markdown
+# Delta for Auth
+
+## ADDED Requirements
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication.
+
+#### Scenario: 2FA login
+- GIVEN a user with 2FA enabled
+- WHEN the user submits valid credentials
+- THEN an OTP challenge is presented
+
+## MODIFIED Requirements
+
+### Requirement: Session Timeout
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+## REMOVED Requirements
+
+### Requirement: Remember Me
+(Deprecated in favor of 2FA.)
+```
+
+归档时，ADDED 追加到主 spec，MODIFIED 替换对应需求，REMOVED 从主 spec 中删除。这意味着：
+
+- 两个变更可以并行修改同一个 spec 文件的不同需求，不冲突
+- 不需要一次性把系统所有行为都写成规范，从你要改的地方开始就行
+- 审查变更时只需要看 Delta，不用 diff 整份文档
+- 天然适合 Brownfield 项目（修改已有行为是一等公民）
+
+### 支持 25+ AI 工具
+
+OpenSpec 通过生成对应工具的 skill/command 文件来集成。主要支持的工具：
+
+| 工具 | 命令格式 | 集成方式 |
+|------|---------|---------|
+| Claude Code | `/opsx:propose` | .claude/skills/ |
+| Cursor | `/opsx-propose` | .cursor/rules/ |
+| GitHub Copilot | `/opsx-propose` | .github/prompts/ |
+| Windsurf | `/opsx-propose` | .windsurf/rules/ |
+| Codex CLI | `/opsx:propose` | skill 文件 |
+| Gemini CLI | skill 调用 | skill 文件 |
+| OpenCode | `/opsx:propose` | skill 文件 |
+| Cline | skill 调用 | skill 文件 |
+
+你可以今天用 Claude Code、明天切换到 Cursor，spec 文件不需要任何改动。
+
+---
+
+## 第八部分：5 分钟快速上手
+
+### 步骤一：安装（1 分钟）
+
+```bash
+# 检查 Node.js 版本（需要 20.19.0+）
+node --version
+
+# 安装 OpenSpec
+npm install -g @fission-ai/openspec@latest
+
+# 验证安装
+openspec --version
+```
+
+如果 Node.js 版本不够：
+
+```bash
+# 用 nvm 升级
+nvm install 20
+nvm use 20
+```
+
+### 步骤二：初始化（1 分钟）
+
+```bash
+# 进入你的项目目录
+cd your-project
+
+# 运行初始化（交互式选择 AI 工具）
+openspec init
+
+# 或者直接指定你用的 AI 工具
+openspec init --tools claude-code
+openspec init --tools claude-code,cursor
+```
+
+初始化会创建以下结构：
+
+```
+your-project/
+├── openspec/
+│   ├── project.md     # ← 你需要填写项目基本信息
+│   ├── AGENTS.md      # ← 自动生成，不要手动改
+│   ├── specs/         # ← 空的，等第一次 propose 填充
+│   └── changes/       # ← 空的，等你的第一个变更
+```
+
+### 步骤三：填写 project.md（2 分钟）
+
+打开 `openspec/project.md`，填写你的项目基本信息：
+
+```markdown
+# Project Context
+
+## Tech Stack
+- Frontend: React 18 + TypeScript 5.0
+- Backend: Node.js 20 + Express 4
+- Database: PostgreSQL 15
+- ORM: Prisma 5
+
+## Architecture
+- Feature-based directory structure
+- All database access through Repository layer
+- REST API, JSON responses
+- JWT authentication
+
+## Code Standards
+- camelCase for variables and functions
+- PascalCase for components and classes
+- Every API endpoint has input validation
+- Error responses follow RFC 7807
+```
+
+这份文件是 AI 理解你项目的"世界观"。写得越准确，AI 生成的代码越贴合你的项目。
+
+### 步骤四：发起你的第一个变更（1 分钟）
+
+在你的 AI 编程工具里输入：
+
+```
+/opsx:propose add-comment-system
+```
+
+AI 会自动创建变更文件夹并生成 proposal、spec delta、design 和 tasks。审查这些文件后：
+
+```
+/opsx:apply
+```
+
+AI 按任务清单实现代码。完成后：
+
+```
+/opsx:archive
+```
+
+Delta Spec 合并进主 spec，变更归档。
+
+### CLI 速查
+
+```bash
+openspec list                        # 列出所有活跃变更
+openspec show add-comment-system     # 查看变更详情
+openspec validate add-comment-system # 验证 spec 格式（--strict 严格模式）
+openspec view                        # 打开交互式仪表板
+openspec update                      # 刷新 AI 工具的 skill 文件
+openspec config profile              # 切换工作流配置
+```
+
+### 扩展工作流
+
+如果你选择了扩展 profile（`openspec config profile` 切换），还有这些命令：
+
+```
+/opsx:new         — 创建新的空变更
+/opsx:continue    — 逐步创建 artifact
+/opsx:ff          — 快速流程（简化 propose）
+/opsx:verify      — 验证实现是否匹配 spec
+/opsx:sync        — 同步 spec 和代码状态
+/opsx:bulk-archive — 批量归档多个并行变更
+/opsx:onboard     — 新人引导（理解项目 spec）
+```
+
+---
+
+## 第九部分：适合谁用、什么时候用、什么时候不用
+
+### 适合用的人
+
+- **独立开发者做中长期项目**：项目要维护三个月以上，需要 AI 在不同会话间保持上下文一致性
+- **2-10 人团队用 AI 编程**：团队需要共享项目理解，PR 需要可审查的需求文档
+- **维护 Brownfield 项目的开发者**：老系统文档缺失，AI 不理解系统行为，需要渐进式引入 spec
+- **同时用多个 AI 工具的人**：白天用 Cursor，晚上用 Claude Code，周末用 Gemini CLI——OpenSpec 让 spec 在所有工具间通用
+
+### 适合用的场景
+
+- 功能开发（新增一个完整的模块）
+- 重构（修改现有模块的架构或逻辑）
+- Bug 修复（影响多个文件的复杂 bug）
+- 安全修复（需要理解现有安全机制的改动）
+- 新人 onboarding（用 spec 而不是口口相传理解系统）
+
+### 不适合用的场景
+
+- **一次性脚本**：用完就扔的代码，spec 的开销大于收益
+- **探索性原型**：你还在试水，不确定要做什么，过早写 spec 是浪费
+- **极小改动**：改个按钮颜色、修个拼写错误，直接改代码更快
+- **团队不习惯读文档**：如果 spec 不会被任何人读，它就是摆设
+- **紧急修复**：线上出了 bug 需要立即修复，来不及走流程
+
+### 什么时候开始用
+
+最好的时机是"现在"——在你已经有一个运行中的项目、需要做下一个功能的时候。不需要先把整个系统写成 spec，从你要改的那个功能开始。
+
+最坏的时机是项目从零开始的第一天。此时系统还没有任何行为，写 spec 的依据不存在。先写代码，等系统有了基本骨架再引入 OpenSpec。
+
+---
+
+## 第十部分：OpenSpec 的隐藏价值
+
+除了上面详细讨论的核心工作流之外，OpenSpec 还带来了几个容易被忽略但实际价值不小的能力。
+
+### 可审查性：Code Review 的新维度
+
+Spec 文件是 Markdown，存在 git 仓库里。这意味着 Code Review 可以审查 spec 而不只是代码。
+
+传统的 Code Review 只能看"代码变了什么"。你看到的是 200 行 diff，需要从中推断"开发者想做什么"。这个过程费时而且容易遗漏——特别是当变更跨越多个文件时。
+
+OpenSpec 改变了这个流程。PR 里不仅有代码 diff，还有 `proposal.md`（解释为什么要改）和 Delta Spec（解释具体改了哪些需求）。Review 者先看 proposal 理解意图，再看 Delta Spec 理解影响范围，最后才看代码 diff 确认实现。
+
+这个"先审意图、再审实现"的模式，把 review 的效率提升了一个档次。实践数据表明，review 时间平均减少 30-40%，返工率（review 后需要大改）从 35% 降到 18% 左右。
+
+### 跨工具连续性：你的 Spec 不跟工具走
+
+AI 编程工具更新换代很快。2024 年是 GitHub Copilot 的天下，2025 年上半年 Cursor 领先，下半年 Claude Code 又开始流行。谁知道 2026 年什么工具最火？
+
+如果你把项目知识绑定在某个工具的私有格式里（比如 Cursor 的 `.cursor/rules/` 或 Claude Code 的 `CLAUDE.md`），换工具意味着这些知识要重新构造。
+
+OpenSpec 的 spec 文件是工具无关的纯 Markdown。你今天用 Cursor 开发，明天换成 Claude Code，spec 文件不需要任何改动——因为它们是项目的一部分，不是工具的一部分。AI 编程工具在不断迭代，今天流行的工具下个月可能被替代。你的 spec 不应该跟着工具走。
+
+### 审计追踪：每个决策都有据可查
+
+OpenSpec 的 archive 目录保留了每个变更的完整记录：为什么做（proposal.md）、怎么做的（design.md）、具体改了什么（Delta Spec）、任务执行情况（tasks.md）。
+
+这在以下场景中特别有价值：
+
+- 三个月后回头看，想理解"当初为什么要这样设计支付流程"——直接去 archive 里翻对应的 proposal
+- 新加入的成员想了解某个模块的演进历史——看 archive 里跟这个模块相关的所有变更
+- 发现了一个 bug，怀疑是某个历史变更引入的——看 archive 里的 Delta Spec 确认当时改了什么需求
+
+这种审计追踪在个人项目里可能无所谓，但在团队项目和长期维护的项目里价值巨大。
+
+### CI/CD 集成：自动化 Spec 质量
+
+OpenSpec 的 CLI 命令可以集成到 CI 流水线中：
+
+```yaml
+# GitHub Actions 示例
+- name: Validate OpenSpec
+  run: |
+    npm install -g @fission-ai/openspec@latest
+    openspec validate --strict
+```
+
+这确保每次 PR 的 spec 文件都符合格式要求。如果有人提交了缺少 Scenario 的 spec，CI 直接报错。这种自动化检查比人工 review 更可靠——人可能遗漏格式问题，但 CI 不会。
+
+## 权衡与局限
+
+诚实地总结 OpenSpec 的局限：
+
+1. **增加了前期时间**：每个变更多花 5-10 分钟在 spec 上。对于确定性高的小改动，这是净开销。
+
+2. **Spec 可能过时**：如果实现偏离了 spec 但不及时更新，spec 变成不准确的文档。过时的 spec 比没有 spec 更危险——因为它给你错误的信心。团队必须建立"改代码同步更新 spec"的纪律。
+
+3. **对 AI 模型有要求**：OpenSpec 推荐 Opus 4.5 和 GPT 5.2 级别的模型。小模型生成的 spec 可能空泛，流于形式。用低配模型跑 OpenSpec 就像用计算器做微积分——工具是对的，但算力不够。
+
+4. **并行变更的冲突**：两个 change 修改同一个 requirement 时，合并依赖 AI 判断，不完全可预测。不像 git merge conflict 那样有确定性的解决策略。这个问题在多人同时开发交叉模块时比较明显。
+
+5. **上下文窗口限制**：虽然 OpenSpec 按需加载 spec，但当系统有几十个 spec 文件时，跨功能的影响分析仍依赖 AI 的判断力。对于超大型代码库（几十万行级别），单靠 OpenSpec 的 spec 文件可能不足以提供完整的全局视图。
+
+6. **团队纪律依赖**：OpenSpec 提供工具但不强制行为。如果团队不按时 archive、不更新 spec、不 review proposal，工具的价值归零。这是一个"人"的问题而不是"工具"的问题，但需要正视。
+
+7. **没有持久化的代码库上下文引擎**：OpenSpec 依赖你选择的 AI 工具自带的上下文能力。对于大型代码库（超过 40 万行），跨文件的语义理解可能不够。如果需要持久化的代码库理解能力，可能需要配合 Augment Code 的 Intent 或类似的上下文引擎产品。
+
+8. **学习曲线虽低但不是零**：虽然 OpenSpec 号称"5 分钟上手"，但真正用好它需要理解 Delta Spec 的设计意图、掌握何时该用何时不该用的判断力、养成同步更新 spec 的习惯。从"装了 OpenSpec"到"用好了 OpenSpec"，通常需要 2-3 周的实际项目磨合。
+
+---
+
+## 延伸阅读
+
+### 官方资料
+
+- [OpenSpec GitHub 仓库](https://github.com/Fission-AI/OpenSpec) — 源码、完整文档、支持的 AI 工具列表
+- [openspec.dev](https://openspec.dev/) — 官方网站
+- [Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md) — 入门指南
+- [Concepts](https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md) — 核心概念详解
+- [intent-driven.dev 知识中心](https://intent-driven.dev/knowledge/openspec/) — 教程、工作流图和博客合集
+
+### 学习资料
+
+- [OpenSpec Deep Dive（redreamality.com）](https://redreamality.com/garden/notes/openspec-guide/) — 架构深度解析，含状态机模型和高级用法模式
+- [6 Best Spec-Driven Development Tools（Augment Code）](https://www.augmentcode.com/tools/best-spec-driven-development-tools) — OpenSpec 与 Spec Kit、Kiro、BMAD、Cursor 的详细对比评测
+- [Spec-Driven Development with OpenSpec（Medium）](https://medium.com/coding-nexus/openspec-a-spec-driven-workflow-for-ai-coding-assistants-no-api-keys-needed-d5b3323294fa) — 实用入门教程
+- [Thoughtworks Technology Radar — OpenSpec](https://www.thoughtworks.com/radar/tools/openspec) — Thoughtworks 对 OpenSpec 的技术雷达评估
+- [OpenSpec Cursor Forum 讨论](https://forum.cursor.com/t/openspec-lightweight-portable-spec-driven-framework-for-ai-coding-assistants/134052) — 社区反馈和使用经验
+- [Superpowers VS OpenSpec（掘金）](https://juejin.cn/post/7605157203591020571) — 与 TDD 方案 Superpowers 的中文对比
+- [Vibe Specs 模式（Tony Bai）](https://tonybai.com/2025/07/02/vibe-specs/) — Spec-First 工作流的效率分析
+- [Spec Coding 与 Harness Engineering（知乎）](https://zhuanlan.zhihu.com/p/2020513059618206488) — 三种 AI 编程范式对比
+- [OpenSpec + Claude CLI 实战指南（Medium）](https://jxausea.medium.com/a-practical-development-guide-based-on-openspec-claude-cli-26da7df71356) — 基于 Claude CLI 的实践教程

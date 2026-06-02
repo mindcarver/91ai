@@ -1,0 +1,963 @@
+# Delta Spec 深度解析：增量规范的写法、合并与并行变更
+
+> 更新日期：2026/06
+
+## TL;DR
+
+Delta Spec 是 OpenSpec 最核心的机制。它不是重写整个规范文件，而是用三个标记（ADDED / MODIFIED / REMOVED）描述"什么变了"。归档时，合并引擎解析 Markdown 结构，按 Requirement 名称匹配，执行结构化的增删改操作。并行变更修改同一个 spec 文件的不同 Requirement 时不冲突；修改同一个 Requirement 时，bulk-archive 让 AI 检查实际代码来裁决。本文拆解 Delta Spec 的写法规范、合并算法的内部逻辑、并行变更的无冲突原理，以及三个完整的实战示例。读完本文，你应该能写出不触发合并错误的 Delta Spec，并理解多个变更并行时会发生什么。
+
+## 前置知识
+
+本文假设你已经读过 02-core-concepts.md，了解 Spec 文件格式（Purpose / Requirements / Scenarios）和 Delta Spec 三种标记的基本含义。本文在此基础上深入到实现层面——合并算法怎么工作、什么操作会触发错误、并行变更如何不冲突。
+
+---
+
+## Delta Spec 不是什么
+
+在开始之前，先排除几个常见误解。
+
+**Delta Spec 不是 Git diff**。Git diff 操作的是文本行，Delta Spec 操作的是结构化的 Requirement 块。你可以把 Delta Spec 理解为"语义层面的 diff"——它不关心缩进变了几个空格，只关心哪个 Requirement 做了什么变更。
+
+**Delta Spec 不是 API 版本描述**。它不描述"v1 到 v2 的变化"，而是描述"系统当前行为的一次变更"。每次变更用 Delta Spec 描述差异，归档后合并到主 spec，主 spec 始终反映最新状态。
+
+**Delta Spec 不是自由格式笔记**。它有严格的结构要求。标题格式、标记位置、Requirement 命名都有规范。不符合规范的 Delta Spec 会在合并时报错。
+
+---
+
+## 三标记的精确定义
+
+### ADDED Requirements
+
+**语义**：系统新增一个行为需求。
+
+**合并行为**：将整个 Requirement 块（包括标题、描述文本、所有 Scenario）追加到主 spec 的 `## Requirements` 部分末尾。
+
+**前提条件**：主 spec 中不存在同名 Requirement。如果存在同名 Requirement，合并失败，错误信息为 `ADDED failed for header "..." - already exists`。
+
+**必须包含**：
+
+- `### Requirement: <名称>` 标题（名称不能为空）
+- 至少一段描述文本，包含 SHALL 或 MUST 关键词
+- 至少一个 `#### Scenario`
+
+**示例**：
+
+```markdown
+## ADDED Requirements
+
+### Requirement: Full-Text Search
+The system SHALL provide full-text search across all published content.
+
+#### Scenario: Keyword match
+- GIVEN a post containing the word "performance"
+- WHEN the user searches for "performance"
+- THEN the post appears in search results
+
+#### Scenario: No results
+- GIVEN no content matches the search query
+- WHEN the user searches
+- THEN a "no results" message is displayed
+```
+
+### MODIFIED Requirements
+
+**语义**：修改一个已有的行为需求。替换后的 Requirement 完全取代旧版本。
+
+**合并行为**：在主 spec 中找到同名 Requirement，将整个块替换为 Delta Spec 中的新版本。替换是整个 Requirement 的替换，包括其下所有 Scenario。不是增量修改——不是"只改了超时时间"就只替换超时时间那一行，而是整个 Requirement 块被替换。
+
+**前提条件**：主 spec 中必须存在同名 Requirement。如果不存在，合并失败，错误信息为 `MODIFIED failed for header "..." - not found`。
+
+**必须包含**：
+
+- `### Requirement: <名称>` 标题（名称必须和主 spec 中的精确匹配）
+- 至少一段描述文本，包含 SHALL 或 MUST 关键词
+- 至少一个 `#### Scenario`
+
+**推荐做法**：在描述文本中用括号标注变更前的值，方便审查。
+
+```markdown
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 15 minutes pass without activity
+- THEN the session is invalidated
+- AND the user must re-authenticate
+```
+
+### REMOVED Requirements
+
+**语义**：删除一个已有的行为需求。
+
+**合并行为**：从主 spec 中删除同名 Requirement 及其所有 Scenario。
+
+**前提条件**：主 spec 中必须存在同名 Requirement（否则无操作，不报错）。
+
+**格式**：REMOVED 支持两种格式。
+
+标准格式（和 ADDED/MODIFIED 一致）：
+
+```markdown
+## REMOVED Requirements
+
+### Requirement: Remember Me
+(Deprecated in favor of 2FA. Users should re-authenticate each session
+for security reasons.)
+```
+
+列表格式（简写形式）：
+
+```markdown
+## REMOVED Requirements
+
+- `### Requirement: Remember Me`
+- `### Requirement: Session Extension on Activity`
+```
+
+两种格式效果相同。列表格式适合批量删除多个 Requirement，标准格式适合需要写明删除原因的场景。
+
+**推荐做法**：写清楚为什么删除。这对未来的团队成员比对你自己更有价值。
+
+---
+
+## 合并算法详解
+
+合并引擎（源码在 `src/core/specs-apply.ts`）是 OpenSpec 最核心的模块。理解它的逻辑，能帮你避免合并错误、写出更可靠的 Delta Spec。
+
+### 处理流程
+
+```
+输入：主 spec 文件 + Delta Spec 文件
+                │
+                ▼
+        1. 解析 Delta Spec
+           按 ## ADDED / ## MODIFIED / ## REMOVED 分割
+           提取每个 section 中的 Requirement Block
+                │
+                ▼
+        2. 预验证
+           检查跨 section 冲突
+           (同一 Requirement 不能出现在多个 section)
+                │
+                ▼
+        3. 加载主 spec
+           提取 ## Requirements 部分
+           解析为 Requirement Block 列表
+                │
+                ▼
+        4. 按顺序执行操作
+           RENAMED → REMOVED → MODIFIED → ADDED
+                │
+                ▼
+        5. 重新组装 Markdown
+           保持原有 Requirement 顺序
+           新增的追加到末尾
+                │
+                ▼
+输出：更新后的主 spec 文件
+```
+
+### 操作顺序：为什么是 RENAMED → REMOVED → MODIFIED → ADDED
+
+这个顺序不是随意决定的，每一步都基于前一步完成后的状态：
+
+1. **RENAMED 先执行**：把 Requirement 改名。改名后，后续操作的名称引用才是正确的。如果先 MODIFIED 再 RENAMED，MODIFIED 用的旧名称可能已经不存在了。
+
+2. **REMOVED 第二**：删除不需要的 Requirement。删除后减少了需要处理的数据量，也避免了 REMOVED 的 Requirement 被 MODIFIED 意外修改。
+
+3. **MODIFIED 第三**：在已有的位置上替换内容。替换不改变 Requirement 的出现顺序。
+
+4. **ADDED 最后**：新增的 Requirement 追加到末尾。放到最后保证不会干扰前面操作的索引。
+
+### 预验证规则
+
+合并引擎在执行任何操作之前先做预验证。以下规则中任一条被违反，整个合并操作就会失败：
+
+**同一 section 内不能有重复**：
+
+```markdown
+## ADDED Requirements
+
+### Requirement: Search
+...
+
+### Requirement: Search      ← 错误：ADDED 中有重复的 "Search"
+...
+```
+
+错误信息：`duplicate requirement in ADDED for header "Search"`
+
+**跨 section 冲突**：
+
+| 冲突类型 | 错误信息 |
+|---------|---------|
+| 同一 Requirement 同时出现在 ADDED 和 MODIFIED | `requirement present in both MODIFIED and ADDED` |
+| 同一 Requirement 同时出现在 MODIFIED 和 REMOVED | `requirement present in both MODIFIED and REMOVED` |
+| 同一 Requirement 同时出现在 ADDED 和 REMOVED | `requirement present in both ADDED and REMOVED` |
+
+这些规则是合理的——你不能同时"新增"和"修改"同一个 Requirement，也不能同时"新增"和"删除"它。
+
+**MODIFIED 必须在主 spec 中存在**：
+
+如果主 spec 中没有 "Session Timeout" 这个 Requirement，你不能 MODIFIED 它。要么先确认名称是否精确匹配，要么应该用 ADDED 而不是 MODIFIED。
+
+**ADDED 不能在主 spec 中已存在**：
+
+如果主 spec 中已经有了 "Full-Text Search" 这个 Requirement，你不能 ADDED 一个同名的。要么它应该是 MODIFIED（修改已有的），要么改一个不同的名称。
+
+**新 spec 只允许 ADDED**：
+
+如果主 spec 文件不存在（完全新的 spec 文件），Delta Spec 中不能有 MODIFIED 或 REMOVED——没有东西可以修改或删除。只能有 ADDED。
+
+### 名称匹配规则
+
+Requirement 名称的匹配基于标题文本的精确匹配（忽略前后空格）。
+
+匹配的：
+
+```markdown
+### Requirement: Session Timeout      ← 主 spec
+### Requirement: Session Timeout      ← Delta Spec
+```
+
+不匹配的：
+
+```markdown
+### Requirement: Session Timeout      ← 主 spec
+### Requirement: Session timeout      ← Delta Spec（大小写不同）
+```
+
+```markdown
+### Requirement: Session Timeout      ← 主 spec
+### Requirement: Session Expiration   ← Delta Spec（文本不同）
+```
+
+名称匹配只做了 `trim()`——去掉前后空格。这意味着：
+
+```markdown
+### Requirement:  Session Timeout     ← 多了空格，仍然匹配
+```
+
+但大小写必须完全一致。这是最常见的合并错误来源——Delta Spec 中的 Requirement 名称和主 spec 不一致。
+
+**调试技巧**：当合并报 `MODIFIED failed for header "..." - not found` 时，直接打开主 spec 文件，搜索对应的 `### Requirement:` 标题，对比文本是否完全一致。
+
+### 完整的合并示例
+
+主 spec（归档前）：
+
+```markdown
+# Auth Specification
+
+## Purpose
+Authentication and session management.
+
+## Requirements
+
+### Requirement: User Authentication
+The system SHALL issue a JWT token upon successful login.
+
+#### Scenario: Valid credentials
+- GIVEN a user with valid credentials
+- WHEN the user submits login form
+- THEN a JWT token is returned
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 30 minutes of inactivity.
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 30 minutes pass without activity
+- THEN the session is invalidated
+
+### Requirement: Remember Me
+The system SHOULD persist sessions across browser restarts when
+the user selects "Remember Me".
+
+#### Scenario: Remember me enabled
+- GIVEN a user who selected "Remember Me"
+- WHEN the browser is closed and reopened
+- THEN the session remains active
+```
+
+Delta Spec：
+
+```markdown
+# Delta for Auth
+
+## ADDED Requirements
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication.
+
+#### Scenario: 2FA login
+- GIVEN a user with 2FA enabled
+- WHEN the user submits valid credentials
+- THEN an OTP challenge is presented
+
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 15 minutes pass without activity
+- THEN the session is invalidated
+
+## REMOVED Requirements
+
+### Requirement: Remember Me
+(Deprecated in favor of 2FA for enhanced security.)
+```
+
+合并后的主 spec：
+
+```markdown
+# Auth Specification
+
+## Purpose
+Authentication and session management.
+
+## Requirements
+
+### Requirement: User Authentication
+The system SHALL issue a JWT token upon successful login.
+
+#### Scenario: Valid credentials
+- GIVEN a user with valid credentials
+- WHEN the user submits login form
+- THEN a JWT token is returned
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 15 minutes pass without activity
+- THEN the session is invalidated
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication.
+
+#### Scenario: 2FA login
+- GIVEN a user with 2FA enabled
+- WHEN the user submits valid credentials
+- THEN an OTP challenge is presented
+```
+
+注意观察变化：
+
+- User Authentication：没变，不在 Delta Spec 中
+- Session Expiration：被 MODIFIED 替换了，超时时间从 30 分钟改为 15 分钟，出现在原来的位置
+- Remember Me：被 REMOVED 删除了
+- Two-Factor Authentication：被 ADDED 追加到了末尾
+
+---
+
+## 并行变更：无冲突的原理
+
+并行变更是 Delta Spec 机制最有价值的特性。理解它的原理，才能在多变更场景下正确操作。
+
+### 什么是并行变更
+
+并行变更是指同时有多个进行中的 change，它们可能涉及同一个 spec 文件。
+
+```
+openspec/changes/
+├── add-2fa/              ← 变更 A：给认证加 2FA
+│   └── specs/
+│       └── auth/
+│           └── spec.md   ← 涉及 auth/spec.md
+└── change-session-timeout/  ← 变更 B：改 session 超时
+    └── specs/
+        └── auth/
+            └── spec.md   ← 也涉及 auth/spec.md
+```
+
+两个变更都修改 `auth/spec.md`，但修改的是不同的 Requirement。
+
+### 不同 Requirement：天然不冲突
+
+变更 A 的 Delta Spec：
+
+```markdown
+## ADDED Requirements
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication.
+...
+```
+
+变更 B 的 Delta Spec：
+
+```markdown
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+...
+```
+
+A 是 ADDED "Two-Factor Authentication"，B 是 MODIFIED "Session Expiration"。两个操作涉及不同的 Requirement 名称。合并时：
+
+1. 先归档 A：ADDED "Two-Factor Authentication" → 追加到主 spec
+2. 再归档 B：MODIFIED "Session Expiration" → 替换主 spec 中的 "Session Expiration"
+
+两个操作互不影响。归档顺序也不影响最终结果。
+
+### 为什么不冲突
+
+合并引擎的操作粒度是 Requirement，不是文件。它按 Requirement 名称匹配，名称不同就是不同的操作目标。两个操作操作不同的目标，天然不会冲突。
+
+这和 Git 的行级 diff 不同。Git diff 如果两个分支修改了同一个文件的不同行，合并时不会冲突。Delta Spec 比 Git 更严格——只要操作不同的 Requirement，即使它们在同一个文件中紧挨着，也不冲突。
+
+### 同一 Requirement：有冲突
+
+当两个 change 修改同一个 Requirement 时：
+
+变更 A 的 Delta Spec：
+
+```markdown
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 10 minutes of inactivity.
+```
+
+变更 B 的 Delta Spec：
+
+```markdown
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+```
+
+两个变更都 MODIFIED 了 "Session Expiration"。归档时：
+
+1. 先归档 A：主 spec 的 "Session Expiration" 被替换为 "10 minutes"
+2. 再归档 B：主 spec 的 "Session Expiration" 被替换为 "15 minutes"
+
+最终结果：Session Expiration 是 15 分钟。后归档的变更覆盖了先归档的变更对同一 Requirement 的修改。
+
+这个行为是确定的但可能不是你想要的。如果 A 和 B 都应该生效，你需要手动解决冲突。
+
+---
+
+## 冲突处理：bulk-archive 的裁决机制
+
+`/opsx:bulk-archive` 专门处理并行变更归档时的冲突。它的策略是：当检测到同一 Requirement 被多个 change 修改时，让 AI 检查实际代码来决定最终结果。
+
+### bulk-archive 的冲突处理流程
+
+```
+1. 扫描所有待归档的 change
+2. 收集所有 Delta Spec
+3. 按 Requirement 名称分组
+4. 对每个 Requirement：
+   a. 只有一个 change 操作它 → 直接合并
+   b. 多个 change 操作它 → 标记为冲突
+5. 对冲突的 Requirement：
+   a. AI 读取相关代码文件
+   b. 分析实际实现
+   c. 决定最终的 Requirement 内容
+6. 按时间顺序依次归档
+```
+
+### 冲突裁决示例
+
+假设两个 change 都修改了 "Session Expiration"：
+
+变更 A（add-rate-limiting）：将超时改为 10 分钟（配合限流策略）
+
+变更 B（improve-security）：将超时改为 15 分钟（安全加固）
+
+两个变更都已经 apply 完毕，代码中的超时时间实际上是 15 分钟（B 后执行，覆盖了 A 的修改）。
+
+bulk-archive 的处理：
+
+```text
+⚠ Conflict detected: "Session Expiration" modified by:
+  - add-rate-limiting (created Jan 20)
+  - improve-security (created Jan 22)
+
+Inspecting codebase to resolve conflict...
+  Found session timeout config: src/config/auth.ts
+  Current value: 15 minutes
+
+Resolution: "Session Expiration" will use the value from improve-security
+(15 minutes), matching the actual implementation.
+
+Proceed with archive?
+```
+
+AI 不是简单地取"后归档的为准"。它检查了实际代码中的值（15 分钟），确认 B 的修改是最终实现，然后用 B 的 Delta Spec 作为合并结果。
+
+这比手动逐个 archive 更安全——逐个 archive 不会检测冲突，后归档的直接覆盖。
+
+### 手动逐个归档的风险
+
+如果你不用 bulk-archive，而是手动逐个 `/opsx:archive`：
+
+1. `/opsx:archive add-rate-limiting` → Session Expiration 变成 10 分钟
+2. `/opsx:archive improve-security` → Session Expiration 变成 15 分钟
+
+最终主 spec 记录的是 15 分钟。如果你不检查代码，你不知道 15 分钟是不是正确值——也许代码里还是 10 分钟（因为 B 的 apply 中途失败了）。
+
+bulk-archive 通过检查实际代码来验证 spec 和实现的一致性，减少这种"spec 和代码不匹配"的风险。
+
+---
+
+## 实战：3 个并行变更的 Delta Spec
+
+用一个完整的案例演示并行变更的工作方式。
+
+### 场景设定
+
+你有一个电商平台，auth 模块的主 spec 当前包含三个 Requirement：
+
+- User Authentication：用户登录
+- Session Expiration：session 超时 30 分钟
+- Password Reset：密码重置功能
+
+你要同时做三个变更：
+
+1. **add-2fa**：加两步验证
+2. **tighten-security**：缩短 session 超时到 15 分钟，要求密码强度
+3. **remove-password-reset**：废弃密码重置功能（用邮件验证码替代）
+
+### 变更 1：add-2fa
+
+Delta Spec（`changes/add-2fa/specs/auth/spec.md`）：
+
+```markdown
+# Delta for Auth
+
+## ADDED Requirements
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication
+for all user accounts.
+
+#### Scenario: 2FA enrollment
+- GIVEN a user without 2FA enabled
+- WHEN the user enables 2FA in security settings
+- THEN a QR code is displayed for authenticator app setup
+- AND the user MUST verify with a TOTP code before activation
+
+#### Scenario: 2FA login
+- GIVEN a user with 2FA enabled
+- WHEN the user submits valid credentials
+- THEN an OTP challenge is presented
+- AND login completes only after valid OTP verification
+
+#### Scenario: 2FA bypass recovery
+- GIVEN a user with 2FA enabled who has lost their device
+- WHEN the user requests account recovery
+- THEN a one-time recovery code is sent to the registered email
+- AND the user can disable 2FA after verifying the code
+```
+
+这个变更只涉及 ADDED，和主 spec 中的现有 Requirement 不冲突。
+
+### 变更 2：tighten-security
+
+Delta Spec（`changes/tighten-security/specs/auth/spec.md`）：
+
+```markdown
+# Delta for Auth
+
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 15 minutes pass without activity
+- THEN the session is invalidated
+- AND the user must re-authenticate
+
+#### Scenario: Activity resets timer
+- GIVEN an authenticated session with 10 minutes of idle time
+- WHEN the user performs any action
+- THEN the idle timer resets to 0
+- AND the session remains valid for another 15 minutes
+
+## ADDED Requirements
+
+### Requirement: Password Strength
+The system MUST enforce minimum password strength requirements.
+
+#### Scenario: Weak password rejection
+- GIVEN a user setting a new password
+- WHEN the password is shorter than 12 characters
+- THEN the password is rejected
+- AND a message indicates minimum length requirement
+
+#### Scenario: Common password rejection
+- GIVEN a user setting a new password
+- WHEN the password matches a known compromised password
+- THEN the password is rejected
+- AND a message suggests using a different password
+```
+
+这个变更涉及 MODIFIED（Session Expiration）和 ADDED（Password Strength）。Session Expiration 的修改和 add-2fa 没有冲突（add-2fa 不涉及 Session Expiration）。
+
+### 变更 3：remove-password-reset
+
+Delta Spec（`changes/remove-password-reset/specs/auth/spec.md`）：
+
+```markdown
+# Delta for Auth
+
+## REMOVED Requirements
+
+### Requirement: Password Reset
+(Replaced by email-based verification code flow.
+Users now verify identity via email code instead of
+resetting their password. See "Email Verification" in
+the new auth-verification spec.)
+```
+
+这个变更只有 REMOVED，删除 Password Reset。和其他两个变更没有冲突。
+
+### 并行操作
+
+三个变更的 Delta Spec 涉及的 Requirement：
+
+| 变更 | 涉及的 Requirement | 操作 |
+|------|-------------------|------|
+| add-2fa | Two-Factor Authentication | ADDED |
+| tighten-security | Session Expiration | MODIFIED |
+| tighten-security | Password Strength | ADDED |
+| remove-password-reset | Password Reset | REMOVED |
+
+四个不同的 Requirement 名称。没有冲突。可以按任意顺序归档。
+
+用 bulk-archive 处理：
+
+```text
+/opsx:bulk-archive
+
+Found 3 completed changes:
+  - add-2fa (4/4 tasks)
+  - tighten-security (6/6 tasks)
+  - remove-password-reset (2/2 tasks)
+
+Checking for spec conflicts...
+  ✅ No conflicts detected. All changes modify different requirements.
+
+Archiving in chronological order:
+  1. add-2fa (created Jun 01)
+  2. tighten-security (created Jun 01)
+  3. remove-password-reset (created Jun 02)
+
+Done. Updated specs/auth/spec.md with:
+  + ADDED: Two-Factor Authentication, Password Strength
+  ~ MODIFIED: Session Expiration
+  - REMOVED: Password Reset
+```
+
+归档后的主 spec：
+
+```markdown
+# Auth Specification
+
+## Purpose
+Authentication and session management for the e-commerce platform.
+
+## Requirements
+
+### Requirement: User Authentication
+The system SHALL issue a JWT token upon successful login.
+
+#### Scenario: Valid credentials
+- GIVEN a user with valid credentials
+- WHEN the user submits login form
+- THEN a JWT token is returned
+
+### Requirement: Session Expiration
+The system MUST expire sessions after 15 minutes of inactivity.
+(Previously: 30 minutes)
+
+#### Scenario: Idle timeout
+- GIVEN an authenticated session
+- WHEN 15 minutes pass without activity
+- THEN the session is invalidated
+- AND the user must re-authenticate
+
+#### Scenario: Activity resets timer
+- GIVEN an authenticated session with 10 minutes of idle time
+- WHEN the user performs any action
+- THEN the idle timer resets to 0
+- AND the session remains valid for another 15 minutes
+
+### Requirement: Two-Factor Authentication
+The system MUST support TOTP-based two-factor authentication
+for all user accounts.
+...
+
+### Requirement: Password Strength
+The system MUST enforce minimum password strength requirements.
+...
+```
+
+注意 User Authentication 没有变（没有任何 change 涉及它），Session Expiration 被替换了（MODIFIED），Password Reset 被删除了（REMOVED），Two-Factor Authentication 和 Password Strength 追加到了末尾（ADDED）。
+
+### 如果变更 2 和变更 3 都涉及 Password Reset
+
+假设变更 3 不是删除 Password Reset，而是修改它：
+
+```markdown
+# 变更 3：modify-password-reset
+
+## MODIFIED Requirements
+
+### Requirement: Password Reset
+The system MUST require email verification before allowing password reset.
+(Previously: only required answering security questions)
+```
+
+这时变更 2 不涉及 Password Reset，但变更 3 涉及。所以变更 2 和变更 3 仍然不冲突——变更 2 不操作 Password Reset。
+
+但如果变更 2 也要 MODIFIED Password Reset（比如要求密码重置后强制重新登录），两个变更就冲突了。这时候 bulk-archive 会检测到冲突，检查代码来裁决。
+
+---
+
+## 常见错误与修复
+
+### 错误 1：MODIFIED 的 Requirement 名称不匹配
+
+**症状**：`MODIFIED failed for header "Session Timeout" - not found`
+
+**原因**：Delta Spec 中写了 `### Requirement: Session Timeout`，但主 spec 中是 `### Requirement: Session Expiration`。名称不一致。
+
+**修复**：打开主 spec 文件，找到对应的 Requirement 标题，复制精确的名称到 Delta Spec 中。
+
+**预防**：写 Delta Spec 之前先看一下主 spec，确认要操作的 Requirement 名称。
+
+### 错误 2：对不存在的 spec 文件使用 MODIFIED
+
+**症状**：`MODIFIED failed for header "Search" - not found`（而且主 spec 文件本身就是新的或空的）
+
+**原因**：如果主 spec 文件不存在，它是空的。不能 MODIFIED 空文件中的 Requirement。应该用 ADDED。
+
+**修复**：把 Delta Spec 中的 `## MODIFIED Requirements` 改为 `## ADDED Requirements`。
+
+### 错误 3：同一个 Requirement 出现在多个 section
+
+**症状**：`requirement present in both MODIFIED and ADDED`
+
+**原因**：Delta Spec 中同时有：
+
+```markdown
+## ADDED Requirements
+### Requirement: Search
+...
+
+## MODIFIED Requirements
+### Requirement: Search
+...
+```
+
+**修复**：一个 Requirement 只能出现在一个 section 中。如果要新增，用 ADDED。如果要修改已有的，用 MODIFIED。不能同时做两个。
+
+### 错误 4：缺少 SHALL/MUST 关键词
+
+**症状**：验证时报 ERROR（`ADDED/MODIFIED requirements must contain SHALL or MUST`）
+
+**原因**：Requirement 的描述文本中没有使用 RFC 2119 关键词。
+
+```markdown
+### Requirement: Search
+The system provides full-text search.
+```
+
+"provides" 不是 RFC 2119 关键词。应该用 SHALL 或 MUST：
+
+```markdown
+### Requirement: Search
+The system SHALL provide full-text search.
+```
+
+**修复**：在描述文本中加上 SHALL 或 MUST。
+
+### 错误 5：缺少 Scenario
+
+**症状**：验证时报 ERROR（`ADDED/MODIFIED requirements must have at least one scenario`）
+
+**原因**：ADDED 或 MODIFIED 的 Requirement 下没有 `#### Scenario`。
+
+```markdown
+## ADDED Requirements
+
+### Requirement: Search
+The system SHALL provide full-text search.
+
+（没有 Scenario）
+```
+
+**修复**：加上至少一个 Scenario。即使是简单的正常路径场景也比没有好。
+
+### 错误 6：Scenario 没有用 GIVEN/WHEN/THEN 格式
+
+这不是硬性错误（合并不会失败），但不符合推荐格式。GIVEN/WHEN/THEN 格式让场景可以直接翻译成测试用例，对后续 verify 有帮助。
+
+### 错误 7：归档顺序导致意外结果
+
+**场景**：两个变更都 ADDED 了同名 Requirement（比如两个变更都在 auth spec 中 ADDED 了 "Rate Limiting"）。
+
+第一个归档成功（ADDED "Rate Limiting" 不存在于主 spec），第二个归档失败（ADDED "Rate Limiting" 已存在于主 spec）。
+
+**修复**：合并前检查所有 Delta Spec 是否有同名 Requirement。如果有，只保留一个，其他的改名或删除。
+
+---
+
+## Delta Spec 写作规范
+
+### 推荐结构
+
+一个完整的 Delta Spec 文件：
+
+```markdown
+# Delta for <Domain Name>
+
+## ADDED Requirements
+
+### Requirement: <New Behavior>
+The system SHALL/MUST <description of new behavior>.
+
+#### Scenario: <Happy path>
+- GIVEN <precondition>
+- WHEN <action>
+- THEN <expected result>
+
+#### Scenario: <Error path>
+- GIVEN <precondition>
+- WHEN <action>
+- THEN <error handling>
+
+## MODIFIED Requirements
+
+### Requirement: <Existing Behavior Name>
+The system SHALL/MUST <updated description>.
+(Previously: <old value or behavior>)
+
+#### Scenario: <Updated scenario>
+- GIVEN <precondition>
+- WHEN <action>
+- THEN <expected result>
+
+## REMOVED Requirements
+
+### Requirement: <Deprecated Behavior>
+(Reason for removal: <why this is being removed>)
+```
+
+### 不一定要三个 section 都有
+
+如果只有新增，只写 ADDED：
+
+```markdown
+# Delta for Auth
+
+## ADDED Requirements
+
+### Requirement: Two-Factor Authentication
+...
+```
+
+如果只有修改，只写 MODIFIED：
+
+```markdown
+# Delta for Auth
+
+## MODIFIED Requirements
+
+### Requirement: Session Expiration
+...
+```
+
+空 section 不要写。不要写 `## ADDED Requirements` 下面什么都不跟——不写这个 section 就行。
+
+### 每个 Requirement 的描述文本规范
+
+1. **用 SHALL 或 MUST**：`The system SHALL ...` 或 `The system MUST ...`。MUST 用于没有例外的情况（安全、数据完整性），SHALL 用于一般行为要求。
+2. **描述外部可观察的行为**：不描述内部实现。`The system SHALL return search results within 200ms` 是好的，`The system SHALL use Elasticsearch for search` 是不好的（属于实现决策，应该在 design.md 中）。
+3. **一个 Requirement 聚焦一个行为**：不要把多个不相关的行为塞进一个 Requirement。"用户认证和密码重置"应该是两个 Requirement。
+4. **Scenario 覆盖正常路径和异常路径**：至少两个 Scenario。一个好的 Scenario 可以直接翻译成自动化测试。
+
+### Delta Spec 的粒度
+
+一个 change 应该包含几个 Delta Spec 文件？取决于变更的范围。
+
+**小变更**：只影响一个 spec 文件。Delta Spec 只有一个文件。
+
+```
+changes/add-2fa/
+└── specs/
+    └── auth/
+        └── spec.md
+```
+
+**中等变更**：影响 2-3 个 spec 文件。每个文件一个 Delta Spec。
+
+```
+changes/add-user-profiles/
+└── specs/
+    ├── auth/
+    │   └── spec.md      # 认证相关的变化
+    ├── api/
+    │   └── spec.md      # API 相关的变化
+    └── ui/
+        └── spec.md      # UI 相关的变化
+```
+
+**大变更**：影响 4+ 个 spec 文件。考虑拆成多个 change。一个 change 影响太多领域，审查成本会很高。
+
+---
+
+## 和其他增量机制的对比
+
+### Delta Spec vs Git Diff
+
+| 维度 | Git Diff | Delta Spec |
+|------|---------|------------|
+| 操作粒度 | 文本行 | Requirement 块 |
+| 匹配方式 | 行号和上下文 | Requirement 名称 |
+| 合并冲突 | 手动解决 | 自动合并（不同 Requirement）或 AI 裁决（同一 Requirement） |
+| 语义理解 | 无 | 有（基于 Markdown 结构） |
+| 版本历史 | 完整 | 通过归档目录隐式保留 |
+
+### Delta Spec vs Database Migration
+
+| 维度 | Database Migration | Delta Spec |
+|------|-------------------|------------|
+| 操作对象 | 数据库 schema | 行为规范 |
+| 方向性 | up 和 down | 只有 forward |
+| 回滚 | 支持（down migration） | 不直接支持 |
+| 顺序保证 | 文件名时间戳 | 归档时间 |
+| 冲突检测 | 无（依赖锁） | 有（预验证 + bulk-archive） |
+
+Delta Spec 没有"回滚"机制。如果需要撤销一个变更，创建一个新的 change，用 REMOVED 删除不需要的 Requirement，或用 MODIFIED 恢复旧值。这和数据库 migration 的 revert migration 思路类似。
+
+---
+
+## 小结
+
+Delta Spec 的核心思想是"描述变化而不是重写全部"。三个标记（ADDED / MODIFIED / REMOVED）覆盖了所有类型的变更。合并引擎按 Requirement 名称匹配，执行结构化的增删改操作。并行变更修改不同 Requirement 时不冲突，修改同一 Requirement 时 bulk-archive 提供基于代码检查的裁决。
+
+写好 Delta Spec 的关键：确认 Requirement 名称和主 spec 精确匹配、每个 Requirement 包含 SHALL/MUST 和至少一个 Scenario、ADDED 不重名、MODIFIED 有对应的现有 Requirement。
+
+最常见的合并错误是名称不匹配。写 Delta Spec 之前花 10 秒钟检查主 spec 中的 Requirement 标题，能避免 80% 的合并问题。
+
+下一篇（05-custom-schemas.md）会介绍如何通过自定义 Schema 让 OpenSpec 适配你的团队工作流，包括 Schema 定制、模板编写和社区 Schema 的使用。

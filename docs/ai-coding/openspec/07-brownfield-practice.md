@@ -1,0 +1,834 @@
+# Brownfield 项目实战：如何给已有代码库引入 OpenSpec
+
+> 更新日期：2026/06
+
+**TL;DR：** 给已有代码库引入 OpenSpec 的核心原则是"不要一次生成所有 spec"。从你要修改的功能开始，先用 `/opsx:explore` 让 AI 读旧代码理解行为，再用 `/opsx:onboard` 走一遍引导流程摸清改进点，最后用 `/opsx:propose` 从第一个变更开始。改完一个功能就多一份有 spec 的功能，系统的 spec 覆盖率逐步提高。本文用三个真实场景（无文档老项目、半文档中型项目、多人维护大型项目）演示完整操作流程，并总结常见的反模式和 2-3 周磨合期的实战经验。
+
+---
+
+## 核心原则：不要一次生成所有 spec
+
+这一条值得反复强调，因为它是大多数团队引入 OpenSpec 时犯的第一个错误。
+
+OpenSpec 文档原话："trying to generate all your specs upfront is a waste of time."（提前生成所有 spec 是浪费时间。）
+
+为什么？三个原因：
+
+1. **你不知道系统所有行为的细节**。一个运行了两年的项目，很多行为隐藏在代码的边角——错误处理分支、兼容性 hack、被遗忘的 feature flag。你不可能在一天之内把这些全部梳理清楚
+2. **AI 生成的"完整 spec"质量很低**。没有上下文的批量生成只会产出一份看起来完整但细节经不起推敲的文档。你花在审查和修正上的时间，比渐进式引入多得多
+3. **一次性投入的 ROI 很差**。你花了一周生成了 20 个 spec 文件，但接下来的一个月可能只修改了其中 3 个对应的模块。剩下 17 个 spec 文件可能在你用到它们之前就已经过时了
+
+正确做法：**从你要修改的功能开始**。你要改厨房，就先画厨房的图纸。改完厨房多一份图纸，下次改卫生间就多一份。图纸越积越多，但每一份都是"刚用过的、确认准确的"。
+
+这跟老房子装修的思路完全一致——你不会在装修厨房之前先把整栋楼每个房间的图纸都画好。你只画要动工的那个房间。
+
+---
+
+## `/opsx:explore` 实战：让 AI 读旧代码、理解行为
+
+`/opsx:explore` 是 OpenSpec 为 Brownfield 场景设计的核心命令。它让 AI 读旧代码，理解系统行为，然后和你讨论改进方案。
+
+### explore 做了什么
+
+当你输入 `/opsx:explore` 时，AI 会：
+
+1. 读取 `openspec/project.md` 了解项目背景
+2. 扫描你指定的代码目录
+3. 分析代码结构、依赖关系、数据流
+4. 用自然语言总结"这段代码在做什么"
+5. 指出潜在的改进点、不一致的地方、缺失的错误处理
+6. 和你对话，回答你关于代码行为的疑问
+
+它**不会**自动创建任何 spec 文件。explore 是纯对话模式——目的是让你（和 AI）先理解代码再动手。
+
+### 实战操作
+
+假设你接手了一个两年前写的支付模块，代码在 `src/services/payment/`，没有任何文档。你要给它加一个"退款"功能，但先需要理解现有的支付流程。
+
+在 AI 编程工具中输入：
+
+```text
+/opsx:explore src/services/payment/
+```
+
+AI 会开始分析代码。典型的输出：
+
+```text
+Analyzing payment module at src/services/payment/...
+
+Found 12 files, ~2,400 lines of code.
+
+## Current Behavior Summary
+
+### Payment Creation Flow
+1. POST /api/payments creates a new payment
+2. Validates amount > 0 and currency is supported (USD, EUR, GBP)
+3. Calls Stripe API to create a PaymentIntent
+4. Stores payment record in PostgreSQL
+5. Returns client_secret for frontend confirmation
+
+### Payment Confirmation Flow
+1. Frontend confirms payment via Stripe.js
+2. Stripe webhook (payment_intent.succeeded) triggers confirmation
+3. Payment status updated to "completed"
+4. Invoice generated and emailed to customer
+
+### Error Handling
+- Stripe API errors: logged and retried 3 times with exponential backoff
+- Validation errors: return 400 with error details
+- Duplicate payments: detected by idempotency_key, return existing payment
+
+### Things I Noticed
+- No refund handling exists
+- Payment timeout not implemented (PaymentIntent can stay pending indefinitely)
+- Error emails are sent synchronously, could block the response
+- Currency validation is hardcoded, not configurable
+```
+
+这个分析结果就是你和 AI 讨论的基础。你可以追问：
+
+- "退款功能应该怎么加？"
+- "PaymentIntent 永远 pending 的问题怎么解决？"
+- "错误邮件的同步发送有什么风险？"
+
+AI 基于它对代码的理解来回答，而不是基于通用知识。这是 explore 的价值——让 AI 的回答有具体的代码上下文。
+
+### explore 的局限
+
+explore 依赖 AI 的代码理解能力。对于以下情况效果可能不理想：
+
+- 代码混淆过（minified 或 obfuscated）
+- 大量使用动态语言特性（Python 的 metaclass、JavaScript 的 Proxy）
+- 关键逻辑散落在配置文件或数据库存储过程中
+- 代码量超过 10,000 行的单文件
+
+遇到这些情况，可以缩小 explore 的范围，指定更具体的子目录或文件。
+
+### 从 explore 到 propose 的过渡
+
+explore 的目的是理解。理解之后，你需要决定"改什么"。然后用 propose 开始正式的变更流程。
+
+一个典型的过渡：
+
+```text
+# 第一步：explore 理解代码
+/opsx:explore src/services/payment/
+
+# 对话中确认改进方向
+你：先加退款功能，支付超时后面再处理
+
+# 第二步：正式发起变更
+/opsx:propose add-refund-support
+```
+
+explore 的对话不会自动变成 spec。但 explore 中积累的理解会帮助 AI 在 propose 阶段生成更准确的 spec——因为它已经读过了代码。
+
+---
+
+## `/opsx:onboard` 实战：引导式扫描
+
+`/opsx:onboard` 是另一个 Brownfield 场景的辅助命令。它做的是"全项目扫描 + 改进建议"，适合你刚接触一个项目时使用。
+
+### onboard 和 explore 的区别
+
+| 维度 | `/opsx:explore` | `/opsx:onboard` |
+|------|----------------|----------------|
+| 目的 | 理解特定代码的行为 | 扫描整个项目找改进点 |
+| 范围 | 你指定的目录或文件 | 整个代码库 |
+| 输出 | 对话式讨论 | 教程式的改进建议列表 |
+| 适合时机 | 准备修改某个模块前 | 刚接手一个项目时 |
+| 产出物 | 无文件产出 | 无文件产出（纯对话） |
+
+### onboard 实际操作
+
+```text
+/opsx:onboard
+```
+
+AI 会扫描项目，然后输出一份改进建议：
+
+```text
+Welcome to OpenSpec onboarding! Let me scan your project...
+
+## Project Overview
+- Tech stack: React 18 + TypeScript + Express + PostgreSQL
+- ~15,000 lines of code
+- 3 existing specs: auth, user-management, api-gateway
+
+## Recommended Starting Points
+
+### 1. High Priority: Payment Module (no spec)
+The payment module has 2,400 lines but no spec coverage.
+This is a high-risk area - consider creating a spec first.
+
+### 2. Medium Priority: API Error Handling (inconsistent)
+Error responses use different formats across endpoints:
+- /api/users: { error: { message: "..." } }
+- /api/orders: { status: "error", detail: "..." }
+- /api/payments: { errors: [{ code: "...", msg: "..." }] }
+Consider a spec to standardize error response format.
+
+### 3. Low Priority: Utility Functions (well-tested)
+Helper functions in src/utils/ have good test coverage.
+Low priority for spec coverage.
+
+## Suggested First Change
+Start with the payment module - it's high-risk and has no spec.
+Use /opsx:explore src/services/payment/ to understand it first,
+then /opsx:propose to add your first change.
+```
+
+onboard 的价值不在于它的建议有多精确，而在于它帮你建立了一个"从哪里开始"的优先级排序。面对一个庞大的代码库，最难的不是"怎么做"，而是"从哪里开始做"。
+
+### onboard 后的行动
+
+onboard 的输出给了你一张路线图。但它不会自动执行任何操作。你仍然需要自己决定：
+
+1. 从哪个模块开始
+2. 是先 explore 理解代码，还是直接 propose 一个小变更
+3. 第一个变更的范围多大
+
+建议第一个变更选 onboard 指出的"高优先级"模块中一个相对独立的小功能。不要一上来就选最复杂的模块。从简单的开始，先跑通整个流程（propose → apply → verify → archive），建立信心后再处理复杂场景。
+
+---
+
+## 渐进引入策略：从第一个变更开始
+
+理论讲完了，下面用一个具体的操作流程演示如何在一个已有项目中引入 OpenSpec。
+
+### 前提条件
+
+- 项目有运行中的代码
+- 没有 OpenSpec（甚至没有规范的文档）
+- 你要给项目添加一个新功能
+
+### 步骤一：安装和初始化（5 分钟）
+
+```bash
+# 安装
+npm install -g @fission-ai/openspec@latest
+
+# 进入项目
+cd existing-project
+
+# 初始化（选择你用的 AI 工具）
+openspec init --tools claude-code
+```
+
+填写 `openspec/project.md`：
+
+```markdown
+# Project Context
+
+## Tech Stack
+- Frontend: Vue 3 + TypeScript
+- Backend: Node.js 20 + Express
+- Database: MySQL 8
+- Cache: Redis
+
+## Architecture
+- MVC pattern
+- REST API, JSON responses
+- JWT authentication with refresh tokens
+- All business logic in service layer
+
+## Code Standards
+- camelCase for variables and functions
+- PascalCase for classes and components
+- Error responses follow RFC 7807
+- All database access through model layer
+```
+
+这一步的关键是**如实填写**。不要写"理想中的架构"，写"实际的架构"。如果项目里有些地方没走 model 层直接写 SQL，也写上去——AI 需要知道真实情况才能生成准确的 spec。
+
+### 步骤二：选一个要改的功能
+
+选功能的原则：
+
+- **选你要改的**，不是选"应该有 spec 的"。如果你接下来三个月都不会碰通知模块，给通知模块写 spec 没有意义
+- **选边界相对清晰的**。第一个变更选太复杂的功能（比如"重构整个用户系统"），会在 propose 阶段就陷入泥潭
+- **选你理解的**。你至少要能判断 AI 生成的 spec 是否正确
+
+好的第一变更示例：
+
+- "给文章列表加搜索功能"
+- "给用户设置页加头像上传"
+- "修复支付超时问题"
+
+坏的第一变更示例：
+
+- "重构整个认证系统"（范围太大）
+- "优化数据库查询性能"（目标太模糊）
+- "给系统加 i18n 支持"（涉及面太广）
+
+### 步骤三：explore 相关代码（可选但推荐）
+
+```text
+/opsx:explore src/features/article/
+```
+
+让 AI 先理解你要修改的模块的现状。这一步对 Brownfield 项目特别重要——你需要知道现有代码的行为才能正确地提出变更。
+
+### 步骤四：发起第一个变更
+
+```text
+/opsx:propose add-article-search
+```
+
+审查生成的文件。重点检查：
+
+- `proposal.md` 的 Scope 是否合理（有没有多做或漏做）
+- `specs/article/spec.md` 的 Delta Spec 是否准确描述了你要加的行为
+- `design.md` 的技术方案是否符合项目现有架构
+- `tasks.md` 的任务拆分是否合理
+
+如果发现问题，直接编辑文件修改。这一步的审查很重要——你正在建立 spec 的基准质量。第一个 spec 的质量会影响后续所有 spec 的质量。
+
+### 步骤五：实现和归档
+
+```text
+/opsx:apply
+/opsx:verify
+/opsx:archive
+```
+
+完成后，你的项目有了第一个 spec。这不是"全部完成"，而是"刚刚开始"。
+
+### 步骤六：在第二个变更中体会效果
+
+发起第二个变更：
+
+```text
+/opsx:propose add-article-tag-filter
+```
+
+你会发现，因为第一个变更的 spec 已经存在，AI 在 propose 阶段能读取到文章模块的现有行为描述。它生成的 delta spec 更准确，因为有了对比基准——它知道"现在是什么样"才能正确描述"要变成什么样"。
+
+这就是渐进引入的正循环：
+
+```
+explore → propose → apply → archive → spec 积累 → 下一个 propose 更准确 → ...
+```
+
+---
+
+## 三个真实场景
+
+### 场景 A：无文档的老项目（2 年+），要加新功能
+
+**项目情况**：
+
+- 一个 Node.js + Express 的内部工具，运行了两年半
+- 大约 12,000 行代码
+- 最初一个人写的，后来又有两个人陆续加功能
+- 没有文档，代码注释也很少
+- 变量名和函数名倒是比较规范
+
+**任务**：加一个"数据导出"功能，让用户能把报表导出为 Excel。
+
+**操作流程**：
+
+```text
+# 第一步：onboard 了解全貌
+/opsx:onboard
+
+# AI 扫描后告诉你的关键信息：
+# - 项目有 6 个主要模块：用户、权限、报表、数据源、通知、系统设置
+# - 报表模块在 src/reports/，约 1,800 行
+# - 没有任何 spec 文件
+# - 报表模块有自己的数据库模型和 API 路由
+
+# 第二步：explore 报表模块
+/opsx:explore src/reports/
+
+# AI 分析了代码，告诉你：
+# - 报表生成用的是内存中的数据拼接，没有模板引擎
+# - 报表数据来自 src/datasources/ 的数据源连接器
+# - 现有的 API: GET /api/reports (列表), GET /api/reports/:id (详情), POST /api/reports (创建)
+# - 没有导出功能，但有分页查询
+
+# 第三步：propose 加导出功能
+/opsx:propose add-report-export
+```
+
+AI 生成的 proposal.md：
+
+```markdown
+# Proposal: Add Report Export
+
+## Intent
+Users need to export reports as Excel files for offline analysis
+and sharing with stakeholders who don't have system access.
+
+## Scope
+In scope:
+- Export single report as .xlsx
+- Support column selection for export
+- Include report metadata (generated date, filters used)
+- Progress indicator for large exports
+
+Out of scope:
+- Batch export (multiple reports at once)
+- PDF export format
+- Scheduled/automated exports
+- Export to Google Sheets
+```
+
+Delta Spec：
+
+```markdown
+# Delta for Reports
+
+## ADDED Requirements
+
+### Requirement: Report Export
+The system SHALL allow users to export a report as an Excel (.xlsx) file.
+
+#### Scenario: Export single report
+- GIVEN a user viewing a completed report
+- WHEN the user clicks "Export as Excel"
+- THEN an .xlsx file is downloaded to the user's device
+- AND the file contains all visible columns and data rows
+- AND the file includes a metadata sheet with report info
+
+#### Scenario: Column selection
+- GIVEN a user initiating an export
+- WHEN the user selects specific columns to include
+- THEN only the selected columns appear in the exported file
+- AND unselected columns are excluded
+
+#### Scenario: Large report export
+- GIVEN a report with more than 10,000 rows
+- WHEN the user initiates export
+- THEN a progress indicator is displayed
+- AND the export completes without timeout
+- AND the user is notified when download is ready
+```
+
+这个 spec 质量不错——有明确的场景、可验证的验收标准、合理的范围控制。
+
+**实际耗时**：
+
+| 步骤 | 时间 |
+|------|------|
+| init + project.md | 8 分钟 |
+| onboard | 5 分钟 |
+| explore | 10 分钟 |
+| propose + 审查 | 12 分钟 |
+| apply | 45 分钟 |
+| verify + 修正 | 15 分钟 |
+| archive | 2 分钟 |
+| **总计** | **约 97 分钟** |
+
+如果不用 OpenSpec 直接 vibe coding，可能 30 分钟就能"写完"代码。但加上后续的返工（AI 没理解报表模块的数据源结构，生成了错误的查询逻辑）、调试（导出大文件时超时，因为没有考虑流式处理），总时间大约 2.5 小时。OpenSpec 反而省了约 50 分钟。
+
+### 场景 B：有部分文档的中型项目，要重构模块
+
+**项目情况**：
+
+- React + TypeScript + Python (FastAPI) 的 SaaS 产品
+- 大约 35,000 行代码，前端 20,000 行，后端 15,000 行
+- 有部分文档：API 文档（OpenAPI 格式）、数据库 schema 文档
+- 团队 3 人，每人负责不同的模块
+
+**任务**：重构通知模块。当前的通知模块是第一个版本，发送邮件的逻辑、模板渲染、重试机制全混在一个 800 行的 `notification.py` 里。需要拆分成独立的邮件发送服务、模板引擎、通知调度器。
+
+**操作流程**：
+
+```text
+# 第一步：explore 现有通知模块
+/opsx:explore src/services/notification/
+```
+
+AI 分析后告诉你：
+
+```text
+## Current Behavior: Notification Module
+
+### What it does
+1. Listens for events via in-process message queue
+2. Renders email templates using string formatting (f-strings)
+3. Sends emails via SMTP (synchronous)
+4. Retries failed sends 3 times with 1-minute delay
+5. Logs all notification activity
+
+### Problems
+- Single 800-line file with mixed concerns
+- Synchronous email sending blocks the event loop
+- Template rendering has no error handling for missing variables
+- Retry logic is basic (fixed delay, no backoff)
+- No support for notification channels other than email
+- Hard-coded SMTP settings, not configurable per environment
+```
+
+第二步是关键——**先写现有行为的 spec，再写重构的 delta**。
+
+```text
+# 第二步：propose 第一步 - 记录现有行为
+/opsx:propose document-notification-current
+```
+
+这个 change 的 delta spec 不是 ADDED/REMOVED，而是纯 ADDED——把现有行为记录下来：
+
+```markdown
+# Delta for Notifications
+
+## ADDED Requirements
+
+### Requirement: Email Notification
+The system SHALL send email notifications for configured events.
+
+#### Scenario: Event triggers email
+- GIVEN an event that has email notification configured
+- WHEN the event occurs
+- THEN an email is sent to the configured recipient(s)
+- AND the email uses the configured template
+```
+
+写完这个"记录现状"的 change 后 apply（不改任何代码，只生成 spec）并 archive。现在 `specs/notifications/spec.md` 有了通知模块的当前行为描述。
+
+```text
+# 第三步：propose 第二步 - 提出重构
+/opsx:propose refactor-notification-module
+```
+
+这时候，AI 有了现有行为的 spec 作为基线，重构的 delta spec 就能正确使用 MODIFIED 和 REMOVED：
+
+```markdown
+# Delta for Notifications
+
+## MODIFIED Requirements
+
+### Requirement: Email Notification
+The system SHALL send email notifications asynchronously via a dedicated
+email service.
+
+#### Scenario: Event triggers email
+- GIVEN an event that has email notification configured
+- WHEN the event occurs
+- THEN the notification is queued for processing
+- AND the email service processes it asynchronously
+- AND the email is sent to the configured recipient(s)
+
+## ADDED Requirements
+
+### Requirement: Template Engine
+The system SHALL use a template engine for email rendering with
+error handling for missing variables.
+
+#### Scenario: Template with missing variable
+- GIVEN a template that references {{user.name}}
+- WHEN the user object has no name property
+- THEN a default value is used
+- AND a warning is logged
+```
+
+**这个两步走的策略是 Brownfield 重构的最佳实践**。先把"现在是什么"记录清楚，再基于记录提出"要变成什么"。没有行为基线的重构是盲目的——你不知道重构后行为是否和之前一致。
+
+### 场景 C：多人维护的大型项目，要引入规范
+
+**项目情况**：
+
+- 大型电商平台后端，80,000 行 Java (Spring Boot)
+- 5 人团队，每人负责 2-3 个微服务
+- 有 JIRA 做任务管理，但没有技术规范文档
+- 代码 review 是口头沟通 + 看 diff
+
+**挑战**：5 个人各自用 AI 编程工具（3 个用 Cursor，1 个用 Claude Code，1 个用 Copilot），每个人跟 AI 的对话上下文不共享。
+
+**引入策略**：
+
+不是一次性让所有人开始用 OpenSpec，而是分阶段引入。
+
+**阶段一：一个人在一个模块上试点（第 1 周）**
+
+选团队中最熟悉 AI 工具的人，在变更频率最高的模块（订单模块）上试点。
+
+```bash
+openspec init --tools cursor,copilot
+```
+
+这个人负责：
+
+- 填写 `project.md`
+- 在订单模块上跑完 propose → apply → verify → archive 的完整流程
+- 记录遇到的问题和解决方案
+
+**阶段二：团队分享试点经验（第 2 周）**
+
+开一个 30 分钟的分享会，演示：
+
+- 一个实际的 change 文件夹长什么样
+- PR 里带 proposal.md 和 delta spec 的 review 体验
+- 常见问题（spec 写得太模糊、scope 没控制好、archive 忘了做）
+
+**阶段三：两人并行使用（第 3 周）**
+
+再加一个人，在一个不相关的模块（支付模块）上使用。测试并行变更是否会冲突。
+
+**阶段四：全员推广（第 4 周）**
+
+5 个人全部开始用 OpenSpec。约定纪律：
+
+- 所有涉及 2 个文件以上的变更必须走 propose 流程
+- 单文件小改动可以直接做
+- archive 在功能上线当天完成，不超过第二天
+
+**实际数据**（来自这个团队的反馈）：
+
+| 指标 | 引入前 | 引入后 1 个月 |
+|------|-------|-------------|
+| PR review 平均时间 | 45 分钟 | 28 分钟 |
+| review 后返工率 | 35% | 18% |
+| 新成员 onboarding 时间 | 2 周 | 4 天 |
+| AI 生成代码的返工率 | 40% | 15% |
+
+这些数据来自一个 5 人团队的一个月实践，不是统计显著的结论。但趋势是明确的：spec 驱动的 review 更高效，AI 生成的代码更准确。
+
+---
+
+## 常见反模式
+
+### 反模式一：一次生成所有 spec
+
+最常见的错误。有人拿到 OpenSpec 后，想先把整个系统的 spec 都生成出来。
+
+具体表现：
+
+```text
+你：帮我把整个项目的所有模块都写成 OpenSpec spec
+AI：（生成了 20 个 spec 文件，每个 50-100 行）
+```
+
+问题：
+
+- AI 在没有修改上下文的情况下生成的 spec，质量通常很差。它只能基于代码静态分析推断行为，遗漏运行时的行为（定时任务、消息队列消费者、外部回调）
+- 一次性生成 20 个 spec，审查工作量巨大。你大概会粗略扫一遍就提交，这意味着很多错误没被发现
+- 从你生成到真正用到某个 spec 之间可能隔几周，到时候代码可能已经变了，spec 过时了
+
+正确做法：只给要修改的功能写 spec。每改一个功能多一份 spec。
+
+### 反模式二：spec 和代码脱节
+
+这种情况发生在"改了代码但忘了更新 spec"的时候。
+
+具体表现：
+
+- 开发者在实现过程中偏离了 design.md 的方案（比如 design 说用 Redis 缓存，实际用了内存缓存），但没有更新 design.md
+- AI 在 apply 过程中修改了某个需求的行为，但没有更新 delta spec
+- 修了一个 bug，bug 修复改变了某个 Requirement 的行为，但 spec 还描述的是旧行为
+
+后果：
+
+- 下一个人读 spec 时获得错误信息
+- AI 基于过时的 spec 生成新的变更，产生更多错误
+- verify 命令报一堆 WARNING，但没人看
+
+预防方法：
+
+1. 每次 apply 之后运行 verify
+
+```text
+/opsx:verify
+```
+
+2. 如果 verify 报 WARNING，立即处理。不要积累
+3. 在 code review 中检查 spec 是否和代码一致。PR 的 reviewer 不只看代码 diff，还看 delta spec
+
+### 反模式三：archive 不及时
+
+变更完成了但迟迟不 archive，导致 `changes/` 目录堆积。
+
+具体表现：
+
+```
+openspec/changes/
+├── add-search/           # 上个月做的，已经上线了
+├── fix-login-bug/        # 两周前做的，已经合并了
+├── refactor-payment/     # 一周前做的，已经上线了
+├── add-export/           # 刚做完
+└── add-notification/     # 正在做
+```
+
+前三个应该已经 archive 了。
+
+问题：
+
+- AI 在 propose 新变更时会读取所有活跃 change 的信息。过期的 change 会干扰 AI 的判断
+- 多个未归档的 change 可能修改同一个 spec，增加合并冲突的风险
+- 看着堆积的 changes 目录会产生"永远做不完"的心理负担
+
+解决方法：
+
+1. 功能上线当天 archive
+2. 如果有多个已完成的 change 要归档，用 bulk-archive：
+
+```text
+/opsx:bulk-archive
+```
+
+3. 在 CI 中加入检查：如果 changes/ 目录中有超过 7 天的未归档变更，发提醒
+
+### 反模式四：过度定制 Schema
+
+OpenSpec 支持自定义 Schema，但这不代表你应该一上来就定制。
+
+具体表现：
+
+- 团队花了一周设计"完美"的自定义 Schema，包含 7 个 artifact 和复杂的依赖关系
+- 自定义模板要求每个 Scenario 必须有 3 个以上的 GIVEN 条件
+- 加了"风险评估"和"安全审查"两个必填 artifact
+
+问题：
+
+- 过度定制的 Schema 维护成本高。OpenSpec 更新后，自定义 Schema 可能不兼容
+- 团队成员学习成本增加。新人不仅要学 OpenSpec，还要学你的自定义 Schema
+- 大部分场景不需要那么复杂。标准 Schema 的 4 个 artifact（proposal、specs、design、tasks）覆盖了 90% 的需求
+
+建议：先用标准 Schema 跑一个月。一个月后根据实际痛点决定是否定制。大部分情况下，通过 `config.yaml` 的 rules 字段加几条规则就够了，不需要动 Schema。
+
+```yaml
+# 用 rules 就能解决大部分定制需求
+rules:
+  proposal:
+    - Include rollback plan
+    - Identify affected teams
+  specs:
+    - Use Given/When/Then format
+  design:
+    - Include sequence diagrams for complex flows
+```
+
+### 反模式五：用小模型生成 spec
+
+OpenSpec 对 AI 模型有要求。用小模型（比如参数量较少的模型、或者免费档位的模型）生成的 spec 质量很差。
+
+具体表现：
+
+- Delta Spec 的 Scenario 没有使用 GIVEN/WHEN/THEN 格式
+- Requirement 描述模糊（"系统应该可以搜索"而不是"系统 SHALL 支持按关键词全文搜索"）
+- Proposal 的 Scope 部分没有列出 Out of scope
+- Design 文档只有方案描述没有决策理由
+
+这不是 OpenSpec 的问题。OpenSpec 的 skill 文件已经包含了格式要求和示例，但小模型的指令遵循能力不够。
+
+OpenSpec 推荐使用 Claude Opus 4.5+ 或 GPT-5+ 级别的模型。这确实意味着更高的 API 成本，但 spec 质量的差异是显著的。
+
+---
+
+## 从"装了 OpenSpec"到"用好了 OpenSpec"的磨合经验
+
+OpenSpec 上手很快——5 分钟安装，10 分钟跑通第一个流程。但从"装了 OpenSpec"到"用好了 OpenSpec"，通常需要 2-3 周的实际项目磨合。
+
+### 第 1-3 天：熟悉阶段
+
+这个阶段你会频繁遇到以下问题：
+
+- 忘了用 propose 直接开始写代码，写了一半想起来应该先走流程
+- propose 生成的 spec 需要大幅修改，因为 AI 不理解你的项目上下文
+- 不确定哪些改动需要走 OpenSpec，哪些可以直接做
+
+建议：第一个星期不强求所有改动都走 OpenSpec。只给"非 trivial"的改动走流程。什么是 trivial？改个 CSS 颜色、修个 typo、加一行日志——这些直接做。什么是 non-trivial？涉及 2 个文件以上的功能修改、架构调整、接口变更——这些走 propose。
+
+### 第 4-7 天：建立习惯
+
+这个阶段 spec 开始积累。你有了 3-5 个 archived change 和对应的主 spec。
+
+常见问题：
+
+- apply 过程中偏离了 design，忘了更新 design.md
+- archive 后发现 spec 有错，想回去改但已经归档了
+- 两个 change 改了同一个 spec，归档顺序导致冲突
+
+建议：
+
+- 每次 apply 后都跑 verify。不要省这一步
+- 如果 archive 后发现 spec 有错，直接编辑主 spec 文件修正。不需要重新发起 change
+- 并行 change 修改同一个 spec 时，按创建时间顺序归档
+
+### 第 8-14 天：体会价值
+
+这个阶段 spec 积累到了一定量，你会开始体会到 spec 的价值：
+
+- propose 新变更时，AI 能读取相关的主 spec，生成的 delta spec 更准确
+- review PR 时看 delta spec 比看代码 diff 更快理解意图
+- 隔几天回来继续开发，读 spec 就能恢复完整上下文
+
+这个阶段也是建立纪律的关键期。团队需要约定：
+
+- 什么时候必须走 propose（比如涉及 API 变更、数据库 schema 变更）
+- 什么时候可以直接做（比如 bug 修复、小调整）
+- archive 的时效要求（功能上线后 X 天内必须 archive）
+- spec 更新的责任（谁改代码谁更新 spec）
+
+### 第 15-21 天：形成节奏
+
+三周后，OpenSpec 工作流变成了肌肉记忆。你不再需要刻意提醒自己"要先 propose"，它变成了自然的开发流程。
+
+这个阶段可以开始探索高级用法：
+
+- 用 explore 做 code review 前的预分析
+- 用 onboard 帮助新成员快速了解项目
+- 用自定义 Schema 适配团队的特定流程
+- 在 CI 中加入 `openspec validate --strict`
+
+### 磨合期常见问题
+
+**Q：spec 写得太细怎么办？**
+
+写 spec 时控制深度。每个 Requirement 2-3 个 Scenario 就够了。不要试图覆盖所有边界情况——那会让 spec 变得庞大且难以维护。只覆盖关键路径和最常见的异常路径。
+
+**Q：团队有人不配合怎么办？**
+
+OpenSpec 的价值来自团队协作。如果团队中有人不使用 OpenSpec、不更新 spec，整个系统的价值就打了折扣。解决方法不是技术手段，而是沟通——在团队会议上讨论为什么引入 OpenSpec、解决了什么问题、每个人的使用体验如何。
+
+**Q：老代码的 spec 怎么补？**
+
+不要主动去补。等你要修改那个模块时再补。改到哪补到哪。这比花一周把整个系统的 spec 都写出来更实际。
+
+**Q：spec 写了但没人看怎么办？**
+
+如果 spec 写了没人看，有两种可能：一是 spec 写得不好（太模糊、太冗长），二是团队没有建立审阅 spec 的习惯。前者通过提高 spec 写作质量解决，后者通过在 PR review 中强制要求审查 spec 解决。
+
+---
+
+## Brownfield 引入的 ROI 分析
+
+从实际数据出发，分析 Brownfield 项目引入 OpenSpec 的投入产出。
+
+### 投入
+
+| 项目 | 时间成本 |
+|------|---------|
+| 安装和初始化 | 10 分钟 |
+| 学习 OpenSpec 概念 | 1-2 小时 |
+| 第一个 change（含摸索） | 1-2 小时 |
+| 前 5 个 change 的额外时间 | 每个 10-15 分钟 |
+| 团队培训 | 30-60 分钟 |
+| **首月总额外时间** | **约 4-6 小时** |
+
+### 回报
+
+| 项目 | 节省时间 |
+|------|---------|
+| AI 生成代码返工减少 | 每个 change 省 30-60 分钟 |
+| Code review 效率提升 | 每个 PR 省 15-20 分钟 |
+| 上下文恢复（跨会话） | 每次省 20-40 分钟 |
+| 新成员 onboarding | 每人省 3-5 天 |
+| 减少因需求理解错误导致的返工 | 每个 change 省 1-3 小时 |
+
+### 盈亏平衡点
+
+对于 3 人团队的中型项目，大约在引入 OpenSpec 的第 2-3 周达到盈亏平衡。也就是说，2-3 周后你省下的时间超过了你花在 OpenSpec 上的额外时间。
+
+对于个人项目，盈亏平衡点取决于项目的维护周期。如果项目要维护 3 个月以上，OpenSpec 的投资大概率是值得的。如果项目只用一个月就丢掉，不值得。
+
+---
+
+## 写在最后
+
+Brownfield 项目引入 OpenSpec 不是一场革命，而是渐进式的改进。不要追求一步到位，从你要修改的第一个功能开始。每一次 propose-apply-archive 循环都在积累系统的知识资产——spec 文件。
+
+`/opsx:explore` 让 AI 理解旧代码，`/opsx:onboard` 帮你找到切入点，`/opsx:propose` 从第一个变更开始。三个命令串起来就是 Brownfield 引入的完整路径。
+
+最后重复一遍最重要的原则：**不要一次生成所有 spec。** 从你要改的地方开始，改完一个功能就多一份有 spec 的功能。spec 的覆盖率会随着开发自然增长，不需要刻意追求 100% 覆盖。
