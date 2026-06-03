@@ -1,0 +1,699 @@
+# 让 Codex 读你的代码：文件读取、上下文注入、图片输入全攻略
+
+> **TL;DR** Codex 不是「全知全能」的——它只能看到你让它看到的东西。启动时自动扫描目录结构和 AGENTS.md；用 `@` 或 `/mention` 指定文件让它读；粘贴截图让它看图分析；用 `/ide` 拉取编辑器上下文；用 `/compact` 压缩对话腾出空间。理解 Codex 的信息获取机制，是让它真正理解你项目的前提。本文逐个拆解这些机制，最后用一个「让 Codex 理解陌生项目」的实战收尾。
+
+---
+
+## 1. Codex 读取代码的机制
+
+Codex 启动时，它对你的项目一无所知。它不是 IDE，不会在你打开项目的时候就建好整个代码的索引。它的信息获取方式是**按需拉取**——你提到什么，它读什么；你不提，它不会主动翻遍整个代码库。
+
+### 启动时发生了什么
+
+当你在项目目录下执行 `codex`，Codex 做这几件事：
+
+1. **确认工作目录**：你从哪个目录启动，它就在哪个目录工作。这是它的「世界边界」。
+2. **扫描目录结构**：Codex 会读取工作目录的文件树——不是所有文件的内容，是文件名和目录层级。这个过程很快，几百个文件的项目基本瞬间完成。上千个文件的 monorepo 可能需要几秒。
+3. **读取 AGENTS.md**：如果项目根目录或上层目录有 `AGENTS.md` 文件，Codex 在启动时自动读取，作为项目级指令注入上下文。后面第五节会详细讲。
+4. **识别项目元信息**：`package.json`、`go.mod`、`Cargo.toml` 这些文件的存在会被 Codex 注意到，用来判断技术栈。
+
+这里有一个关键区分：**扫描目录结构不等于读文件内容**。Codex 知道 `src/lib/auth.ts` 这个文件存在，但不知道里面写了什么。直到你让它读，或者它根据任务需要自己决定去读。
+
+### 按需读取的工作方式
+
+Codex 有一个内置的 `read_file` 工具。当模型判断某个任务需要查看文件内容时，它会调用这个工具读取指定文件。你在 TUI 里看到的 `Reading: src/lib/auth.ts` 就是这个动作。
+
+这意味着：
+
+- 你说「解释 auth.ts」，Codex 会调用 `read_file` 读取 `src/lib/auth.ts` 的内容
+- 你说「修一下登录的 bug」，Codex 会根据目录结构猜测哪些文件可能相关，然后依次读取
+- 你什么都没说，Codex 不会把所有 `.ts` 文件都读一遍
+
+和 IDE 的「全项目索引」相比，Codex 的方式有两个特点：
+
+- **优点**：上下文干净。只加载和当前任务相关的文件，不会把无关代码塞进模型的视野
+- **缺点**：可能遗漏。如果项目的关键依赖藏在一个不起眼的目录里，Codex 可能猜不到要去读
+
+### 上下文窗口的限制
+
+模型能「看到」的 token 数量有上限。GPT-5.4 的上下文窗口约 200K token，GPT-5.5 更大一些。这个窗口不是只装文件内容——对话历史、AGENTS.md、系统指令、工具调用结果都在这个窗口里挤。
+
+一个粗略的估算：一个 200 行的 TypeScript 文件大约 2000-3000 token。如果你让 Codex 一次读 20 个文件，光文件内容就占了 4-6 万 token。加上对话历史和系统指令，可用空间会缩水得很快。
+
+这不是说 Codex 每次只能读几个文件。但它意味着你需要有意识地管理「让 Codex 看什么」，而不是一股脑全塞进去。后面第六节会讲上下文管理的具体策略。
+
+---
+
+## 2. `/mention` 指定文件
+
+`/mention` 是最直接的方式，告诉 Codex 「你接下来需要关注这个文件」。
+
+### 基本用法
+
+在 Codex 的输入框（composer）中，输入 `/mention` 加文件路径：
+
+```
+/mention src/lib/auth.ts
+```
+
+Codex 会弹出文件选择器，基于你输入的路径做模糊匹配。选中后，文件内容会被注入到当前对话的上下文中。
+
+也可以不带参数输入 `/mention`，直接打开文件选择器，用方向键浏览或输入关键词搜索：
+
+```
+/mention
+```
+
+选择器会列出工作目录下所有文件，支持模糊匹配——输入 `auth` 就能过滤出所有文件名包含 `auth` 的文件。
+
+### mention 多个文件
+
+可以连续 mention 多个文件：
+
+```
+/mention src/lib/auth.ts
+/mention src/components/LoginForm.tsx
+/mention src/app/api/auth/route.ts
+```
+
+每次 mention 都会把对应文件的内容加入上下文。如果三个文件之间有依赖关系（比如组件调用了 auth 库，API 路由也用了 auth 库），Codex 在后续对话中会同时参考这三个文件的内容。
+
+注意：mention 太多文件会快速消耗上下文窗口。三个 200 行的文件加起来约 6000-9000 token，还好。但如果 mention 十几个文件，上下文里光是文件内容就占了几万 token，留给对话和推理的空间就不多了。
+
+### mention 后的行为
+
+mention 的文件不只是「读一次就忘」。Codex 在后续的对话轮次中，会持续参考被 mention 的文件内容。这意味着：
+
+- 你 mention 了 `src/lib/auth.ts`，然后在后续消息中问「这个文件里的 `createSession` 函数有没有处理 token 过期的情况？」，Codex 不需要重新读取文件
+- 如果你之后让 Codex 修改这个文件，它已经知道文件内容，不需要额外加载
+
+但有一个边界：如果对话太长，Codex 触发了自动压缩（compaction），被 mention 的文件内容可能会被压缩成摘要。这时候如果需要精确的文件内容，Codex 会重新读取。
+
+### `@` 快捷方式
+
+除了 `/mention`，在输入框中输入 `@` 也能触发文件搜索。这是官方文档明确提到的操作方式：
+
+> Type `@` in the composer to open a fuzzy file search over the workspace root; press `Tab` or `Enter` to drop the highlighted path into your message.
+
+`@` 和 `/mention` 的效果一样：把文件路径插入消息，Codex 在处理时会读取对应的文件。`@` 更快——两个字符就能触发，适合你正在打字、不想切到斜杠命令的场景。
+
+### mention 目录
+
+`/mention` 也可以指向一个目录：
+
+```
+/mention src/components/
+```
+
+此时 Codex 会把该目录下所有文件的内容加入上下文。谨慎使用——如果一个目录下有 50 个文件，mention 整个目录可能会直接把上下文窗口撑爆。大多数情况下，mention 你关心的那几个具体文件更合理。
+
+### `/mention` 和在提示词中写文件名的区别
+
+你可以在提示词里直接写：
+
+```
+解释 src/lib/auth.ts 这个文件
+```
+
+Codex 会根据这个路径自动去读文件。这和 `/mention` 的区别是：
+
+- **`/mention`**：文件内容作为上下文的一部分注入，后续对话持续可用
+- **提示词中写文件名**：Codex 在处理这条消息时读取文件，但后续轮次可能不会保留完整内容
+
+如果你只是临时看一眼某个文件，写文件名就够了。如果你接下来要多轮讨论这个文件，用 `/mention` 更省事——不用每次都重复写文件路径。
+
+实际使用中，两种方式可以混用。先把核心文件 `/mention` 进来，然后在提示词中写具体的任务。比如：
+
+```
+/mention src/lib/auth.ts
+/mention src/types/user.ts
+
+基于这两个文件，给 createSession 加一个自动刷新 token 的逻辑，
+过期时间从 7 天缩短到 1 小时，但在过期前 5 分钟自动续期。
+```
+
+---
+
+## 3. 图片输入：截图和设计稿
+
+Codex 不只能读文字。你可以把截图直接粘贴到输入框，让 Codex 识别图片内容并结合代码分析。
+
+### 粘贴图片到输入框
+
+在 TUI 的输入框中，直接粘贴（Ctrl+V 或 Cmd+V）一张截图。支持的格式包括 PNG 和 JPEG。粘贴后，图片会以缩略图的形式显示在输入框中，和文字一起发送给 Codex。
+
+也可以在启动时通过 `--image`（或 `-i`）标志指定图片文件：
+
+```bash
+codex -i screenshot.png "解释这个错误"
+```
+
+多张图片用逗号分隔：
+
+```bash
+codex --image img1.png,img2.jpg "对比这两张设计稿的差异"
+```
+
+### 使用场景
+
+图片输入在以下几个场景中特别有用：
+
+**UI bug 截图**：你的页面出了布局问题，截一张图给 Codex，配上相关的组件文件路径。Codex 能看到「哪里出了问题」，结合代码定位原因。
+
+```
+[粘贴一张导航栏错位的截图]
+
+导航栏在移动端错位了，相关组件在 src/components/Navbar.tsx，
+帮我修一下
+```
+
+**设计稿转代码**：你有一张设计师给的 Figma 截图，想让 Codex 照着实现。
+
+```
+[粘贴一张设计稿截图]
+
+照这个设计稿实现一个卡片组件，放在 src/components/ProductCard.tsx，
+用 Tailwind CSS，支持深色模式
+```
+
+**错误截图**：终端里的报错信息，截个图比手打错误信息快得多。
+
+```
+[粘贴一张终端报错截图]
+
+这个错误是什么意思？怎么修？
+```
+
+### Codex 处理图片的方式
+
+Codex 收到图片后，底层的多模态模型（GPT-5.4、GPT-5.5 都支持视觉输入）会分析图片内容。它能识别：
+
+- UI 元素的布局和样式
+- 文字内容（包括错误信息、日志输出）
+- 图表和流程图的基本结构
+- 代码截图中的文字
+
+识别完成后，Codex 把图片信息和你提供的文字提示结合起来，再调用代码读取、文件编辑等工具完成任务。
+
+### 图片占用的 token
+
+图片占用的 token 比文本多得多。一张 1024x1024 的截图，处理时可能消耗数千 token。这不是一个小数目——如果你的上下文窗口是 200K token，几张高清截图就能吃掉好几个百分点的空间。
+
+几个实际的建议：
+
+- 截图前裁剪到最小范围。只截出问题的区域，不要截整个屏幕
+- 不要一次贴太多张。一到两张图片加上清晰的文字描述，比贴五张图不管描述效果好
+- 如果错误信息可以复制文字，优先复制文字而不是截图。文字占用 token 远少于图片
+
+### `tools.view_image` 配置
+
+在 Codex 的功能开关中，有一个和图片相关的配置项。你可以在 `config.toml` 中控制图片相关功能的行为：
+
+```toml
+[features]
+view_image = true
+```
+
+默认情况下图片输入是开启的。如果你不需要图片功能，可以关闭它来节省上下文空间。但在大多数场景下，保持开启就好——你不主动粘贴图片，它不会额外消耗资源。
+
+---
+
+## 4. `/ide` 拉取编辑器上下文
+
+如果你在 VS Code 中使用 Codex（通过 Codex 的 VS Code 扩展），`/ide` 命令能自动把编辑器的状态拉取到 Codex 的上下文中。
+
+### 基本用法
+
+在 Codex 的输入框中输入：
+
+```
+/ide
+```
+
+Codex 会从 IDE 扩展获取以下信息：
+
+- **当前打开的文件**：你正在编辑哪个文件
+- **当前选中的代码**：你选中了哪段代码
+- **光标位置**：光标在文件的哪个位置
+
+你也可以在 `/ide` 后面加上文字说明：
+
+```
+/ide 帮我优化这段选中代码的性能
+```
+
+这样 Codex 知道你希望它针对 IDE 中当前选中的代码做性能优化。
+
+### 为什么需要 `/ide`
+
+没有 `/ide`，你需要手动告诉 Codex 你在看什么：
+
+```
+我在看 src/components/Dashboard.tsx 的第 42-58 行，
+帮我优化这段代码
+```
+
+有了 `/ide`，Codex 自动知道这些信息。你只需要说「帮我优化这段代码」，它就知道「这段代码」是哪个文件的哪些行。
+
+### IDE Extension 的专属功能
+
+`/ide` 只在通过 IDE 扩展使用 Codex 时可用。在纯终端的 Codex CLI 中，这个命令不会出现——因为终端没有「当前打开的文件」这个概念。
+
+Codex 的 VS Code 扩展提供了几种使用方式：
+
+- **侧边栏面板**：在 VS Code 侧边栏中打开 Codex，直接在编辑器旁边对话
+- **命令面板**：通过 `Cmd+Shift+P` 搜索 Codex 相关命令
+- **行内操作**：选中代码后右键，选择 Codex 相关操作
+
+如果你日常开发在 VS Code 中，`/ide` 是一个省时间的功能。不需要在终端和编辑器之间来回切换描述「我在看什么文件」。
+
+### `/ide` 的局限
+
+`/ide` 只拉取编辑器的当前状态，不会自动追踪你的后续操作。如果你在 IDE 中切换了文件，需要重新执行 `/ide` 来更新上下文。另外，`/ide` 拉取的上下文同样占用 token 窗口。如果当前打开的文件很长，整个文件内容会被注入上下文。
+
+---
+
+## 5. 项目级上下文：AGENTS.md 简介
+
+AGENTS.md 是 Codex 的项目级指令文件。Codex 启动时自动读取它，不需要你手动 mention。它是让 Codex 理解你项目「规矩」的主要方式。
+
+### AGENTS.md 的位置和读取顺序
+
+Codex 在启动时按以下顺序查找 AGENTS.md：
+
+1. **全局文件**：`~/.codex/AGENTS.md`（或 `~/.codex/AGENTS.override.md`）
+2. **项目文件**：从项目根目录（通常是 Git 仓库根目录）到当前工作目录，逐层查找
+
+每层目录最多读一个文件。Codex 把找到的所有文件拼接在一起，形成一个完整的指令链。靠近当前工作目录的文件排在后面，具有更高的优先级——如果根目录的 AGENTS.md 说「用 npm」，而当前目录的 AGENTS.md 说「用 pnpm」，Codex 会优先遵循当前目录的指示。
+
+### 写什么
+
+AGENTS.md 应该包含 Codex 在这个项目中需要知道的规则和约定。一个简洁有效的项目级 AGENTS.md 大致涵盖这些内容：
+
+```markdown
+# 项目规则
+
+## 技术栈
+- Next.js 14 (App Router) + TypeScript
+- tRPC v11 + Drizzle ORM + Neon PostgreSQL
+- Tailwind CSS + shadcn/ui
+
+## 目录结构
+- src/app/ — 页面和 API 路由
+- src/trpc/ — tRPC 路由定义
+- src/server/ — 业务逻辑层
+- src/db/ — 数据库 schema 和查询
+- src/components/ — React 组件
+- src/lib/ — 纯工具函数
+
+## 编码规范
+- 调用方向严格自上而下：app → trpc → server → db
+- 组件不能直接 import src/server/ 或 src/db/
+- 所有数据库查询通过 src/db/ 的 Drizzle ORM，禁止手写 SQL
+- 文件名用 kebab-case，组件名用 PascalCase
+
+## 禁止事项
+- 不要修改 src/db/migrations/ 里的文件，由 drizzle-kit 自动生成
+- 不要手动编辑 .env 文件
+- 不要在 trpc router 里直接写数据库查询，委托给 src/server/
+```
+
+这个文件大约 600 字节，远小于默认的 32 KiB 限制。它给 Codex 提供了足够的信息来理解项目结构和遵循编码规范。
+
+### 不写什么
+
+AGENTS.md 不是 README。不要把所有项目文档都塞进去：
+
+- **不要写太长**：默认限制是 32 KiB（由 `project_doc_max_bytes` 控制）。超过这个限制，后面的内容会被截断。30 KB 看起来不小，但如果是几十个文件的详细说明，很容易超。
+- **不要写会频繁变化的内容**：比如版本号、具体的 API endpoint 列表。这些每次都变，而 AGENTS.md 是启动时一次性加载的。
+- **不要写通用的编程建议**：比如「变量名要有意义」「函数要短」。Codex 本身就知道这些。写你项目的特殊规则。
+
+### 全局 AGENTS.md
+
+除了项目级的文件，你还可以在 `~/.codex/AGENTS.md` 放一个全局文件。这个文件对你所有项目生效。适合放一些跨项目的偏好：
+
+```markdown
+# 全局偏好
+
+- 修改 JavaScript/TypeScript 文件后，始终运行 npm test
+- 优先使用 pnpm 而不是 npm
+- 添加新依赖前先问我
+```
+
+全局文件和项目文件会合并。如果某个规则在两个文件中都出现了，项目文件的优先级更高。
+
+### 覆盖机制
+
+如果你需要临时改变全局规则，可以创建 `~/.codex/AGENTS.override.md`。Codex 在同一层级会优先读 `.override.md` 文件，忽略同层的 `AGENTS.md`。用完之后删除 override 文件就能恢复原来的配置。
+
+在项目目录中也可以用同样的覆盖机制。比如在 `services/payments/` 目录下放一个 `AGENTS.override.md`，指定支付模块的特殊规则（使用 `make test-payments` 而不是 `npm test`）。
+
+### `/init` 快速生成
+
+如果你不想手写 AGENTS.md，Codex 提供了一个快捷命令：
+
+```
+/init
+```
+
+在 Codex TUI 中输入 `/init`，Codex 会分析当前项目的技术栈和结构，自动生成一个 AGENTS.md 骨架。你只需要在骨架上补充项目特有的规则就行。
+
+### 后续深入
+
+AGENTS.md 的功能远不止本节介绍的这些。嵌套目录的分层覆盖、fallback 文件名配置、`project_doc_max_bytes` 的调优、多 monorepo 的指令管理——这些会在本系列第 28 篇深入讲解。
+
+---
+
+## 6. 上下文窗口管理
+
+上下文窗口是 Codex 工作的物理限制。理解它，你才能在长任务中保持 Codex 的高效运转。
+
+### 上下文窗口有多大
+
+不同模型的上下文窗口不同：
+
+| 模型 | 上下文窗口 |
+|------|-----------|
+| GPT-5.5 | ~400K token |
+| GPT-5.4 | ~200K token |
+| GPT-5.4-mini | ~128K token |
+| GPT-5.3-Codex | ~192K token |
+
+这些数字是理论最大值。实际可用空间要减去系统指令、AGENTS.md、工具定义等固定开销。一个典型的会话，可用空间大约是总窗口的 70-80%。
+
+### 代码文件占多少 token
+
+一个粗略的经验估算：
+
+- 1 行 TypeScript/Python 代码 ≈ 10-15 token
+- 1 行 CSS ≈ 8-12 token
+- 1 行 JSON/YAML ≈ 5-10 token
+- 1 张 1024x1024 的图片 ≈ 1000-3000 token
+
+所以一个 200 行的 TypeScript 文件大约 2000-3000 token。一个 1000 行的文件大约 10000-15000 token。如果你让 Codex 一次读 10 个这样的文件，光文件内容就 10-15 万 token——已经占掉了 GPT-5.4 上下文窗口的一半以上。
+
+### 读太多文件的后果
+
+上下文窗口不是「读得越多越好」。当窗口里塞了太多信息，模型的注意力会被稀释——它可能在 50 个文件的内容中找不到你真正关心的那个函数。
+
+实际表现是：
+
+- Codex 的回答变得笼统，不再针对具体代码
+- 它可能忽略你明确提到的约束条件
+- 修改代码时可能搞混不同文件之间的逻辑关系
+- 极端情况下，Codex 会报上下文溢出错误，拒绝执行
+
+### `/compact` 压缩历史
+
+`/compact` 是 Codex 提供的上下文压缩命令。在 TUI 中输入：
+
+```
+/compact
+```
+
+Codex 会把之前的对话历史压缩成一段摘要，释放大部分占用的 token。压缩后，之前的详细对话内容不可恢复（除非你保存了 session），但 Codex 会保留关键信息：做了什么修改、哪些文件被涉及、重要的上下文约束。
+
+什么时候该用 `/compact`：
+
+- 你和 Codex 已经对话了 20 多轮，对话历史很长
+- 你准备开始一个新任务，之前的对话内容不再需要逐字保留
+- `/status` 显示上下文使用率接近 80%
+
+什么时候不要用：
+
+- 你还需要 Codex 精确回忆之前某段代码的具体内容
+- 当前的多步任务还没完成，中间结果还需要引用
+
+Codex 也会在上下文即将耗尽时自动触发压缩。但自动压缩的时机可能不够理想——你手动在任务之间的空隙执行 `/compact`，效果更好。
+
+### 分阶段读取策略
+
+一个高效的做法是：不要一次把所有文件塞给 Codex，而是按需分阶段读取。
+
+**第一阶段：看结构**
+
+```
+给我看一下这个项目的目录结构
+```
+
+Codex 读取目录树，你了解项目的整体布局。这个操作几乎不消耗 token（目录树很紧凑）。
+
+**第二阶段：读关键文件**
+
+```
+/mention package.json
+/mention src/app/layout.tsx
+```
+
+只 mention 你当前任务需要的核心文件。不要把所有入口文件都 mention 进来——只 mention 最相关的。
+
+**第三阶段：深入具体模块**
+
+当 Codex 在执行任务时发现需要更多信息，它会自己读取相关文件。你不需要提前把所有可能用到的文件都 mention 好。
+
+**第四阶段：任务切换时压缩**
+
+```
+/compact
+```
+
+完成一个任务后、开始下一个任务前，执行一次 `/compact`。清除不再需要的旧上下文，给新任务腾出空间。
+
+### 配置相关的参数
+
+在 `config.toml` 中，有几个和上下文管理相关的配置项：
+
+```toml
+# 上下文窗口大小（一般不需要手动设置）
+model_context_window = 200000
+
+# 自动压缩阈值——当对话 token 超过这个数时自动压缩
+model_auto_compact_token_limit = 100000
+```
+
+`model_auto_compact_token_limit` 的默认值取决于模型。如果你的对话经常在长任务中途耗尽上下文，可以把这个值调低一些（比如设为上下文窗口的 50%），让自动压缩更早触发。
+
+---
+
+## 7. 实战：让 Codex 理解一个陌生项目
+
+假设你刚接手一个陌生项目——一个用 Next.js + tRPC + Drizzle 搭建的全栈应用。项目有 50 多个文件，你完全不熟悉代码结构。你想让 Codex 帮你快速理解这个项目。
+
+以下是推荐的步骤和一个完整的对话示例。
+
+### 第一步：让 Codex 读项目结构
+
+**你的输入**：
+
+```
+给我展示这个项目的目录结构，重点说明 src/ 下的分层
+```
+
+**Codex 的处理**：
+
+调用 `shell` 工具执行类似 `find src -type f | head -100` 的命令，或者直接读取目录树。
+
+**可能的输出**：
+
+```
+src/
+├── app/                  # Next.js App Router 页面和 API 路由
+│   ├── layout.tsx        # 根布局
+│   ├── page.tsx          # 首页
+│   └── api/              # API 路由
+├── components/           # React 组件
+│   ├── ui/               # 基础 UI 组件 (shadcn/ui)
+│   └── features/         # 业务功能组件
+├── trpc/                 # tRPC 路由定义
+│   ├── _app.ts           # tRPC router 合并入口
+│   └── routers/          # 各功能模块的子路由
+├── server/               # 业务逻辑层
+├── db/                   # Drizzle schema 和查询
+│   ├── schema/           # 表结构定义
+│   └── index.ts          # 数据库连接
+├── lib/                  # 纯工具函数
+└── auth/                 # NextAuth 配置
+```
+
+这一步几乎不消耗 token，但让你和 Codex 都对项目结构有了基本认知。
+
+### 第二步：让 Codex 读依赖文件
+
+**你的输入**：
+
+```
+/mention package.json
+
+分析这个项目的技术栈和主要依赖
+```
+
+**Codex 的处理**：
+
+读取 `package.json`，识别依赖版本和项目配置。
+
+**可能的输出**：
+
+```
+技术栈：
+- Next.js 14 (App Router)
+- tRPC v11 (类型安全 API)
+- Drizzle ORM + @neondatabase/serverless (数据库)
+- NextAuth v5 (认证)
+- Tailwind CSS + shadcn/ui (样式)
+- Zod (运行时类型校验)
+
+关键脚本：
+- dev: next dev（开发服务器）
+- build: next build（生产构建）
+- lint: eslint .
+- typecheck: tsc --noEmit
+- test: vitest
+
+这是一个典型的全栈 Next.js 应用，
+数据库用的是 Neon（Serverless PostgreSQL），
+认证走 NextAuth v5。
+```
+
+### 第三步：让 Codex 读 AGENTS.md（如果有）
+
+**你的输入**：
+
+```
+这个项目有没有 AGENTS.md？如果有，总结一下里面的项目规则
+```
+
+**Codex 的处理**：
+
+检查项目根目录是否有 `AGENTS.md` 文件。如果有，读取并总结。
+
+**可能的输出**：
+
+```
+这个项目有 AGENTS.md，主要规则：
+1. 调用方向严格自上而下：app → trpc → server → db
+2. 组件不能直接 import server/ 或 db/
+3. 数据库查询只通过 Drizzle ORM，禁止手写 SQL
+4. tRPC router 不能直接写数据库查询，委托给 server/
+5. 不要修改 db/migrations/ 目录
+```
+
+这一步让 Codex（和你自己）知道项目有哪些硬性约束。后续让 Codex 改代码时，它会遵守这些规则。
+
+### 第四步：mention 核心入口文件
+
+**你的输入**：
+
+```
+/mention src/app/layout.tsx
+/mention src/trpc/_app.ts
+/mention src/db/index.ts
+
+解释这三个文件各自的职责，以及它们之间的调用关系
+```
+
+**Codex 的处理**：
+
+读取三个文件的内容，分析导入关系和函数调用。
+
+**可能的输出**：
+
+```
+src/app/layout.tsx：
+根布局组件。引入了全局的 ThemeProvider 和 SessionProvider，
+为所有页面提供主题切换和用户会话上下文。
+通过 tRPC 的 createTRPCClient 在客户端调用 API。
+
+src/trpc/_app.ts：
+tRPC 的根路由。合并了 14 个子路由（auth、users、posts、
+comments 等），导出一个类型安全的 AppRouter 类型。
+每个子路由定义了自己的 procedure（查询和变更）。
+
+src/db/index.ts：
+数据库连接和 Drizzle 实例。使用 @neondatabase/serverless
+驱动，通过环境变量 DATABASE_URL 建立连接。导出 db 对象
+供 server/ 层使用。
+
+调用关系：
+layout.tsx → (tRPC client) → _app.ts 中的路由
+                                   ↓
+server/ 层的业务逻辑 → db/index.ts 的数据库实例
+```
+
+### 第五步：让 Codex 总结项目架构
+
+**你的输入**：
+
+```
+基于你目前看到的信息，总结这个项目的整体架构。
+从请求入口到数据存储，描述一个完整的数据流。
+```
+
+**Codex 的处理**：
+
+综合之前读取的目录结构、package.json、AGENTS.md 和核心文件，输出一份架构总结。
+
+**可能的输出**：
+
+```
+架构概览：
+
+数据流方向（自上而下）：
+
+1. 用户请求 → Next.js App Router (src/app/)
+   处理页面渲染和 API 路由
+
+2. API 路由 → tRPC 路由 (src/trpc/routers/)
+   类型安全的 API 定义，每个子路由对应一个业务模块
+
+3. tRPC 路由 → 业务逻辑 (src/server/)
+   复杂的业务逻辑委托给 server 层，router 只做参数校验和调用
+
+4. 业务逻辑 → 数据库 (src/db/)
+   通过 Drizzle ORM 操作 Neon PostgreSQL
+
+横向支撑：
+- src/auth/：NextAuth v5 认证，保护 API 路由和页面
+- src/components/：React 组件，通过 tRPC hooks 获取数据
+- src/lib/：纯工具函数（slug 生成、markdown 解析等），无反向依赖
+
+技术决策：
+- 用 tRPC 而不是 REST API，获得端到端类型安全
+- 用 Drizzle 而不是 Prisma，减少运行时开销
+- 用 Neon 而不是自建 PostgreSQL，省去运维成本
+```
+
+### 对话消耗评估
+
+上面五轮对话，大致消耗的 token：
+
+- 步骤一（目录结构）：~500 token
+- 步骤二（package.json）：~3000 token
+- 步骤三（AGENTS.md）：~1500 token
+- 步骤四（三个核心文件）：~5000 token
+- 步骤五（架构总结）：~2000 token
+
+总计约 12000 token，不到 GPT-5.4 上下文窗口的 10%。这个投入换来了对整个项目架构的理解，性价比很高。
+
+关键在于分阶段：先看结构再读文件，先读核心再读细节。不要上来就让 Codex 读 50 个文件——那只会浪费上下文窗口，而且 Codex 给出的回答大概率也是一团乱麻。
+
+---
+
+## 8. 下一步
+
+本文覆盖了 Codex 获取代码信息的所有主要途径：自动扫描、`/mention` 指定文件、图片输入、`/ide` 拉取编辑器上下文、AGENTS.md 项目级指令、以及上下文窗口的管理策略。
+
+Codex 能读你的代码，接下来的问题是：它怎么改你的代码？下一篇将深入 Codex 的代码修改机制——从文件编辑、命令执行到 diff 审查，带你完整走一遍「让 Codex 改代码」的流程。
+
+**下一篇**：[让 Codex 改你的代码：文件编辑、命令执行和 diff 审查全流程](./08-edit-code.md)（即将发布）
+
+### 延伸阅读
+
+- [Codex CLI Features — OpenAI 官方文档](https://developers.openai.com/codex/cli/features) — TUI 交互、图片输入、斜杠命令的完整文档
+- [Codex Slash Commands — OpenAI 官方文档](https://developers.openai.com/codex/cli/slash-commands) — 所有内置斜杠命令的用法和参数
+- [Custom instructions with AGENTS.md — OpenAI 官方文档](https://developers.openai.com/codex/guides/agents-md) — AGENTS.md 的分层机制和配置详解
+- [AGENTS.md 官方网站](https://agents.md/) — AGENTS.md 开放格式的通用说明
+- [Codex CLI GitHub 仓库](https://github.com/openai/codex) — 开源代码，可以看 read_file 等工具的实现细节
+
+---
+
+*本文基于 Codex CLI 官方文档和 2026 年 6 月的最新版本撰写。Codex 更新频繁，部分功能细节可能在未来版本中调整。*

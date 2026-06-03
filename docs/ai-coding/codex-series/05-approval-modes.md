@@ -1,0 +1,570 @@
+# Codex CLI 三种审批模式详解：suggest / auto-edit / full-auto 怎么选
+
+> **TL;DR** Codex CLI 的审批模式控制 AI 在改文件、跑命令前要不要问你。`untrusted`（相当于 suggest）每一步都要确认，适合陌生项目；`on-request`（相当于 auto-edit）是默认模式，文件改动自动执行，遇到超出沙箱的操作才弹审批；`never`（相当于 full-auto）一路绿灯，适合有 git 保护的日常开发。另有 `granular` 细粒度策略可以逐项开关五类审批。本文结合源码和官方文档逐条拆解。
+
+---
+
+## 1. 为什么需要审批模式
+
+AI 编程助手和普通的聊天机器人不一样——它能读你的文件、改你的代码、在你的终端跑命令。能力越大，出事的时候后果越严重。
+
+想象几个场景：
+
+- Codex 执行 `rm -rf node_modules && npm install`，这本是常规操作，但如果它判断错了目录呢？
+- Codex 修改了一个配置文件，你完全没注意到，过了半小时才在部署时踩坑。
+- Codex 跑了一条 `curl` 把你的 API key 传到了某个外部地址。
+
+审批模式就是为了应对这些问题而设计的。它的本质是一个「信任滑块」——你把滑块往左拉，AI 每走一步都要请你确认；往右拉，AI 放开手脚自己干。
+
+不是所有操作的风险等级相同。读文件几乎零风险，改文件可以用 `git checkout` 回滚，跑命令可能触发不可逆的副作用（删数据、发网络请求）。Codex 的审批系统把这些操作分了类，让你按需控制。
+
+Codex 的安全体系实际上分两层：
+
+- **沙箱模式（sandbox_mode）**：控制 Codex 技术上能做什么——能写哪些目录、能不能联网。这是硬限制。
+- **审批策略（approval_policy）**：控制 Codex 什么时候需要停下来问你。这是软限制。
+
+两者配合使用。比如你设置 `sandbox_mode = "workspace-write"` + `approval_policy = "on-request"`，Codex 可以在 workspace 内自由读写，但如果它想访问网络，沙箱层面直接拦住，审批层面也会弹窗告知你。只有当沙箱允许但策略规定要问你的操作，才会真正弹审批。
+
+有一个容易混淆的点：审批策略和沙箱模式不是互相替代的关系。沙箱是「能不能做」，审批是「要不要问你」。即使你把审批设成 `never`（永不询问），沙箱仍然会阻止 Codex 写入 workspace 外的文件。反过来说，即使沙箱很宽松，审批策略仍然可以要求 Codex 在每个关键操作前停下来。
+
+本文聚焦审批策略这一层。
+
+---
+
+## 2. untrusted 模式（建议模式）
+
+### 行为
+
+在 `untrusted` 模式下，只有被 Codex 内部的 `is_safe_command()` 判定为「已知安全」的只读操作才会自动通过。其他所有操作——包括文件编辑和命令执行——都需要你手动确认。
+
+这是最保守的模式。Codex 像一个实习生，每做一件事都要先问「我可以这样吗？」。
+
+### 对应关系
+
+在源码中，这个模式对应 `AskForApproval::UnlessTrusted` 枚举值。在配置文件中写作 `approval_policy = "untrusted"`。
+
+### 适合场景
+
+- 第一次用 Codex CLI
+- 在陌生项目或不信任的代码库中工作
+- 处理高风险操作（数据库迁移、生产环境配置）
+- 学习 Codex 的行为模式，观察它会做什么
+
+### 具体交互流程
+
+当 Codex 需要执行操作时，TUI 会弹出审批提示。你可以选择：
+
+- **Y**：同意执行这次操作
+- **N**：拒绝
+- **E**：手动编辑命令后再执行
+
+一次典型的 `untrusted` 会话可能是这样的：
+
+```
+> codex --ask-for-approval untrusted "修复登录页面的 CSS 布局问题"
+
+Codex: 我需要读取 src/components/Login.tsx 的内容
+[审批提示] 读取文件 src/components/Login.tsx
+> Y
+
+Codex: 我发现 flex 布局缺少 gap 属性。我将修改这个文件。
+[审批提示] 写入文件 src/components/Login.tsx
+> Y
+
+Codex: 修改完成，我需要运行 lint 检查。
+[审批提示] 执行命令: npx eslint src/components/Login.tsx
+> Y
+
+Codex: Lint 通过，修改完成。
+```
+
+### 优点
+
+你对 Codex 的每一个动作都有完全的掌控权。出问题的概率极低，因为你能在执行前拦截任何不合理的操作。
+
+### 缺点
+
+慢。如果你让 Codex 做一个涉及 20 个文件的重构任务，你需要按 20 次 Y。频繁的确认会打断你自己的思路，也打断 Codex 的工作流。
+
+### 实际体验
+
+在 `untrusted` 模式下，Codex 的效率大约只有全自动模式的三分之一到一半。但对于你不信任的代码库（比如从 GitHub 随便 clone 下来的项目），这种保守是完全值得的。
+
+一个实用的技巧：你可以在会话开始时用 `untrusted` 模式，观察 Codex 前几步的操作是否合理。如果它的行为在你的预期之内，再通过 `/permissions` 切换到更宽松的模式。这样你不需要全程按 Y，又能在开头建立一个基本的信任判断。
+
+---
+
+## 3. on-request 模式（自动编辑）
+
+### 行为
+
+`on-request` 是 Codex 的**默认审批策略**。在这个模式下，Codex 自主决定什么时候需要你的审批——通常是在执行沙箱内的常规操作时自动通过，在需要突破沙箱边界时才停下来问你。
+
+具体来说，在默认的 `workspace-write` 沙箱下：
+
+- **文件读写**：在 workspace 范围内自动通过
+- **命令执行**：常规命令自动执行
+- **跨沙箱操作**：编辑 workspace 外的文件、访问网络——这些需要你确认
+
+### 对应关系
+
+源码中是 `AskForApproval::OnRequest`，配置文件写作 `approval_policy = "on-request"`。这也是 `AskForApproval` 枚举的 `#[default]` 值。
+
+### 为什么这样设计
+
+核心逻辑是「undo 成本」：
+
+- **改文件**容易 undo。`git checkout -- .` 或者 `git stash` 就能恢复。风险可控。
+- **跑命令**可能不可逆。`DROP TABLE` 跑了就是跑了，`rm -rf` 删了就是删了。需要更多控制。
+
+但 `on-request` 模式并不对「文件编辑」和「命令执行」做二选一的区分。它让模型自己判断——如果操作在沙箱权限范围内，直接执行；如果需要突破沙箱（比如访问网络、写 workspace 外的文件），才弹审批。
+
+### 适合场景
+
+- 日常开发：修 bug、加功能、写测试
+- 你信任 Codex 改代码的能力
+- 你的项目有 git 版本控制（出问题可以回滚）
+- 你想专注于高层逻辑，不想被每个文件修改打断
+
+### 具体交互流程
+
+```
+> codex "给 UserService 添加分页查询方法"
+
+Codex: 我需要读取 src/services/UserService.ts
+（自动通过，因为读文件在沙箱内）
+
+Codex: 我将在 UserService.ts 中添加 paginate 方法
+（自动通过，因为写文件在 workspace 内）
+
+Codex: 修改完成。我需要运行测试验证一下。
+（自动通过，因为测试命令在沙箱内）
+
+Codex: 测试全部通过。
+```
+
+你可能注意到，整个过程中没有任何审批提示弹出。这是因为所有操作都在 `workspace-write` 沙箱的权限范围内。
+
+但如果 Codex 判断需要安装一个新依赖：
+
+```
+Codex: 我需要安装 @tanstack/react-query。
+[审批提示] 需要网络访问: npm install @tanstack/react-query
+> Y
+```
+
+这时候会弹审批，因为 `npm install` 需要网络访问，而默认的 workspace-write 沙箱禁止网络。
+
+### 优点
+
+日常开发效率高。文件修改和常规命令不打断你，只在真正需要关注的地方停下来。
+
+### 缺点
+
+Codex 可能修改了你不知道的文件。虽然 `git diff` 可以事后检查，但如果你不养成「跑完后看 diff」的习惯，可能漏掉意外的改动。
+
+这里有一个常见的坑：Codex 在修改代码时可能顺带「优化」了其他文件——比如它觉得某个 import 路径不规范就顺手改了，或者它在修改 A 文件时发现 B 文件有一个相关的 typo 就一起改了。这些改动单独看都是合理的，但如果你只关注了目标文件的 diff，可能忽略掉这些连带修改。
+
+### TUI 中的快捷切换
+
+在 TUI 中输入 `/permissions` 可以切换到这个模式。
+
+---
+
+## 4. never 模式（全自动）
+
+### 行为
+
+`never` 模式下，Codex 永远不会停下来问你。所有操作直接执行，不弹任何审批提示。失败的操作直接返回给模型处理，不会升级到用户层面。
+
+### 对应关系
+
+源码中是 `AskForApproval::Never`，配置文件写作 `approval_policy = "never"`。CLI 标志是 `--ask-for-approval never` 或简写 `-a never`。
+
+### 安全网
+
+全自动并不意味着没有任何保护。Codex 的沙箱机制仍然生效——你用 `workspace-write` 沙箱跑 `never` 模式，Codex 仍然不能写 workspace 外的文件、不能联网。
+
+实际的安全网包括：
+
+1. **沙箱隔离**：macOS 用 Seatbelt，Linux 用 bwrap + seccomp，Windows 有自己的沙箱实现。Codex 的命令在沙箱内运行，受文件系统和网络限制。
+2. **Git 检测**：Codex 启动时会检测当前目录是否有 git 版本控制。有 git 的目录默认可以进入 `workspace-write` 模式；没有 git 的目录默认为 `read-only`。
+3. **受保护路径**：即使在 `workspace-write` 模式下，`.git`、`.codex`、`.agents` 目录仍然是只读的。
+4. **操作记录**：Codex 记录所有操作到 transcript 中，你可以事后用 `git diff` 审查。
+
+### 适合场景
+
+- 你信任 Codex 的判断能力
+- 你对项目非常熟悉
+- 项目有 git 版本控制
+- 重构任务，需要修改大量文件
+- 你想走开让 Codex 自己跑，回来再检查
+
+### 实际体验示例
+
+```
+> codex --ask-for-approval never "把所有 class component 重构为 hooks"
+
+Codex: 正在扫描 src/ 目录下的 React 组件...
+Codex: 找到 15 个 class component，开始逐一重构。
+Codex: [1/15] src/components/Header.tsx 已重构
+Codex: [2/15] src/components/Footer.tsx 已重构
+...
+Codex: [15/15] src/components/Dashboard.tsx 已重构
+Codex: 运行 TypeScript 类型检查...
+Codex: 运行测试套件...
+Codex: 全部完成。15 个组件已从 class 重构为 hooks。
+```
+
+整个过程没有任何中断。你可以泡杯咖啡回来，`git diff` 看结果。
+
+### 优点
+
+快。不受任何中断，Codex 可以一口气完成多步骤任务。对于重构、批量修改这类需要连贯执行的任务，效率提升明显。
+
+### 缺点
+
+Codex 可能改错。虽然沙箱限制了大范围破坏，但它可能修改了你不想改的文件、执行了你没预料到的命令。跑完后一定要检查。
+
+具体来说，`never` 模式下你需要注意这几种情况：Codex 可能删掉它认为「不需要」的代码但实际是业务需要的；它可能跑 `npm install` 引入了你不想加的依赖；它可能在修改配置文件时覆盖了环境特定的值。这些都是 `git diff` 可以发现的问题，前提是你记得检查。
+
+### --yolo 快捷方式
+
+`--dangerously-bypass-approvals-and-sandbox`（别名 `--yolo`）等于 `approval_policy = "never"` + `sandbox_mode = "danger-full-access"`。这会关闭所有审批和沙箱保护。
+
+```
+> codex --yolo "更新所有依赖到最新版本"
+```
+
+官方文档明确标注了 "Elevated Risk"、"not recommended"。这个标志只在 Docker 容器等已有外部隔离的环境下使用才有意义。日常开发中不要用 `--yolo`。
+
+---
+
+## 5. 三种模式对比表
+
+| 维度 | `untrusted` (suggest) | `on-request` (auto-edit) | `never` (full-auto) |
+|------|----------------------|-------------------------|---------------------|
+| 文件编辑 | 每次都要确认 | workspace 内自动通过 | 直接执行 |
+| 命令执行 | 每次都要确认 | 沙箱内自动通过 | 直接执行 |
+| 沙箱外操作 | 弹审批 | 弹审批 | 直接执行（受沙箱限制） |
+| 典型场景 | 陌生项目、学习阶段 | 日常开发（默认） | 重构、批量操作 |
+| 风险等级 | 低 | 中 | 高 |
+| 效率 | 慢 | 中 | 快 |
+| CLI 标志 | `-a untrusted` | 默认，无需指定 | `-a never` |
+| 配置值 | `approval_policy = "untrusted"` | `approval_policy = "on-request"` | `approval_policy = "never"` |
+
+补充说明：`untrusted` 和 `on-request` 的区别不在于「文件 vs 命令」的二选一，而在于审批触发的条件不同。`untrusted` 对几乎所有写操作都弹审批；`on-request` 让模型判断什么时候需要问。
+
+---
+
+## 6. 切换审批模式的方法
+
+有三种方式可以设置审批模式，按优先级从高到低排列。
+
+### 启动时通过 CLI 标志
+
+```bash
+# 指定审批策略
+codex --ask-for-approval untrusted
+codex --ask-for-approval on-request
+codex --ask-for-approval never
+
+# 简写
+codex -a untrusted
+codex -a never
+```
+
+`--ask-for-approval`（或 `-a`）标志的优先级最高，会覆盖配置文件中的设置。
+
+### 会话中通过 /permissions 命令
+
+在 TUI 交互会话中，输入 `/permissions` 可以打开权限设置面板，实时切换模式。
+
+这在以下场景很有用：
+
+- 你刚开始用 `untrusted` 模式探索代码库，理解了项目结构后想切换到 `on-request` 加速开发。
+- 你在 `on-request` 模式下遇到了一段需要大量文件修改的重构任务，临时切到 `never` 完成。
+
+会话中的切换只影响当前会话，不写入配置文件。
+
+### config.toml 全局配置
+
+在 `~/.codex/config.toml` 中设置：
+
+```toml
+# 默认审批策略
+approval_policy = "on-request"
+```
+
+这个设置对所有新的 Codex 会话生效，但可以被 CLI 标志覆盖。
+
+### 使用 Profile 配置
+
+你可以在 `~/.codex/` 下创建多个 profile 文件，每个文件对应一套配置：
+
+```toml
+# ~/.codex/safe.config.toml
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+```
+
+```toml
+# ~/.codex/full_auto.config.toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+```
+
+启动时用 `--profile` 选择：
+
+```bash
+codex --profile safe
+codex --profile full_auto
+```
+
+### 优先级
+
+CLI 标志 > 会话中 `/permissions` 切换 > profile 配置 > config.toml 默认值。
+
+### approval_policy 的可选值
+
+根据源码中的 `AskForApproval` 枚举，`approval_policy` 接受以下值：
+
+| 值 | 含义 | 状态 |
+|----|------|------|
+| `"untrusted"` | 只自动通过已知安全的只读操作 | 可用 |
+| `"on-request"` | 模型判断何时需要审批（默认） | 可用 |
+| `"on-failure"` | 失败时才问 | 已废弃，用 `on-request` 替代 |
+| `"never"` | 永不询问 | 可用 |
+| `{ granular = { ... } }` | 细粒度控制 | 可用 |
+
+---
+
+## 7. granular 细粒度审批策略
+
+如果你觉得 `untrusted` 太保守，`on-request` 又不够精细，`granular` 模式给你五个独立的开关，让你逐项控制哪类审批弹窗、哪类自动拒绝。
+
+### 配置语法
+
+```toml
+approval_policy = { granular = {
+  sandbox_approval = true,
+  rules = true,
+  mcp_elicitations = true,
+  request_permissions = false,
+  skill_approval = false
+} }
+```
+
+在 `granular` 对象内，每个子开关是布尔值：`true` 表示该类审批请求会弹出让你审批，`false` 表示自动拒绝（不是自动通过，是直接拒绝）。
+
+### 五个子开关详解
+
+#### sandbox_approval
+
+控制沙箱升级审批。当 Codex 需要突破当前沙箱的限制时（比如从 workspace-write 升级到更大的权限），是否弹审批。
+
+- `true`：弹审批，让你决定是否允许突破沙箱
+- `false`：自动拒绝，Codex 无法突破沙箱
+
+场景：Codex 在 `workspace-write` 模式下想修改 workspace 外的配置文件，这个请求会被路由到 `sandbox_approval`。
+
+#### rules
+
+控制 execpolicy 规则触发的审批。Codex 内部有一套命令执行策略（execpolicy），某些命令模式匹配到 `prompt` 规则时会触发审批。
+
+- `true`：匹配到的命令会弹审批
+- `false`：匹配到的命令自动拒绝
+
+场景：你配置了一条规则「禁止 `rm -rf /`」，如果 Codex 尝试执行类似命令，`rules` 为 `true` 时会弹审批，为 `false` 时直接拒绝。
+
+#### mcp_elicitations
+
+控制 MCP（Model Context Protocol）工具的交互请求。当 MCP 服务器需要用户交互时（比如 OAuth 登录确认、输入凭据），是否弹审批。
+
+- `true`：MCP 工具的交互请求会弹出
+- `false`：交互请求自动拒绝
+
+场景：你连接了一个 GitHub MCP 服务器，它需要你确认 PR 合并操作。`mcp_elicitations = true` 会弹出确认框；`false` 直接拒绝。
+
+#### request_permissions
+
+控制 `request_permissions` 工具的权限请求。Codex 在执行过程中可以通过这个工具主动请求额外的权限。
+
+- `true`：权限请求会弹出让你审批
+- `false`：权限请求自动拒绝
+
+场景：Codex 判断需要读取 `/etc/hosts` 文件来完成某项任务，但这个文件不在沙箱的读取范围内。它通过 `request_permissions` 工具请求读取权限。
+
+#### skill_approval
+
+控制 Skill 脚本的审批。Codex 的 Skill 系统允许执行自定义脚本，这些脚本可能有副作用。
+
+- `true`：Skill 脚本执行前会弹审批
+- `false`：Skill 脚本执行前自动拒绝
+
+场景：你有一个自动格式化代码的 Skill，它会在执行前调用 `prettier`。`skill_approval = true` 让你在每次执行前确认。
+
+### 实际配置示例
+
+一个适合日常开发的 granular 配置：
+
+```toml
+# 日常开发：允许沙箱升级和规则审批，关闭 MCP 和权限请求
+approval_policy = { granular = {
+  sandbox_approval = true,
+  rules = true,
+  mcp_elicitations = false,
+  request_permissions = false,
+  skill_approval = true
+} }
+sandbox_mode = "workspace-write"
+```
+
+一个适合 CI/CD 的配置：
+
+```toml
+# CI 环境：所有审批都自动拒绝
+approval_policy = { granular = {
+  sandbox_approval = false,
+  rules = false,
+  mcp_elicitations = false,
+  request_permissions = false,
+  skill_approval = false
+} }
+sandbox_mode = "workspace-write"
+```
+
+### 与 auto_review 配合
+
+你可以把 `granular` 策略和自动审批审查器（auto_review）配合使用：
+
+```toml
+approval_policy = { granular = {
+  sandbox_approval = true,
+  rules = true,
+  mcp_elicitations = true,
+  request_permissions = true,
+  skill_approval = true
+} }
+approvals_reviewer = "auto_review"
+```
+
+这样，弹出的审批请求不会直接到你面前，而是先经过一个 AI 审查器评估风险等级。低风险和中风险的操作可以自动通过，高风险和关键风险的操作会被拒绝。这相当于在 `on-request` 和 `never` 之间找了一个中间点。
+
+---
+
+## 8. 工程实战：不同场景用什么模式
+
+### 场景一：刚接手一个陌生项目
+
+推荐配置：
+
+```bash
+codex --ask-for-approval untrusted --sandbox read-only "帮我理解这个项目的架构"
+```
+
+为什么：
+
+- 你不了解这个项目的代码结构，也不知道有没有恶意的构建脚本
+- `untrusted` 确保每一步你都能审查
+- `read-only` 沙箱防止任何文件修改
+- 这阶段你主要需要 Codex 读代码和解释，不需要它动手改
+
+等你熟悉了项目结构，确认项目安全后，可以切到 `on-request`。
+
+### 场景二：日常开发，修 bug、加功能
+
+推荐配置：
+
+```bash
+codex "修复用户列表页面的分页 bug"
+```
+
+为什么：
+
+- 默认的 `on-request` + `workspace-write` 就是为此设计的
+- 文件修改自动执行，不打断你的工作流
+- 需要突破沙箱的操作（比如网络请求）才弹审批
+- 你的项目有 git，改错了可以回滚
+
+如果遇到 Codex 修改了不该改的文件，事后 `git diff` 检查，用 `git checkout -- <file>` 恢复。
+
+### 场景三：重构一个模块，信任 Codex
+
+推荐配置：
+
+```bash
+codex -a never "把 src/api/ 下所有 REST 调用改成使用 react-query"
+```
+
+为什么：
+
+- 重构任务通常涉及大量文件的规律性修改
+- 每次确认会打断 Codex 的连续工作流
+- 你信任 Codex 在这个项目上的表现（通过之前的场景一和场景二验证过了）
+- 跑完后 `git diff` 全面审查，不满意就 `git checkout -- .`
+
+前提条件：你的项目有 git，你已经在之前的会话中验证过 Codex 对这个项目的理解程度。
+
+### 场景四：CI/CD 自动化
+
+推荐配置：
+
+```bash
+codex exec --sandbox workspace-write "根据最近的 commit 更新 CHANGELOG.md"
+```
+
+为什么：
+
+- `codex exec` 是非交互模式，默认使用 `AskForApproval::Never`
+- 不需要人盯着，适合脚本调用
+- 沙箱仍然提供保护
+- 输出通过 stdout 返回，可以被 CI 管道捕获
+
+### 场景五：代码审查辅助
+
+推荐配置：
+
+```bash
+codex --ask-for-approval on-request
+```
+
+然后在会话中输入 `/review`。
+
+为什么：
+
+- `/review` 是只读操作，不会修改代码
+- `on-request` 模式下，读取文件自动通过
+- 审查结果直接显示在 transcript 中
+
+### 从保守到激进的过渡路径
+
+建议新手按这个顺序逐步提升 Codex 的自主权：
+
+1. **第一周**：`untrusted` + `read-only`。只读代码，学习 Codex 的行为模式。这个阶段的目标是理解 Codex 会怎么分析你的项目、它会做什么样的推理。
+2. **第二周**：`on-request` + `workspace-write`。开始让 Codex 修改代码，关注每次审批弹窗。这里你开始建立对 Codex 改代码能力的信任。
+3. **第三周起**：`on-request` + `workspace-write`，不再逐条关注审批。养成跑完后 `git diff` 的习惯。大多数日常开发停留在这个阶段就够用了。
+4. **稳定信任后**：对于大规模重构任务，临时使用 `-a never`。不要在配置文件里永久设置 `never`，只在特定任务中通过 CLI 标志临时启用。
+
+核心原则：信任是逐步建立的。不要上来就用 `--yolo`。
+
+还有一个实用的做法：在每个 Codex 会话结束后，花 30 秒到 1 分钟过一遍 `git diff`。这不只是检查 Codex 有没有改错——你在读 diff 的过程中也在加深对项目变更的理解，这比单纯的代码审查更有学习价值。
+
+---
+
+## 9. 下一步
+
+本文拆解了 Codex CLI 的审批模式体系——从最保守的 `untrusted` 到全自动的 `never`，再到细粒度的 `granular`。选择哪种模式取决于你对项目的熟悉程度、对 Codex 的信任程度、以及出错的代价。
+
+下一篇（第 06 篇）将讨论 Codex CLI 的模型选择与切换——什么时候用 `gpt-5.5`，什么时候用 `o4-mini`，如何在会话中用 `/model` 命令切换模型，以及如何在 config.toml 中配置默认模型。
+
+### 延伸阅读
+
+- [Codex 官方文档 - Agent approvals & security](https://developers.openai.com/codex/agent-approvals-security)
+- [Codex 官方文档 - Configuration Reference](https://developers.openai.com/codex/config-reference)
+- [Codex 开源仓库 - AskForApproval 枚举定义](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/protocol.rs)
+- [Codex 官方文档 - Sandbox and approvals](https://developers.openai.com/codex/sandboxing)
+
+---
+
+*本文基于 Codex CLI 源码（`AskForApproval` 枚举、`GranularApprovalConfig` 结构体）和 2026 年 6 月的官方文档撰写。Codex 版本更新频繁，部分配置项可能在未来版本中变更。*

@@ -1,0 +1,711 @@
+# 第一次和 Codex 对话：从启动到看到结果的完整流程
+
+**TL;DR：** 本文手把手带你完成第一次 Codex CLI 对话。从 `codex` 命令启动 TUI，到理解 Codex 的"推理-工具调用-审批"循环，再到三个实战例子（解释代码、修 bug、写新功能），最后掌握中断回滚和输入技巧。读完这篇，你就真正上手 Codex 了。
+
+---
+
+## 1. 启动 Codex
+
+认证配好之后（上一篇内容），在终端里输入一个词就够了：
+
+```bash
+codex
+```
+
+回车。终端会从普通命令行界面切换到一个全屏 TUI（Terminal User Interface）。你会看到屏幕分成三个区域：
+
+- **上方**：对话区域。Codex 的回复、文件内容、代码变更预览都在这里显示，支持语法高亮的 Markdown 渲染
+- **底部**：输入框（composer）。你在这里打字、贴代码、发图片
+- **状态栏**：显示当前模型、审批模式、工作目录、token 用量等信息
+
+首次启动时，Codex 检测到你的工作目录是不是 Git 仓库。如果是，它会建议使用 Auto 审批模式（工作目录内自动读写，超出范围或需要网络时才问你）；如果不是，默认进入 Read-only 模式，防止误操作。你可以按提示选择接受默认配置，或者用 `/permissions` 命令调整。
+
+如果你已经在上一篇完成了 `codex login`，启动时不会再次要求登录。CLI 自动从 `~/.codex/auth.json` 或系统 keyring 读取缓存的凭据。如果凭据过期了，你会看到一条提示，按指引重新浏览器授权即可。
+
+### 带初始提示启动
+
+不想先等 TUI 出来再打字？把提示内容直接写在命令后面：
+
+```bash
+codex "帮我看看这个项目的结构"
+```
+
+Codex 启动后立刻开始处理这条指令，不用你手动在输入框里敲一遍。适合你知道自己要做什么、不想多按一次回车的场景。
+
+### 常用启动参数
+
+`codex` 命令支持一些参数，让你在启动时就配好环境：
+
+**指定模型**：
+
+```bash
+codex --model gpt-5.4
+```
+
+默认用的是 GPT-5.5（目前推荐的旗舰模型）。如果你想省额度跑简单任务，切到 `gpt-5.4-mini`。启动后也可以用 `/model` 斜杠命令切换，不需要退出重来。
+
+**指定审批模式**：
+
+```bash
+codex --sandbox workspace-write --ask-for-approval on-request
+```
+
+这两个参数组合等于"Auto 模式"：工作目录内可读写，跑命令前问你。如果你想要纯只读浏览：
+
+```bash
+codex --sandbox read-only --ask-for-approval on-request
+```
+
+完全放开（谨慎使用）：
+
+```bash
+codex --ask-for-approval never
+```
+
+**指定工作目录**：
+
+```bash
+codex --cd /path/to/project
+```
+
+不用先 `cd` 到项目目录再启动。如果你需要同时操作多个目录（比如前后端分离的项目），用 `--add-dir`：
+
+```bash
+codex --cd apps/frontend --add-dir ../backend --add-dir ../shared
+```
+
+**查看帮助**：
+
+```bash
+codex --help
+```
+
+列出所有可用的启动参数。参数不少，但日常用到的就是 `--model`、`--sandbox`、`--ask-for-approval`、`--cd` 这几个。
+
+### 在项目目录中启动 vs 在空目录中启动
+
+区别很大。
+
+在项目目录中启动，Codex 能看到你的代码、`AGENTS.md`（如果有的话）、`package.json` 或其他配置文件。它理解项目上下文，给出的回答更贴切。你让它"解释这个项目"，它会读目录结构、读配置文件、读关键源码，然后给你一个有内容的回答。
+
+在空目录中启动，Codex 没有代码可以读。这时候它只能做通用编程问题回答，不能操作具体文件。适合你只想问一个编程问题、不想让它碰任何项目的时候用。
+
+日常使用，建议在 Git 仓库根目录启动。原因有两个：一是 Codex 能完整理解项目；二是 Git 提供了安全网，出了问题随时 `git checkout .` 回滚。
+
+---
+
+## 2. 理解 Codex 的"思考-执行"循环
+
+你输入一条指令，Codex 不是立刻给你答案。它跑的是一个多步循环，每一步都有具体动作。理解这个循环，你就知道 TUI 里那些不断滚动的输出在干什么。
+
+### 循环拆解
+
+```
+你输入指令 → Agent 推理（thinking） → 调用工具 → 观察结果 → 继续推理或结束
+```
+
+六个环节逐一说明：
+
+**1. 接收指令**
+
+你在输入框打字，回车发送。Codex 把你的文字（或图片）作为一轮对话的输入。
+
+**2. 推理（thinking）**
+
+Codex 的底层模型开始分析你的指令。这一步它会：
+
+- 读取 `AGENTS.md` 里的项目规则（如果存在）
+- 回顾之前的对话上下文（如果这不是第一条消息）
+- 判断需要用到哪些工具
+- 制定执行计划
+
+在 TUI 里，你会看到一段"thinking"输出，描述它打算怎么做。比如：
+
+```
+I'll start by reading the project structure to understand the codebase,
+then identify the relevant files for adding a footer component.
+```
+
+**3. 调用工具**
+
+Codex 根据推理结果选择工具。它能调用的工具包括：
+
+| 工具 | 作用 |
+|------|------|
+| `read_file` | 读取文件内容 |
+| `write_file` | 创建或修改文件 |
+| `shell` | 在沙箱里执行 shell 命令（编译、测试、lint 等） |
+| `web_search` | 搜索网络，查文档或 API 参考 |
+
+每一步工具调用，TUI 都会实时显示。你看到的是 Codex 正在做什么，不是它做完了告诉你结果。
+
+**4. 审批**
+
+根据审批模式，Codex 可能在执行前暂停等你确认。Auto 模式下，工作目录内的文件编辑和命令执行会自动通过，但涉及网络访问或超出工作目录的操作会弹审批提示。Read-only 模式下，任何写入操作都要你手动批准。
+
+审批提示长这样：
+
+```
+Codex wants to run: npm test
+Approve? [Y/n]
+```
+
+按 `Y` 继续，按 `n` 拒绝。如果你不想被频繁打断，可以在启动时用 `--ask-for-approval never` 或用 `/permissions` 切到更宽松的模式。
+
+**5. 观察结果**
+
+工具执行完毕，Codex 拿到结果（文件内容、命令输出、搜索结果），进入下一轮推理。如果任务没完成，它继续调用工具；如果完成了，输出最终回答。
+
+**6. 多轮迭代**
+
+Codex 会自己检查中间结果。比如它改了代码，可能接着跑一遍测试看看有没有报错。测试报错了，它再修一轮。整个过程不需要你干预——除非审批模式要求你确认。
+
+### 走一个完整例子
+
+假设你有一个静态网站项目，根目录有个 `index.html`。你想给页面加一个 footer。在 TUI 里输入：
+
+```
+给 index.html 加一个 footer，内容是 "© 2026 My Website"
+```
+
+Codex 的处理过程大概是这样：
+
+**第一步，推理**：
+
+```
+I need to read index.html to understand the current structure,
+then add a <footer> element before the closing </body> tag.
+```
+
+**第二步，调用 read_file 工具**：
+
+```
+Reading: index.html
+```
+
+TUI 显示文件内容（语法高亮）。
+
+**第三步，继续推理**：
+
+模型读完文件，确认在 `</body>` 标签前插入 footer。
+
+**第四步，调用 write_file 工具**（Auto 模式下自动通过）：
+
+```
+Editing: index.html
+  <footer>
+    <p>&copy; 2026 My Website</p>
+  </footer>
+</body>
+```
+
+TUI 以 diff 格式显示变更，让你一眼看出加了什么、删了什么。
+
+**第五步，Codex 输出最终回复**：
+
+```
+Done. I've added a footer element at the bottom of the page,
+right before the closing </body> tag. The footer contains
+the copyright text you specified.
+```
+
+如果审批模式是 Read-only，第四步之前会暂停，等你批准后才会实际修改文件。
+
+整个过程从你输入到看到结果，可能就几秒钟。中间的推理、文件读取、变更预览都在 TUI 里实时展示。你不需要猜 Codex 在干什么——它做的每一步你都能看到。
+
+### TUI 里的几个实用操作
+
+在 Codex 跑任务的过程中，你不是干等着。TUI 提供了几个交互方式：
+
+- **按 `Enter`（Codex 运行中）**：在当前轮次中注入新的指令。比如 Codex 正在改文件，你突然想起来还有个约束条件，按 `Enter` 直接补充
+- **按 `Tab`（Codex 运行中）**：把你的下一条消息排入队列。Codex 完成当前任务后会自动处理队列里的内容。排队的内容可以是普通提示、斜杠命令（如 `/review`）、或者 `!` 开头的 shell 命令
+- **按 `Ctrl+R`**：搜索你的历史提示记录。输入关键词，从之前的输入里找，省去重新打字
+- **按 `Esc` 两次（输入框为空时）**：回到上一条你发的消息，可以编辑后重新发送。继续按 `Esc` 往更早的消息回溯
+- **按 `Ctrl+G`**：打开外部编辑器（`$VISUAL` 或 `$EDITOR` 定义的编辑器），写一段较长的提示，保存后自动发送到 Codex
+- **按 `Ctrl+O`**：复制 Codex 最近一条完成的回复到剪贴板
+
+这些操作不需要记，用到的时候回来看就行。最常用的是 `Enter` 注入指令和 `Tab` 排队。
+
+---
+
+## 3. 第一次任务实战：三个由浅入深的例子
+
+上一节了解了原理，这一节动手。三个例子从简单到进阶，分别展示"只读分析"、"定位修复"和"多文件功能开发"三种典型任务。
+
+### 例子一：让 Codex 解释一段代码
+
+这是最安全的起点——只读不改，不碰文件系统。
+
+**你的输入**：
+
+```
+解释一下 src/lib/auth.ts 这个文件做了什么
+```
+
+**Codex 的处理**：
+
+1. 调用 `read_file`，读取 `src/lib/auth.ts`
+2. 分析文件内容：函数签名、导入依赖、导出接口
+3. 输出解释
+
+**TUI 里看到的**：
+
+```
+Reading: src/lib/auth.ts
+```
+
+文件内容显示出来。几秒后，Codex 输出解释：
+
+```
+这个文件封装了用户认证的核心逻辑：
+
+1. `createSession(userId: string)` — 接收用户 ID，生成 JWT token，
+   写入 HttpOnly cookie。token 过期时间 7 天。
+
+2. `verifySession(token: string)` — 验证 JWT 签名和过期时间，
+   返回 `{ valid: boolean, userId?: string }`。
+
+3. `destroySession()` — 清除 cookie，用于登出。
+
+依赖了 jsonwebtoken 库做签名/验签，cookie 库操作 cookie。
+密钥从环境变量 JWT_SECRET 读取。
+```
+
+这个例子中，Codex 没有修改任何文件。不管你用什么审批模式，`read_file` 都不需要确认。适合你第一次和 Codex 互动、想先熟悉它的输出风格。
+
+### 例子二：让 Codex 修复一个 bug
+
+上一个例子是只读，这次让 Codex 改代码。假设你有一个 API 端点 `/api/users`，前端调它返回 500 错误。
+
+**你的输入**：
+
+```
+/api/users 这个端点返回 500，帮我查一下原因并修复
+```
+
+**Codex 的处理**：
+
+1. 读取路由文件（比如 `src/app/api/users/route.ts`）
+2. 读取相关的服务层和数据层代码
+3. 定位问题：比如某个字段没做空值检查，导致 `undefined.toString()` 抛异常
+4. 生成修复代码
+5. 等待你确认（取决于审批模式）
+6. 应用修改
+
+**TUI 里看到的**：
+
+```
+Reading: src/app/api/users/route.ts
+Reading: src/server/users.ts
+Reading: src/db/schema/users.ts
+
+I found the issue. In src/server/users.ts:47, the code calls
+`user.email.toLowerCase()` without checking if `user.email` is null.
+For OAuth users who haven't set an email, this field can be null.
+
+Proposed fix:
+```
+
+然后显示 diff：
+
+```diff
+- const email = user.email.toLowerCase();
++ const email = user.email?.toLowerCase() ?? '';
+```
+
+**审批流程**（Auto 模式下）：
+
+文件编辑在工作目录内，自动通过。Codex 直接应用修改。如果你想让它顺便跑测试验证：
+
+```
+跑一下测试确认没引入新问题
+```
+
+Codex 调用 `shell` 工具执行 `npm test`。在 Auto 模式下，工作目录内的命令也是自动通过的。如果测试通过，Codex 汇报结果；如果测试失败，它会自动看报错信息，尝试修第二轮。
+
+**如果你用 Read-only 模式**：
+
+每一步写操作都需要你确认。TUI 弹出提示：
+
+```
+Codex wants to edit: src/server/users.ts
+Approve? [Y/n]
+```
+
+好处是你对每一步变更都有完全控制权；代价是复杂任务需要频繁按键确认。建议日常用 Auto 模式，不确定的时候临时切 Read-only。
+
+### 例子三：让 Codex 写一个新功能
+
+前两个例子是分析和修复，这次让 Codex 从零写一个功能：给用户列表页加搜索框，支持按名字和邮箱筛选。
+
+**你的输入**：
+
+```
+给用户列表页加一个搜索框，支持按名字和邮箱筛选。
+用户列表组件在 src/components/UserList.tsx，
+API 端点在 src/app/api/users/route.ts。
+不要改动现有的测试用例。
+```
+
+注意这条输入比前两个更具体：指明了文件位置、功能要求、约束条件。这种写法能让 Codex 更快定位、减少猜错方向。输入技巧在第六节详细讲。
+
+**Codex 的处理**：
+
+1. 读取用户列表组件和 API 端点
+2. 读取相关的类型定义和样式文件
+3. 规划改动：前端加搜索框 + 状态管理 + API 加查询参数
+4. 依次修改文件
+5. 可能跑一遍 lint 和 typecheck 验证
+
+**TUI 里看到的**（简化）：
+
+```
+Reading: src/components/UserList.tsx
+Reading: src/app/api/users/route.ts
+Reading: src/types/user.ts
+
+Plan:
+1. Add a search input to UserList.tsx with debounced state
+2. Add name/email query params to the API endpoint
+3. Filter users server-side based on the query
+
+Editing: src/components/UserList.tsx
+  + import { useState, useEffect } from 'react';
+  + const [search, setSearch] = useState('');
+  + <input
+  +   type="text"
+  +   placeholder="Search by name or email..."
+  +   value={search}
+  +   onChange={(e) => setSearch(e.target.value)}
+  + />
+
+Editing: src/app/api/users/route.ts
+  + const { search } = new URL(request.url).searchParams;
+  + if (search) {
+  +   query = query.where(
+  +     or(like(name, `%${search}%`), like(email, `%${search}%`))
+  +   );
+  + }
+
+Done. I've added a search input to the user list page and updated
+the API endpoint to filter by name and email. The search is debounced
+(300ms) to avoid excessive API calls.
+```
+
+在 Auto 模式下，上面所有文件编辑自动通过。Codex 修改了两个文件，整个过程你在旁边看着就行。
+
+在 Read-only 模式下，每次编辑都会暂停等你确认，你需要按两次 `Y`。
+
+这个例子体现了 Codex 作为 Agent 的能力：它不只是改一个文件，而是跨多个文件协调改动，同时保证功能完整性。你描述的是目标（"加搜索框"），它自己规划路径（前端组件 + API 端点 + 状态管理）。
+
+---
+
+## 4. 中断、回滚和退出
+
+Codex 跑任务的时候，你不需要干等。有时候你想叫停、回退、或者直接走人。这里讲三个操作。
+
+### Ctrl+C：中断当前任务
+
+Codex 正在跑一个长任务（比如重构整个模块），你发现方向不对。按 `Ctrl+C`。
+
+Codex 收到中断信号后：
+
+- **已完成的操作保留**：已经写入磁盘的文件变更不会自动撤销
+- **未完成的操作中止**：正在进行中的工具调用会被取消
+- **TUI 仍然运行**：你回到输入框，可以发新指令
+
+中断后的状态取决于 Codex 刚才做了什么。如果它改了三个文件中的两个，第三个还没改，你的项目处于"部分修改"状态。这时候你有两个选择：
+
+1. 在 TUI 里继续给 Codex 新指令（比如"把刚才的修改全部撤销"）
+2. 退出 TUI，手动处理
+
+### Git 回滚：最靠谱的后悔药
+
+如果你在 Git 仓库里启动的 Codex（前面建议过），中断后的部分修改很容易处理：
+
+```bash
+git checkout .
+```
+
+或者更精确地恢复某个文件：
+
+```bash
+git checkout src/components/UserList.tsx
+```
+
+Codex 官方文档也推荐这种做法："Codex always surfaces a transcript of its actions, so you can review or roll back changes with your usual git workflow." 翻译：Codex 记录了它做的每一步，你用 Git 就能回滚。
+
+这也是为什么本文反复建议在 Git 仓库根目录启动 Codex——不是为了赶时髦，是为了有后悔药吃。
+
+### /diff：看看改了什么
+
+退出之前（或者任务完成之后），想看看 Codex 到底改了哪些文件、改了什么内容。在输入框里打：
+
+```
+/diff
+```
+
+Codex 会显示工作目录中所有未提交的变更，格式和 `git diff` 类似。你看到的是实际文件的增删改，不是 Codex 的口头描述。
+
+你也可以在任何时候用 `!git diff`（注意前面的感叹号）直接跑 Git 命令，效果一样。感叹号前缀让 Codex 把后面的内容当作本地 shell 命令执行。
+
+### /quit 和 /exit：退出 TUI
+
+```
+/quit
+```
+
+或者：
+
+```
+/exit
+```
+
+两个命令效果一样，关闭 TUI，回到普通终端。
+
+养成一个习惯：退出前先 `/diff` 看一眼，确认没有意料之外的改动。如果发现问题，在 TUI 里直接让 Codex 修，比退出后手动改省事。
+
+### 会话恢复
+
+退出不等于丢失上下文。Codex 会把对话记录保存在本地（`~/.codex/sessions/` 目录）。下次你想接着聊，用 `resume` 子命令：
+
+```bash
+codex resume --last
+```
+
+跳过选择界面，直接进入最近一次会话。如果你想从列表里挑：
+
+```bash
+codex resume
+```
+
+会显示一个交互式选择器，列出你最近的会话，带摘要。高亮你想恢复的那个，回车进入。
+
+恢复的会话保留完整的对话历史和项目状态。Codex 知道你们之前聊了什么，不需要你重新描述上下文。如果你换了电脑或者项目状态变了（比如别人提交了新代码），恢复的会话可能会和当前文件对不上——这时候建议用 `/new` 开新会话。
+
+还有一些相关的斜杠命令，在交互过程中会用到的：
+
+| 命令 | 作用 |
+|------|------|
+| `/clear` | 清空对话记录，从头开始（不退出 TUI） |
+| `/new` | 开一个新会话，同一个 TUI 窗口内 |
+| `/status` | 显示当前会话的模型、审批模式、token 用量 |
+| `/model` | 切换模型（比如从 GPT-5.5 切到 GPT-5.4-mini） |
+| `/permissions` | 切换审批模式（Auto / Read-only / Full Access） |
+| `/copy` | 复制 Codex 最近一条回复到剪贴板 |
+| `/theme` | 切换语法高亮主题 |
+
+`/clear` 和 `/new` 的区别：`/clear` 清空当前对话的上下文，但还在同一个会话里；`/new` 是开一个全新的会话，有独立的 ID 和 transcript。一般用 `/clear` 就够了，除非你想让会话记录更干净。
+
+---
+
+## 5. 工作目录的重要性
+
+Codex 的操作范围由启动时的工作目录决定。这不是软约束——沙箱在操作系统层面强制执行。
+
+### 沙箱的边界
+
+macOS 上，Codex 用 Seatbelt（Apple 的系统级沙箱框架）限制文件访问。Linux 上用 Bubblewrap + Landlock + seccomp 组合。不管哪个平台，Codex 只能在工作目录内读写文件。尝试访问目录外的文件会被操作系统拒绝，Codex 会报错并告知你。
+
+这意味着两件事：
+
+1. Codex 看不到你其他项目的代码。在 `~/projects/frontend` 启动，它不知道 `~/projects/backend` 的存在
+2. Codex 写不了系统文件。它改不了 `/etc/hosts`，也改不了 `~/.ssh/config`
+
+### 大项目 vs 小项目
+
+Codex 启动后会扫描工作目录结构。小项目（几十个文件）几乎瞬间完成。大项目（上千个文件）可能需要几秒钟。Codex 不会一次性读所有文件内容——它先看目录树，再根据任务需要选择性读取。
+
+如果你在一个 monorepo 根目录启动，Codex 能看到所有子项目。但你也可以用 `--cd` 指向子目录，让它只关注一个模块。选择取决于你的任务范围——修整个 monorepo 的依赖问题就在根目录启动，修某个模块的 bug 就指向那个模块。
+
+### 为什么建议在 Git 仓库根目录启动
+
+三个原因：
+
+1. **安全网**：Codex 的改动可以用 `git diff` 查看、用 `git checkout` 回滚
+2. **上下文完整**：Codex 能读到 `.gitignore`（知道哪些文件该忽略）、`AGENTS.md`（项目规则）、配置文件
+3. **审批策略**：Codex 检测到 Git 仓库会推荐 Auto 模式（更方便），非 Git 目录默认 Read-only（更保守）
+
+### 不在 Git 仓库中的情况
+
+Codex 在非 Git 目录中也能用，但有两个变化：
+
+- 默认进入 Read-only 模式，防止误操作（没有 Git 没法轻松回滚）
+- 没有 `/diff` 的参照基准（`git diff` 无从跑起）
+
+如果你就是想在一个没有版本控制的目录里用 Codex（比如临时文件夹、实验项目），可以在启动时手动指定更宽松的模式：
+
+```bash
+codex --sandbox workspace-write --ask-for-approval on-request
+```
+
+Codex 会在 TUI 里提醒你当前目录不是 Git 仓库。看到这个提醒时想一下：你确定要在这个目录里让 AI 修改文件吗？
+
+---
+
+## 6. 输入技巧：怎么描述任务效果更好
+
+Codex 的输出质量，很大程度上取决于你的输入质量。这不是 Codex 的问题——所有大语言模型都这样。你描述得越具体，它理解得越准确。下面是一些实操建议。
+
+### 具体 > 模糊
+
+**模糊**：
+
+```
+改一下按钮
+```
+
+Codex 不知道你要改哪个按钮（哪个文件？哪个组件？）、改什么（颜色？大小？行为？）、改成什么样。
+
+**具体**：
+
+```
+把 src/components/Button.tsx 里的 onClick 回调从同步改成异步，
+加一个 loading 状态，点击时按钮显示 Spinner 并禁用。
+```
+
+Codex 能精准定位到文件、函数、改动内容。执行结果大概率一次过。
+
+不需要每次都写这么长。关键信息有三个：**哪里**（文件路径或组件名）、**做什么**（具体改动）、**什么约束**（不能改什么、必须满足什么条件）。三样给齐了，Codex 就不太会跑偏。
+
+### 一次一个任务 vs 一次多个任务
+
+**一次一个任务**（推荐新手）：
+
+```
+给 UserList 组件加分页功能
+```
+
+等 Codex 做完，检查结果，再发下一个：
+
+```
+给分页器加一个"每页显示数量"的下拉选择
+```
+
+好处是每一步都能验证，出问题好定位。Codex 单次任务的完成率也比多任务高。
+
+**一次多个任务**（适合熟手）：
+
+```
+1. 给 UserList 组件加分页
+2. 加搜索框（按名字和邮箱）
+3. 搜索和分页联动——翻页时保留搜索条件
+```
+
+Codex 会按顺序执行，中间你可能需要确认几次。如果某个步骤出错，后续步骤可能受影响。建议在你信任 Codex 的判断力、且任务之间有明确依赖关系时才用这种方式。
+
+### 指定文件路径
+
+如果你知道要改的文件在哪，直接告诉 Codex：
+
+```
+在 src/api/users.ts 中添加分页参数 page 和 pageSize，
+默认值分别是 1 和 20。
+```
+
+而不是：
+
+```
+给用户 API 加分页
+```
+
+前者让 Codex 直接打开目标文件操作，省掉它自己搜索定位的步骤（省 token，省时间）。
+
+用 `@` 符号可以快速引用文件。在输入框里打 `@`，会弹出文件搜索框（模糊匹配工作目录下的所有文件），选中后文件路径自动插入你的消息。
+
+### 附带约束
+
+约束是你告诉 Codex "不要做什么"：
+
+```
+重构 src/utils/format.ts 里的日期格式化函数，
+使用 date-fns 替代 moment.js。
+不要改动其他文件中对这个函数的调用方式——保持接口不变。
+```
+
+最后一句就是约束。没有它，Codex 可能在重构函数的同时改了所有调用方的代码（虽然也没错，但超出了你的预期）。
+
+常见的约束写法：
+
+- "不要改动现有的测试用例"
+- "只改 TypeScript 文件，不要碰样式文件"
+- "保持向后兼容，旧接口不能 break"
+- "不要引入新的依赖包"
+
+### 分步引导
+
+遇到复杂任务，别让 Codex 一次性做完。先让它分析，你再决定下一步：
+
+**第一轮**：
+
+```
+分析一下 src/services/payment.ts 这个文件，
+看看有哪些地方可能在并发场景下出问题
+```
+
+Codex 给出分析结果。你读完，选一个你觉得最关键的问题。
+
+**第二轮**：
+
+```
+你说的第三个问题（库存扣减的竞态条件），帮我修一下。
+用乐观锁的方式，在 UPDATE 语句里加 WHERE 条件判断库存是否充足。
+```
+
+这种分步方式有两个好处：一是你保持了对方向的控制权，二是每一步的上下文更小，Codex 的推理更准确。
+
+### 几个常见的新手失误
+
+**误区一：把 Codex 当搜索引擎**
+
+```
+Python 怎么读 CSV 文件？
+```
+
+这不是 Codex 的最佳使用场景。这种通用编程问题，问 ChatGPT、Google、Stack Overflow 都行。Codex 的价值在于它能操作你的项目——读你的代码、改你的文件、跑你的测试。拿它当搜索引擎，浪费了 Agent 能力。
+
+**误区二：一句含糊的话然后抱怨结果不对**
+
+```
+把代码优化一下
+```
+
+"优化"指什么？性能优化（减少内存占用）？代码优化（提升可读性）？体积优化（减少打包大小）？Codex 会根据自己的判断选一个方向，但大概率和你想的不一样。把"优化"替换成具体的动作，结果会好很多。
+
+**误区三：不给上下文就让它改**
+
+```
+修复登录页面的 bug
+```
+
+如果你的项目只有一个登录页面，Codex 能找到。如果项目有五六个登录相关的组件、页面、测试文件，Codex 要自己猜你说的是哪个。猜错了，它改的文件不是你想要的。给个文件路径或组件名，省掉这层不确定性。
+
+**误区四：一次塞十个需求**
+
+```
+1. 加暗色模式
+2. 重构路由
+3. 升级依赖
+4. 修 CI
+5. 加国际化
+...
+```
+
+Codex 会尝试逐个处理，但长任务容易在中途跑偏或耗尽上下文。拆成多次会话，每次处理一到两个相关任务，效果和速度都更好。
+
+---
+
+## 7. 下一步
+
+到这里，你已经完成了 Codex CLI 的第一次对话：从启动 TUI、理解工作循环，到跑三个实战任务，再到中断回滚和输入优化。这些是日常使用中 80% 的场景。
+
+但审批模式这一块，本文只是概要带过。Auto 模式下 Codex 能自动做多少事？Read-only 模式下具体要确认几次？Full Access 模式风险在哪？`auto_review` 自动审批怎么配？这些问题在下一篇详细拆解。
+
+**下一篇**：[三种审批模式详解：Auto / Read-only / Full Access 的选择指南](./05-approval-modes.md)（即将发布）
+
+## 延伸阅读
+
+- [Codex CLI Features — OpenAI 官方文档](https://developers.openai.com/codex/cli/features) — TUI 交互、斜杠命令、图片输入、会话恢复的完整文档
+- [Codex Slash Commands — OpenAI 官方文档](https://developers.openai.com/codex/cli/slash-commands) — 所有内置斜杠命令的用法和参数
+- [Agent Approvals & Security — OpenAI 官方文档](https://developers.openai.com/codex/agent-approvals-security) — 沙箱机制、审批策略、安全配置详解
+- [Codex CLI GitHub 仓库](https://github.com/openai/codex) — 开源代码，可以看沙箱实现的细节

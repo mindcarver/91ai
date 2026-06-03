@@ -1,0 +1,547 @@
+# Codex CLI Shell 与沙箱配置：环境变量、执行策略与安全隔离
+
+> **TL;DR** Codex 执行 Shell 命令时，你的环境变量会怎样传过去？AI 写的代码能不能访问你的 home 目录？网络请求会不会悄悄发出去？这些问题的答案全部藏在 `config.toml` 的 `shell_environment_policy`、`sandbox_mode`、`features.shell_tool` 等配置项里。本篇逐个拆解这些配置的工作原理、默认值、踩坑点，然后给出三种实战场景下的推荐配置。
+
+---
+
+## 1. Shell 配置的重要性
+
+很多人第一次用 Codex 的时候，根本不会去碰 Shell 配置。默认值能用就行——反正 AI 说了算，对吧？
+
+直到出问题。
+
+有人让 Codex 帮忙跑 `npm install`，结果依赖安装时偷偷读到了 shell 里残留的 `AWS_SECRET_ACCESS_KEY`，把它写进了日志。有人让 Codex 调试一个网络服务，结果沙箱默认禁止网络访问，调试脚本全跑不通，折腾半天才发现是 `sandbox_mode = "read-only"` 的锅。还有人发现 Codex 执行的命令拿不到自己刚在 `.envrc` 里设的变量，一脸迷惑——为什么 `direnv` 加载的环境在 Codex 里看不到？
+
+这些问题的根源都在同一件事上：**Shell 配置决定了 Codex 运行命令时的执行环境边界**。理解这条边界在哪里、怎么调，是安全用 Codex 的基本功。
+
+Codex 的 Shell 配置分三个层面：
+
+1. **环境变量层**（`shell_environment_policy`）——哪些宿主环境变量可以泄漏到 Codex 启动的子进程里
+2. **沙箱层**（`sandbox_mode` + `sandbox_workspace_write`）——子进程能读哪些文件、写哪些目录、能不能联网
+3. **执行特性层**（`features.shell_tool`、`shell_snapshot`、`unified_exec`、`allow_login_shell`）——Shell 工具本身的开关和实现方式
+
+这三层互相独立但互相影响。环境变量泄漏到子进程里，但沙箱禁止写入任何文件——那变量有用但没处用。沙箱允许写入工作区，但环境变量被过滤干净了——那 `npm install` 可能连 `NODE_PATH` 都找不到。执行层关掉了 Shell 工具——那前两层配置根本没意义。
+
+下面逐层展开。
+
+---
+
+## 2. shell_environment_policy 环境变量策略
+
+### 2.1 这个东西在解决什么问题
+
+你打开一个终端，执行 `env` 命令，能看到几十甚至上百个环境变量。`PATH`、`HOME`、`LANG`、`LESSOPEN`、`NVM_DIR`、`PYENV_ROOT`、`AWS_ACCESS_KEY_ID`、`DATABASE_URL`……有些是你自己设的，有些是 shell profile（`.zshrc`、`.bashrc`）加载的，有些是桌面环境或系统服务注入的。
+
+当 Codex 执行一条 Shell 命令时，这些变量该不该一起传过去？
+
+全部传过去是最方便的——Codex 能直接用你配好的 `PATH`、`PYENV_ROOT`，跟你手动在终端里执行完全一样。但也是危险的——`DATABASE_URL`、`AWS_SECRET_ACCESS_KEY` 这些敏感变量会一起暴露给 AI 执行的每一条命令。即使 Codex 的沙箱限制了文件写入，环境变量是进程级的，它可以在命令输出里把值打印出来，或者通过 `curl` 把值发到外部服务器。
+
+所以 Codex 需要一套策略来控制：**继承哪些变量、排除哪些变量、强制注入哪些变量**。这就是 `shell_environment_policy` 的职责。
+
+### 2.2 inherit 基线继承
+
+```toml
+[shell_environment_policy]
+inherit = "all"   # "all" | "none" | "profile"
+```
+
+`inherit` 决定了策略的起点。三个值的含义：
+
+- **`"all"`**（默认值）：先把宿主 Shell 的全部环境变量作为基线，然后再用其他规则过滤。最方便，也最危险。如果你只是个人用 Codex 处理自己的项目，`"all"` 配合合理的 `exclude` 规则就够用。
+- **`"none"`**：不从宿主继承任何变量，白纸一张。然后用 `set` 显式注入你需要的东西。这是最安全但也最麻烦的配置——你得手动列出 `PATH`、`HOME` 等基础变量，否则 Codex 执行的命令连 `ls` 都可能找不到。
+- **`"profile"`**：走 shell profile 加载路径。设了这个值后，Codex 会尝试执行你的 shell profile（比如 `.zshrc`），然后用 profile 加载后的环境作为基线。介于 `all` 和 `none` 之间——你通过 profile 文件精确控制环境，而不是依赖当前 Shell 的运行时状态。
+
+实际效果差异举个例子。假设你的终端里当前有这些变量：
+
+```
+HOME=/home/user
+PATH=/usr/local/bin:/usr/bin
+NVM_DIR=/home/user/.nvm
+AWS_SECRET_ACCESS_KEY=xxxxx
+TEMP_SECRET=super_secret_thing
+```
+
+- `inherit = "all"`：这五个变量全部进入基线
+- `inherit = "none"`：全部丢弃，从零开始
+- `inherit = "profile"`：取决于你的 `.zshrc` 里 export 了什么。如果 `.zshrc` 里没有 `export TEMP_SECRET`，那这个变量不会出现在基线里——即使你当前终端里有
+
+### 2.3 set 显式设置
+
+```toml
+[shell_environment_policy]
+set = { MY_VAR = "my-value", NODE_ENV = "development" }
+```
+
+`set` 里的键值对会被**强制注入**到最终的环境里。不管 `inherit` 是什么值，`set` 的东西一定会出现在子进程环境中。
+
+如果 `inherit` 的基线里已经有同名变量，`set` 会覆盖它。执行顺序是：先按 `inherit` 构建基线，再应用 `exclude`/`include_only` 过滤，最后用 `set` 覆盖。这意味着 `set` 的优先级最高——你可以用 `set` 来修正那些被意外过滤掉的变量。
+
+典型用法：强制指定 Codex 使用的语言运行时环境。
+
+```toml
+[shell_environment_policy]
+set = { NODE_ENV = "development", RUST_BACKTRACE = "1" }
+```
+
+### 2.4 include_only 白名单
+
+```toml
+[shell_environment_policy]
+include_only = ["^PATH$", "^HOME$", "^LANG$", "^TERM$"]
+```
+
+`include_only` 是一个正则表达式数组。设了这个值后，**只有匹配这些模式的变量会保留在基线里**。不匹配的全部丢弃。
+
+这是一个强过滤策略。一旦设置了 `include_only`，所有不在白名单里的变量都会消失。典型的正则模式：
+
+- `"^PATH$"` — 精确匹配 PATH
+- `"^LANG"` — 匹配 LANG、LANGUAGE、LC_ALL 等（如果你想宽松一点）
+- `"^CODEX_"` — 只保留 Codex 自己的变量
+
+注意：`include_only` 和 `exclude` 可以同时存在，但通常没必要。如果两个都设了，先应用 `include_only` 筛选，再在结果上应用 `exclude`。实际上 `include_only` 已经足够严格了，加上 `exclude` 属于双重保险。
+
+### 2.5 exclude 排除规则
+
+```toml
+[shell_environment_policy]
+exclude = ["^SECRET_", "^TOKEN_", "^KEY$", "^PASSWORD_"]
+```
+
+`exclude` 是 `include_only` 的反面。它指定要移除的变量模式，不匹配的保留。
+
+正则模式同样适用。注意正则锚点——`^` 和 `$` 分别匹配开头和结尾。如果你写 `"SECRET"`，那 `MY_SECRET` 和 `SECRET_KEY` 都会匹配；写 `"^SECRET_"` 就只会匹配以 `SECRET_` 开头的变量。
+
+### 2.6 ignore_default_excludes 和内置排除列表
+
+```toml
+[shell_environment_policy]
+ignore_default_excludes = true
+```
+
+Codex 有一个内置的排除列表，会自动过滤掉含有 `KEY`、`SECRET`、`TOKEN`、`PASSWORD` 等敏感关键词的环境变量。这是默认开启的保护机制。
+
+大多数情况下你不需要动这个开关。内置排除列表就是你写的 `exclude` 规则的自动版——Codex 替你做了"把敏感变量过滤掉"这个操作。
+
+什么时候需要设 `ignore_default_excludes = true`？极少数场景：某些构建工具或包管理器的变量名里碰巧含有 `KEY` 或 `TOKEN`，但实际不是敏感信息。比如某个工具用 `FLUTTER_TOKEN_VERSION=2.0` 这样的变量来标识版本，不是什么密钥。设了这个标志后，Codex 不再自动过滤这些变量，你通过自己的 `exclude` 规则来精确控制。
+
+### 2.7 experimental_use_profile
+
+```toml
+[shell_environment_policy]
+experimental_use_profile = true
+```
+
+这个实验性标志改变的是环境变量的加载方式。默认情况下，Codex 从**当前运行的 Shell 进程**继承环境变量（也就是你启动 Codex 时的那个终端的环境）。设了 `experimental_use_profile = true` 后，Codex 会重新执行你的 Shell profile 文件（`.zshrc`、`.bashrc` 等），从 profile 执行后的环境里继承变量。
+
+两者的区别：
+
+- **不设**：继承你当前 Shell 的运行时状态。包括你在这条终端里临时 export 的变量、`direnv` 加载的变量、`nvm use` 切换后的 `NVM_DIR` 等
+- **设了**：从 profile 文件重新开始。丢失所有临时变量，只保留 profile 文件里 export 的东西
+
+这等于把环境重置为"新开一个终端"的状态。有用的场景：你的终端环境很脏（跑了太多临时 export），想给 Codex 一个干净的环境。但代价是丢失了某些有用的上下文（比如你用 `direnv` 为当前项目加载的 `.envrc`）。
+
+既然标注了 `experimental`，说明 API 可能变，不建议在生产环境依赖。
+
+### 2.8 完整执行顺序
+
+总结一下 `shell_environment_policy` 的变量组装算法：
+
+1. **构建基线**：根据 `inherit` 值获取基础环境
+   - `"all"` → 复制宿主进程全部环境变量
+   - `"none"` → 空环境
+   - `"profile"` → 执行 shell profile 后获取环境
+2. **应用 include_only**：如果设置了，只保留匹配白名单的变量
+3. **应用 exclude**：从结果中移除匹配排除模式的变量
+4. **应用默认排除**：除非 `ignore_default_excludes = true`，否则过滤 KEY/SECRET/TOKEN/PASSWORD 变量
+5. **应用 set**：强制注入或覆盖指定变量
+6. **注入 CODEX_THREAD_ID**：Codex 内部使用的线程标识符，始终注入，不受上述规则影响
+
+一个完整的配置示例：
+
+```toml
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = ["^GOOGLE_APPLICATION_CREDENTIALS$", "^FIREBASE_"]
+include_only = []
+set = { NODE_ENV = "development" }
+experimental_use_profile = false
+```
+
+效果：继承全部宿主变量 → 不跳过默认排除（自动过滤 KEY/SECRET/TOKEN） → 额外排除 Google Cloud 和 Firebase 的凭证变量 → 强制设置 NODE_ENV。
+
+---
+
+## 3. 沙箱模式详解
+
+### 3.1 三种模式
+
+```toml
+sandbox_mode = "workspace-write"  # "read-only" | "workspace-write" | "danger-full-access"
+```
+
+Codex 有三种沙箱模式，对应三个递增的权限级别。名字很直白，但背后的机制值得细讲。
+
+### 3.2 read-only 只读模式
+
+`"read-only"` 是最严格的模式。Codex 执行的命令**只能读取文件，不能写入任何文件**。网络访问也被阻断。
+
+具体来说：
+
+- 文件系统：只读。能 `cat`、`ls`、`grep`、`find`，不能 `touch`、`mkdir`、`cp`（写入目标）、`echo "..." > file`
+- 网络：完全禁止。`curl`、`wget`、`ping` 全部失败
+- 进程：可以执行命令和启动进程，但受文件系统限制
+
+适合场景：审查陌生项目的代码、阅读文档、做静态分析。Codex 不需要修改任何东西，只需要看。
+
+### 3.3 workspace-write 工作区可写
+
+`"workspace-write"` 是默认模式。在只读基础上，额外允许对**工作区目录**进行写入。
+
+"工作区"的范围取决于当前你所在的目录：
+
+- 如果你在 git 仓库里，工作区就是仓库根目录
+- 如果不在 git 仓库里，工作区就是当前工作目录（CWD）
+
+Codex 可以在工作区内创建文件、修改文件、安装依赖（`npm install` 会在项目目录的 `node_modules` 里写文件）。但工作区之外的文件系统仍然只读。
+
+网络访问呢？默认是**禁止**的。可以通过 `sandbox_workspace_write.network_access = true` 来开启，后面细讲。
+
+### 3.4 danger-full-access 完全访问
+
+`"danger-full-access"` 名字就告诉你了——危险。这个模式关闭了沙箱的文件系统和网络限制。Codex 执行的命令跟你自己在终端里执行的效果完全一样。
+
+这个模式下 Codex 可以：
+
+- 读写任意位置的文件（包括 `/etc/`、`/var/`、你的 home 目录）
+- 访问任意网络地址
+- 执行任意系统命令
+
+适合场景：你完全信任 Codex 的行为，或者需要执行必须突破工作区的操作（比如修改系统配置、部署脚本）。大多数人不应该用这个模式作为日常默认。
+
+一个实际考量：即使用 `danger-full-access`，Codex 的审批策略仍然生效。`approval_policy` 决定的是执行前要不要问你，`sandbox_mode` 决定的是执行时的权限边界。两者独立运作。
+
+---
+
+## 4. sandbox_workspace_write 细节
+
+```toml
+[sandbox_workspace_write]
+writable_roots = []
+network_access = false
+exclude_slash_tmp = false
+exclude_tmpdir_env_var = false
+```
+
+这个子表只在 `sandbox_mode = "workspace-write"` 时生效。它让你在默认工作区可写的基础上，做精细化的扩展和收缩。
+
+### 4.1 writable_roots 扩展可写目录
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/tmp/my-build-cache", "~/shared-libs"]
+```
+
+默认情况下，`workspace-write` 模式只允许写入当前工作区。`writable_roots` 让你额外声明一些目录，Codex 也可以往里面写。
+
+典型场景：构建缓存目录。你让 Codex 编译一个项目，编译产物和缓存需要写到 `/tmp/my-build-cache` 里，但这个路径不在工作区内。加了 `writable_roots` 后，Codex 就能写到这个位置。
+
+路径支持绝对路径和 `~` 展开。不支持相对路径——相对路径没有明确含义，Codex 会拒绝。
+
+### 4.2 network_access 网络开关
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+这个布尔值控制 `workspace-write` 模式下的网络访问权限。默认 `false`。
+
+设为 `true` 后，Codex 执行的命令可以发起网络请求。`curl`、`npm install`（需要从 registry 下载包）、`pip install`、`git clone`（从远程仓库拉代码）这些操作才能正常工作。
+
+这是一个需要明确开启的选项，不是默认行为。Codex 团队的设计思路是：网络访问是高权限操作，你应该主动选择开启。
+
+### 4.3 /tmp 排除选项
+
+```toml
+[sandbox_workspace_write]
+exclude_slash_tmp = true
+exclude_tmpdir_env_var = true
+```
+
+这两个选项控制 `/tmp` 目录的可写性。
+
+**`exclude_slash_tmp = true`**：从可写目录列表中移除 `/tmp`。Codex 不能往 `/tmp` 里写任何东西。
+
+**`exclude_tmpdir_env_var = true`**：从可写目录列表中移除 `$TMPDIR` 环境变量指向的目录。在 macOS 上 `$TMPDIR` 通常指向 `/var/folders/xx/...` 这样的私有临时目录，不是 `/tmp`。这个选项会禁止 Codex 使用这个私有临时目录。
+
+什么时候需要这些？当你关心临时文件安全的时候。某些攻击向量利用的是 `/tmp` 的可预测路径——攻击者在 `/tmp` 里放一个软链接指向敏感文件，等目标程序写 `/tmp/some-file` 时就会覆盖敏感文件。排除 `/tmp` 可以堵住这个向量，代价是一些需要临时文件的工具可能会报错。
+
+---
+
+## 5. Shell 工具特性
+
+### 5.1 shell_tool 开关
+
+```toml
+[features]
+shell_tool = true
+```
+
+`shell_tool` 是 Shell 工具的总开关。默认 `true`。
+
+设为 `false` 后，Codex 完全失去执行 Shell 命令的能力。没有 `bash`、没有 `ls`、没有 `npm`——Codex 只能使用文件读写、MCP 工具等非 Shell 通道。
+
+这是个强力开关，但极少需要关。关了之后 Codex 的能力大幅下降——很多操作（安装依赖、运行测试、启动开发服务器）都需要 Shell。
+
+可以考虑关闭的场景：你只让 Codex 做代码阅读和编辑，不希望它执行任何命令。配合 `sandbox_mode = "read-only"` 效果更强——双重保险。
+
+### 5.2 shell_snapshot 环境快照
+
+```toml
+[features]
+shell_snapshot = true
+```
+
+这是 Codex 的一个有趣特性。默认 `true`。
+
+**Shell 快照是什么？** Codex 在会话开始时，会执行一次你的 Shell profile（`.zshrc` 或 `.bashrc`），然后把 profile 加载后的环境——包括函数定义、别名、shell 选项、export 的变量——保存为一个快照文件。后续 Codex 执行命令时，先 source 这个快照文件，确保命令在一个和你的 Shell 环境一致的环境里运行。
+
+具体来说，快照捕获了这些东西：
+
+- **函数**：你在 `.zshrc` 里定义的 shell 函数
+- **别名**：shell alias
+- **Shell 选项**：`setopt`（zsh）或 `set -o`（bash）
+- **Export 变量**：profile 里 export 的环境变量
+
+快照保存为 `.sh` 脚本文件，放在 `~/.codex/shell_snapshots/` 目录下。每个会话一个文件，用会话 ID 和时间戳命名。超过 3 天没有对应会话的快照文件会被自动清理。
+
+快照还会做验证——生成后，Codex 会尝试 source 这个快照文件，确认它不会报错。如果验证失败（比如 profile 里有交互式命令导致 source 失败），快照会被丢弃。
+
+设为 `false` 后，Codex 不再创建 Shell 快照。命令会在一个最小化的 Shell 环境中执行，没有你的自定义函数和别名。一般不需要关，除非快照创建导致了问题。
+
+### 5.3 unified_exec 统一执行工具
+
+```toml
+[features]
+unified_exec = true
+```
+
+`unified_exec` 把 Shell 命令执行和补丁应用（apply_patch）合并到一个统一的代码路径里。默认 `true`（Windows 除外）。
+
+在 `unified_exec` 开启时，Codex 使用 `unified_exec` handler 来处理命令执行。这个 handler 统一管理进程生命周期、输出流处理、超时控制。关闭后，退回到独立的 Shell 执行和补丁应用路径。
+
+对日常使用来说，保持默认就好。这是一个内部实现优化，不影响你看到的命令执行结果。如果遇到进程管理相关的 bug，可以尝试关掉它看是否修复。
+
+Windows 上默认关闭，因为 Windows 的进程模型和 Unix 不同，统一执行路径在 Windows 上还不够成熟。
+
+### 5.4 allow_login_shell
+
+```toml
+allow_login_shell = true
+```
+
+这个配置控制 Codex 是否允许模型请求以"登录 Shell"（login shell）的方式执行命令。
+
+什么是登录 Shell？你在终端里输入 `bash --login` 或 `zsh --login` 时启动的就是登录 Shell。登录 Shell 会加载完整的 profile 文件链（`/etc/profile`、`~/.bash_profile`、`~/.zprofile` 等），而不仅仅是 `.bashrc` 或 `.zshrc`。
+
+默认 `true`，允许 Codex 请求登录 Shell。设为 `false` 后，所有以 `login = true` 的 Shell 请求会被拒绝。
+
+什么时候要关？当你担心登录 Shell 加载了敏感环境或执行了不安全操作的时候。登录 Shell 加载的 profile 链比交互式 Shell 更完整，某些 profile 文件里可能有 `eval`、`curl` 等命令，在沙箱受限时可能导致意外的副作用。
+
+---
+
+## 6. Windows 沙箱
+
+如果你在 Windows 上使用 Codex，有一些平台特定的沙箱配置。
+
+```toml
+[windows]
+sandbox = "elevated"              # "elevated" | "unelevated"
+sandbox_private_desktop = true
+```
+
+**`windows.sandbox`** 控制沙箱进程的权限级别：
+
+- **`"elevated"`**：沙箱子进程以提升的权限运行。在某些 Windows 版本上，这可以绕过普通用户权限的限制，让沙箱正常工作
+- **`"unelevated"`**：沙箱子进程以普通用户权限运行。更安全，但在某些场景下可能不够
+
+**`windows.sandbox_private_desktop`**：默认 `true`。在私有桌面上启动沙盒子进程。Windows 的"桌面"不是你看到的那个屏幕——它是一个内核对象的隔离边界。私有桌面意味着沙箱进程的窗口（如果有的话）和你的主桌面隔离，不能互相接收输入事件。设为 `false` 时使用 `Winsta0\Default`（共享桌面），隔离性降低。
+
+注意：如果 Windows 沙箱级别设为 `Disabled`，`workspace-write` 模式会自动降级为 `read-only`。这是 Codex 的安全兜底——在没有沙箱保护的环境下不允许可写操作。
+
+---
+
+## 7. 权限 Profile
+
+### 7.1 default_permissions
+
+```toml
+default_permissions = "my-custom-profile"
+```
+
+`default_permissions` 指定一个命名的权限 profile 来控制沙箱行为。这是比 `sandbox_mode` 更灵活的权限控制方式。
+
+`default_permissions` 的值可以是一个自定义 profile 名称，也可以是以 `:` 开头的内置 profile 名称。
+
+### 7.2 内置 Profile
+
+Codex 提供三个内置权限 profile：
+
+- **`:read-only`**：等价于 `sandbox_mode = "read-only"`。纯只读，无网络访问
+- **`:workspace`**：等价于 `sandbox_mode = "workspace-write"`。工作区可写，网络默认禁止
+- **`:danger-full-access`**：等价于 `sandbox_mode = "danger-full-access"`。关闭所有限制
+
+这三个内置 profile 以冒号开头，防止和你自定义的 profile 名称冲突。你在自己的 `[permissions]` 表里定义的 profile 不能用冒号开头。
+
+### 7.3 自定义 Profile
+
+```toml
+default_permissions = "strict-dev"
+
+[permissions.strict-dev]
+description = "Workspace write with only specific network access"
+extends = ":workspace"
+[permissions.strict-dev.filesystem]
+read = ["/home/user/projects"]
+[permissions.strict-dev.network]
+enabled = true
+domains = { "api.example.com" = "allow" }
+```
+
+自定义 profile 支持继承（`extends`）、文件系统路径规则（`filesystem`）和网络域名控制（`network`）。
+
+- `extends`：继承一个内置 profile 的基础权限，然后在上面添加或修改规则
+- `filesystem`：用路径和 glob 模式定义额外的读写规则
+- `network`：控制网络访问的粒度，可以指定允许或拒绝的域名
+
+Profile 解析时，Codex 会检测继承循环并验证引用的父 profile 是否存在。内置 profile（以 `:` 开头）不能作为 `extends` 的目标——也就是说，你的自定义 profile 只能继承另一个自定义 profile，不能反过来继承内置 profile。
+
+注意区分 `default_permissions` 和 `sandbox_mode` 的关系：如果你设了 `default_permissions`，它定义的权限 profile 会决定沙箱行为。`sandbox_mode` 仍然可以单独设置，但权限 profile 的优先级更高。建议二选一，不要同时使用。
+
+---
+
+## 8. 实战配置
+
+### 8.1 场景一：安全优先的个人配置
+
+适合个人开发者，在家处理自己的项目，环境变量里有敏感凭证（AWS 密钥、数据库密码等），但需要 Codex 能正常安装依赖和运行测试。
+
+```toml
+# ~/.codex/config.toml
+
+# 沙箱：工作区可写，允许网络（npm install 需要）
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["/tmp"]
+
+# 环境变量：继承全部，但排除敏感凭证
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = [
+    "^AWS_",
+    "^GOOGLE_APPLICATION_CREDENTIALS$",
+    "^DATABASE_URL$",
+    "^FIREBASE_",
+    "^STRIPE_",
+    "^TWILIO_",
+]
+
+# 强制注入需要的开发环境变量
+[shell_environment_policy.set]
+NODE_ENV = "development"
+
+# Shell 特性保持默认
+[features]
+shell_tool = true
+shell_snapshot = true
+unified_exec = true
+allow_login_shell = true
+```
+
+思路：`inherit = "all"` 继承全部变量（方便 Codex 用你配好的 PATH 和工具链），然后通过 `exclude` 精确排除所有可能包含密钥的变量。`ignore_default_excludes = false` 让 Codex 的内置排除（自动过滤 KEY/SECRET/TOKEN）也生效，作为第二道防线。`network_access = true` 让 `npm install` 能正常从 registry 下载包。
+
+### 8.2 场景二：团队共享的沙箱策略
+
+适合团队环境。多个开发者使用 Codex，需要统一的权限基准。通过 `requirements.toml`（系统级配置文件）强制执行。
+
+```toml
+# /etc/codex/requirements.toml
+
+# 强制使用自定义权限 profile
+permission_profile = "team-standard"
+
+# 禁止使用 danger-full-access
+approval_policy = "on-request"
+```
+
+对应的用户自定义 profile：
+
+```toml
+# ~/.codex/config.toml
+
+default_permissions = "team-standard"
+
+[permissions.team-standard]
+description = "Team standard: workspace write, limited network, extra build dirs"
+extends = ":workspace"
+
+[permissions.team-standard.filesystem]
+read = ["/home/user/projects"]
+"/tmp" = { "." = "write" }
+
+[permissions.team-standard.network]
+enabled = true
+domains = {
+    "registry.npmjs.org" = "allow"
+    "pypi.org" = "allow"
+    "files.pythonhosted.org" = "allow"
+    "github.com" = "allow"
+}
+
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^SECRET_", "^TOKEN_", "^KEY$", "^PASSWORD_"]
+```
+
+思路：通过 `requirements.toml` 在系统层锁定 `permission_profile`，团队成员无法在用户配置里绕过。自定义 profile 只允许访问指定的域名（npm registry、PyPI、GitHub），不能访问任意外部地址。环境变量仍然自动过滤敏感信息。
+
+### 8.3 场景三：CI/CD 环境配置
+
+适合在 CI/CD 流水线中使用 Codex。CI 环境通常已经通过 CI 系统自己的机制隔离了敏感信息（比如 GitHub Actions 的 `secrets` 不会出现在环境变量里，除非显式 export），所以环境变量策略可以放松，但沙箱仍然要限制。
+
+```toml
+# ~/.codex/config.toml
+
+# CI 环境不需要太严格的沙箱，但也不需要 full access
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["/tmp", "/var/cache"]
+
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+# CI 环境可能用 WORKSPACE_ 或 BUILD_ 前缀的变量
+exclude = ["^PRIVATE_", "^INTERNAL_SECRET_"]
+
+[features]
+shell_snapshot = false    # CI 环境不需要 snapshot，节省启动时间
+unified_exec = true
+allow_login_shell = false  # CI 环境不需要 login shell
+```
+
+思路：CI 环境的敏感信息由 CI 系统管理（比如 GitHub Actions 的 secrets 只有通过 `$GITHUB_` 变量才能访问，且需要显式映射），所以 `shell_environment_policy` 可以适当放宽。关闭 `shell_snapshot` 可以节省几秒钟的启动时间——CI 环境通常每次运行都是全新的，snapshot 的价值不大。`allow_login_shell = false` 避免不必要的 profile 加载开销。
+
+---
+
+## 延伸阅读
+
+- [Codex Configuration Reference](https://developers.openai.com/codex/config-reference) — 官方配置参考，涵盖所有 config.toml 字段
+- [Codex Sandboxing and Security](https://developers.openai.com/codex/config-advanced) — 沙箱实现机制详解（macOS Seatbelt、Linux Landlock、Windows Job Objects）
+- [Exec Policy and Approvals](https://developers.openai.com/codex/config-advanced) — 命令执行策略引擎，控制哪些命令可以执行、哪些需要审批
+- [openai/codex 仓库](https://github.com/openai/codex) — 源代码，`codex-rs/core/src/exec_env.rs` 和 `codex-rs/core/src/shell_snapshot.rs` 是环境变量和 Shell 快照的核心实现

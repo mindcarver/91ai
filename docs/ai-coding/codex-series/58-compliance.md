@@ -1,0 +1,330 @@
+# Codex CLI 安全插件与合规：企业级防护体系
+
+> TL;DR：Codex 提供了安全插件（Security plugin）和云安全（Codex Security cloud）两层防护机制。安全插件在本地实时拦截危险操作；云安全服务提供集中式威胁分析、策略管理和合规审计。两者配合，覆盖了从终端到云端的完整安全链路。本文覆盖威胁模型、安全插件配置、云安全架构、合规场景，以及和现有安全工具的集成。
+
+---
+
+## 1. Codex 的威胁模型
+
+在讨论安全之前，先搞清楚 Codex 面临的威胁。
+
+Codex 的核心能力是：读代码、改代码、跑命令。这三个动作每个都有对应的风险面：
+
+| 能力 | 威胁 | 示例 |
+|------|------|------|
+| 读代码 | 敏感信息泄露 | Codex 读到 API key、数据库密码、私钥 |
+| 改代码 | 供应链攻击 | 注入恶意代码到项目，通过 git push 扩散 |
+| 跑命令 | 系统级破坏 | 执行 `rm -rf /`、安装后门、访问内网 |
+
+加上 Codex 的 web search 能力，攻击面进一步扩大：恶意网页可以通过 prompt injection 操控 Codex 的行为。
+
+Codex 的安全架构对应这三层威胁：
+
+1. **沙箱**（第一层）：限制文件系统和网络访问范围
+2. **审批策略**（第二层）：高风险操作必须人工确认
+3. **安全插件 + 云安全**（第三层）：实时检测和拦截已知攻击模式
+
+沙箱和审批策略在前面安全篇已经详细讲过。本文聚焦第三层。
+
+## 2. 安全插件（Security Plugin）
+
+### 2.1 工作原理
+
+Codex Security 插件在 agent 循环中实时运行，检查每个工具调用是否符合安全策略。它的检测时机在 Codex 执行动作之前——如果检测到风险，可以在动作发生前拦截。
+
+插件关注的攻击模式包括：
+
+- **Prompt injection**：用户输入或代码中的内容试图操控 Codex 的行为
+- **数据外泄**：Codex 尝试把敏感信息发送到外部地址
+- **危险命令**：执行破坏性系统命令
+- **未授权访问**：尝试访问工作目录外的敏感路径
+- **依赖投毒**：安装来源不可信的包
+
+### 2.2 配置方式
+
+安全插件在 Codex 中默认启用。你可以通过 config.toml 调整其行为：
+
+```toml
+# 启用/禁用安全插件
+[security]
+enabled = true
+
+# 配置检测灵敏度
+[security.plugin]
+strict_mode = false  # true 时对更多操作触发警告
+```
+
+在企业 managed config 中，管理员可以锁定安全插件的启用状态，用户无法关闭：
+
+```toml
+# 系统级 managed config
+[security]
+enabled = true  # 用户无法覆盖
+```
+
+## 3. Codex Security Cloud
+
+### 3.1 架构
+
+Codex Security cloud 是 OpenAI 托管的安全分析服务。它在云端对 Codex 的行为做更深层的分析：
+
+```
+Codex CLI
+  ↓ 发送工具调用详情（脱敏）
+Codex Security Cloud
+  ↓ 返回风险评分和建议
+Codex CLI
+  ↓ 根据建议决定是否放行/拦截/降级
+```
+
+关键点：发送到云端的是工具调用的元数据（调了什么工具、传了什么参数），不是代码内容本身。这个设计平衡了安全分析的数据需求和隐私保护。
+
+### 3.2 威胁模型增强
+
+云安全服务维护着一个持续更新的威胁情报库，能检测：
+
+- **已知攻击模式**：基于 OpenAI 安全团队的研究和社区报告
+- **新型攻击变种**：通过行为模式匹配，不依赖固定签名
+- **上下文感知分析**：结合代码库类型、项目语言、历史行为做综合判断
+
+### 3.3 配置与部署
+
+```toml
+[security]
+cloud = true  # 启用云安全分析
+
+[security.cloud]
+# 可选：自定义策略阈值
+sensitivity = "medium"  # low / medium / high
+```
+
+## 4. 合规场景
+
+### 4.1 SOC2 合规
+
+SOC2 要求对数据访问有完整的审计链。Codex 的安全插件 + 云安全提供了：
+
+- **操作审计**：每次工具调用都有记录
+- **访问控制**：沙箱 + 审批策略限制 Codex 的访问范围
+- **异常检测**：安全插件检测不符合正常模式的行为
+
+企业需要做的：
+
+1. 在 managed config 中启用安全插件和云安全
+2. 配置 OTel 导出审计日志（参考第 57 篇）
+3. 锁定用户的 `security.enabled` 设置
+4. 定期审查安全报告
+
+### 4.2 数据保护合规
+
+处理个人数据或受监管数据的项目：
+
+```toml
+# 管理员配置
+[security]
+enabled = true
+
+[sandbox]
+mode = "read-only"  # 默认只读，显式批准写入
+
+[otel]
+environment = "production"
+log_user_prompt = false  # 不记录用户输入中的敏感数据
+```
+
+推荐做法：
+
+- 对敏感仓库使用 Read-only 审批模式
+- 启用 OTel 导出但关闭 `log_user_prompt`
+- 安全插件的 strict_mode 设为 true
+- 限制 `/sandbox-add-read-dir` 的使用
+
+### 4.3 供应链安全
+
+防止 Codex 成为供应链攻击的入口：
+
+1. **依赖安装审批**：Codex 安装包时必须经过审批
+2. **私有 registry**：配置 npm/pip 使用私有 registry
+3. **lock 文件检查**：安装前检查 package-lock.json / requirements.txt 的完整性
+4. **CI/CD 集成**：在 GitHub Actions 中用 `safety-strategy: drop-sudo`
+
+## 5. 与现有安全工具集成
+
+### 5.1 SAST/DAST 工具
+
+Codex 的安全插件和传统 SAST 工具（如 SonarQube、Snyk）定位不同：
+
+| 工具 | 检测时机 | 检测对象 |
+|------|---------|---------|
+| SAST | 代码提交时 | 静态代码分析 |
+| DAST | 应用运行时 | 动态漏洞扫描 |
+| Codex 安全插件 | Codex 执行时 | Agent 行为分析 |
+
+它们互补，不互斥。Codex 安全插件防止的是 agent 行为本身带来的风险，而不是代码中的漏洞。
+
+### 5.2 端点检测（EDR）
+
+Codex 在沙箱内执行命令，EDR 可以监控沙箱内的进程行为。但需要注意：
+
+- Codex 的沙箱用户是专用低权限用户，EDR 告警可能需要调整阈值
+- Windows elevated 沙箱有独立的防火墙规则，可能和 EDR 的网络监控有冲突
+
+建议和 IT 团队沟通 Codex 沙箱的预期行为，避免误报。
+
+### 5.3 SIEM 集成
+
+通过 OTel 导出，Codex 的审计数据可以接入现有的 SIEM 平台：
+
+```
+Codex → OTel Collector → SIEM (Splunk/QRadar/Graylog)
+```
+
+在 SIEM 中可以配置告警规则：
+
+- Codex 尝试访问工作目录外的路径
+- 单次会话 token 消耗超过阈值
+- 沙箱拒绝次数异常增加
+- 安全插件拦截次数突增
+
+## 6. 安全配置最佳实践
+
+### 个人开发者
+
+```toml
+# ~/.codex/config.toml
+[sandbox]
+mode = "workspace-write"  # 限制在工作目录
+
+# 安全插件默认启用，不需要额外配置
+```
+
+### 小团队
+
+```toml
+# 项目级 .codex/config.toml
+[sandbox]
+mode = "workspace-write"
+writable_roots = ["./src", "./tests"]
+
+[security]
+enabled = true
+
+[otel]
+environment = "team"
+```
+
+### 企业
+
+```toml
+# 系统级 managed config（管理员部署）
+[security]
+enabled = true
+
+[security.plugin]
+strict_mode = true
+
+[sandbox]
+mode = "workspace-write"
+
+[permissions]
+default = "read-only"
+allowed_approval_policies = ["auto", "read-only"]
+
+[otel]
+environment = "production"
+log_user_prompt = false
+
+[otel.trace_exporter]
+type = "otlp-http"
+endpoint = "https://siem.company.com/v1/traces"
+
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "https://siem.company.com/v1/metrics"
+```
+
+企业配置的核心思路：默认最严格（read-only），通过 approved 策略逐步放宽，所有行为通过 OTel 审计，安全插件严格模式启用。
+
+## 7. Codex Security 插件详细配置
+
+### 7.1 安全插件加载机制
+
+安全插件通过 Codex 的 hooks 机制在工具调用前拦截。当 agent 决定执行一个工具（比如 `write_file` 或 `run_command`），插件会先检查这个操作是否匹配已知的危险模式。
+
+检查流程：
+
+```
+Agent 请求工具调用
+  → 安全插件拦截
+    → 匹配危险模式？
+      ├─ 是 → 根据策略：拦截 / 警告 / 记录
+      └─ 否 → 放行，继续正常执行
+```
+
+插件内置了几类检测规则：
+
+| 规则类别 | 检测内容 |
+|---------|---------|
+| 文件操作 | 尝试写入 .git/、.ssh/、.env 等敏感目录 |
+| 命令执行 | 包含 `rm -rf`、`chmod 777`、`curl \| bash` 等高危命令 |
+| 网络请求 | 向非白名单域名发送数据 |
+| 依赖安装 | 安装来自非 registry 源的包 |
+| Prompt injection | 用户输入中包含已知攻击模式的字符串 |
+
+### 7.2 自定义规则
+
+如果你的项目有特殊的安全需求，可以通过 config.toml 添加自定义检测规则：
+
+```toml
+[security.rules]
+block_write_paths = [".ssh", ".aws", ".env.production"]
+block_commands = ["rm -rf", "drop table", "DROP TABLE"]
+allow_domains = ["api.github.com", "registry.npmjs.org"]
+```
+
+### 7.3 策略分级
+
+安全插件不是简单的通过/拒绝。它有多个响应级别：
+
+| 级别 | 行为 | 适用场景 |
+|------|------|---------|
+| `block` | 直接拦截，不执行 | 确认的危险操作 |
+| `warn` | 警告用户，但允许继续 | 可疑但不一定危险的操作 |
+| `log` | 只记录不干预 | 审计和事后分析 |
+| `allow` | 不检查 | 明确安全的操作 |
+
+管理员可以在 managed config 中为不同规则设置不同级别。
+
+## 8. 常见问题
+
+### 8.1 安全插件误报
+
+如果安全插件拦截了正常操作：
+
+1. 检查具体触发了哪个检测规则
+2. 如果确认是误报，在 config 中调低 sensitivity
+3. 反馈给 OpenAI 帮助改进检测规则
+
+### 云安全和网络隔离冲突
+
+Codex Security cloud 需要网络访问。如果你的环境严格限制出站流量：
+
+1. 将 `*.openai.com` 和相关域名加入防火墙白名单
+2. 或通过企业代理配置访问
+3. 如果网络完全隔离，安全插件仍可工作（本地检测），但云安全分析不可用
+
+### 安全插件影响了性能
+
+安全插件在工具调用前做检查，通常增加 <50ms 延迟。如果感觉明显变慢：
+
+1. 检查网络连接（云安全分析可能因网络延迟变慢）
+2. 考虑关闭云安全只保留本地插件
+3. 反馈具体的性能数据
+
+## 延伸阅读
+
+- [Codex Security 官方文档](https://developers.openai.com/codex/security)
+- [Codex Security 云端设置](https://developers.openai.com/codex/security/cloud)
+- [OpenTelemetry 可观测性配置（第 57 篇）](./57-otel.md)
+- [沙箱机制全解析（第 29 篇）](./29-sandbox.md)
+- [安全最佳实践清单（第 35 篇）](./35-security-checklist.md)

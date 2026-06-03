@@ -1,0 +1,909 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex 源码 model-provider-info/src/lib.rs: 内置 Provider 定义、ModelProviderInfo 结构体
+2. Codex 源码 config/src/config_toml.rs: 配置字段定义
+3. Codex 源码 config/src/types.rs: auth_credentials_store_mode 类型
+4. zread.ai/openai/codex/22-configuration-reference: 完整配置参考
+5. zread.ai/openai/codex/18-model-provider-layer: 模型提供层架构
+6. zread.ai/openai/codex/3-authentication-setup: 认证配置
+7. Codex 源码 responses-api-proxy/README.md: 代理配置示例
+8. Codex 源码 sdk/typescript/src/exec.ts: CODEX_API_KEY 和 baseUrl 配置
+版本基准: 2026 年 6 月, Codex v0.75.0
+-->
+
+# Codex CLI 模型与 Provider 配置：自定义模型源、API Key 管理
+
+> **TL;DR**：Codex CLI 通过 Provider 机制管理模型连接。内置四个 Provider（openai、ollama、lmstudio、amazon-bedrock）不可覆盖，但你可以通过 `model_providers` 在 `config.toml` 里定义任意数量的自定义 Provider。每个自定义 Provider 可以配置独立的 base_url、API Key、HTTP 头、查询参数、重试策略和认证方式。`model_provider` 选择当前使用的 Provider，`openai_base_url` 覆盖 OpenAI Provider 的默认 URL，`model_catalog_json` 扩展可用模型列表。认证方面，`forced_login_method` 强制登录方式，`cli_auth_credentials_store` 控制凭据存储位置。`--oss` 标志快速切换到本地模型。
+
+---
+
+## 1. Provider 概念解析
+
+### 什么是 Provider
+
+在 Codex 的世界里，Provider 就是"模型从哪来、怎么连、怎么认证"这一整套规则的封装。
+
+打个比方：你用外卖 App 点餐。餐厅就是"模型"，App 就是 Codex CLI。但 App 怎么知道这家餐厅的地址（base_url）、怎么结账（API Key）、送餐超时怎么办（重试策略）、要不要走VIP通道（HTTP 头）？这些信息都绑在餐厅的"商户档案"上——这个档案就是 Provider。
+
+具体来说，一个 Provider 定义了以下几件事：
+
+- **base_url**：模型的 API 地址。OpenAI 是 `https://api.openai.com/v1`，Ollama 是 `http://localhost:11434/v1`
+- **认证方式**：用环境变量里的 API Key？走 OpenAI 登录？跑一条命令拿 token？还是不需要认证（本地模型）
+- **通信协议**：目前统一用 Responses API（`wire_api = "responses"`）
+- **网络参数**：超时多久、重试几次、要不要加自定义 HTTP 头
+- **查询参数**：URL 后面要不要追加额外参数
+
+Codex 内部用 `ModelProviderInfo` 结构体存储所有这些信息。源码里这个结构体的定义大概是这样的（简化版）：
+
+```rust
+pub struct ModelProviderInfo {
+    pub name: String,                          // 显示名
+    pub base_url: Option<String>,             // API 基础 URL
+    pub env_key: Option<String>,              // API Key 环境变量名
+    pub env_key_instructions: Option<String>, // 设置引导
+    pub experimental_bearer_token: Option<String>, // 直接 token（不推荐）
+    pub auth: Option<ModelProviderAuthInfo>,  // 命令认证
+    pub aws: Option<ModelProviderAwsAuthInfo>,// AWS 认证（Bedrock）
+    pub wire_api: WireApi,                    // 通信协议
+    pub query_params: Option<HashMap<String, String>>, // 查询参数
+    pub http_headers: Option<HashMap<String, String>>, // 静态 HTTP 头
+    pub env_http_headers: Option<HashMap<String, String>>, // 环境变量 HTTP 头
+    pub request_max_retries: Option<u64>,      // 请求重试次数
+    pub stream_max_retries: Option<u64>,       // 流式重连次数
+    pub stream_idle_timeout_ms: Option<u64>,  // 流式空闲超时
+    pub requires_openai_auth: bool,          // 是否需要 OpenAI 认证
+    pub supports_websockets: bool,           // 是否支持 WebSocket
+}
+```
+
+### 为什么要有 Provider 机制
+
+如果你只用 OpenAI 官方模型，Provider 机制对你来说几乎是透明的——Codex 启动时自动用内置的 OpenAI Provider，你不需要关心任何配置。
+
+但现实场景往往更复杂：
+
+- 企业内部有 LLM 网关，所有模型请求要走内网代理
+- 你想用 Azure OpenAI 而不是 OpenAI 官方
+- 团队有些人在用本地 Ollama 跑开源模型
+- 你的公司用 Amazon Bedrock 托管 OpenAI 模型
+- 你要接入一个 OpenAI 兼容的第三方服务
+
+没有 Provider 机制的话，这些场景都需要改 Codex 源码或者搞一层代理转发。有了 Provider 机制，只需要在 `config.toml` 里加几行配置就能搞定。
+
+### 配置位置
+
+Provider 配置写在 `~/.codex/config.toml` 里。所有 Provider 定义都放在 `model_providers` 这个 TOML 表下面：
+
+```toml
+# ~/.codex/config.toml
+
+# 选择当前使用哪个 Provider
+model_provider = "my-custom"
+
+# 自定义 Provider 定义
+[model_providers.my-custom]
+name = "My Custom Provider"
+base_url = "https://my-api.example.com/v1"
+env_key = "MY_API_KEY"
+```
+
+一个项目如果需要覆盖全局 Provider 配置，可以在项目根目录的 `.codex/config.toml` 中设置。但注意：`model_provider`、`openai_base_url`、`chatgpt_base_url` 这几个安全敏感的字段在项目级配置中会被静默忽略，防止凭据重定向攻击。
+
+---
+
+## 2. 内置 Provider
+
+Codex 内置了四个 Provider。它们的 ID 是保留的，你不能在 `model_providers` 里用同样的 ID 覆盖它们。
+
+### OpenAI
+
+这是默认 Provider。ID 是 `openai`。
+
+```toml
+# 内置定义（不可修改，仅作参考）
+[model_providers.openai]
+name = "OpenAI"
+base_url = "https://api.openai.com/v1"
+requires_openai_auth = true
+supports_websockets = true
+wire_api = "responses"
+```
+
+OpenAI Provider 有几个特点：
+
+- `requires_openai_auth = true`：必须通过 ChatGPT 登录或 API Key 认证。你第一次使用 Codex 时看到的浏览器登录流程就是因为这个设置
+- `supports_websockets = true`：支持通过 WebSocket 传输 Responses API，实现更实时的流式输出
+- 默认 base_url 是 `https://api.openai.com/v1`。如果你用 ChatGPT 登录模式，实际请求会发到 `https://chatgpt.com/backend-api/codex`
+
+OpenAI Provider 自动处理两个环境变量的 HTTP 头：
+
+- `OPENAI_ORGANIZATION` → 映射到 `OpenAI-Organization` 请求头
+- `OPENAI_PROJECT` → 映射到 `OpenAI-Project` 请求头
+
+这让你可以在使用多个 OpenAI 组织或项目时，通过环境变量切换。
+
+### Ollama
+
+ID 是 `ollama`，面向本地运行 Ollama 的用户。
+
+```toml
+# 内置定义（不可修改）
+[model_providers.ollama]
+name = "gpt-oss"
+base_url = "http://localhost:11434/v1"
+requires_openai_auth = false
+supports_websockets = false
+wire_api = "responses"
+```
+
+关键点：
+
+- `requires_openai_auth = false`：不需要任何认证。Ollama 本身是本地服务，没有 API Key 的概念
+- 默认监听端口 `11434`。如果你改了 Ollama 的端口，用 `CODEX_OSS_PORT` 环境变量覆盖：
+  ```bash
+  export CODEX_OSS_PORT=8080
+  codex --oss "你的提示"
+  ```
+- 也可以用 `CODEX_OSS_BASE_URL` 覆盖完整 URL：
+  ```bash
+  export CODEX_OSS_BASE_URL="http://192.168.1.100:11434/v1"
+  ```
+
+一个容易踩的坑：旧版 Codex 有个 `ollama-chat` Provider，现在已经被移除了。如果你之前的配置里用了 `ollama-chat`，会报错。解决方案是把所有 `ollama-chat` 改成 `ollama`。
+
+### LM Studio
+
+ID 是 `lmstudio`，面向本地运行 LM Studio 的用户。
+
+```toml
+# 内置定义（不可修改）
+[model_providers.lmstudio]
+name = "gpt-oss"
+base_url = "http://localhost:1234/v1"
+requires_openai_auth = false
+supports_websockets = false
+wire_api = "responses"
+```
+
+和 Ollama 一样不需要认证，只是默认端口不同（`1234`）。同样支持 `CODEX_OSS_PORT` 和 `CODEX_OSS_BASE_URL` 覆盖。
+
+LM Studio 的 `name` 也是 `gpt-oss`，和 Ollama 一样。这是因为 Codex 内部把所有本地开源模型统一归类为 OSS Provider，不区分具体的本地运行环境。
+
+### Amazon Bedrock
+
+ID 是 `amazon-bedrock`，面向使用 AWS Bedrock 托管 OpenAI 模型的企业用户。
+
+```toml
+# 内置定义（不可修改核心字段）
+[model_providers.amazon-bedrock]
+name = "Amazon Bedrock"
+base_url = "https://bedrock-mantle.us-east-1.api.aws/openai/v1"
+requires_openai_auth = false
+supports_websockets = false
+wire_api = "responses"
+```
+
+Bedrock Provider 的认证走 AWS SigV4 签名，不用 API Key。但它是唯一一个允许部分覆盖的内置 Provider——你可以设置 AWS 的 profile 和 region：
+
+```toml
+[model_providers.amazon-bedrock]
+aws.profile = "dev"
+aws.region = "us-west-2"
+```
+
+限制很严格：除了 `aws.profile` 和 `aws.region` 之外，你不能改 Bedrock 的任何其他字段。如果你试着设置 `base_url` 或 `env_key`，Codex 会报校验错误。
+
+Bedrock 的模型目录是静态的，内置三个模型：`openai.gpt-5.4`、`openai.gpt-oss-120b`、`openai.gpt-oss-20b`。
+
+### 内置 Provider 对比
+
+| Provider ID | 名称 | base_url | 认证方式 | WebSocket |
+|-------------|------|----------|---------|-----------|
+| `openai` | OpenAI | api.openai.com/v1 | OpenAI 登录或 API Key | 支持 |
+| `ollama` | gpt-oss | localhost:11434/v1 | 无 | 不支持 |
+| `lmstudio` | gpt-oss | localhost:1234/v1 | 无 | 不支持 |
+| `amazon-bedrock` | Amazon Bedrock | bedrock-mantle.amazonaws.com | AWS SigV4 | 不支持 |
+
+---
+
+## 3. 自定义 Provider
+
+自定义 Provider 是本文的核心。它是 Codex 最灵活的扩展机制——你不需要改源码，只需要在 `config.toml` 里定义一个新的 Provider，就能接入任何 OpenAI 兼容的模型服务。
+
+### 基础配置
+
+一个最简单的自定义 Provider 只需要 `name` 和 `base_url`：
+
+```toml
+model_provider = "my-provider"
+
+[model_providers.my-provider]
+name = "My Provider"
+base_url = "https://api.example.com/v1"
+```
+
+这已经够用了——如果这个服务不需要认证，Codex 就会直接用这个 base_url 发请求。
+
+选择使用哪个 Provider，有两种方式：
+
+```toml
+# 方式一：在 config.toml 中设置默认 Provider
+model_provider = "my-provider"
+
+# 方式二：启动时通过 --local-provider 指定（仅限 OSS Provider）
+# codex --local-provider lmstudio "你的提示"
+```
+
+方式二主要给 `--oss` 模式用。当你用 `--oss` 标志时，Codex 会用 `oss_provider` 配置项指定的本地 Provider。
+
+### API Key 管理
+
+大部分自定义 Provider 都需要 API Key 认证。Codex 提供了几种方式，推荐程度从高到低排列。
+
+**方式一：env_key（推荐）**
+
+指定一个环境变量名，Codex 运行时从环境变量中读取实际的 API Key：
+
+```toml
+[model_providers.my-provider]
+name = "My Provider"
+base_url = "https://api.example.com/v1"
+env_key = "MY_PROVIDER_API_KEY"
+env_key_instructions = "从 https://api.example.com/keys 获取 API Key，然后 export MY_PROVIDER_API_KEY=sk-xxx"
+```
+
+然后在 shell 里设置环境变量：
+
+```bash
+export MY_PROVIDER_API_KEY="sk-xxxxxxxxxxxxxxxx"
+```
+
+`env_key_instructions` 是可选的。它在你忘记设置环境变量时，会出现在错误提示里，引导你完成配置。好的 `env_key_instructions` 应该告诉用户两件事：去哪里获取 key，怎么设置到环境变量。
+
+`env_key` 的工作机制：Codex 启动时调用 `std::env::var("MY_PROVIDER_API_KEY")` 读取环境变量。如果变量不存在或值为空，报错并显示 `env_key_instructions`。
+
+**方式二：requires_openai_auth（用于 OpenAI 代理）**
+
+如果你的 Provider 是 OpenAI 的代理或中转（比如企业内部的 LLM 网关代理 OpenAI 请求），可以直接复用你已经做好的 OpenAI 认证：
+
+```toml
+[model_providers.openai-proxy]
+name = "OpenAI Proxy"
+base_url = "https://llm-proxy.internal/v1"
+requires_openai_auth = true
+```
+
+设了这个之后，Codex 会用你当前的 OpenAI 凭据（ChatGPT 登录 token 或 API Key）去请求这个代理。不需要额外设置 `env_key`。
+
+这个方式适合企业场景：管理员搭建一个 OpenAI API 代理，所有员工通过代理访问，流量经过审计和限流。
+
+**方式三：experimental_bearer_token（不推荐）**
+
+直接在配置文件里写死 bearer token：
+
+```toml
+[model_providers.test]
+name = "Test Provider"
+base_url = "http://localhost:8080/v1"
+experimental_bearer_token = "my-hardcoded-token"
+```
+
+不推荐的原因：token 明文写在配置文件里，不安全。这个选项名字里带了 `experimental` 就是提醒你它不稳定。仅适合本地开发测试用，绝不要提交到 git。
+
+三种认证方式互斥。如果你同时设了 `env_key` 和 `experimental_bearer_token`，Codex 的校验逻辑会报错。同样，`auth`（命令认证，下面讲）也和这两个互斥。
+
+### 命令认证（动态 token）
+
+有些场景下，API Key 是短期的，需要定期刷新。比如 AWS SSO token、企业的 OAuth token、或者自定义的认证脚本。
+
+Codex 的 `auth` 配置支持"跑一条命令拿 token"的模式：
+
+```toml
+[model_providers.aws-sso]
+name = "AWS SSO Provider"
+base_url = "https://my-api.example.com/v1"
+
+[model_providers.aws-sso.auth]
+command = "aws"
+args = ["sso", "get-token", "--profile", "dev"]
+cwd = "/home/user"
+timeout_ms = 5000
+refresh_interval_ms = 300000
+```
+
+工作原理：
+
+1. Codex 执行 `aws sso get-token --profile dev` 命令（在 `/home/user` 目录下）
+2. 命令的 stdout 输出作为 bearer token
+3. 请求超时 5 秒（`timeout_ms`），超时则报错
+4. 每 5 分钟自动重新执行命令刷新 token（`refresh_interval_ms`）
+
+`cwd` 是可选的，默认是当前工作目录。`timeout_ms` 默认 5000ms，`refresh_interval_ms` 默认 300000ms（5 分钟）。
+
+命令的输出格式：命令的 stdout 就是 raw token 值。如果你的命令输出的不是纯 token（比如有 JSON 包装），你需要自己加一层 shell 处理：
+
+```toml
+[model_providers.oauth]
+name = "OAuth Provider"
+base_url = "https://api.example.com/v1"
+
+[model_providers.oauth.auth]
+command = "bash"
+args = ["-c", "curl -s https://auth.example.com/token | jq -r .access_token"]
+timeout_ms = 10000
+refresh_interval_ms = 600000
+```
+
+注意事项：
+
+- `auth` 和 `env_key`、`experimental_bearer_token`、`requires_openai_auth` 互斥。Codex 的源码里有明确的冲突检测
+- `auth.command` 不能是空字符串，否则校验失败
+- 如果刷新命令持续失败，Codex 不会无限重试，会报错让你检查认证配置
+
+### HTTP 头和查询参数
+
+自定义 Provider 支持两种 HTTP 头配置：静态的和环境变量驱动的。
+
+**静态 HTTP 头**
+
+```toml
+[model_providers.custom]
+name = "Custom Provider"
+base_url = "https://api.example.com/v1"
+env_key = "MY_API_KEY"
+
+[model_providers.custom.http_headers]
+"X-Custom-Header" = "static-value"
+"X-Team-ID" = "team-42"
+```
+
+每次请求都会带上这些 HTTP 头。适合不变化的值，比如团队标识、客户端版本号等。
+
+**环境变量驱动的 HTTP 头**
+
+```toml
+[model_providers.custom.env_http_headers]
+"Authorization" = "MY_BEARER_TOKEN"
+"X-Request-ID" = "TRACE_ID"
+```
+
+和静态头的区别：值不是直接写死的，而是从环境变量读取。上面这个配置的意思是：从 `MY_BEARER_TOKEN` 环境变量读取值，放到 `Authorization` 头里；从 `TRACE_ID` 环境变量读取值，放到 `X-Request-ID` 头里。
+
+如果环境变量不存在或为空，这个头就不会被添加到请求中。这个行为是安全的——不会因为环境变量没设就报错。
+
+**查询参数**
+
+```toml
+[model_providers.custom]
+query_params = { "api-version" = "2024-01" }
+```
+
+这些参数会被追加到 base_url 后面的每个请求上。效果等同于 base_url 从 `https://api.example.com/v1` 变成 `https://api.example.com/v1?api-version=2024-01`。
+
+Azure OpenAI 的 API 就需要指定 api-version 查询参数，后面会讲到。
+
+### 重试与超时
+
+网络不稳定是常态。Codex 的 Provider 配置给了你三个超时/重相关的参数：
+
+```toml
+[model_providers.unstable]
+name = "Unstable Provider"
+base_url = "https://unstable-api.example.com/v1"
+env_key = "UNSTABLE_API_KEY"
+request_max_retries = 8
+stream_max_retries = 10
+stream_idle_timeout_ms = 600000
+```
+
+三个参数的含义：
+
+| 参数 | 默认值 | 含义 | 上限 |
+|------|--------|------|------|
+| `request_max_retries` | 4 | 普通请求失败后的最大重试次数 | 100 |
+| `stream_max_retries` | 5 | 流式响应断开后重连的最大次数 | 100 |
+| `stream_idle_timeout_ms` | 300000 (5 分钟) | 流式响应中多久没数据就判定断连 | 无硬上限 |
+
+**请求重试**（`request_max_retries`）：适用于非流式的普通 HTTP 请求。默认重试 4 次，包含初始请求共 5 次尝试。重试策略：200ms 基础延迟，不重试 429（速率限制），重试 5xx 服务端错误和传输层错误。
+
+**流式重连**（`stream_max_retries`）：适用于流式响应（SSE/WebSocket）。流式传输中途断开时，Codex 会尝试重新连接。默认重试 5 次。如果你的模型响应时间很长（比如跑复杂推理），适当提高这个值。
+
+**空闲超时**（`stream_idle_timeout_ms`）：流式响应期间，如果超过这个时间没收到任何数据，Codex 判定连接已断开，触发重连或报错。默认 5 分钟。对于需要长时间推理的模型（比如推理强度设为 `high` 或 `xhigh`），可能需要调高这个值。
+
+还有一个 WebSocket 专属的超时参数：
+
+```toml
+websocket_connect_timeout_ms = 30000
+```
+
+默认 15 秒。控制 WebSocket 握手连接的超时时间。如果你的网络到 OpenAI 服务器延迟较高，可以适当调高。
+
+### wire_api 协议
+
+```toml
+wire_api = "responses"
+```
+
+`wire_api` 指定 Provider 使用的通信协议。目前只支持 `responses`，也就是 OpenAI 的 Responses API（`/v1/responses` 端点）。
+
+旧版的 Codex 支持 `chat` 协议（走 `/v1/chat/completions`），但现在已经被移除了。如果你的配置里还有 `wire_api = "chat"`，Codex 会报错并指向 GitHub Discussions #7782 说明迁移方法。遇到这个报错，把 `"chat"` 改成 `"responses"` 就行。
+
+---
+
+## 4. 模型目录
+
+### model_catalog_json
+
+模型目录（model catalog）是 Codex 用来确定"有哪些模型可以用、每个模型支持什么功能"的数据结构。默认情况下，模型目录由 OpenAI 服务端动态下发——Codex 启动时会请求 `/v1/models` 端点获取可用模型列表。
+
+如果你需要使用自定义模型目录（比如接入的 Provider 有自己的模型列表），可以通过 `model_catalog_json` 指定一个本地 JSON 文件：
+
+```toml
+model_catalog_json = "~/.codex/custom-models.json"
+```
+
+这个 JSON 文件定义了模型的元数据：模型 ID、支持的功能标志、默认参数等。格式和内置目录一致。
+
+这个选项在以下场景有用：
+
+- 你接入的 Provider 不提供 `/v1/models` 端点
+- 你想在本地预定义一组模型，不让 Codex 去服务端拉取
+- 你的模型目录是静态的，不需要每次启动都请求
+
+### 模型选择策略
+
+在 config.toml 中，模型和 Provider 是两个独立的选择：
+
+```toml
+# 选择默认模型
+model = "gpt-5.4"
+
+# 选择模型来源的 Provider
+model_provider = "openai"
+```
+
+`model` 决定用哪个模型，`model_provider` 决定去哪找这个模型。两者的关系是"模型名" + "Provider" 组合定位到一个具体的模型端点。
+
+比如：
+
+```toml
+model = "gpt-5.4"
+model_provider = "openai"         # → api.openai.com/v1 的 gpt-5.4
+```
+
+```toml
+model = "gpt-5.4"
+model_provider = "amazon-bedrock"  # → bedrock-mantle 的 openai.gpt-5.4
+```
+
+```toml
+model = "llama3"
+model_provider = "ollama"         # → localhost:11434/v1 的 llama3
+```
+
+同一个模型名，换一个 Provider，实际的请求就发到完全不同的地方。这个设计让你可以在不同的 Provider 之间无缝切换，而不需要改模型名。
+
+如果你只设了 `model` 没设 `model_provider`，默认使用 `openai` Provider。
+
+### openai_base_url：OpenAI Provider URL 覆盖
+
+如果你需要让 OpenAI Provider 的请求发到别的地址（比如代理或中转），不用自定义 Provider，直接设 `openai_base_url` 就行：
+
+```toml
+openai_base_url = "https://my-proxy.example.com/v1"
+```
+
+这只影响内置的 `openai` Provider。效果等同于在 OpenAI Provider 里覆盖 base_url。
+
+使用场景：
+
+- 企业内部搭建了 OpenAI API 代理
+- 使用 Azure OpenAI 的兼容端点
+- 在网络受限环境里需要走中转
+
+注意一个安全限制：`openai_base_url` 不能在项目级配置（`.codex/config.toml`）中设置，防止项目代码劫持你的模型请求到恶意服务器。只能在全局配置（`~/.codex/config.toml`）或托管配置中设置。
+
+### chatgpt_base_url：ChatGPT 登录 URL 覆盖
+
+```toml
+chatgpt_base_url = "https://chatgpt.internal.example.com"
+```
+
+和 `openai_base_url` 类似，但控制的是 ChatGPT 登录流程和 ChatGPT 后端 API 的 base URL。当你用 ChatGPT 账号登录时，Codex 的 OAuth 流程和后续请求都会用这个 URL。
+
+使用场景比较小众：企业内部署了 ChatGPT 的代理实例，需要让 Codex 连接到内部地址而不是公网地址。
+
+同样受安全限制，不能在项目级配置中覆盖。
+
+---
+
+## 5. 认证配置
+
+### 登录方式控制
+
+**forced_login_method**
+
+这个配置项限制用户只能用特定的认证方式：
+
+```toml
+# 只允许 ChatGPT 登录，禁止 API Key
+forced_login_method = "chatgpt"
+
+# 只允许 API Key，禁止 ChatGPT 登录
+forced_login_method = "api"
+```
+
+通常由企业管理员通过托管配置（`requirements.toml`）下发，不在用户的本地 `config.toml` 里设置。
+
+行为逻辑：
+
+- 如果设为 `chatgpt`，而当前用户用的是 API Key，Codex 会自动登出并提示"ChatGPT login is required"
+- 如果设为 `api`，而当前用户用的是 ChatGPT 登录，Codex 会自动登出并提示"ChatGPT login is disabled"
+- 这个检查在 Codex 启动时执行，不需要用户手动确认
+
+为什么管理员要强制登录方式？几个典型场景：
+
+- 强制 `chatgpt`：企业要求所有 AI 工具走 workspace 管控，禁止个人 API Key 绕过审计
+- 强制 `api`：企业要求所有请求可追踪到具体的 API Key，不使用基于会话的认证
+
+### 凭证存储
+
+**cli_auth_credentials_store**
+
+控制 Codex 认证凭据的存储位置（第 03 篇认证文章有详细讲，这里从 Provider 角度补充）：
+
+```toml
+# auto: 优先 keyring，不可用时回退 file（默认）
+# file: 存到 ~/.codex/auth.json（明文）
+# keyring: 存到系统钥匙串（加密）
+cli_auth_credentials_store = "auto"
+```
+
+这个设置影响的是 OpenAI Provider 的认证凭据。对于自定义 Provider 的 `env_key`，API Key 从环境变量读取，和这个设置无关。
+
+在 Provider 配置的语境下，这个选项的意义在于：如果你用 `requires_openai_auth = true` 的自定义 Provider（比如 OpenAI 代理），凭据存储方式决定了 OpenAI 的 token 存在哪里。
+
+### OSS 模式
+
+**oss_provider 和 --oss 标志**
+
+如果你主要用本地模型（Ollama 或 LM Studio），可以用 OSS 模式快速切换：
+
+```toml
+# 指定默认的 OSS Provider
+oss_provider = "ollama"
+```
+
+或者启动时用 `--oss` 标志：
+
+```bash
+# 用默认 OSS Provider（oss_provider 配置项指定的）
+codex --oss "解释这段代码"
+
+# 指定用哪个 OSS Provider
+codex --oss --local-provider ollama "解释这段代码"
+codex --oss --local-provider lmstudio "生成测试"
+```
+
+`--oss` 标志的效果等同于：
+
+```bash
+codex --local-provider ollama -c model_provider="ollama" "你的提示"
+```
+
+它跳过用户配置加载（`--ignore-config`），直接用 OSS Provider。适合快速在本地模型上测试，不污染你的主配置。
+
+### OAuth MCP 认证
+
+如果你的 MCP 服务器需要 OAuth 认证，Codex 提供了几个相关配置项：
+
+```toml
+# MCP OAuth 回调端口（默认动态分配）
+mcp_oauth_callback_port = 8765
+
+# OAuth 回调 URL（覆盖默认的 localhost）
+mcp_oauth_callback_url = "https://my-app.example.com/callback"
+
+# MCP OAuth 凭证存储方式
+mcp_oauth_credentials_store = "auto"
+```
+
+`mcp_oauth_callback_port` 固定 OAuth 回调的本地端口。默认是临时分配的，如果你有防火墙规则需要放行特定端口，可以固定它。
+
+`mcp_oauth_callback_url` 覆盖 OAuth 的 redirect URI。默认是 `http://localhost:<port>/auth/callback`，如果你在 Docker 或远程环境里，可能需要改成实际可达的地址。
+
+`mcp_oauth_credentials_store` 控制 MCP OAuth 凭证的存储位置。选项和 `cli_auth_credentials_store` 一样：`auto`、`file`、`keyring`。存储在 `$CODEX_HOME/.credentials.json`（file 模式）或系统钥匙串（keyring 模式）。
+
+---
+
+## 6. Provider 配置实战
+
+### 场景一：接入 Azure OpenAI
+
+Azure OpenAI 的 API 地址格式是 `https://<resource-name>.openai.azure.com/openai`，需要 API Key 和 api-version 查询参数。
+
+```toml
+# ~/.codex/config.toml
+
+model_provider = "azure"
+model = "gpt-5.4"
+
+[model_providers.azure]
+name = "Azure OpenAI"
+base_url = "https://my-resource.openai.azure.com/openai"
+env_key = "AZURE_OPENAI_API_KEY"
+env_key_instructions = "从 Azure Portal → 你的 OpenAI 资源 → Keys and Endpoint 获取 API Key，然后 export AZURE_OPENAI_API_KEY=xxx"
+query_params = { "api-version" = "2024-12-01-preview" }
+wire_api = "responses"
+request_max_retries = 3
+```
+
+然后设置环境变量：
+
+```bash
+export AZURE_OPENAI_API_KEY="your-azure-api-key"
+```
+
+启动 Codex：
+
+```bash
+codex
+```
+
+Azure OpenAI 的延迟通常比 OpenAI 官方 API 高，特别是从国内访问时。适当提高 `stream_idle_timeout_ms` 可以避免长推理场景下的超时断连：
+
+```toml
+[model_providers.azure]
+stream_idle_timeout_ms = 600000  # 10 分钟
+```
+
+### 场景二：使用本地 Ollama
+
+假设你已经在本地装好了 Ollama，并且拉了一个模型（比如 llama3）：
+
+```bash
+# 检查 Ollama 是否运行
+ollama list
+
+# 如果没有模型，拉一个
+ollama pull llama3
+```
+
+配置 Codex 使用 Ollama：
+
+```toml
+# ~/.codex/config.toml
+
+# 方式一：使用内置的 ollama Provider
+model_provider = "ollama"
+
+# 方式二：用 --oss 标志临时使用（不改配置）
+# 启动时：codex --oss "你的提示"
+```
+
+Ollama 默认监听 `11434` 端口。如果改了端口：
+
+```bash
+export CODEX_OSS_PORT=8080
+codex --oss "你的提示"
+```
+
+如果 Ollama 跑在另一台机器上：
+
+```bash
+export CODEX_OSS_BASE_URL="http://192.168.1.100:11434/v1"
+codex --oss "你的提示"
+```
+
+也可以通过 `oss_provider` 配置指定默认 OSS Provider，配合 `model` 选择具体模型：
+
+```toml
+oss_provider = "ollama"
+model = "llama3"
+```
+
+注意：Ollama 跑的模型名称要和 Ollama 本地实际的模型名一致。用 `ollama list` 可以看到你拉了哪些模型。
+
+### 场景三：企业代理环境配置
+
+一个比较典型的企业环境：所有 AI 模型请求必须经过内部的 LLM 网关代理，代理需要 API Key 认证，需要加企业标识 HTTP 头，代理网络偶尔不稳定需要更多重试。
+
+```toml
+# ~/.codex/config.toml
+
+model_provider = "enterprise-proxy"
+model = "gpt-5.4"
+
+[model_providers.enterprise-proxy]
+name = "Enterprise LLM Gateway"
+base_url = "https://llm-gateway.internal.corp/v1"
+env_key = "LLM_GATEWAY_API_KEY"
+env_key_instructions = """
+从内部密钥管理平台获取 API Key:
+  1. 打开 https://keys.internal.corp
+  2. 搜索 'LLM Gateway'
+  3. 创建一个新的 API Key
+  4. export LLM_GATEWAY_API_KEY=你的key
+"""
+
+[model_providers.enterprise-proxy.http_headers]
+"X-Team-ID" = "engineering"
+"X-Client-Version" = "codex-cli"
+
+[model_providers.enterprise-proxy.env_http_headers]
+"X-Requester-Email" = "CORP_EMAIL"
+"X-Trace-ID" = "TRACE_ID"
+
+[model_providers.enterprise-proxy.query_params]
+"deployment" = "production"
+
+request_max_retries = 6
+stream_max_retries = 8
+stream_idle_timeout_ms = 600000
+
+# 如果代理需要 OpenAI 认证（复用企业 OpenAI 凭据）
+# 取消下面这行的注释，删除 env_key 配置
+# requires_openai_auth = true
+```
+
+对应的环境变量：
+
+```bash
+export LLM_GATEWAY_API_KEY="your-gateway-key"
+export CORP_EMAIL="you@company.com"
+export TRACE_ID=""  # 可选，用于链路追踪
+```
+
+### 场景四：动态认证（命令获取 token）
+
+假设你的企业用 AWS SSO 管理 API 认证，token 有效期 8 小时，需要定期刷新：
+
+```toml
+model_provider = "aws-auth"
+
+[model_providers.aws-auth]
+name = "AWS SSO Authenticated Provider"
+base_url = "https://api.example.com/v1"
+
+[model_providers.aws-auth.auth]
+command = "aws"
+args = ["sso", "get-token", "--profile", "engineering-dev"]
+timeout_ms = 10000
+refresh_interval_ms = 1800000  # 每 30 分钟刷新一次（比 token 有效期短）
+```
+
+如果 AWS CLI 的输出不是纯 token（比如是 JSON），用 shell 包装：
+
+```toml
+[model_providers.aws-auth.auth]
+command = "bash"
+args = ["-c", "aws sso get-token --profile engineering-dev --output text | awk '{print $NF}'"]
+timeout_ms = 10000
+refresh_interval_ms = 1800000
+```
+
+### 场景五：多 Provider 切换
+
+如果你在不同场景下需要不同的 Provider（比如公司项目走代理，个人项目走 OpenAI），可以用 Profile 配合 `CODEX_HOME` 做隔离。
+
+但更轻量的方式是在项目级配置里切换 Provider（注意：`model_provider` 不受安全限制，可以在项目级设置）：
+
+```toml
+# 项目 A 的 .codex/config.toml
+model_provider = "enterprise-proxy"
+model = "gpt-5.4"
+```
+
+```toml
+# 项目 B 的 .codex/config.toml
+model_provider = "openai"
+model = "gpt-5.4-mini"
+```
+
+进入不同项目目录启动 Codex，自动使用对应的 Provider。不需要手动切换 Profile。
+
+---
+
+## 7. 配置校验与排错
+
+### Provider 配置校验规则
+
+Codex 对 Provider 配置有严格的校验。了解这些规则可以避免配置错误：
+
+1. **保留 ID 不可覆盖**：`openai`、`amazon-bedrock`、`ollama`、`lmstudio` 这四个 ID 是内置的。你如果在 `model_providers` 里用同样的 ID，配置会被忽略（不会报错，但不会生效）。
+
+2. **Amazon Bedrock 部分覆盖**：只有 `aws.profile` 和 `aws.region` 可以覆盖。其他字段（base_url、name 等）不允许改。
+
+3. **认证方式互斥**：`env_key`、`experimental_bearer_token`、`auth`（命令认证）、`requires_openai_auth` 这四种认证方式只能选一种。设了两个或以上会报校验错误。
+
+4. **AWS 认证互斥**：`aws`（Bedrock 专用）和 `env_key`、`experimental_bearer_token`、`auth`、`requires_openai_auth` 都互斥。这是因为 AWS 有自己的 SigV4 签名机制，不需要 bearer token。
+
+5. **WebSocket 限制**：`aws` 和 `supports_websockets` 不能同时设为 true。因为 AWS SigV4 签名目前不支持 WebSocket 升级请求。
+
+6. **auth.command 非空**：如果设了 `auth` 表，`command` 字段不能是空字符串。
+
+7. **重试上限**：`request_max_retries` 和 `stream_max_retries` 的硬上限都是 100。超过 100 的值会被截断到 100。
+
+### 常见错误
+
+**"provider auth cannot be combined with env_key"**
+
+你同时设了 `auth` 和 `env_key`。删掉一个。
+
+```toml
+# 错误
+[model_providers.my]
+env_key = "MY_KEY"
+[model_providers.my.auth]
+command = "aws"
+args = ["sso", "get-token"]
+
+# 修正：只用 env_key
+[model_providers.my]
+env_key = "MY_KEY"
+```
+
+**"provider aws cannot be combined with env_key"**
+
+你给 Bedrock Provider 设了 `env_key`。Bedrock 用 AWS SigV4 认证，不需要 API Key。
+
+```toml
+# 错误
+[model_providers.amazon-bedrock]
+env_key = "MY_KEY"
+
+# 修正：只用 aws 配置
+[model_providers.amazon-bedrock]
+aws.profile = "dev"
+```
+
+**"wire_api = "chat" is no longer supported"**
+
+旧版配置用了 `chat` 协议。改成 `responses`。
+
+```toml
+# 错误
+wire_api = "chat"
+
+# 修正
+wire_api = "responses"
+```
+
+**"`ollama-chat` is no longer supported"**
+
+旧版 `model_provider` 或 `oss_provider` 用了 `ollama-chat`。改成 `ollama`。
+
+**"model_providers.amazon-bedrock only supports changing aws.profile and aws.region"**
+
+你试图改 Bedrock Provider 的其他字段。删掉多余的配置，只保留 `aws.profile` 和 `aws.region`。
+
+### 用 codex debug-config 检查
+
+确认配置是否生效：
+
+```bash
+# 查看完整的配置（包括合并后的 Provider 列表）
+codex debug-config
+
+# 查看可用的模型列表
+codex debug models
+
+# 只看内置模型目录（不联网）
+codex debug models --bundled
+```
+
+`debug-config` 会输出当前所有配置的合并结果——包括内置默认值、全局配置、项目配置和 CLI 覆盖。这是检查 Provider 配置是否正确加载的最佳方式。
+
+---
+
+## 延伸阅读
+
+- [Codex Configuration Reference](https://developers.openai.com/codex/config-reference) — config.toml 完整字段说明
+- [Codex Authentication Setup](https://developers.openai.com/codex/auth) — 认证方式详解
+- [Codex Models](https://developers.openai.com/codex/models) — 模型列表和功能说明
+- [Codex 源码 model-provider-info](https://github.com/openai/codex/blob/main/codex/codex-rs/model-provider-info/src/lib.rs) — Provider 结构体定义
+- [Codex 源码 config_toml.rs](https://github.com/openai/codex/blob/main/codex/codex-rs/config/src/config_toml.rs) — 配置字段定义
+- [系列上一篇：基础配置项（23）](./23-config-basic.md)
+- [系列下一篇：TUI 界面配置（25）](./25-config-tui.md)
+- [系列第 06 篇：模型选择与切换](./06-model-selection.md)
+- [系列第 03 篇：首次登录与认证配置](./03-authentication.md)

@@ -1,0 +1,718 @@
+<!--
+调研来源（不发布，仅记录）：
+1. GitHub 仓库 openai/codex: codex-rs/tui/src/slash_command.rs — 斜杠命令枚举定义（/theme, /keymap, /statusline, /title, /vim, /memories, /ps, /stop）
+2. GitHub 仓库 openai/codex: codex-rs/tui/src/cli.rs — TUI CLI 参数和配置字段（tui.* 相关配置项）
+3. Zread: openai/codex 终端用户界面 (TUI) 文档 — /theme 预览与持久化、/keymap 上下文绑定、/statusline footer 配置
+4. Zread: openai/codex 配置参考 — tui.alternate_screen, tui.animations, tui.raw_output_mode 等 TUI 配置项
+5. Zread: openai/codex 记忆系统文档 — memories.use_memories, memories.generate_memories, consolidation/extract 模型
+6. Zread: openai/codex 后台终端管理 — /ps 和 /stop 命令行为，unified_exec 上下文
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 个性化与 UI 命令：/theme、/keymap、/statusline、/vim、/memories
+
+> **TL;DR** — Codex CLI 的 TUI（终端用户界面）不是写死的。`/theme` 切语法高亮配色，`/keymap` 重映射快捷键到九个上下文，`/statusline` 和 `/title` 分别控制底部状态栏和终端窗口标题显示什么信息，`/vim` 开启编辑区的 Vim 模式，`/memories` 管理跨会话记忆的注入和生成，`/ps` 和 `/stop` 管理后台终端进程。这些命令修改的配置全部持久化到 `config.toml`，重启不丢失。本文逐一拆解每个命令的行为、配置参数和搭配使用的方式。
+
+---
+
+## 1. TUI 界面定制基础
+
+Codex CLI 的交互界面是一个基于终端的 TUI 应用。你每次在终端里敲 `codex` 回车，看到的就是这个 TUI——底部有输入框、中间是对话区域、顶部或底部有状态信息。这些视觉元素的样式和行为都可以通过斜杠命令调整。
+
+和那些"改配置文件才能动"的 CLI 工具不同，Codex 的 UI 定制是**交互式的**。你在 TUI 里输入 `/theme`、`/keymap` 这些命令，直接在界面上预览效果，满意了就确认保存，不满意就取消。配置最终写到 `~/.codex/config.toml` 的 `[tui]` 段，下次启动自动加载。
+
+这种设计的好处是零摩擦。你不需要去查"语法高亮主题叫什么名字"，直接 `/theme` 列出所有可选主题，用方向键选，实时看到效果，回车就保存。改快捷键也一样——`/keymap` 列出当前上下文的所有绑定，告诉你哪些键已经被占用了，修改后立即可用。
+
+配置项分为两类：
+
+- **斜杠命令控制的**：`/theme`、`/keymap`、`/statusline`、`/title`、`/vim`、`/memories`——每个命令操作 config.toml 中对应的几个键
+- **纯配置文件控制的**：`tui.alternate_screen`、`tui.animations`、`tui.notifications` 等——这些没有对应的斜杠命令，需要手动编辑 config.toml
+
+两类配置最终都存放在同一个地方，优先级也相同。区别只在于交互方式。
+
+---
+
+## 2. /theme 语法高亮主题
+
+`/theme` 预览并持久化 Codex TUI 的语法高亮主题。
+
+### 基本用法
+
+在 TUI 输入框里输入 `/theme`，Codex 会弹出一个主题选择器。选择器里列出所有可用的主题，每个主题带一个简短的预览（通常是代码片段的着色效果）。用方向键选择，回车确认。
+
+选中的主题会被写入 config.toml：
+
+```toml
+[tui]
+theme = "dracula"
+```
+
+下次启动 Codex 自动加载这个主题。
+
+### 主题对什么生效
+
+主题影响的是 TUI 内的语法高亮渲染，具体包括：
+
+- **代码块着色**：Codex 展示代码片段、diff 输出、shell 命令输出时，关键词、字符串、注释等用不同颜色显示
+- **语法元素**：变量名、函数名、类型标注等
+- **Markdown 渲染**：Codex 输出中包含的 Markdown 格式文本
+
+主题不影响的内容：
+
+- TUI 框架本身的颜色（边框、按钮、选中状态）——这些由终端模拟器的配色方案决定
+- 纯文本消息的显示
+- 终端窗口本身的背景色和前景色
+
+所以如果你觉得"Codex 的代码高亮颜色不好看"，是 `/theme` 该管的。如果你觉得"整个终端的颜色都不舒服"，那是你的终端模拟器（iTerm2、Alacritty、WezTerm 等）该调的。
+
+### 可用主题
+
+Codex 内置了一组流行主题，覆盖了常见的终端配色偏好。具体的主题列表随版本更新可能有变化，`/theme` 选择器里显示的就是当前版本支持的全部。典型的内置主题包括：
+
+- `dracula`：深色背景，紫色为主调
+- `one-dark`：Atom One Dark 风格
+- `nord`：北极色调，蓝灰为主
+- `github-dark`：GitHub Dark 配色
+- `catppuccin-mocha`：Catppuccin 配色系列的热门变体
+- `solarized-dark` / `solarized-light`：Solarized 经典配色
+- `tokyo-night`：流行暗色主题
+- `gruvbox-dark` / `gruvbox-light`：Gruvbox 暖色系
+
+具体列表以 `/theme` 选择器为准。如果某个主题你觉得还不错但某些颜色需要微调，目前 Codex 不支持自定义主题的个别颜色——只能在内置主题中选择。
+
+---
+
+## 3. /keymap 快捷键映射
+
+`/keymap` 是这套 UI 命令里最灵活的一个。它让你检查、更新并持久化 TUI 快捷键到九个不同的上下文。
+
+### 上下文是什么
+
+Codex TUI 的快捷键不是全局统一的——不同界面状态下，同一按键可以有不同含义。比如在聊天输入框里，`Enter` 是发送消息；在 Vim normal 模式下，`Enter` 可能是跳到下一行。上下文（context）就是用来区分这些状态的。
+
+`/keymap` 支持的九个上下文：
+
+| 上下文 | 说明 |
+|--------|------|
+| `global` | 全局，任何状态下都生效。比如 `Ctrl+C` 中断、`Ctrl+L` 清屏 |
+| `chat` | 聊天输入框，你打字的那个区域 |
+| `composer` | Composer 编辑区（多行编辑器） |
+| `editor` | 通用编辑器上下文 |
+| `vim_normal` | Vim normal 模式 |
+| `vim_operator` | Vim operator 等待模式（按了 `d` 之后等下一个键的状态） |
+| `vim_text_object` | Vim 文本对象选择（`diw` 中的 `iw`） |
+| `pager` | 分页查看器（看长输出时） |
+| `list` | 列表选择器（/resume、/theme 等弹出列表时） |
+| `approval` | 审批提示（Codex 请求权限确认时） |
+
+### 基本用法
+
+在 TUI 中输入 `/keymap`，会显示当前上下文的所有快捷键绑定列表。如果你在聊天输入框里输入，默认展示 `chat` 上下文的绑定。
+
+查看其他上下文的绑定：
+
+```
+> /keymap global
+# 显示全局快捷键
+
+> /keymap vim_normal
+# 显示 Vim normal 模式的绑定
+```
+
+### 修改绑定
+
+修改一个快捷键的绑定：
+
+```
+> /keymap chat submit=Ctrl+Enter
+# 把 chat 上下文中的 submit 动作绑到 Ctrl+Enter
+```
+
+修改后立即生效，同时写入 config.toml：
+
+```toml
+[tui]
+[tui.keymap]
+chat = { submit = "Ctrl+Enter" }
+```
+
+### 解绑（空数组）
+
+如果想恢复某个绑定到默认值，或者完全解绑，可以用空数组：
+
+```
+> /keymap chat submit=[]
+# 解绑 chat 上下文中的 submit
+```
+
+解绑后，原来绑定的动作就没有快捷键了——你只能通过菜单或斜杠命令触发。
+
+### 实用的绑定调整
+
+几个常见的快捷键调整场景：
+
+**把提交消息改为 Ctrl+Enter**：默认 Enter 是发送，但如果你习惯 Enter 换行、Ctrl+Enter 发送（类似 Slack/Discord 的行为），可以这样改：
+
+```
+> /keymap chat submit=Ctrl+Enter
+> /keymap chat newline=Enter
+```
+
+**在 pager 中自定义滚动**：如果你觉得默认的上下翻页快捷键不顺手：
+
+```
+> /keymap pager scroll_up=Ctrl+K
+> /keymap pager scroll_down=Ctrl+J
+```
+
+**Vim 用户的个性化**：如果你开了 `/vim`，可以在 Vim 上下文中进一步调整：
+
+```
+> /keymap vim_normal save_and_submit=ZZ
+> /keymap vim_normal cancel=Ctrl+C
+```
+
+### 注意事项
+
+- 快捷键冲突检测：`/keymap` 会提示你某个键是否已经被当前上下文的其他动作占用了
+- 持久化：所有修改自动写入 config.toml，重启不丢失
+- 重置：如果想恢复所有快捷键到默认值，手动删除 config.toml 中的 `[tui.keymap]` 段即可
+
+---
+
+## 4. /statusline 状态栏
+
+`/statusline` 控制 TUI 底部状态栏显示哪些信息项以及排列顺序。
+
+### 可用信息项
+
+| 信息项 | 显示内容 |
+|--------|---------|
+| `model` | 当前使用的模型名称 |
+| `model+reasoning` | 模型名称 + 推理强度 |
+| `context stats` | 当前上下文的使用量（已用/总量 token） |
+| `rate limits` | API 速率限制的剩余情况 |
+| `git branch` | 当前 Git 分支名 |
+| `token counters` | token 计数器（输入/输出 token 数） |
+| `session id` | 当前会话 ID（UUID 缩写） |
+| `current directory` | 当前工作目录 |
+| `project root` | 项目根目录 |
+| `codex version` | Codex CLI 版本号 |
+
+### 基本用法
+
+在 TUI 中输入 `/statusline`，会弹出信息项选择器。你可以勾选想要显示的项、取消不需要的项，并用方向键调整排列顺序。
+
+选择确认后写入 config.toml：
+
+```toml
+[tui]
+status_line = ["model+reasoning", "context stats", "git branch"]
+```
+
+### 推荐配置
+
+根据工作场景的不同，推荐不同的状态栏配置：
+
+**开发日常**：关注模型和上下文
+
+```toml
+status_line = ["model+reasoning", "context stats", "git branch"]
+```
+
+**多项目切换**：关注项目和 Git
+
+```toml
+status_line = ["git branch", "project root", "current directory"]
+```
+
+**调试 token 消耗**：关注计数器
+
+```toml
+status_line = ["model+reasoning", "token counters", "context stats", "rate limits"]
+```
+
+### 状态栏的视觉位置
+
+状态栏显示在 TUI 的底部，紧贴输入框下方。每个信息项之间用分隔符隔开。如果你的终端窗口比较窄，信息项过多会导致状态栏换行或者截断显示。建议保持 3-5 个信息项，最多不超过 6 个。
+
+---
+
+## 5. /title 终端标题
+
+`/title` 控制你的终端模拟器窗口标题栏显示什么信息。
+
+### 可用信息项
+
+| 信息项 | 显示内容 |
+|--------|---------|
+| `app name` | "Codex" |
+| `project` | 当前项目名（目录名） |
+| `spinner` | 加载/运行中的旋转动画指示器 |
+| `status` | 当前状态（空闲、运行中、等待审批） |
+| `thread` | 当前线程 ID 缩写 |
+| `git branch` | Git 分支名 |
+| `model` | 当前模型 |
+| `task progress` | 任务进度指示 |
+
+默认配置是 `["spinner", "project"]`。也就是说，你的终端窗口标题默认显示一个旋转指示器和项目名。
+
+### 基本用法
+
+在 TUI 中输入 `/title`，弹出信息项选择器。操作方式和 `/statusline` 一致——勾选、排序、确认。
+
+配置写入 config.toml：
+
+```toml
+[tui]
+title = ["spinner", "project", "model", "git branch"]
+```
+
+### 为什么终端标题重要
+
+你可能觉得"谁会看终端标题"。但如果你同时开了五六个终端窗口（一个跑 dev server、一个看日志、一个在 Codex 里开发、一个在 git 操作……），终端标题是快速定位窗口的最有效方式。
+
+推荐配置：
+
+```toml
+title = ["spinner", "project", "git branch"]
+```
+
+这三个信息足够你在窗口列表里一眼找到"Codex 正在什么项目的什么分支上工作"。加太多反而变成噪音——你在窗口标题里看到一长串信息根本来不及读。
+
+### 和终端模拟器的关系
+
+`/title` 设置的是 Codex 告诉终端模拟器"请把我的标题设成这个"的值。终端模拟器支持这个协议（大多数现代终端都支持 ANSI title escape sequence）。如果你的终端模拟器忽略了这个请求，那可能是终端本身的设置问题，不是 Codex 的。
+
+---
+
+## 6. /vim Vim 模式
+
+`/vim` 切换 Composer 编辑区的 Vim 编辑模式。
+
+### 基本用法
+
+```
+> /vim
+# 切换 Vim 模式（开/关）
+```
+
+Vim 模式默认关闭。`/vim` 是一个开关——按一次开，再按一次关。开启状态持久化到 config.toml：
+
+```toml
+[tui]
+vim_mode_default = true
+```
+
+### Vim 模式覆盖什么
+
+Vim 模式影响的是 **Composer 编辑区**——也就是你写长篇提示词、编辑代码片段时用的多行编辑器。开启后，这个编辑区获得基本的 Vim 操作能力：
+
+- Normal 模式：`hjkl` 移动光标、`dd` 删除行、`yy` 复制行、`p` 粘贴
+- Insert 模式：`i` 进入插入、`a` 追加、`o` 新行
+- Visual 模式：`v` 字符选择、`V` 行选择
+
+**Vim 模式不影响的部分**：
+
+- 聊天输入框（chat context）里的单行输入行为
+- 分页器、列表选择器等非编辑区域的键盘操作
+- Codex 的全局快捷键（如 `Ctrl+C`）
+
+### 配合 /keymap 使用
+
+开了 Vim 模式后，`vim_normal`、`vim_operator`、`vim_text_object` 三个上下文变得可用。你可以通过 `/keymap` 进一步定制 Vim 相关的快捷键：
+
+```
+> /keymap vim_normal save_and_submit=ZZ
+> /keymap vim_normal cancel=Ctrl+C
+```
+
+如果你是 Vim 重度用户，建议把 Composer 的保存提交绑定到 `ZZ`（Vim 的经典保存退出键位），这样编辑完提示词后的操作手感更接近原生 Vim。
+
+### 不用 Vim 的人
+
+如果你不用 Vim，这个命令完全不需要碰。Codex 的默认编辑器行为是标准的 readline 风格——`Ctrl+A` 到行首、`Ctrl+E` 到行尾、`Ctrl+K` 删到行尾、`Ctrl+U` 删到行首。这对大多数开发者已经足够。
+
+---
+
+## 7. /memories 记忆系统
+
+`/memories` 配置 Codex 的跨会话记忆功能——记忆的注入和生成。
+
+### 记忆系统是什么
+
+Codex 的记忆系统解决一个问题：**每次新对话，Codex 都是从零开始的**。它不记得你上次让它做了什么、你的代码库有哪些约定、你偏好什么风格。
+
+记忆系统试图弥合这个断层。它有两个方向：
+
+- **注入（use_memories）**：把之前积累的记忆信息注入到新对话的上下文里，让 Codex 一开始就知道一些背景
+- **生成（generate_memories）**：在对话过程中自动提炼值得记住的信息，保存起来供后续对话使用
+
+打个比方：`use_memories` 类似于你每次开会前先翻一下上次的会议纪要，`generate_memories` 类似于你开完会后把要点记下来。
+
+### /memories 命令用法
+
+在 TUI 中输入 `/memories`，会显示当前记忆系统的配置状态，并提供切换选项：
+
+```
+> /memories
+# 显示当前配置，并提供 toggle 开关
+```
+
+你可以在界面中切换以下两个核心开关：
+
+- `use_memories`：是否在新对话中注入已有记忆
+- `generate_memories`：是否在对话中自动生成新记忆
+
+### 配置选项
+
+记忆系统相关的配置项在 config.toml 中分布在 `[features]` 和 `[memories]` 两个段：
+
+**启用记忆功能**：
+
+```toml
+[features]
+memories = true
+```
+
+这是总开关。关闭后，记忆系统完全不工作。
+
+**注入和生成控制**：
+
+```toml
+[memories]
+use_memories = true         # 注入已有记忆到新对话
+generate_memories = true    # 在对话中自动生成新记忆
+```
+
+**模型选择**：
+
+```toml
+[memories]
+consolidation_model = "gpt-4o-mini"   # 全局记忆合并用的模型
+extract_model = "gpt-4o-mini"        # 每线程记忆提取用的模型
+```
+
+记忆系统需要用模型来"提炼"对话中的关键信息。`consolidation_model` 负责把多条原始记忆合并成精炼的记忆，`extract_model` 负责从单个对话中提取值得记忆的信息。默认用 `gpt-4o-mini` 是因为记忆提炼不需要很强的推理能力，用小模型足够，也省 token 费用。
+
+如果你希望提炼更精确，可以换成更强的模型：
+
+```toml
+[memories]
+consolidation_model = "o4-mini"
+extract_model = "o4-mini"
+```
+
+**容量和生命周期控制**：
+
+| 配置键 | 默认值 | 范围 | 说明 |
+|--------|--------|------|------|
+| `max_raw_memories_for_consolidation` | 256 | 上限 4096 | 合并前最多积累多少条原始记忆 |
+| `max_rollout_age_days` | 30 | 0-90 | 记忆的保留天数，超过就清理 |
+| `min_rollout_idle_hours` | 6 | 1-48 | 对话结束后至少空闲多少小时才开始提取记忆 |
+
+### 记忆系统工作原理
+
+整个记忆系统的工作流程分为三个阶段：
+
+**第一阶段：提取（Extract）**
+
+当你在一个对话中工作了一段时间后退出，`extract_model` 会被调用，分析这次对话的内容，提炼出几条关键信息。比如你在一个对话里让 Codex "把 auth 模块从 JWT 迁移到 session"，退出后记忆系统可能会提炼出：
+
+```
+- 项目 auth 模块使用 session 认证（非 JWT）
+- auth 模块位于 src/auth/ 目录
+- 使用了 Express session 中间件
+```
+
+提取不是立刻发生的——`min_rollout_idle_hours` 控制对话结束后至少空闲多少小时才开始提取。默认 6 小时，意味着你退出 Codex 后至少等 6 小时，系统才会开始从这个对话中提炼记忆。这个设计是为了避免频繁的短对话产生大量低质量记忆。
+
+**第二阶段：积累（Accumulate）**
+
+提炼出的原始记忆被保存到本地存储中。随着你持续使用 Codex，原始记忆会越来越多。`max_raw_memories_for_consolidation` 控制积累上限——默认 256 条，超过后触发合并。
+
+**第三阶段：合并（Consolidate）**
+
+当原始记忆积累到上限，`consolidation_model` 被调用来做合并。合并的目的是把多条零散的记忆压缩成更精炼、更少但更有信息量的记忆。比如之前积累的 50 条关于 auth 模块的细碎记忆，可能被合并成 5 条概括性的记忆。
+
+合并后的记忆会替换原始记忆，总量下降，但每条的信息密度更高。
+
+### 记忆的注入
+
+当 `use_memories = true` 时，你在 TUI 里开始一个新对话，Codex 会在发送给模型的 prompt 中注入已有的记忆信息。模型在第一次回复时就已经"知道"了一些背景——比如你的项目结构、你之前做过哪些改动、你的代码偏好。
+
+这就是"跨会话记忆"的实际效果。它不是完美记忆——Codex 不会记住你上次对话的每一行内容——但它记住了被提炼出来的关键事实。
+
+### 使用场景
+
+**适合开启的场景**：
+
+- 长期维护一个项目，希望 Codex 记住项目约定和架构决策
+- 经常在多个会话间切换，不想每次都重复交代背景
+- 团队共享 Codex 配置，让团队成员的 Codex 都"知道"项目惯例
+
+**不太需要的场景**：
+
+- 临时性的小任务（修个 bug、查个文档）
+- 不常使用 Codex（频率低，积累的记忆不多）
+- 对 token 消耗敏感（注入记忆会增加上下文占用）
+
+### 记忆和 AGENTS.md 的关系
+
+AGENTS.md 是项目级的指令文件，你手动编写的。记忆系统是自动提炼的。两者互补：
+
+- **AGENTS.md**：你明确告诉 Codex 的规则和约定（"测试用 Vitest"、"提交信息用中文"、"不修改 vendor 目录"）
+- **Memories**：Codex 自己从你的使用中总结出的知识（"这个项目的 auth 模块在 3 月迁移过"、"API 用的是 tRPC"、"数据库是 PostgreSQL"）
+
+如果你已经有了一份详尽的 AGENTS.md，记忆系统的边际价值会降低。如果你没有 AGENTS.md 或者维护得不够勤快，记忆系统能自动填补一部分空白。
+
+---
+
+## 8. /ps 和 /stop 后台终端管理
+
+这两个命令我们在本系列的"让 Codex 跑命令"那篇里已经提到过。这里从 UI 命令的角度做一个补充。
+
+### /ps 显示后台终端
+
+在 TUI 中输入 `/ps`，会列出所有当前活跃的后台终端。每个条目显示：
+
+- **命令**：该终端正在执行的命令
+- **最近 3 行输出**：终端 stdout 的最后 3 行
+
+这个设计的意图是让你快速了解后台进程在干什么，而不需要切换到另一个终端去查。
+
+后台终端在使用 `unified_exec` 时会出现。`unified_exec` 是 Codex 处理命令执行的一种模式，它把 shell 命令放到后台终端中运行，命令的输出可以异步获取，不会阻塞 Codex 的主对话流。
+
+### /stop 停止所有后台终端
+
+```
+> /stop
+# 停止所有活跃的后台终端
+```
+
+`/stop` 会向所有后台终端发送终止信号。Codex 在退出时也会自动执行 `/stop`，所以通常不需要手动清理。但在以下情况下手动 `/stop` 有用：
+
+- 你想释放一个被 dev server 占用的端口，准备用 `/stop` 杀掉它再重启
+- 后台终端卡死了，你想强制清理
+- 你不确定有没有后台进程在跑，`/stop` 一下保底
+
+`/clean` 是 `/stop` 的别名。两个命令效果完全一样。
+
+### 和会话生命周期的关系
+
+后台终端的生命周期绑定在会话上。当你 `/quit` 退出 Codex 时，所有后台终端会被终止。当你 `/resume` 恢复一个会话时，之前会话里的后台终端**不会恢复**——你需要重新启动那些长期进程。
+
+---
+
+## 9. TUI 配置项完整参考
+
+除了斜杠命令直接控制的配置外，config.toml 中还有一些 TUI 相关的配置项，只能通过手动编辑配置文件来修改。
+
+### alternate_screen
+
+```toml
+[tui]
+alternate_screen = "auto"   # 默认
+# alternate_screen = "always"
+# alternate_screen = "never"
+```
+
+控制是否使用终端的备用屏幕缓冲区（alternate screen buffer）。
+
+- `auto`：Codex 自动判断终端是否支持，支持就用
+- `always`：强制使用
+- `never`：不使用
+
+备用屏幕缓冲区的作用是：Codex 启动时切换到一个独立的屏幕，退出时恢复原来的终端内容。这样 Codex 的对话不会"污染"你的终端滚动历史。大多数现代终端都支持这个特性，`auto` 就够用了。
+
+如果你遇到启动 Codex 后终端显示异常（比如退出后终端内容乱了），可以试试把 `alternate_screen` 设成 `always`。如果还是有问题，设成 `never` 看看是不是 alternate screen 的兼容性问题。
+
+### animations
+
+```toml
+[tui]
+animations = true   # 默认
+```
+
+控制 TUI 动画效果。关闭后，界面上的过渡动画（比如加载 spinner、消息出现动画）会被禁用。在以下情况建议关闭：
+
+- 你的终端模拟器对动画支持不好，出现闪烁或撕裂
+- 通过 SSH 在高延迟网络中使用 Codex
+- 你单纯不喜欢动画，觉得分散注意力
+
+### notifications
+
+```toml
+[tui]
+notifications = true          # 默认，所有通知都开启
+# notifications = false       # 关闭所有通知
+# notifications = ["tool_done"] # 只启用指定类型的通知
+```
+
+控制 Codex 完成长时间任务后是否发送桌面通知。设置为布尔值开启或关闭全部通知；设置为数组则只启用数组中指定的通知类型。
+
+### notification_condition
+
+```toml
+[tui]
+notification_condition = "unfocused"  # 默认
+# notification_condition = "always"
+```
+
+控制什么时候发送通知：
+
+- `unfocused`（默认）：终端窗口失去焦点时才发送通知。也就是说，你在 Codex 里盯着任务跑，不会收到通知；你切到浏览器做别的事，任务完成了会弹通知
+- `always`：任务完成就通知，不管你有没有在看
+
+`unfocused` 是更合理的默认值。你不在终端前时才需要被提醒回到终端。
+
+### notification_method
+
+```toml
+[tui]
+notification_method = "auto"  # 默认
+# notification_method = "osc9"
+# notification_method = "bel"
+```
+
+通知的发送方式：
+
+- `auto`：Codex 自动选择最佳方式（通常优先 OSC 9）
+- `osc9`：使用 OSC 9 escape sequence。大多数现代终端支持，能显示标题和内容
+- `bel`：使用 Bell 字符（`\x07`）。老式方式，终端只会发出蜂鸣声或闪烁标题栏，没有详细通知内容
+
+### raw_output_mode
+
+```toml
+[tui]
+raw_output_mode = false  # 默认
+```
+
+当设为 `true` 时，Codex 的输出不做 Markdown 渲染，以纯文本形式显示。适用于：
+
+- 把 Codex 的输出重定向到文件或管道
+- 不需要格式化的纯文本场景
+- Markdown 渲染出了兼容性问题
+
+日常使用不建议开启。
+
+### show_tooltips
+
+```toml
+[tui]
+show_tooltips = true  # 默认
+```
+
+控制 TUI 中是否显示工具提示（tooltips）。工具提示会在你把光标悬停在某些界面元素上时显示额外信息。如果你觉得提示太多或者影响性能，可以关闭。
+
+---
+
+## 10. 个性化配置实战
+
+### 场景一：Vim 用户的完整配置
+
+如果你是一个 Vim 重度用户，希望 Codex 的交互尽可能贴近 Vim 习惯：
+
+```toml
+[tui]
+theme = "gruvbox-dark"
+vim_mode_default = true
+status_line = ["model+reasoning", "context stats", "git branch"]
+title = ["spinner", "project", "git branch"]
+animations = false  # Vim 用户通常不喜欢花哨的动画
+
+[tui.keymap]
+chat = { submit = "Ctrl+Enter", newline = "Enter" }
+vim_normal = { save_and_submit = "ZZ", cancel = "Ctrl+C" }
+
+[memories]
+use_memories = true
+generate_memories = true
+consolidation_model = "gpt-4o-mini"
+extract_model = "gpt-4o-mini"
+```
+
+对应的斜杠命令操作：
+
+```
+> /theme gruvbox-dark
+> /vim
+> /statusline   # 选择 model+reasoning, context stats, git branch
+> /title        # 选择 spinner, project, git branch
+> /keymap chat submit=Ctrl+Enter newline=Enter
+> /keymap vim_normal save_and_submit=ZZ cancel=Ctrl+C
+> /memories     # 开启 use_memories 和 generate_memories
+```
+
+### 场景二：暗色主题 + 快捷键优化
+
+如果你偏好暗色主题，同时希望 Enter 保留换行功能（很多从聊天工具迁移过来的用户有这个需求）：
+
+```toml
+[tui]
+theme = "tokyo-night"
+status_line = ["model+reasoning", "token counters", "git branch"]
+title = ["spinner", "project"]
+notifications = true
+notification_condition = "unfocused"
+
+[tui.keymap]
+chat = { submit = "Ctrl+Enter", newline = "Enter" }
+pager = { scroll_up = "Ctrl+K", scroll_down = "Ctrl+J" }
+```
+
+这个配置适合在 macOS Terminal 或 WezTerm 中使用。`tokyo-night` 主题和这些终端的暗色配色方案搭配起来比较协调。
+
+### 场景三：团队统一的 TUI 配置
+
+如果你是团队负责人，希望所有成员使用一致的 Codex TUI 配置，可以把以下内容放到项目根目录的 `.codex/config.toml` 中（项目级配置优先级高于用户级）：
+
+```toml
+[tui]
+theme = "nord"
+status_line = ["model+reasoning", "context stats", "git branch", "project root"]
+title = ["spinner", "project", "git branch"]
+vim_mode_default = false
+
+[tui.keymap]
+chat = { submit = "Ctrl+Enter", newline = "Enter" }
+
+[memories]
+use_memories = true
+generate_memories = true
+max_rollout_age_days = 14
+```
+
+团队统一配置的好处是：code review 的时候，每个人的 Codex 界面看起来差不多，减少"我的 Codex 和你的不一样"的困惑。`max_rollout_age_days = 14` 比默认值短一些，让记忆更新更频繁，适合快速迭代的项目。
+
+---
+
+## 11. 命令速查表
+
+| 命令 | 作用 | 操作的配置键 | 持久化 |
+|------|------|-------------|--------|
+| `/theme` | 选择语法高亮主题 | `tui.theme` | 是 |
+| `/keymap` | 查看/修改快捷键 | `tui.keymap.<context>` | 是 |
+| `/statusline` | 配置底部状态栏 | `tui.status_line` | 是 |
+| `/title` | 配置终端窗口标题 | `tui.title` | 是 |
+| `/vim` | 切换 Vim 编辑模式 | `tui.vim_mode_default` | 是 |
+| `/memories` | 配置记忆注入/生成 | `memories.use_memories`, `memories.generate_memories` | 是 |
+| `/ps` | 查看后台终端 | — | — |
+| `/stop` `/clean` | 停止所有后台终端 | — | — |
+
+---
+
+## 12. 下一步
+
+本文覆盖了 Codex CLI 中所有与 UI 个性化和记忆相关的斜杠命令。这些命令的共同特点是：交互式操作，实时预览，自动持久化。你不需要背配置文件的格式——在 TUI 里用命令调，调到满意为止。
+
+个性化配置是锦上添花的东西。没有它 Codex 照样好用。但当你用 Codex 做的事情越来越多、使用频率越来越高之后，一套顺手的界面配置能显著提升你的使用体验。尤其是 `/keymap` 和 `/vim`，对于手指已经有肌肉记忆的开发者来说，不让键盘跟着你的习惯走会一直有微妙的违和感。
+
+记忆系统则是一个更偏长期价值的特性。它不会在你第一次开启后立刻产生明显的效果，但随着使用次数的积累，你会发现 Codex 新对话时的"起跑线"越来越往前——它对你项目的理解越来越深，你需要重复交代的东西越来越少。
+
+**延伸阅读**
+
+- [Codex CLI 斜杠命令官方文档](https://developers.openai.com/codex/cli/slash-commands) — 所有 TUI 内置命令的权威参考
+- [Codex 配置参考](https://developers.openai.com/codex/config-reference) — tui.*、memories.* 等所有配置项的完整说明
+- [Codex 记忆系统文档](https://developers.openai.com/codex/memories) — 记忆注入、生成和合并的详细机制
+- [Codex TUI 源码](https://github.com/openai/codex) — codex-rs/tui/src/ 下的 slash_command.rs 和 cli.rs

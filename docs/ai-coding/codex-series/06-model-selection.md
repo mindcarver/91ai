@@ -1,0 +1,652 @@
+# Codex CLI 模型选择与切换：GPT-5.5 / 5.4 / 5.3-Codex 怎么选
+
+> **TL;DR** Codex CLI 目前提供五个主力模型：GPT-5.5（最新旗舰）、GPT-5.4（上代旗舰）、GPT-5.4-mini（轻量快速）、GPT-5.3-Codex（编程专用 RL 训练）、GPT-5.3-Codex-Spark（低延迟研究预览版，Pro 专属）。用 `/model` 切换模型，`/fast` 开快速队列，`model_reasoning_effort` 调推理强度。日常开发选 GPT-5.4，要效果拉满选 GPT-5.5，跑 CI 或轻量任务用 GPT-5.4-mini。本文给出每个模型的真实定位、配置方法和按任务类型的选型建议。
+
+---
+
+## 1. Codex 可用的模型一览
+
+截至 2026 年 6 月，Codex 官方支持以下模型。每个模型有自己的定位、速度特征和适用场景。
+
+### GPT-5.5
+
+OpenAI 最新发布的前沿模型。在 Codex 场景下，GPT-5.5 专注于复杂编码、计算机使用（Computer Use）、知识处理和研究类工作流。
+
+GPT-5.5 相比 GPT-5.4 的核心提升在于：用更少的 token 达到同等级别的输出质量。这意味着同样一个任务，GPT-5.5 消耗的 credits 更少。虽然它是更强悍的模型，但因为效率提升，反而有助于在额度限制内做更多事情。
+
+启动命令：
+
+```bash
+codex -m gpt-5.5
+```
+
+**定位**：复杂编码、架构设计、长上下文推理、多步骤任务。
+**速度**：中等。GPT-5.5 的 per-token 延迟和 GPT-5.4 基本持平，但更强的能力让它可以用更少的步骤完成任务。
+**质量**：目前 Codex 可用的最强模型。
+**适用场景**：重构、架构设计、需要深度理解代码语义的任务。
+
+### GPT-5.4
+
+上代旗舰模型。GPT-5.4 把 GPT-5.3-Codex 的编程能力和更强的推理、工具使用、Agent 工作流整合到了一个模型里。它是一个通才型模型，编码能力不输给编程专用模型。
+
+```bash
+codex -m gpt-5.4
+```
+
+**定位**：日常专业开发工作的默认选择。
+**速度**：中等，和 GPT-5.5 接近。
+**质量**：高，编码和推理都很强。
+**适用场景**：写新功能、修 bug、代码审查、日常开发。
+
+### GPT-5.4-mini
+
+GPT-5.4 的轻量化版本。速度快、消耗低，适合响应式的编码任务和子 Agent（subagent）场景。
+
+```bash
+codex -m gpt-5.4-mini
+```
+
+**定位**：快速编码、轻量任务、子 Agent。
+**速度**：快。这是所有主力模型中响应最快的通用模型。
+**质量**：日常任务够用，复杂推理不如旗舰模型。
+**适用场景**：代码解释、CI/CD 自动化、简单 bug 修复、批量操作。
+
+### GPT-5.3-Codex
+
+通过强化学习专门训练的编程模型。在复杂的软件工程任务上表现出色，是 Codex Cloud 云端任务和代码审查的默认模型。
+
+GPT-5.3-Codex 和 GPT-5.4 的关系值得多说一句：GPT-5.4 已经吸收了 GPT-5.3-Codex 的编程能力。如果你用的是 GPT-5.4，编程层面的表现不会比 GPT-5.3-Codex 差。GPT-5.3-Codex 的价值在于它是 Codex Cloud 和代码审查的底层模型，同时对于纯编程任务（不涉及推理和工具使用），它仍然是一个针对性的选择。
+
+```bash
+codex -m gpt-5.3-codex
+```
+
+**定位**：纯编码场景，Codex Cloud 和代码审查的默认模型。
+**速度**：中等。
+**质量**：编程专项很强，但推理和工具使用不如 GPT-5.4 和 GPT-5.5。
+**适用场景**：代码审查、Cloud 任务、纯编码任务。
+
+### GPT-5.3-Codex-Spark
+
+研究预览版模型，专为接近实时的编码迭代优化。延迟极低，但能力也相应减弱。仅 ChatGPT Pro 订阅用户可用。
+
+```bash
+codex -m gpt-5.3-codex-spark
+```
+
+**定位**：实时编码迭代，类似结对编程的快速反馈。
+**速度**：最快。接近即时响应。
+**质量**：低于 GPT-5.3-Codex，适合快速迭代而非深度思考。
+**适用场景**：实时编码辅助、快速试错、结对编程式的交互。
+**限制**：仅 Pro 用户，研究预览阶段，有独立的使用额度。
+
+### 模型对比表
+
+| 模型 | 定位 | 速度 | 质量 | 适用场景 | 套餐要求 |
+|------|------|------|------|---------|---------|
+| GPT-5.5 | 最新旗舰 | 中 | 最高 | 复杂编码、架构、研究 | Plus 及以上 |
+| GPT-5.4 | 上代旗舰 | 中 | 高 | 日常开发、写功能、修 bug | Plus 及以上 |
+| GPT-5.4-mini | 轻量快速 | 快 | 中 | 代码解释、CI/CD、子 Agent | Plus 及以上 |
+| GPT-5.3-Codex | 编程专用 | 中 | 高（编程） | 代码审查、Cloud 任务 | Plus 及以上 |
+| GPT-5.3-Codex-Spark | 低延迟预览 | 最快 | 中低 | 实时编码迭代 | Pro 专属 |
+
+还有一个旧模型 GPT-5.2 仍在可用列表中，适合需要深度推理的调试场景，但 OpenAI 推荐优先使用 GPT-5.4 或 GPT-5.5。
+
+---
+
+## 2. `/model` 命令详解
+
+### 基本用法
+
+在 Codex CLI 的交互会话中，输入 `/model` 会弹出模型选择器：
+
+```text
+> /model
+
+  gpt-5.5          最新旗舰，复杂编码首选
+  gpt-5.4          上代旗舰，日常开发默认
+  gpt-5.4-mini     轻量快速，日常够用
+  gpt-5.3-codex    编程专用 RL 训练
+  gpt-5.3-codex-spark  低延迟研究预览 (Pro)
+```
+
+用方向键选择，回车确认。切换后，当前会话的后续所有对话都会使用新选择的模型。
+
+### 启动时指定模型
+
+如果你不想每次进会话再切换，可以在启动时直接指定：
+
+```bash
+# 用 -m 参数
+codex -m gpt-5.4
+
+# 用 --model 参数（完整写法）
+codex --model gpt-5.4-mini
+```
+
+这对 `codex exec` 非交互模式同样有效：
+
+```bash
+codex exec -m gpt-5.4-mini "运行测试并报告结果"
+```
+
+### `/status` 验证当前模型
+
+切换完模型后，可以用 `/status` 确认当前会话使用的模型：
+
+```text
+> /status
+Model: gpt-5.4
+Reasoning effort: medium
+Fast mode: off
+```
+
+`/status` 还会显示推理强度和 Fast 模式的状态，后面会讲到。
+
+### 模型目录机制
+
+Codex 维护一个 model catalog（模型目录），定义了每个模型的元数据：支持哪些功能、默认参数、可用的 service tier 等。这个目录由 OpenAI 服务端下发，你不需要手动维护。
+
+如果你有自定义需求（比如接入第三方模型），可以通过 `model_catalog_json` 配置项指定一个本地 JSON 文件来扩展目录：
+
+```toml
+model_catalog_json = "~/.codex/custom-models.json"
+```
+
+自定义模型目录的格式和内置目录一致，具体字段参考官方 Configuration Reference 文档。
+
+---
+
+## 3. `/fast` 快速模式
+
+### 什么是 Fast tier
+
+Fast 模式不是一个独立的模型，而是同一个模型的「优先队列」。开启 Fast 模式后，你的请求会被路由到优先级更高的计算资源上，响应速度提升约 1.5 倍。模型的智能水平和输出质量不变——你拿到的是同一个模型的结果，只是更快。
+
+拿 GPT-5.4 举例，标准模式和 Fast 模式的区别：
+
+| 维度 | Standard | Fast |
+|------|----------|------|
+| 模型 | gpt-5.4 | gpt-5.4（同一个） |
+| 输出质量 | 不变 | 不变 |
+| 响应速度 | 基准 | ~1.5x 更快 |
+| Credit 消耗 | 1x | 2x |
+
+Fast 模式的代价是更高的 credit 消耗。GPT-5.5 的 Fast 模式消耗 2.5x credits，GPT-5.4 的 Fast 模式消耗 2x credits。这意味着你的 5 小时使用窗口额度会用得更快。
+
+### 命令用法
+
+```text
+# 开启 Fast 模式
+> /fast on
+
+# 关闭 Fast 模式
+> /fast off
+
+# 查看当前状态
+> /fast status
+Fast mode: on (gpt-5.5 at 2.5x credits)
+```
+
+### 配置文件中持久化
+
+如果你希望每次启动 Codex 都默认开启 Fast 模式，在 `config.toml` 中添加：
+
+```toml
+service_tier = "fast"
+
+[features]
+fast_mode = true
+```
+
+### 支持的模型
+
+Fast 模式目前支持 GPT-5.5 和 GPT-5.4。GPT-5.4-mini、GPT-5.3-Codex 和 GPT-5.3-Codex-Spark 不支持 Fast 模式。
+
+### Fast 模式与 Codex-Spark 的区别
+
+容易混淆的一点：Fast 模式和 Codex-Spark 都能加速响应，但机制完全不同。
+
+Fast 模式是给现有模型（GPT-5.5、GPT-5.4）换一个更快的计算队列，模型本身不变，输出质量不变，代价是更高的 credit 消耗。
+
+Codex-Spark（GPT-5.3-Codex-Spark）是一个独立的模型。它不是为了提速 GPT-5.3-Codex，而是从架构层面为低延迟场景设计的更轻量模型。输出质量比 GPT-5.3-Codex 低，但响应接近即时。Codex-Spark 有独立的使用额度，不占用你常规模型的额度窗口。
+
+一句话总结：**Fast 模式 = 同一个模型跑更快，Codex-Spark = 另一个更小的模型**。
+
+### 什么时候值得用 Fast 模式
+
+- 你在做快速迭代，需要高频发消息，等待时间越短越好
+- 你的额度充足，不介意多消耗 credits
+- 你在 Pro 套餐下，有 5x 或 20x 的使用额度
+- 你在做结对编程式的交互，每一轮对话等待时间直接影响体验
+
+什么时候不要用：
+
+- 你在 Plus 套餐下，额度有限，日常使用 Standard 模式更持久
+- 你在做不需要频繁交互的任务（比如一次性大型重构）
+- 你用 API Key 付费——API Key 不支持 Fast 模式的 credit 计费方式
+
+---
+
+## 4. reasoning effort 推理强度
+
+### 五档推理强度
+
+`model_reasoning_effort` 控制模型在回答前「想多久」。推理强度越高，模型花更多时间做内部推理，输出质量更好但速度更慢。
+
+Codex 支持五个档位：
+
+| 档位 | 说明 | 适用场景 |
+|------|------|---------|
+| `minimal` | 几乎不推理 | 简单的格式化、查找替换 |
+| `low` | 轻度推理 | 代码解释、简单问答 |
+| `medium` | 中等推理（默认） | 日常开发、修 bug |
+| `high` | 深度推理 | 架构设计、复杂重构 |
+| `xhigh` | 极限推理 | 模型相关，需模型支持 |
+
+一个直观的类比：`minimal` 是秒回，`low` 是想几秒再回，`medium` 是认真想一下再回，`high` 是写个草稿反复改再回。
+
+### 设置推理强度
+
+方法一：在 `config.toml` 中全局设置
+
+```toml
+model_reasoning_effort = "high"
+```
+
+方法二：CLI 启动时通过 `--config` 覆盖
+
+```bash
+codex --config model_reasoning_effort=\"high\"
+```
+
+方法三：Plan 模式的独立设置
+
+Plan 模式（Codex 先做规划再执行）有自己独立的推理强度配置：
+
+```toml
+plan_mode_reasoning_effort = "high"
+```
+
+### 推理强度对实际输出的影响
+
+推理强度不是简单的「高低」开关，它会影响模型内部 Chain-of-Thought 的深度。
+
+- **minimal / low**：模型跳过大部分内部推理步骤，直接给出答案。对于 `这个函数是干嘛的` 这类问题，`low` 就够了。
+- **medium**：模型会做适度的推理分析。适合「这里有个 bug，帮我修」这类需要理解上下文但不涉及全局架构的任务。
+- **high**：模型会做深度的多步推理。适合「把这个单体应用拆成微服务」这类需要全局理解的复杂任务。
+- **xhigh**：行为取决于具体模型。不是所有模型都支持这个档位。
+
+### 推理强度和 token 消耗的关系
+
+推理强度越高，模型内部生成的「思考 token」越多，实际消耗的 token 也越多。这不影响你看到的输出（推理 token 默认不展示），但会影响 credit 消耗和速率限制。
+
+一个粗略的参考：
+
+- `low` 到 `high` 之间，token 消耗可能增加 2-5 倍
+- `high` 的响应时间可能是 `low` 的 3 倍以上
+
+所以推理强度不是越高越好。简单的任务用高强度推理，既浪费时间又浪费额度。
+
+### 一个实际例子
+
+假设你让 Codex 解释一段代码：
+
+`low` effort 的行为：
+```text
+这个函数接收一个用户 ID，从数据库查询用户信息，
+验证邮箱是否已确认，然后返回用户对象。
+```
+
+`high` effort 的行为：
+```text
+这个函数实现了用户信息的查询与验证流程：
+1. 通过 userId 参数查询 users 表
+2. 检查 email_verified 字段是否为 true
+3. 如果邮箱未验证，抛出 UnauthorizedError
+4. 返回经过 sanitize 过的 UserDTO 对象
+
+潜在问题：
+- 没有处理 userId 为空的情况
+- 数据库查询没有超时保护
+- sanitize 方法只过滤了 HTML 标签，没有处理 SQL 注入
+```
+
+可以看到，`high` effort 不只是回答更详细，它还会主动发现问题。对于代码审查、重构这类需要深度理解的任务，这个差异很关键。但对于「这段代码干嘛的」这类简单问题，`low` effort 的回答已经够用了。
+
+---
+
+## 5. 不同任务类型怎么选模型
+
+模型选择没有唯一正确答案，但可以根据任务类型给出推荐配置。核心原则是：**任务越复杂，用越强的模型和越高的推理强度；任务越简单，用越轻的模型和越低的推理强度。**
+
+### 代码解释
+
+你拿到了一段陌生代码，想让 Codex 解释它的功能。
+
+**推荐**：GPT-5.4-mini + `low` effort
+
+这个任务不需要深度推理，mini 模型的速度优势在这里很明显。
+
+```bash
+codex -m gpt-5.4-mini --config model_reasoning_effort=\"low\" \
+  "解释 src/utils/validator.ts 中每个导出函数的用途"
+```
+
+为什么不用更强的模型？代码解释是一个「读和理解」的任务，不是「推理和创造」的任务。mini 模型的理解能力足够，响应更快，消耗更少。
+
+### 修 bug
+
+你的应用出了一个 bug，需要 Codex 分析原因并修复。
+
+**推荐**：GPT-5.4 + `medium` effort
+
+修 bug 需要理解上下文——代码在做什么、为什么出错、怎么改才不会引入新问题。GPT-5.4 的推理能力在这里很关键。
+
+```bash
+codex -m gpt-5.4 --config model_reasoning_effort=\"medium\" \
+  "修复用户登录后偶尔出现白屏的问题"
+```
+
+如果 bug 涉及多个模块的交互或者竞态条件，把推理强度提到 `high`。
+
+### 写新功能
+
+你需要 Codex 帮你实现一个新功能模块。
+
+**推荐**：GPT-5.4 或 GPT-5.5 + `high` effort
+
+写新功能是最需要推理能力的任务之一。模型需要理解现有架构、设计新代码的结构、确保和现有代码风格一致、处理边界情况。
+
+```bash
+# 日常新功能
+codex -m gpt-5.4 --config model_reasoning_effort=\"high\" \
+  "实现一个用户偏好设置页面，支持主题切换和通知配置"
+
+# 复杂新功能
+codex -m gpt-5.5 --config model_reasoning_effort=\"high\" \
+  "为现有的电商系统添加多币种支付支持"
+```
+
+GPT-5.5 在复杂功能开发中的优势在于：它更擅长理解跨模块的依赖关系，生成更完整的实现，减少来回修改的次数。
+
+### 重构
+
+你需要重构一段代码——可能是提取公共逻辑、拆分大函数、改变数据流方向。
+
+**推荐**：GPT-5.5 + `high` effort
+
+重构是最复杂的任务类型。模型需要同时理解旧代码的语义、设计新代码的结构、确保行为不变。这需要最深度的推理能力。
+
+```bash
+codex -m gpt-5.5 --config model_reasoning_effort=\"high\" \
+  "将 UserService 类拆分为 UserAuthService 和 UserProfileService"
+```
+
+重构任务用 GPT-5.5 的理由：它对代码语义的理解更准确，生成的重构方案更可靠，出错需要人工介入的概率更低。
+
+### 代码审查
+
+你提交了一个 PR，想让 Codex 审查代码质量。
+
+**推荐**：GPT-5.3-Codex + `medium` effort
+
+GPT-5.3-Codex 是编程专用模型，在代码审查场景下表现很好。如果你在做 GitHub 集成的自动代码审查，Codex Cloud 默认就用这个模型。
+
+```bash
+codex -m gpt-5.3-codex --config model_reasoning_effort=\"medium\" \
+  "审查这个 PR 的代码质量，检查潜在的 bug 和性能问题"
+```
+
+你也可以通过 `review_model` 配置项为 `/review` 命令指定专用模型：
+
+```toml
+review_model = "gpt-5.3-codex"
+```
+
+### CI/CD 自动化
+
+你在 CI 管道中使用 Codex 执行自动化任务。
+
+**推荐**：GPT-5.4-mini + `minimal` effort
+
+CI 场景下，任务通常很明确（运行测试、检查格式、生成 changelog），不需要深度推理。用最轻的模型和最低的推理强度，省钱够用。
+
+```bash
+codex exec -m gpt-5.4-mini --config model_reasoning_effort=\"minimal\" \
+  "运行 npm test 并总结失败的测试用例"
+```
+
+### 任务-模型-推理强度推荐表
+
+| 任务类型 | 推荐模型 | 推理强度 | 理由 |
+|---------|---------|---------|------|
+| 代码解释 | GPT-5.4-mini | low | 速度快，够用 |
+| 修 bug | GPT-5.4 | medium | 需要理解上下文 |
+| 写新功能（简单） | GPT-5.4 | medium-high | 需要推理能力 |
+| 写新功能（复杂） | GPT-5.5 | high | 需要最强推理 |
+| 重构 | GPT-5.5 | high | 最复杂的任务 |
+| 代码审查 | GPT-5.3-Codex | medium | 编程专用模型 |
+| CI/CD 自动化 | GPT-5.4-mini | minimal | 省钱够用 |
+| 快速试错 | GPT-5.3-Codex-Spark | low | 极低延迟 |
+| 文档生成 | GPT-5.4 | low-medium | 不需要深度推理 |
+
+---
+
+## 6. 模型与套餐的关系
+
+不同 ChatGPT 套餐下，你能使用的模型和额度差异很大。
+
+### 各套餐的模型访问
+
+**Free（免费）**：可以体验 Codex 的基础能力，模型选择有限，额度很低。适合尝试。
+
+**Go（$8/月）**：轻量级使用，适合偶尔写写脚本的用户。
+
+**Plus（$20/月）**：解锁全部主力模型，包括 GPT-5.5、GPT-5.4、GPT-5.4-mini 和 GPT-5.3-Codex。有速率限制。
+
+**Pro 5x / 20x（$100-$200/月）**：Plus 的所有能力，加上 GPT-5.3-Codex-Spark 的访问权限。5x 和 20x 分别对应 Plus 的 5 倍和 20 倍使用额度。
+
+**API Key**：按 token 付费。支持 GPT-5.4、GPT-5.4-mini、GPT-5.3-Codex。GPT-5.5 和 GPT-5.3-Codex-Spark 在 API 端暂不可用或延迟发布。没有 Cloud 功能（GitHub 代码审查、Slack 集成等）。
+
+### 速率限制详解
+
+Codex 的使用限制基于 **5 小时滑动窗口**。以下是 Plus 套餐下的本地消息额度参考：
+
+| 模型 | Plus 本地消息 / 5h | Pro 5x / 5h | Pro 20x / 5h |
+|------|-------------------|-------------|--------------|
+| GPT-5.5 | 15-80 | 80-400 | 300-1600 |
+| GPT-5.4 | 20-100 | 100-500 | 400-2000 |
+| GPT-5.4-mini | 60-350 | 300-1750 | 1200-7000 |
+| GPT-5.3-Codex | 30-150 | 150-750 | 600-3000 |
+
+为什么是一个范围而不是固定数字？因为实际消耗取决于任务的复杂度和上下文长度。一个 `帮我加个 console.log` 消耗的额度远小于 `重构整个认证模块`。
+
+### 额度省着用的方法
+
+几个实际的建议：
+
+1. **日常开发用 GPT-5.4**：比 GPT-5.5 省额度，能力差距在日常任务中不明显。
+2. **简单任务切 GPT-5.4-mini**：代码解释、格式化、简单修改这些任务用 mini 模型。
+3. **控制 prompt 长度**：不必要的上下文不要塞给模型。
+4. **控制 AGENTS.md 大小**：大项目的 AGENTS.md 可能很长，按目录嵌套拆分。
+5. **减少 MCP 服务器数量**：每个 MCP 服务器都会增加上下文消耗。不用的就关掉。
+6. **额度快用完时切小模型**：接近限制时切到 GPT-5.4-mini 继续工作。
+
+### 额度用完了怎么办
+
+Plus 和 Pro 用户额度耗尽后可以购买额外的 ChatGPT credits 继续使用，不需要升级套餐。Business、Edu 和 Enterprise 用户可以通过 workspace credits 扩展额度。
+
+所有用户也可以额外配置一个 API Key，以标准 API 费率运行额外的本地任务。API Key 的计费独立于 ChatGPT 的额度窗口。
+
+---
+
+## 7. config.toml 中的模型配置
+
+所有模型相关的配置都在 `~/.codex/config.toml` 中完成。项目级覆盖可以放在项目根目录的 `.codex/config.toml` 中。
+
+### 配置优先级
+
+Codex 按以下顺序解析配置（优先级从高到低）：
+
+1. CLI 标志和 `--config` 覆盖
+2. 项目配置：`.codex/config.toml`（从项目根到当前目录，最近的优先）
+3. Profile 文件：`~/.codex/profile-name.config.toml`
+4. 用户配置：`~/.codex/config.toml`
+5. 系统配置：`/etc/codex/config.toml`（Unix）
+6. 内置默认值
+
+### 核心配置项
+
+```toml
+# 默认模型
+model = "gpt-5.4"
+
+# 推理强度：minimal | low | medium | high | xhigh
+model_reasoning_effort = "medium"
+
+# 上下文窗口大小（token 数）
+# 一般不需要手动设置，模型有内置默认值
+model_context_window = 128000
+
+# 自动压缩阈值
+# 当历史对话超过这个 token 数时，自动压缩
+model_auto_compact_token_limit = 100000
+
+# 代码审查专用模型
+review_model = "gpt-5.3-codex"
+```
+
+### Fast 模式配置
+
+```toml
+# 设置 service tier 为 fast
+service_tier = "fast"
+
+# 确保 fast_mode 功能开启（默认就是 true）
+[features]
+fast_mode = true
+```
+
+### 推理摘要配置
+
+你可以控制模型是否返回推理过程的摘要：
+
+```toml
+# auto: 模型自动决定
+# concise: 简短摘要
+# detailed: 详细摘要
+# none: 不生成摘要
+model_reasoning_summary = "auto"
+
+# 强制开启或关闭推理元数据
+model_supports_reasoning_summaries = true
+```
+
+### Profile 切换不同模型配置
+
+如果你在不同项目间切换，可以为每个场景创建一个 Profile 文件。假设你有一个日常开发 Profile 和一个重构专用 Profile：
+
+`~/.codex/daily.config.toml`：
+
+```toml
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+```
+
+`~/.codex/refactor.config.toml`：
+
+```toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+```
+
+启动时选择 Profile：
+
+```bash
+# 日常开发
+codex --profile daily
+
+# 重构任务
+codex --profile refactor
+```
+
+### 一个完整的模型配置示例
+
+```toml
+# ~/.codex/config.toml
+
+# 默认使用 GPT-5.4
+model = "gpt-5.4"
+
+# 默认推理强度
+model_reasoning_effort = "medium"
+
+# 代码审查用 GPT-5.3-Codex
+review_model = "gpt-5.3-codex"
+
+# 上下文窗口
+model_context_window = 128000
+
+# 自动压缩阈值
+model_auto_compact_token_limit = 100000
+
+# 推理摘要
+model_reasoning_summary = "auto"
+
+# 输出详细程度：low | medium | high
+# 控制模型回复的长度和详细程度
+model_verbosity = "medium"
+
+# Fast 模式（按需开启）
+# service_tier = "fast"
+
+[features]
+fast_mode = true
+```
+
+### 用 CLI 标志临时覆盖
+
+除了改配置文件，你还可以在命令行用 `--config` 或 `-c` 做一次性覆盖：
+
+```bash
+# 临时切换模型
+codex -m gpt-5.5
+
+# 临时调高推理强度
+codex -c model_reasoning_effort=\"high\"
+
+# 组合使用
+codex -m gpt-5.5 -c model_reasoning_effort=\"high\" "重构 auth 模块"
+```
+
+CLI 标志的优先级最高，会覆盖所有配置文件中的同名设置。这只对当次会话生效，不会写入任何配置文件。
+
+### 项目级配置
+
+如果你的某个项目需要用特定的模型（比如一个大型遗留项目需要更强的推理），在项目根目录创建 `.codex/config.toml`：
+
+```toml
+# .codex/config.toml（项目级）
+
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+```
+
+这个配置只在该项目目录下生效，不会影响其他项目。注意：项目级配置不能覆盖认证、Provider、通知等安全相关的配置项。
+
+---
+
+## 8. 下一步
+
+本文覆盖了 Codex CLI 的模型选择机制——从模型定位到配置方法到按任务选型。接下来的一个关键问题是：如何让模型更好地理解你的代码？
+
+第 07 篇将讲解 Codex 的代码理解能力，包括 AGENTS.md 的编写方法、项目上下文注入、以及如何通过 MCP 服务器扩展 Codex 对你项目的感知范围。
+
+### 延伸阅读
+
+- [Codex Models 官方文档](https://developers.openai.com/codex/models)
+- [Codex Speed 文档](https://developers.openai.com/codex/speed)
+- [Codex Config Reference](https://developers.openai.com/codex/config-reference)
+- [Codex Pricing](https://developers.openai.com/codex/pricing)
+- [GPT-5.5 发布公告](https://openai.com/index/introducing-gpt-5-5/)

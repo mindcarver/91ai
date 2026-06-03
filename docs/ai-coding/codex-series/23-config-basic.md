@@ -1,0 +1,603 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex CLI 源码 codex-rs/config/src/config_toml.rs — ConfigToml 主结构体定义
+2. Codex CLI 源码 codex-rs/config/src/types.rs — 各配置项类型定义（History, Notifications, ShellEnvironmentPolicy, FileOpener 等）
+3. Codex CLI 源码 codex-rs/features/src/lib.rs — Feature 枚举与 FeaturesToml 完整定义
+4. Codex CLI 文档 zread.ai/openai/codex/22-configuration-reference — 配置参考页面
+5. Codex CLI 源码 codex-rs/protocol/src/config_types.rs — WebSearchMode, ReasoningEffort, SandboxMode 等枚举
+6. Codex CLI 源码 codex-rs/tui/src/config_update.rs — service_tier 配置构建逻辑
+版本基准: 2026 年 6 月，Codex CLI v0.75.0
+-->
+
+# Codex CLI 基础配置项：model、sandbox、features 与日常调优
+
+> **TL;DR**：`~/.codex/config.toml` 里大部分配置项你一辈子不用碰。日常只需要关注这几个：`model`（用什么模型）、`approval_policy`（执行命令要不要问你）、`sandbox_mode`（文件和网络权限）、`web_search`（要不要联网搜东西）、`model_reasoning_effort`（模型多使劲想）。`[features]` 是实验性功能的总开关，大部分默认就好，但 `memories`（记忆）和 `network_proxy`（网络代理）值得手动开。本文从源码出发，逐个拆解每个配置项的含义、取值范围和实际使用建议，最后给一份可直接复制的配置模板。
+
+---
+
+## 1. 最常改的配置项
+
+先说结论。如果你只想改 5 个配置项，改这些：
+
+```toml
+# ~/.codex/config.toml
+
+model = "gpt-5.4"                    # 用什么模型
+approval_policy = "on-request"        # 命令执行审批策略
+sandbox_mode = "workspace-write"      # 文件系统权限
+web_search = "live"                   # 网络搜索模式
+model_reasoning_effort = "medium"     # 推理强度
+```
+
+这五个覆盖了 90% 的日常需求。下面逐个展开，把每个配置项的来龙去脉讲清楚。
+
+所有这些配置项写在 `~/.codex/config.toml` 里（除非你改了 `CODEX_HOME`）。项目级的 `.codex/config.toml` 也可以设，但有些安全敏感字段在项目级会被忽略——这个在上一篇（第 22 篇配置体系总览）里讲过了。
+
+---
+
+## 2. model 与模型相关
+
+### 2.1 model — 用什么模型
+
+```toml
+model = "gpt-5.4"
+```
+
+这个配置项决定 Codex 默认使用哪个模型。从源码看，它就是一个 `Option<String>`——填模型 slug 字符串。
+
+取值取决于你的 API 权限和套餐。截至 2026 年 6 月，常用的有：
+
+| 模型 slug | 定位 | 适用场景 |
+|---|---|---|
+| `gpt-5.5` | 最新旗舰 | 复杂架构、长上下文推理 |
+| `gpt-5.4` | 上代旗舰 | 日常开发默认选择 |
+| `gpt-5.4-mini` | 轻量快速 | CI/CD、简单任务 |
+| `gpt-5.3-codex` | 编程专用 | 纯编码任务 |
+| `o4-mini` | 推理模型 | 数学、逻辑推理密集任务 |
+
+CLI 启动时可以用 `-m` 覆盖：
+
+```bash
+codex -m gpt-5.5
+```
+
+运行中也可以用 `/model` 命令切换，这个改的是当前会话的上下文，不影响配置文件。
+
+### 2.2 review_model — 代码审查专用模型
+
+```toml
+review_model = "o4-mini"
+```
+
+这个配置项专门给 `/review` 功能用。如果你想让日常编码用 GPT-5.4（平衡速度和质量），但代码审查用 o4-mini（推理能力强），可以这样设。不设的话，review 也用 `model` 指定的模型。
+
+### 2.3 model_reasoning_effort — 推理强度
+
+```toml
+model_reasoning_effort = "medium"
+```
+
+这个配置控制模型在推理上花多少算力。从源码看，它映射到 OpenAI Responses API 的 `reasoning.effort` 参数。
+
+取值范围：
+
+| 值 | 含义 | 什么时候用 |
+|---|---|---|
+| `minimal` | 几乎不推理 | 最快最便宜，适合简单格式化 |
+| `low` | 少量推理 | 快速问答、简单编辑 |
+| `medium` | 中等推理（多数模型的默认值） | 日常开发 |
+| `high` | 大量推理 | 复杂 bug、架构分析 |
+| `xhigh` | 最大推理 | 最难的推理题，日常用不上 |
+
+实际体验：大部分时候 `medium` 够用。遇到难搞的 bug 临时切 `high`。`xhigh` 基本只在跑 benchmark 或者极端复杂场景下用，token 消耗会显著增加。
+
+还有一个 `plan_mode_reasoning_effort`，专门控制 Plan 模式的推理强度。不设的话，Plan 模式用 `model_reasoning_effort` 的值。
+
+### 2.4 model_auto_compact_token_limit — 自动压缩阈值
+
+```toml
+model_auto_compact_token_limit = 80000
+```
+
+当对话历史占用的 token 数超过这个阈值时，Codex 会自动触发历史压缩——把之前的对话内容总结成更短的摘要，腾出空间给新内容。
+
+默认值取决于模型。一般不需要手动改。但如果你发现 Codex 经常在长对话中"遗忘"早期上下文，可以适当调高这个值；反之如果 token 消耗太快，可以调低。
+
+### 2.5 model_context_window — 上下文窗口大小
+
+```toml
+model_context_window = 200000
+```
+
+显式告诉 Codex 模型的上下文窗口有多大（单位：token）。大多数情况下不用设——Codex 会从模型 catalog 里自动获取这个信息。只有在你用自定义模型提供商（比如本地部署的 Ollama）时才需要手动指定，因为本地模型没有 catalog 数据可查。
+
+### 2.6 model_reasoning_summary — 推理摘要
+
+```toml
+model_reasoning_summary = "concise"
+```
+
+控制推理过程的摘要风格。模型思考完之后，可以把思考过程以不同详细程度展示给你。可选值一般是 `"concise"`（简洁）或者 `"auto"`（自动）。这个配置项影响的是你看到的推理过程展示方式，不影响模型实际的推理质量。
+
+### 2.7 service_tier — 服务层级
+
+```toml
+service_tier = "flex"
+```
+
+这个配置项对应 OpenAI API 的 service tier 参数，决定请求走哪个处理队列。
+
+| 值 | 含义 |
+|---|---|
+| `flex` | 弹性队列，延迟可能更高，但便宜 |
+| `fast` | 快速队列，优先处理，价格更高 |
+
+从源码看，`service_tier` 支持 `"default"`、`"priority"`、`"flex"` 和旧值 `"fast"`。Codex 会在内部把 `"fast"` 映射到对应的 tier。
+
+实际建议：日常开发用 `flex` 省钱。赶时间的时候不设或者切到快速队列。这个配置在 TUI 里也可以通过设置面板切换。
+
+---
+
+## 3. 审批与沙箱
+
+### 3.1 approval_policy — 审批策略
+
+```toml
+approval_policy = "on-request"
+```
+
+这个配置项决定：Codex 想执行一个命令时，是直接跑还是先问你。
+
+从源码看，`approval_policy` 对应 `AskForApproval` 枚举，在执行策略层有完整的决策流程。
+
+| 值 | 行为 | 什么时候用 |
+|---|---|---|
+| `untrusted` | 只信任预置白名单中的命令，其他都问 | 默认值。最安全，但弹窗多 |
+| `on-request` | 只在模型主动请求审批时才问 | 日常开发的好选择，减少弹窗 |
+| `on-failure` | 只在命令执行失败时才问 | 比较激进的自动化 |
+| `never` | 永远不问，直接执行 | CI/CD 或完全信任的环境 |
+| `granular` | 根据沙箱规则、可信度等做细粒度判断 | 高级用户精确控制 |
+
+实际体验：`untrusted` 是默认值，安全但烦人——每个 `ls` 都可能弹窗。改成 `on-request` 之后，日常体验顺畅很多。`never` 在 CI 里用没问题，但在本地开发时用 `never` 风险自负——模型要是不小心跑了个 `rm -rf`，没人拦着。
+
+### 3.2 sandbox_mode — 沙箱模式
+
+```toml
+sandbox_mode = "workspace-write"
+```
+
+沙箱控制 Codex 子进程对文件系统和网络的访问权限。这是安全相关的核心配置。
+
+| 值 | 文件权限 | 网络权限 | 适用场景 |
+|---|---|---|---|
+| `read-only` | 只读 | 阻止 | 最安全，只能看不能改 |
+| `workspace-write` | 项目目录内可写 | 默认阻止 | 日常开发推荐 |
+| `danger-full-access` | 无限制 | 无限制 | CI/容器化环境，或者你完全信任模型 |
+
+`workspace-write` 是大多数人应该用的默认值。它允许 Codex 在项目目录下创建和修改文件（这是写代码必需的），但不能碰项目外的文件，也不能联网。
+
+### 3.3 sandbox_workspace_write — workspace-write 的细化配置
+
+当 `sandbox_mode = "workspace-write"` 时，可以用 `[sandbox_workspace_write]` 做更细的控制：
+
+```toml
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true              # 允许联网
+writable_roots = ["/tmp/build"]    # 额外的可写目录
+exclude_tmpdir_env_var = false     # 排除 TMPDIR 环境变量
+exclude_slash_tmp = false          # 排除 /tmp 目录
+```
+
+`network_access = true` 是最常见的用法——让 Codex 在 workspace-write 模式下也能 `npm install`、`pip install` 这类需要联网的操作。不设的话，默认阻止网络。
+
+`writable_roots` 允许你指定项目目录之外的额外可写路径。比如你的构建输出目录在 `/tmp/build`，不在项目目录里，就可以加到这里。
+
+---
+
+## 4. web_search 网络搜索
+
+```toml
+web_search = "live"
+```
+
+控制模型是否能进行网络搜索。从源码看，它映射到 `WebSearchMode` 枚举。
+
+| 值 | 行为 |
+|---|---|
+| `disabled` | 完全禁用网络搜索 |
+| `cached` | 只使用缓存的搜索结果，不实时查询 |
+| `live` | 实时网络搜索 |
+
+默认值取决于你的套餐和模型。对于大多数 OpenAI API 用户，默认是 `"live"`。
+
+`cached` 模式是一个有趣的中间态——它不会发起新的搜索请求，而是复用之前的搜索结果。适合想减少 API 调用的场景，但信息可能不是最新的。
+
+`disabled` 适合完全离线的工作环境，或者你不想让模型联网的场景。
+
+注意：旧版配置里用 `[features]` 下的 `web_search_request` 和 `web_search_cached` 来控制搜索。这些已经被标记为 deprecated。新配置用顶层的 `web_search` 就行。
+
+---
+
+## 5. features 特性开关详解
+
+`[features]` 是 Codex 的实验性功能总开关。从源码看，它是一个扁平的键值对表，每个键对应一个 `Feature` 枚举值，值是 `true` 或 `false`。
+
+```toml
+[features]
+memories = true
+shell_snapshot = true
+network_proxy = false
+```
+
+特性分为几个阶段：
+
+- **Stable**：稳定功能，大部分默认开启
+- **Experimental**：实验性功能，需要手动开启
+- **Under Development**：开发中，不建议日常使用
+- **Deprecated/Removed**：已废弃或已移除，配置了会被忽略
+
+下面列出日常最可能用到的特性。
+
+### 5.1 默认开启的特性（一般不用管）
+
+这些默认就是 `true`，除非你有特殊需求要关掉：
+
+| 特性 key | 含义 |
+|---|---|
+| `shell_tool` | Shell 命令执行工具 |
+| `unified_exec` | 统一的 PTY 执行工具（Linux/macOS 默认开启） |
+| `shell_snapshot` | Shell 快照功能 |
+| `hooks` | 生命周期钩子 |
+| `multi_agent` | 多 Agent 协作 |
+| `personality` | 模型个性选择 |
+| `fast_mode` | 快速模式 |
+| `apps` | Codex Apps 连接器 |
+| `plugins` | 插件系统 |
+| `tool_suggest` | 工具建议 |
+| `guardian_approval` | 自动审批 |
+| `goals` | 目标追踪 |
+| `image_generation` | 图片生成 |
+
+### 5.2 需要手动开启的特性
+
+这些默认关闭，但可能对你有用：
+
+| 特性 key | 含义 | 什么时候开 |
+|---|---|---|
+| `memories` | 记忆系统——从历史会话提取和整合知识 | 长期使用 Codex，想让它在不同会话间记住你的偏好和项目知识 |
+| `network_proxy` | 沙箱会话的网络代理限制 | 需要精细控制 Codex 的网络访问（域名白名单/黑名单） |
+| `terminal_resize_reflow` | 终端窗口大小变化时重建滚动回溯 | 默认已开启，一般不用动 |
+
+### 5.3 memories — 记忆系统
+
+```toml
+[features]
+memories = true
+```
+
+记忆系统是 Codex 的一个重要实验性功能。开启后，Codex 会在你使用过程中自动从对话中提取知识点，并在后续对话中注入相关记忆。
+
+记忆系统的详细配置在 `[memories]` 表里：
+
+```toml
+[memories]
+generate_memories = true           # 是否从新会话中生成记忆
+use_memories = true                # 是否在对话中注入已有记忆
+dedicated_tools = false            # 是否暴露专用的记忆管理工具
+max_rollouts_per_startup = 2       # 每次启动最多处理多少个待提取会话
+min_rollout_idle_hours = 6         # 会话空闲多久后才提取记忆（小时）
+max_rollout_age_days = 10          # 最多提取多少天前的会话
+max_unused_days = 30               # 超过多少天没使用的记忆自动过期
+```
+
+`min_rollout_idle_hours` 默认是 6 小时——也就是说，你刚结束的对话不会立刻被提取，要等 6 小时。这个设计是避免把还没完成的对话当成"已完成的知识"。
+
+### 5.4 network_proxy — 网络代理
+
+```toml
+[features]
+network_proxy = true
+```
+
+开启后，Codex 会启动一个本地网络代理，对沙箱会话中的网络请求做精细控制——域名白名单/黑名单、MITM 钩子等。这是一个高级功能，适合需要严格网络安全策略的场景。
+
+网络代理的详细配置比较复杂，涉及 `[permissions]` 表的 `[permissions.<name>.network]` 子表。如果你需要这个功能，建议参考 Codex 源码中 `codex-rs/network-proxy/README.md` 的示例配置。
+
+### 5.5 已废弃的特性
+
+下面这些特性在早期版本有用，但现在已经被标记为 Removed 或 Deprecated。配置文件里有它们不会报错，但会被忽略：
+
+| 旧 key | 状态 | 说明 |
+|---|---|---|
+| `undo` | Removed | 旧版的 undo 功能已移除 |
+| `codex_git_commit` | Removed | Git commit 归属标注已移除 |
+| `js_repl` | Removed | JavaScript REPL 已移除 |
+| `web_search_request` | Deprecated | 网络搜索现在用顶层 `web_search` 控制 |
+| `web_search_cached` | Deprecated | 同上 |
+| `use_legacy_landlock` | Deprecated | 旧版 Linux 沙箱方案，即将移除 |
+
+如果你在旧配置文件里看到这些，可以安全删除。
+
+---
+
+## 6. shell_environment_policy 环境策略
+
+这个配置控制 Codex 启动子进程时，子进程继承什么样的环境变量。从源码看，它是一个独立的表 `[shell_environment_policy]`。
+
+### 6.1 四种模式
+
+```toml
+# 模式一：继承所有环境变量（默认）
+[shell_environment_policy]
+inherit = "all"
+
+# 模式二：设置特定环境变量
+[shell_environment_policy]
+inherit = "all"
+[shell_environment_policy.set]
+NODE_ENV = "development"
+CUSTOM_FLAG = "1"
+
+# 模式三：只包含匹配的变量
+[shell_environment_policy]
+include_only = ["^PATH$", "^HOME$", "^NODE_"]
+
+# 模式四：排除特定变量
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^AWS_", "^SECRET_"]
+```
+
+### 6.2 参数详解
+
+| 参数 | 类型 | 含义 |
+|---|---|---|
+| `inherit` | 字符串 | `"all"`（继承全部，默认）或 `"none"`（不继承） |
+| `set` | 键值对 | 手动设置环境变量 |
+| `include_only` | 正则数组 | 只继承匹配这些正则的变量 |
+| `exclude` | 正则数组 | 排除匹配这些正则的变量 |
+| `ignore_default_excludes` | 布尔 | 是否忽略 Codex 内置的默认排除列表 |
+
+实际场景举例。如果你用 Codex 处理涉及 AWS 凭证的项目，不想让模型碰你的 `AWS_SECRET_ACCESS_KEY`：
+
+```toml
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^AWS_SECRET", "^AWS_SESSION_TOKEN"]
+```
+
+如果你在容器里跑 Codex，只想暴露最小化的环境：
+
+```toml
+[shell_environment_policy]
+include_only = ["^PATH$", "^HOME$", "^LANG$", "^TERM$"]
+[shell_environment_policy.set]
+NODE_ENV = "production"
+```
+
+---
+
+## 7. 历史与通知
+
+### 7.1 history — 历史记录配置
+
+```toml
+[history]
+persistence = "save-all"    # 或 "none"
+max_bytes = 5242880         # 5MB
+```
+
+| 参数 | 值 | 含义 |
+|---|---|---|
+| `persistence` | `"save-all"`（默认） | 所有历史记录写入 `~/.codex/history.jsonl` |
+| `persistence` | `"none"` | 不写入历史记录 |
+| `max_bytes` | 整数（字节数） | 历史文件超过此大小时，自动丢弃最旧的条目 |
+
+`max_bytes` 是一个容易被忽视的配置。默认不设上限。如果你用 Codex 很频繁，`history.jsonl` 可能会长到几十 MB。设一个上限可以让它自动轮转。
+
+### 7.2 notify — 通知配置
+
+```toml
+notify = ["terminal-notifier", "-title", "Codex", "-message"]
+```
+
+`notify` 是一个字符串数组，指定一个外部命令来发送通知。当 Codex 完成长时间运行的任务时，会调用这个命令通知你。
+
+比如在 macOS 上用 `terminal-notifier`：
+
+```toml
+notify = ["terminal-notifier", "-title", "Codex CLI", "-sound", "default"]
+```
+
+不设的话，Codex 使用内置的终端通知机制（OSC 9 转义序列或 BEL 字符）。
+
+更精细的通知控制在 `[tui]` 表里：
+
+```toml
+[tui]
+notifications = true                # 是否启用通知
+notification_method = "auto"        # "auto" | "osc9" | "bel"
+notification_condition = "unfocused" # "unfocused"（默认）| "always"
+```
+
+`notification_condition = "unfocused"` 的意思是：只有当终端窗口不在前台时才发通知。这避免了你正看着 Codex 输出时还被通知打扰。
+
+---
+
+## 8. 工具与文件操作
+
+### 8.1 file_opener — 文件打开器
+
+```toml
+file_opener = "vscode"
+```
+
+当 Codex 的输出中引用文件路径时，这个配置决定点击路径会用什么编辑器打开。
+
+| 值 | 编辑器 |
+|---|---|
+| `"vscode"` | Visual Studio Code |
+| `"vscode-insiders"` | VS Code Insiders 版本 |
+| `"cursor"` | Cursor |
+| `"windsurf"` | Windsurf |
+| `"none"` | 不使用 URI 方案，禁用超链接 |
+
+不设的话，Codex 不会为文件路径生成可点击的超链接。设了之后，点击文件路径会用对应编辑器的 URI scheme 打开。
+
+### 8.2 tools — 工具配置
+
+```toml
+[tools]
+[tools.web_search]
+# 网络搜索工具的详细配置
+```
+
+`[tools]` 表目前主要用于网络搜索工具的细粒度配置。顶层的 `web_search` 控制全局开关，`[tools.web_search]` 可以做更细的调整。
+
+### 8.3 instructions — 系统指令
+
+```toml
+instructions = "回复使用中文。代码注释用英文。"
+```
+
+这个配置项直接往模型的系统提示里注入自定义指令。适合做一些全局的行为偏好设定。
+
+如果你需要更复杂的指令，可以用 `developer_instructions`：
+
+```toml
+developer_instructions = """
+你是一个专注于 TypeScript 后端开发的助手。
+遵循以下编码规范：
+- 使用严格类型
+- 优先使用函数式风格
+- 错误处理用 Result 模式
+"""
+```
+
+`instructions` 是普通系统消息，`developer_instructions` 是 developer 角色的消息。两者可以同时使用。
+
+---
+
+## 9. 推荐的基础配置模板
+
+最后给出三套配置模板，分别对应不同的使用场景。你可以直接复制到 `~/.codex/config.toml` 使用。
+
+### 9.1 日常开发（推荐）
+
+安全性和便利性的平衡。
+
+```toml
+# ~/.codex/config.toml — 日常开发配置
+
+model = "gpt-5.4"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+model_reasoning_effort = "medium"
+service_tier = "flex"
+
+# 允许 workspace-write 模式下联网
+[sandbox_workspace_write]
+network_access = true
+
+# 开启记忆系统
+[features]
+memories = true
+
+# 历史记录保留 5MB
+[history]
+persistence = "save-all"
+max_bytes = 5242880
+
+# 文件链接用 VS Code 打开
+file_opener = "vscode"
+```
+
+### 9.2 CI/CD 自动化
+
+完全自动化，不弹窗，不交互。
+
+```toml
+# ~/.codex/config.toml — CI/CD 配置
+
+model = "gpt-5.4-mini"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "disabled"
+model_reasoning_effort = "low"
+
+[sandbox_workspace_write]
+network_access = false
+
+[history]
+persistence = "none"
+```
+
+CI 环境下用 `gpt-5.4-mini` 省钱，`never` 不弹窗（CI 里也没人弹），`disabled` 关掉搜索减少不可控因素。
+
+### 9.3 重度用户
+
+追求效果最大化，不太在乎 token 消耗。
+
+```toml
+# ~/.codex/config.toml — 重度用户配置
+
+model = "gpt-5.5"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+model_reasoning_effort = "high"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+memories = true
+network_proxy = false
+
+[memories]
+generate_memories = true
+use_memories = true
+max_rollouts_per_startup = 4
+min_rollout_idle_hours = 3
+
+[history]
+persistence = "save-all"
+max_bytes = 10485760
+
+# 环境变量保护——防止模型意外看到敏感凭证
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^AWS_SECRET", "^PRIVATE_KEY", "^TOKEN$"]
+
+file_opener = "vscode"
+```
+
+---
+
+## 配置优先级速查
+
+在修改配置时记住：运行时覆盖 > 项目级配置 > Profile 配置 > 用户级配置。CLI 参数（如 `-m`、`--sandbox`）优先级最高，配置文件里的值会被 CLI 参数覆盖。
+
+```bash
+# CLI 参数覆盖配置文件
+codex -m gpt-5.5 --sandbox workspace-write
+
+# --config 临时覆盖任意配置项
+codex --config web_search=disabled --config model_reasoning_effort=high
+```
+
+运行中可以用 `/model`、`/fast`、`/config` 等 TUI 命令做临时调整，这些调整只在当前会话生效。
+
+---
+
+## 延伸阅读
+
+- [第 22 篇：配置文件体系总览](22-config-overview.md) — 四层加载优先级、安全约束、项目级配置的限制
+- [第 24 篇：模型提供商配置](24-config-provider.md) — 自定义 OpenAI 兼容 API、Ollama、LM Studio 等本地模型
+- [第 05 篇：审批模式详解](05-approval-modes.md) — approval_policy 的深层行为和安全模型
+- [第 29 篇：沙箱配置](29-sandbox.md) — sandbox_mode 的底层实现和操作系统差异
+- [第 27 篇：配置 Profile](27-config-profiles.md) — 用 Profile 在不同环境间快速切换配置
+- [第 06 篇：模型选择](06-model-selection.md) — GPT-5.5 / 5.4 / 5.3-Codex 各模型的定位和选型

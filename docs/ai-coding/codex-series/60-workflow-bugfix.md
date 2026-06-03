@@ -1,0 +1,370 @@
+# 真实工作流：用 Codex 修 Bug 全流程
+
+> TL;DR：修 Bug 是 Codex 最实用的场景之一。一个高效的流程是：确认 bug → 用 Codex 读代码定位问题 → 规划修复方案 → 执行修改 → 跑测试验证 → review 变更 → 提交。本文用一个具体的 bug 类型走完整流程，展示每一步怎么和 Codex 配合，以及常见陷阱怎么避免。
+
+---
+
+## 1. 流程总览
+
+```
+确认 Bug → 读代码定位 → 根因分析 → 规划修复 → 执行修改 → 测试验证 → Review → 提交
+```
+
+这八个步骤不一定都是 Codex 在做。有些需要你自己判断，有些 Codex 和你配合。关键是在正确的环节让 Codex 发挥最大的作用。
+
+## 2. Step 1：确认 Bug
+
+在让 Codex 动手之前，先确认 bug 真的存在且可复现。
+
+### 自己确认
+
+1. 按描述的步骤复现问题
+2. 记录错误信息（终端输出、浏览器 Console、日志文件）
+3. 确认不是环境问题（重启试试、清缓存试试）
+
+### 搜一下是不是已知问题
+
+```
+codex "搜索 GitHub issues，看看这个项目有没有关于 XXX 的已知 bug"
+```
+
+或者在浏览器里搜项目 issues。
+
+### 告诉 Codex bug 的完整信息
+
+确认是真正需要修的 bug 后，把完整信息给 Codex：
+
+```
+/mention src/api/order.js
+/mention tests/order.test.js
+
+Bug 描述：创建订单后，订单 ID 返回的是 undefined。
+复现步骤：
+1. POST /api/orders { item: "widget", qty: 2 }
+2. 返回的 body 里 id 字段是 undefined
+3. 数据库里记录是正常生成了 ID 的
+
+期望：返回的订单对象应该包含正确的 id 字段。
+```
+
+信息越具体，Codex 越容易定位问题。
+
+## 3. Step 2：用 Codex 读代码定位
+
+让 Codex 读相关文件，分析问题出在哪：
+
+```
+读取上面的文件，分析为什么订单 ID 返回 undefined。
+关注 createOrder 函数的返回值处理。
+```
+
+Codex 会读文件、分析逻辑、给出可能的原因。这个时候不要让它改代码——先让它分析。
+
+### 多文件场景
+
+如果 bug 涉及多个文件，让 Codex 一起看：
+
+```
+分析这个 bug 涉及的完整调用链：
+1. 路由层怎么接收请求
+2. service 层怎么创建订单
+3. model 层怎么插入数据库
+4. 返回值怎么组装
+
+/mention src/routes/order.js
+/mention src/services/orderService.js
+/mention src/models/Order.js
+```
+
+Codex 读完多个文件后会给出一个调用链分析，帮你确认问题出在哪个环节。
+
+## 4. Step 3：根因分析
+
+Codex 给出分析后，不要立刻说"修一下"。先验证它的分析是否正确。
+
+### 验证方法
+
+```
+/side 你说问题出在 orderService.js 第 45 行，
+model.create() 返回的是 Sequelize 实例而不是 plain object。
+验证一下：看看其他 service 文件里的 model.create()
+是怎么处理的，是不是用了 toJSON() 或 .get({plain: true})
+```
+
+用 side conversation 做验证不会污染主会话的上下文。
+
+### 常见根因类型
+
+| 根因类型 | Codex 定位方式 | 验证方法 |
+|---------|--------------|---------|
+| 返回值处理错误 | 读函数返回值链 | 在对应位置加日志 |
+| 异步未 await | 搜漏掉的 await | grep async function |
+| 类型不匹配 | 读类型定义和调用 | TypeScript 编译检查 |
+| 边界条件 | 读 if/switch 逻辑 | 手动走一遍边界值 |
+| 数据格式变化 | 读上下游的数据约定 | 对比输入输出格式 |
+
+## 5. Step 4：规划修复
+
+确认根因后，用 plan 模式规划修复方案：
+
+```
+/plan 基于分析结果，修复方案如下：
+1. 在 orderService.js 的 createOrder 函数中，
+   model.create() 后加上 .toJSON() 转换
+2. 不修改函数签名和返回类型
+3. 补一个测试：验证返回的订单对象包含 id 字段
+```
+
+plan 模式下 Codex 不动文件，只输出方案。你看完方案确认没问题，再切回执行模式。
+
+### 为什么要先规划
+
+- 避免方向错误导致的连锁修改
+- 确认修复范围不会影响其他功能
+- 给自己一个审核点，判断 Codex 的方案是否合理
+
+## 6. Step 5：执行修改
+
+方案确认后，让 Codex 执行：
+
+```
+按上面的方案修复。改完后跑测试确认通过。
+```
+
+或者分步执行，每步检查：
+
+```
+先改 orderService.js，只改 createOrder 函数。
+改完后不要急着动其他文件，先跑一次测试。
+```
+
+### 小改动 vs 大改动
+
+如果修复很简单（改一两行），直接让 Codex 做。
+
+如果修复涉及多个文件或结构性变化：
+
+```
+/goal 修复订单 ID 返回 undefined 的 bug，
+确保所有相关测试通过，不引入新的测试失败
+```
+
+用 /goal 保持聚焦，防止 Codex 在修复过程中"顺便"做了其他改动。
+
+## 7. Step 6：测试验证
+
+### 跑现有测试
+
+```
+跑项目的测试套件，看看有没有被修复破坏的测试。
+```
+
+如果全部通过，很好。如果有测试失败：
+
+1. 确认是修复引入的还是之前就有的
+2. 如果是修复引入的，回滚并用不同方案修复
+
+### 补充测试
+
+修复 bug 后应该补一个回归测试，防止同样的问题再出现：
+
+```
+为这个 bug 补一个测试：
+- 测试用例：创建订单，验证返回的订单对象包含非空的 id 字段
+- 放在 tests/order.test.js 里
+```
+
+## 8. Step 7：Review 变更
+
+修改完成后，用 /review 检查：
+
+```
+/review
+```
+
+Codex 会读取你的 working tree 的 diff，报告潜在问题。关注：
+
+- 是否有未预期的改动
+- 代码风格是否和项目一致
+- 是否有遗漏的边界情况
+
+然后看具体的 diff：
+
+```
+/diff
+```
+
+确认每一行改动都是预期的。
+
+## 9. Step 8：提交
+
+最后一步，提交变更：
+
+```bash
+git add src/services/orderService.js tests/order.test.js
+git commit -m "fix: order creation returns undefined id
+
+The createOrder function was returning a Sequelize instance
+instead of a plain object, causing the id field to be undefined
+in the API response. Added toJSON() conversion.
+
+Regression test added."
+```
+
+提交信息要具体：说了什么问题、为什么发生、怎么修的。不要写 "fix bug"。
+
+## 10. 常见陷阱
+
+### 10.1 让 Codex 直接修，不先分析
+
+Codex 不一定每次都能正确判断根因。跳过分析直接让它改，可能改错地方，反而引入新 bug。
+
+**对策**：先分析，后修改。用 plan 模式做中间确认。
+
+### 10.2 盲信 Codex 的分析
+
+Codex 的分析基于 LLM 的理解，可能出错。
+
+**对策**：用 side conversation 做交叉验证，手动检查关键代码路径。
+
+### 10.3 一次修太多
+
+修一个 bug 的同时"顺便"修了其他几个问题。每个改动都没有充分测试。
+
+**对策**：一个 bug 一个 commit。用 /goal 限制范围。
+
+### 10.4 不补测试
+
+修了 bug 没补回归测试。下次重构可能又把同样的 bug 引回来。
+
+**对策**：修完必补测试。让 Codex 根据修复内容生成测试用例。
+
+### 10.5 在错误的方向上持续
+
+Codex 的第一个方案可能不对，但你让它继续迭代，越改越偏。
+
+**对策**：如果第一次修复没生效，回滚（`git checkout .`），重新分析。不要在错误的基础上补丁。
+
+## 11. 复杂 Bug 的处理
+
+有些 bug 不是改一两行能解决的。比如竞态条件、内存泄漏、并发问题。
+
+这类 bug 的处理策略：
+
+```
+/goal 修复用户并发下单时的库存超卖 bug
+
+先不急着改代码。你需要：
+1. 读 OrderService 和 StockService 的完整实现
+2. 找到库存扣减的事务边界
+3. 确认是否有现有的锁机制
+4. 如果没有锁，分析哪种锁方案适合当前架构
+```
+
+让 Codex 做深度分析，而不是快速修复。复杂 bug 的价值在于理解根因，修复本身往往是简单的。
+
+## 12. 效率对比
+
+| 阶段 | 不用 Codex | 用 Codex |
+|------|-----------|---------|
+| 定位问题 | grep、翻文件、加日志 | `/mention` 指向文件，Codex 直接分析 |
+| 根因分析 | 看代码、推理、画调用链 | Codex 生成调用链分析 |
+| 编写修复 | 自己写代码 | Codex 执行，你 review |
+| 补测试 | 自己写测试 | Codex 生成测试用例 |
+| 代码审查 | 自己看 diff | `/review` + `/diff` |
+
+Codex 最有优势的阶段是**定位和分析**——它能在几秒内读完多个文件并生成调用链分析，省去你 grep 和翻文件的时间。修复阶段 Codex 也能帮忙，但需要你的审核把关。
+
+## 13. 用 Codex 执行模式修 Bug（CI/CD 场景）
+
+如果你想在 CI/CD 中自动化 bug 修复流程，可以用 `codex exec` 非交互模式：
+
+```bash
+# 单步执行
+codex exec "读取 src/services/orderService.js，找出 createOrder
+函数返回 undefined id 的原因，输出分析结果"
+
+# 根据分析结果修复
+codex exec "在 orderService.js 的 createOrder 中添加
+toJSON() 转换，然后跑测试"
+
+# 验证
+codex exec "运行测试套件，报告结果"
+```
+
+在 GitHub Actions 中串联：
+
+```yaml
+name: Auto-fix reported bug
+on:
+  issues:
+    types: [labeled]
+    labels: [bug]
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run Codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/fix-bug.md
+          sandbox: workspace-write
+          output-file: codex-fix-report.md
+```
+
+注意：自动修复适合确定的、小范围的 bug。不确定的 bug 仍然需要人工介入。
+
+## 14. 和其他工作流的配合
+
+### 14.1 修复后立即跑 CI
+
+```bash
+# Codex 修完 bug 后
+codex exec "运行 lint 和测试，报告所有失败项"
+
+# 或者让 Codex 帮你跑
+"先跑 eslint --fix，再跑 npm test，报告结果"
+```
+
+### 14.2 用 /diff 确认改动范围
+
+修复完成后检查 Codex 是不是改多了：
+
+```
+/diff
+```
+
+如果你发现 Codex 修改了你不想改的文件，可以用 `git checkout` 回滚单个文件：
+
+```bash
+git checkout src/unrelated-file.js
+```
+
+### 14.3 用 /fork 做对比方案
+
+如果不确定修复方案，开一个 fork 探索：
+
+```
+/fork
+```
+
+在 fork 里试另一个方案，和主线程的方案对比，选更好的那个。
+
+## 15. 总结
+
+Codex 修 Bug 的核心流程可以浓缩为六个字：**先分析，后修改**。
+
+Codex 擅长的是读代码和分析问题，这是最耗时的部分。修复本身往往是简单的，但需要你把关。不要跳过分析阶段直接让它改代码——这是最常见的错误。
+
+对于复杂 bug，把 Codex 当分析助手而不是执行者。让它帮你理解代码、追踪调用链、生成假设，你自己做决策。
+
+## 延伸阅读
+
+- [规划模式详解（第 13 篇）](./13-plan-mode.md)
+- [目标追踪详解（第 14 篇）](./14-goal-tracking.md)
+- [代码审查：/review 和 /diff（第 12 篇）](./12-code-review.md)
+- [让 Codex 跑命令（第 9 篇）](./09-run-commands.md)
+- [让 Codex 改你的代码（第 8 篇）](./08-edit-code.md)

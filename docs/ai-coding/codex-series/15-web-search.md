@@ -1,0 +1,602 @@
+# Codex CLI 网络搜索：让 Codex 上网查资料
+
+> **TL;DR** Codex CLI 内置了网络搜索能力，让 AI 可以主动查文档、找 API 参考和排查版本兼容性问题。搜索分三种模式——`disabled`（关闭）、`cached`（走 OpenAI 缓存索引，默认）、`live`（实时抓取网页）。高级配置可以控制搜索上下文大小、限制域名范围、设定地理位置。沙箱网络层通过 `network_proxy` 提供域名策略和 SOCKS5 代理支持。企业管理员可以通过 `requirements.toml` 锁定搜索模式和网络策略。本文从"为什么需要联网"开始，逐层拆解配置机制，最后给出三个实战场景。
+
+---
+
+## 1. 为什么 Codex 需要联网
+
+LLM 有一个根本性的短板：它的知识是训练时截断的。
+
+这不是 Codex 的问题，是所有大语言模型的通病。GPT-5.5 的训练数据可能截至 2025 年底，这意味着 2026 年发布的 React 19 新特性、某个 npm 包上周刚改的 API、或者昨天才爆出的安全漏洞——它统统不知道。
+
+但你在日常开发中遇到的场景，偏偏大量依赖最新信息：
+
+- "Prisma 6.x 的 `migrate dev` 命令有哪些新参数？"——手册刚更新
+- "Next.js 15 的 `next.config.ts` 怎么写？"——配置格式变了
+- "这个第三方库 v3 和 v2 的迁移指南在哪？"——你可能都没装这个库
+- "Tailwind CSS 4.0 取消了 `tailwind.config.js`，现在怎么配？"——生态大改
+
+如果你把这些问题直接丢给 Codex，它会怎么做？在没有网络搜索的情况下，它只能凭训练数据里的"记忆"来回答——可能是对的，可能是过时的，也可能是错的。最糟糕的情况是它一本正经地编造出一个不存在的 API，你照着写了半天代码，跑的时候才发现根本没这个方法。
+
+网络搜索解决的就是这个问题。开启之后，Codex 在回答之前可以先去搜一下相关文档，拿到准确、当前的信息，再基于这些信息给你建议。效果类似于你自己先打开浏览器查一遍再告诉 Codex 要怎么做——只不过这个过程是自动的。
+
+还有一个容易忽略的好处：**减少幻觉**。当 Codex 不确定某个 API 的具体用法时，它会主动搜索确认，而不是硬编一个看似合理的答案。这对代码质量的影响很大，特别是在你不熟悉的领域。
+
+### 搜索触发机制
+
+Codex 不会每次对话都去搜索。搜索是工具调用（tool call）的一部分——模型在判断"我需要外部信息"时才会主动调用 `web_search` 工具。具体来说，当你的问题涉及：
+
+- 特定库/框架的最新用法
+- 版本迁移和变更日志
+- 错误信息排查
+- API 文档参考
+
+模型大概率会触发搜索。如果你只是让它"优化这个函数的性能"或者"重命名这些变量"，它通常不会去搜索，因为本地信息就够了。
+
+你也可以在提示词中显式要求搜索，比如"帮我查一下 FastAPI 0.115 新增了哪些 middleware 钩子"——明确的查询意图会增加模型调用搜索的概率。
+
+---
+
+## 2. web_search 三种模式
+
+Codex 的网络搜索通过一个顶级配置项 `web_search` 控制，接受三个字符串值：
+
+```toml
+# config.toml
+web_search = "cached"   # 默认值
+```
+
+三个模式各有适用场景，理解它们的区别是正确配置的前提。
+
+### 2.1 disabled：完全禁用
+
+```toml
+web_search = "disabled"
+```
+
+最简单的模式——Codex 完全不能使用网络搜索工具。模型甚至不知道搜索功能的存在。
+
+适合的场景：
+
+- **离线环境**：你在飞机上、内网机房里、或者公司网络策略禁止外部访问
+- **合规要求**：某些企业的安全策略不允许 AI 工具访问外部网络
+- **节省 token**：搜索结果会占用上下文窗口空间，如果确认不需要外部信息，关掉可以省下这些 token
+- **调试需要**：排查问题时想确认"到底是搜索结果引入的错误，还是模型本身的问题"，可以临时关闭搜索
+
+一个容易忽略的点：禁用搜索不等于禁用网络。Codex 仍然可以通过 `curl`、`wget` 或其他命令行工具发起网络请求（前提是沙箱允许）。`web_search = "disabled"` 只是关闭了内置的搜索工具调用，不限制命令层面的网络访问。如果你需要完全断网，需要同时配置沙箱的网络策略。
+
+### 2.2 cached：缓存搜索（默认）
+
+```toml
+web_search = "cached"   # 不写也行，这是默认值
+```
+
+这是 Codex 的默认模式。搜索请求走的是 OpenAI 维护的索引，而不是实时抓取网页。
+
+具体来说，`cached` 模式的工作流程是：
+
+1. Codex 决定需要搜索某个关键词
+2. 搜索请求发送到 OpenAI 的搜索服务
+3. OpenAI 从自己的索引中返回相关结果（这些索引是定期更新的，但不是实时的）
+4. 模型基于搜索结果生成回答
+
+这里的"缓存"不是指你本地的缓存，而是 OpenAI 服务端的搜索索引。你可以理解为：OpenAI 有一个"网页快照数据库"，会定期爬取和更新，但不是实时同步的。当 Codex 搜索时，它查的是这个数据库，而不是直接去访问目标网站。
+
+优点：
+- **速度快**：不需要实时抓取网页，响应延迟低
+- **成本低**：不需要消耗额外的网络带宽
+- **质量稳定**：OpenAI 对索引内容做了一定的清洗和筛选，结果质量相对可控
+
+局限：
+- **信息可能过时**：如果某个 API 昨天刚改了，cached 索引可能还没更新
+- **覆盖范围有限**：不是所有网页都在索引里，特别是小众博客、私有文档、刚发布的页面
+- **无法获取动态内容**：需要 JavaScript 渲染的页面，缓存索引可能拿不到完整内容
+
+对于大多数日常开发场景，`cached` 模式已经够用了。查 API 文档、看库的用法说明、找常见错误的解决方案——这些信息变化频率不高，OpenAI 的索引通常跟得上。
+
+### 2.3 live：实时搜索
+
+```toml
+web_search = "live"
+```
+
+`live` 模式会从网络实时获取最新数据。Codex 不再依赖 OpenAI 的缓存索引，而是直接从互联网抓取当前可用的信息。
+
+什么时候需要用 `live`？
+
+- **查刚刚发布的变更**：比如某个库 2 小时前发布了新版本，你想知道 breaking changes
+- **查实时信息**：比如某个服务的当前状态、某个域名是否可以访问
+- **查缓存覆盖不到的内容**：小众项目、个人博客、私有文档
+- **查需要 JavaScript 渲染的页面**：有些 SPA 站点的文档需要 live 模式才能获取完整内容
+
+代价也很明确：
+
+- **速度更慢**：需要实时抓取网页，延迟比 cached 高不少
+- **成本更高**：消耗更多的 token（网页内容通常比缓存摘要长）
+- **结果质量不稳定**：直接从互联网抓取的内容可能有噪声、广告、无关信息
+
+### 2.4 模式自动切换
+
+有一个细节值得注意：当你使用 `--yolo`（即 `--dangerously-bypass-approvals-and-sandbox`）或者 `sandbox_mode = "danger-full-access"` 时，`web_search` 的默认值会自动变成 `"live"`。这不是因为你手动改了配置，而是 Codex 在 full access 模式下认为你应该有权限获取最新信息。
+
+如果你不希望这样，可以显式设置：
+
+```toml
+sandbox_mode = "danger-full-access"
+web_search = "cached"   # 显式覆盖自动行为
+```
+
+---
+
+## 3. 配置网络搜索
+
+### 3.1 config.toml 基础配置
+
+最基本的配置只需要一行。在 `~/.codex/config.toml` 中：
+
+```toml
+# 关闭搜索
+web_search = "disabled"
+
+# 使用缓存搜索（默认，可以不写）
+web_search = "cached"
+
+# 使用实时搜索
+web_search = "live"
+```
+
+你也可以通过命令行参数临时覆盖：
+
+```bash
+codex --config web_search=live "查一下 React 19 的新 hooks"
+```
+
+这个 `--config` 参数的优先级最高——运行时覆盖会压过 config.toml 里的设置。适合"平时用 cached，这次临时需要 live"的场景。
+
+如果你用的是 Profile 机制，不同 profile 可以配不同的搜索模式：
+
+```toml
+# ~/.codex/config.toml
+profile = "work"
+
+[profiles.work]
+web_search = "cached"    # 工作时用缓存，够用且快
+
+[profiles.research]
+web_search = "live"       # 做调研时开实时搜索
+```
+
+### 3.2 高级搜索选项
+
+`web_search` 只是控制搜索的开关和模式。如果你需要更精细的控制——比如限制搜索结果的上下文大小、指定只搜索某些域名——需要用 `[tools.web_search]` 子表。
+
+这个配置可以是一个布尔值（简单开关）或者一个嵌套表格（详细配置）：
+
+```toml
+# 简单开关（等同于顶层 web_search 的效果）
+[tools]
+web_search = true    # 启用
+
+# 详细配置
+[tools.web_search]
+context_size = "high"
+allowed_domains = ["docs.python.org", "fastapi.tiangolo.com"]
+location = { country = "US", region = "California" }
+```
+
+#### context_size：搜索上下文大小
+
+```toml
+[tools.web_search]
+context_size = "medium"   # 默认值，可以不写
+```
+
+`context_size` 控制搜索结果注入到上下文窗口中的信息量。三个级别：
+
+| 值 | 说明 | 适用场景 |
+|---|---|------|
+| `"low"` | 只注入搜索摘要，信息量最少 | 快速参考、只需要确认某个小细节 |
+| `"medium"` | 注入摘要加部分正文，平衡信息量和 token 消耗 | 日常开发，大多数情况够用 |
+| `"high"` | 注入完整搜索结果，信息量最大 | 深度调研、需要详细了解某个主题 |
+
+这不是一个"越多越好"的设置。`context_size = "high"` 意味着搜索结果会占用更多的上下文窗口空间。如果你的对话已经很长（接近上下文窗口上限），额外的搜索内容可能导致 Codex 触发自动压缩（compact），丢失之前的对话细节。
+
+建议：大多数情况用默认的 `"medium"` 就行。只有在明确需要详细文档内容时才切到 `"high"`，用完记得切回来。
+
+#### allowed_domains：限制搜索域名
+
+```toml
+[tools.web_search]
+allowed_domains = ["docs.python.org", "fastapi.tiangolo.com", "github.com"]
+```
+
+这个配置限制搜索只在指定域名范围内进行。相当于告诉 Codex："你只能在这些网站里找答案。"
+
+为什么需要这个？
+
+- **提高搜索质量**：排除无关网站的结果，减少噪声。比如你只用 Python，限定 `docs.python.org` 可以避免搜到 Java 的同名概念
+- **合规要求**：企业安全策略可能不允许访问某些网站
+- **减少 token 浪费**：不用处理来自垃圾网站的无关内容
+
+不设置的话，搜索范围不限制——Codex 会在整个互联网上搜索。
+
+#### location：地理位置定位
+
+```toml
+[tools.web_search]
+location = { country = "JP", region = "Tokyo", city = "Shibuya", timezone = "Asia/Tokyo" }
+```
+
+搜索结果的地理位置会影响返回内容的排序。比如搜索"React conference 2026"，设置 `country = "US"` 可能优先返回美国的会议信息，设置 `country = "JP"` 则偏向日本的。
+
+这个配置对大多数开发者来说用不到，除非你在做本地化的开发工作，或者需要查询特定地区的服务信息。注意 `country` 和 `timezone` 通常就够了，`region` 和 `city` 是可选的细化字段。
+
+### 3.3 旧版配置：不要再用
+
+如果你在老的教程或配置示例中看到以下写法，它们已经废弃了：
+
+```toml
+# 以下配置已废弃，不要再使用
+[features]
+web_search = true
+web_search_cached = true
+web_search_request = true
+```
+
+正确的做法是使用顶层的 `web_search` 配置项和 `[tools.web_search]` 子表。`features.*` 命名空间下的搜索相关字段已经被标记为废弃，未来版本会移除。
+
+---
+
+## 4. 沙箱网络机制
+
+网络搜索（`web_search`）只是 Codex 访问网络的一种方式。另一种是通过沙箱执行命令（`curl`、`git clone`、`npm install` 等）。这两种方式的网络路径不同，配置也不同。
+
+### 4.1 network_proxy 基础
+
+Codex 的沙箱网络通过 `[features.network_proxy]` 配置（虽然它在 `features` 命名空间下，但和上面废弃的搜索字段不是一回事，这个还在用）。
+
+```toml
+[features.network_proxy]
+enabled = true
+```
+
+`enabled` 控制沙箱内是否允许网络访问。这里的"沙箱"指的是 Codex 执行命令时的隔离环境——macOS 的 Seatbelt、Linux 的 Bubblewrap、Windows 的 windows-sandbox-rs。
+
+注意区分两个层面的网络控制：
+
+| 层面 | 配置项 | 控制对象 |
+|---|---|---|
+| 搜索工具 | `web_search` | Codex 的 `web_search` 工具调用 |
+| 沙箱网络 | `features.network_proxy.enabled` | Codex 在沙箱中执行命令时的网络访问 |
+
+两者独立工作。你可以让搜索开着但沙箱断网（`web_search = "live"` + `network_proxy.enabled = false`），也可以反过来（`web_search = "disabled"` + `network_proxy.enabled = true`）。
+
+### 4.2 域名策略规则
+
+`network_proxy` 可以配置域名级别的允许/拒绝策略：
+
+```toml
+[features.network_proxy]
+enabled = true
+domains = { "api.github.com" = "allow", "registry.npmjs.org" = "allow", "evil.example.com" = "deny" }
+```
+
+这里的 `domains` 是一个 map，键是域名，值是 `"allow"` 或 `"deny"`。
+
+几个实际用法：
+
+**只允许访问特定的包管理器和 Git 服务**：
+
+```toml
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "registry.yarnpkg.com" = "allow"
+  "api.github.com" = "allow"
+  "github.com" = "deny"     # 允许 API 但不允许浏览网页
+}
+```
+
+**黑名单模式**（默认允许，只阻止特定域名）：
+
+```toml
+[features.network_proxy]
+enabled = true
+domains = {
+  "malware-cdn.example.com" = "deny"
+  "suspicious-tracker.net" = "deny"
+}
+```
+
+需要理解的是，这个域名策略只影响沙箱中命令的网络访问，不影响 `web_search` 工具。`web_search` 走的是 OpenAI 的服务端通道，不经过你的本地沙箱。如果你想同时控制两者，需要分别配置 `tools.web_search.allowed_domains` 和 `features.network_proxy.domains`。
+
+### 4.3 SOCKS5 支持
+
+如果你的网络环境需要通过代理才能访问外部网络（常见于企业内网），Codex 支持两种代理协议：
+
+```toml
+[features.network_proxy]
+enabled = true
+proxy_url = "http://proxy.example.com:8080"         # HTTP 代理
+socks_url = "socks5://127.0.0.1:1080"              # SOCKS5 代理
+```
+
+- `proxy_url`：标准的 HTTP/HTTPS 代理
+- `socks_url`：SOCKS5 代理，适用于需要更底层网络控制的场景
+
+两者可以同时设置，Codex 会根据具体协议选择合适的代理。如果你本地跑着 Clash、V2Ray 之类的代理工具，通常本地会暴露一个 SOCKS5 端口（比如 1080），直接把 `socks_url` 指过去就行。
+
+### 4.4 sandbox_workspace_write 中的网络开关
+
+除了 `network_proxy`，还有一个更直接的网络控制方式：
+
+```toml
+[sandbox_workspace_write]
+network_access = true   # 默认 false
+```
+
+这个配置在 `workspace-write` 沙箱模式下控制是否允许网络访问。默认是 `false`——也就是说，在默认沙箱配置下，Codex 跑的命令是不能访问网络的。
+
+这是一个安全设计：防止 Codex 通过 `curl` 把你的代码或环境信息发送到外部服务器。日常开发中，如果你需要 Codex 执行 `npm install`、`git clone` 等需要网络的命令，就需要把这个打开：
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+或者用更精细的方式，通过 `features.network_proxy.domains` 来控制哪些域名可以访问，而不是一揽子放开。
+
+### 4.5 安全考虑
+
+网络是双刃剑。给 Codex 网络访问权限意味着：
+
+1. **数据泄露风险**：Codex 可能通过 `curl` 把代码发送到外部 URL
+2. **恶意下载**：Codex 可能执行 `curl | bash` 这类危险命令
+3. **依赖投毒**：`npm install` 可能安装被篡改的包
+
+建议遵循最小权限原则：
+
+- 日常开发用 `cached` 搜索 + `network_access = false`，只在需要时临时放开
+- 如果需要网络命令，用 `network_proxy.domains` 限定域名范围
+- 企业环境建议通过 `requirements.toml` 统一管控（见下一节）
+- 使用 `approval_policy` 确保网络相关命令需要你确认
+
+---
+
+## 5. requirements.toml 管理员约束
+
+Codex 的配置是分层合并的。对于个人开发者，自己在 `config.toml` 里改就行。但在企业环境中，管理员需要一种方式来强制执行安全策略，防止开发者绕过限制。
+
+这就是 `requirements.toml` 的作用。它位于系统级目录：
+
+- Unix/macOS：`/etc/codex/requirements.toml`
+- Windows：`%ProgramData%\OpenAI\Codex\requirements.toml`
+
+`requirements.toml` 中的设置是**约束**——它们不会直接设定值，而是划定用户配置的边界。用户可以在约束范围内自由调整，但不能越界。
+
+### 5.1 allowed_web_search_modes
+
+```toml
+# /etc/codex/requirements.toml
+allowed_web_search_modes = ["cached"]    # 只允许缓存搜索
+```
+
+这个配置限制 `web_search` 可以使用的模式。可能的值组合：
+
+| 设置 | 效果 |
+|---|---|
+| `["cached"]` | 用户只能用缓存搜索，不能切到 live 或关闭 |
+| `["cached", "live"]` | 用户可以在缓存和实时之间切换，但不能完全关闭 |
+| `["disabled"]` | 强制关闭搜索，用户无法开启 |
+| `["cached", "live", "disabled"]` | 不限制，三种模式都可以（等同于不设置） |
+
+如果用户的 `config.toml` 设置了 `web_search = "live"`，但 `requirements.toml` 只允许 `["cached"]`，Codex 会自动降级为 `"cached"` 并在日志中记录一条警告。
+
+### 5.2 experimental_network 配置
+
+```toml
+# /etc/codex/requirements.toml
+[network]
+mode = "allow"
+domains = { "api.internal.company.com" = "allow" }
+
+[filesystem]
+read = ["${HOME}/projects/*"]
+write = ["${HOME}/projects/*"]
+```
+
+`requirements.toml` 中的 `[network]` 和 `[filesystem]` 表提供了管理员级别的网络和文件系统约束。注意这里的 `[network]` 和上面说的 `features.network_proxy` 不同——`requirements.toml` 中的约束是最严格的，用户层无法绕过。
+
+实际的企业配置可能是这样的：
+
+```toml
+# /etc/codex/requirements.toml
+
+# 搜索策略：只允许缓存搜索，不能实时搜索
+allowed_web_search_modes = ["cached"]
+
+# 网络策略：只允许访问公司内部服务和常用开发资源
+[network]
+mode = "allow"
+domains = {
+  "api.internal.company.com" = "allow"
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "api.github.com" = "allow"
+}
+
+# 文件系统策略：限制工作目录范围
+[filesystem]
+read = ["${HOME}/projects/*", "/tmp/*"]
+write = ["${HOME}/projects/*"]
+```
+
+这个配置实现的效果：
+- 开发者可以用缓存搜索查文档，但不能实时搜索外部网站
+- 命令层面的网络访问只允许访问公司 API、npm 和 PyPI 注册表、GitHub API
+- 文件系统读写被限制在项目目录和 /tmp
+
+---
+
+## 6. 实战场景
+
+### 场景一：查询最新 API 变更
+
+**背景**：你用 Next.js 14 写的项目要升级到 Next.js 15，听说路由系统有大改。
+
+**配置**：
+
+```toml
+# ~/.codex/config.toml
+web_search = "live"
+[tools.web_search]
+context_size = "high"
+allowed_domains = ["nextjs.org", "github.com"]
+```
+
+选择 `live` 是因为 Next.js 15 的文档可能还在频繁更新，`cached` 索引可能跟不上下限。`context_size = "high"` 确保能拿到详细的迁移指南。`allowed_domains` 限定在官方文档和 GitHub，避免搜到过时或低质量的第三方博客。
+
+**对话示例**：
+
+```
+> 帮我把这个 Next.js 14 项目迁移到 Next.js 15，
+  重点关注 App Router 的变更和 server actions 的新写法。
+  先列出需要改的文件和具体改动点。
+
+Codex: [调用 web_search 搜索 "Next.js 15 migration guide"]
+Codex: [调用 web_search 搜索 "Next.js 15 breaking changes app router"]
+Codex: [调用 web_search 搜索 "Next.js 15 server actions changes"]
+
+根据搜索结果，以下是你需要关注的变更：
+1. src/app/layout.tsx - 需要更新 metadata 导出方式
+2. src/app/api/ - 路由处理函数签名变更
+3. ...
+```
+
+**操作完成后**，建议把搜索模式切回 `cached`：
+
+```toml
+web_search = "cached"   # 日常使用足够了
+```
+
+### 场景二：排查第三方库版本兼容性
+
+**背景**：你的 Python 项目升级了 SQLAlchemy 后，数据库连接频繁超时。你怀疑是新版本的连接池行为变了。
+
+**配置**：
+
+```toml
+# 项目根目录 config.toml（项目级配置）
+web_search = "cached"
+[sandbox_workspace_write]
+network_access = false   # 沙箱不需要网络，搜索走 web_search 就够了
+```
+
+**对话示例**：
+
+```
+> SQLAlchemy 2.0.36 的连接池行为和 2.0.30 有什么区别？
+  我升级后数据库连接频繁超时，想确认是不是已知问题。
+
+Codex: [调用 web_search 搜索 "SQLAlchemy 2.0.36 connection pool timeout"]
+Codex: [调用 web_search 搜索 "SQLAlchemy changelog 2.0.36"]
+
+根据搜索到的 release notes，SQLAlchemy 2.0.36 修改了
+pool_pre_ping 的默认行为...
+```
+
+这个场景用 `cached` 就够了——库的 changelog 之类的信息通常很快就会被收录到索引中。`sandbox_workspace_write.network_access = false` 确保即使 Codex 尝试用 `curl` 或 `pip install` 访问网络，也会被沙箱拦截。
+
+### 场景三：企业内网限制下的搜索配置
+
+**背景**：你在一家金融机构工作，公司的安全策略要求：Codex 只能访问内部知识库和批准的技术文档站，不能访问公网。同时，开发者需要能执行 `pip install` 来安装依赖。
+
+**管理员配置**（`/etc/codex/requirements.toml`）：
+
+```toml
+# 搜索限制：只允许缓存搜索
+allowed_web_search_modes = ["cached"]
+
+# 网络限制：只允许内部服务和 PyPI
+[network]
+mode = "allow"
+domains = {
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "docs.internal.company.com" = "allow"
+  "artifactory.internal.company.com" = "allow"
+}
+
+# 文件系统限制
+[filesystem]
+read = ["/home/*/projects/*"]
+write = ["/home/*/projects/*"]
+```
+
+**开发者配置**（`~/.codex/config.toml`）：
+
+```toml
+# 用户层面的配置不能放宽管理员的约束
+web_search = "cached"     # 只能 cached，被 requirements.toml 约束
+
+[sandbox_workspace_write]
+network_access = true     # 允许网络命令（但域名被管理员约束）
+```
+
+实际效果：Codex 可以用缓存搜索查文档，可以执行 `pip install` 安装包（因为 `pypi.org` 在管理员的域名白名单里），但无法访问外部网站或下载未授权的资源。
+
+---
+
+## 7. 常见问题与排错
+
+### Codex 为什么不搜索？
+
+最常见的原因有三个：
+
+1. **搜索被禁用了**：检查 `web_search` 是否设为 `"disabled"`，或者被 `requirements.toml` 限制了
+2. **模型判断不需要**：如果你的问题很明确且模型有足够知识，它可能不触发搜索。尝试在提示词中加入"帮我搜一下"、"查一下最新文档"等明确要求
+3. **Provider 不支持**：如果你用的是自定义 ModelProvider（比如 AmazonBedrock），需要确认 `web_search` 能力已启用。Bedrock 默认是关闭的
+
+### 搜索结果不准怎么办？
+
+- 切到 `live` 模式获取实时数据
+- 用 `allowed_domains` 限定搜索范围到权威文档站
+- 提高搜索的针对性——提示词中明确包含库名、版本号、具体问题
+
+### 搜索后上下文不够了？
+
+`context_size = "high"` 会注入更多搜索内容，容易撑满上下文窗口。解决方案：
+
+- 把 `context_size` 调回 `"medium"` 或 `"low"`
+- 在搜索前先用 `/compact` 压缩对话历史
+- 把大任务拆成多个小会话，每个会话聚焦一个搜索查询
+
+### web.run 工具是什么？
+
+Codex 近期引入了一个独立的网页搜索扩展，工具 ID 是 `web.run`。它和内置的 `web_search` 走的是完全不同的实现路径，由 `standalone_web_search` 特性标志控制。当使用 OpenAI Provider 时，`web.run` 和 `web_search` 是互斥的——同时只会启用其中一个。
+
+对于普通用户来说，你只需要关注 `web_search` 的配置就行。`web.run` 目前还处于实验阶段，主要服务于 Codex 内部的搜索架构演进。
+
+### --yolo 模式下搜索行为变了？
+
+是的。`--yolo`（`--dangerously-bypass-approvals-and-sandbox`）会自动把 `web_search` 切到 `"live"`。如果你只想放开审批但不想改变搜索行为，可以用更精细的配置：
+
+```bash
+# 不要用 --yolo，改用精确配置
+codex --config approval_policy=never \
+      --config sandbox_mode=workspace-write \
+      --config web_search=cached \
+      "你的任务"
+```
+
+---
+
+## 延伸阅读
+
+- **本系列第 05 篇**：三种审批模式详解——审批策略与网络安全的配合
+- **本系列第 29 篇**（待写）：沙箱机制全解析——Seatbelt / Bubblewrap / Windows Sandbox 的网络隔离实现
+- **本系列第 22 篇**（待写）：配置文件体系总览——四层加载优先级和合并语义
+- **本系列第 54 篇**（待写）：管理员配置指南——requirements.toml 完整用法
+- [OpenAI Codex GitHub](https://github.com/openai/codex) — 配置参考源码 `config_toml.rs`

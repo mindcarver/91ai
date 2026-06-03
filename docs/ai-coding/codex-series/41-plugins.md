@@ -1,0 +1,812 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Developers Docs — Plugins Overview: https://developers.openai.com/codex/plugins
+2. OpenAI Developers Docs — Build Plugins: https://developers.openai.com/codex/plugins/build
+3. OpenAI Developers Docs — Configuration Reference: https://developers.openai.com/codex/config-reference
+4. OpenAI Codex 源码 openai/codex — codex-rs/core-plugins/src/manifest.rs 插件清单解析
+5. OpenAI Codex 源码 openai/codex — codex-rs/core-plugins/src/loader.rs 插件加载与聚合
+6. OpenAI Codex 源码 openai/codex — codex-rs/core-plugins/src/marketplace.rs 市场管理
+7. OpenAI Codex 源码 openai/codex — codex-rs/core-plugins/src/toggles.rs 插件启停状态
+8. OpenAI Codex 源码 openai/codex — codex-rs/plugin/src/plugin_id.rs 插件 ID 命名空间
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI Plugins 插件开发
+
+> **TL;DR** — Codex 插件是一个以 `.codex-plugin/plugin.json` 为入口的文件夹，里面可以装技能（SKILL.md）、MCP 服务器配置（.mcp.json）、应用连接器（.app.json）、生命周期钩子（hooks.json），还有图标和截图。插件通过市场（marketplace）分发——可以是本地目录，也可以是 Git 仓库。开发一个插件，本质上就是写一个清单文件、往里面塞组件、然后把它挂到一个 marketplace.json 上让 Codex 能发现。这篇文章从插件系统的设计原理讲起，一步步带你手动创建插件、配置市场、管理 MCP 服务器和钩子，最后用两个完整的实战案例收尾。
+
+---
+
+## 1. 插件系统概览
+
+先回答一个问题：为什么需要插件？
+
+你之前学过 Skills（第 38 篇），技能可以把你反复用的领域知识打包。但技能解决的是"指令"层面的问题。当你的工作流还涉及外部服务接入、MCP 工具链配置、生命周期钩子这些东西时，单独一个 SKILL.md 就不够用了。
+
+插件把这些东西打包在一起。一个插件可以同时包含：
+
+| 组件 | 文件 | 解决什么问题 |
+|------|------|-------------|
+| Skills（技能） | `skills/<name>/SKILL.md` | 可复用的 Agent 指令 |
+| MCP Servers（MCP 服务器） | `.mcp.json` | 给 Agent 提供额外的工具集 |
+| Apps（应用连接器） | `.app.json` | 连接 GitHub、Slack、Google Drive 等外部服务 |
+| Hooks（生命周期钩子） | `hooks/hooks.json` | 在会话启动、工具执行等节点插入自定义逻辑 |
+
+用官方的例子来说：Codex Security 插件把安全扫描技能、MCP 服务器和验证钩子打包在一起，装上就能让 Codex 自动审查代码变更的安全性。Gmail 插件把邮件读写技能和 Google 认证流程封装起来，一句"帮我回复今天的邮件"就行。
+
+所以插件的核心定位是**可分发的扩展包**。你在自己的工作流里打磨好了技能和配置，想分享给团队？做成插件。你想把社区里别人做好的工具链拿过来用？从市场安装插件。
+
+### 插件和技能、MCP 服务器的关系
+
+这三者的边界有时候让人困惑。简单来说：
+
+- **Skill**：面向 Agent 的指令集。告诉 Agent "遇到这类任务该怎么做"。
+- **MCP Server**：面向工具链的服务进程。给 Agent 提供具体的工具（比如搜索、查询、执行）。
+- **Plugin**：一个容器，把 Skill、MCP Server、App、Hooks 组合在一起，加上元数据（名字、版本、作者、图标），通过市场分发。
+
+如果你只是想给单个项目加一条规则，写个 Skill 就够了。如果你想把一套完整的工作流打包分享出去，那就做插件。
+
+---
+
+## 2. 插件发现与安装
+
+### 2.1 在 Codex App 中浏览插件
+
+打开 Codex 桌面应用，点击左侧的 Plugins 入口，你会看到插件目录被分成三个区域：
+
+- **Curated by OpenAI**：官方精选插件，所有用户都能看到
+- **Shared with you**：团队里其他人分享给你的插件
+- **Created by you**：你自己创建或添加的插件
+
+浏览插件列表，选中一个插件，点击安装按钮（加号或 Add to Codex）。如果插件需要连接外部服务（比如 Gmail 需要登录 Google 账号），会引导你完成认证。安装完成后，新建一个线程就可以直接使用了。
+
+### 2.2 在 CLI 中管理插件
+
+在 Codex CLI 中，输入 `/plugins` 打开插件浏览器。CLI 版本的插件列表按市场分组，你可以：
+
+- 用 Tab 切换不同的市场来源
+- 选中一个插件查看详情
+- 点击 Install plugin 安装
+- 按 `Space` 键切换已安装插件的启用状态
+
+```
+codex
+/plugins
+```
+
+### 2.3 使用插件
+
+安装完插件后有两种使用方式：
+
+**方式一：直接描述任务**
+
+不指定插件，直接说你想要什么。比如：
+
+```
+帮我总结今天未读的 Gmail 邮件
+```
+
+Codex 会自动选择合适的已安装工具来完成任务。
+
+**方式二：用 @ 显式调用**
+
+输入 `@` 然后选择插件或其技能。适合你想明确告诉 Codex 用哪个工具的场景。
+
+### 2.4 禁用和卸载
+
+在插件浏览器里选择 Uninstall plugin 可以卸载。如果你只是想暂时关掉某个插件，可以在配置文件里设置：
+
+```toml
+# ~/.codex/config.toml
+[plugins."gmail@openai-curated"]
+enabled = false
+```
+
+修改后重启 Codex 生效。注意，卸载插件会移除插件本身的文件，但已经安装的 Apps（如 Google 账号连接）不会自动移除，需要在 ChatGPT 里单独管理。
+
+---
+
+## 3. 插件结构与 manifest
+
+### 3.1 目录结构
+
+一个插件的文件结构如下：
+
+```
+my-plugin/
+  ├── .codex-plugin/
+  │   └── plugin.json        # 必需：插件清单
+  ├── skills/
+  │   ├── my-skill/
+  │   │   └── SKILL.md       # 可选：技能指令
+  │   └── another-skill/
+  │       └── SKILL.md
+  ├── hooks/
+  │   └── hooks.json         # 可选：生命周期钩子
+  ├── .app.json              # 可选：应用连接器映射
+  ├── .mcp.json              # 可选：MCP 服务器配置
+  └── assets/
+      ├── icon.png           # 可选：图标
+      ├── logo.png           # 可选：Logo
+      └── screenshot.png     # 可选：截图
+```
+
+几个关键规则：
+
+- `plugin.json` 是唯一的必需文件，而且必须放在 `.codex-plugin/` 目录下
+- 其他所有文件（skills、hooks、.mcp.json、.app.json、assets）都放在插件根目录
+- 路径一律用 `./` 开头，相对于插件根目录解析
+- 插件名称用 kebab-case 命名（比如 `my-code-formatter`），Codex 用它作为标识符和命名空间
+
+### 3.2 最小可用清单
+
+最小的插件只需要一个清单加一个技能：
+
+```json
+{
+  "name": "my-first-plugin",
+  "version": "1.0.0",
+  "description": "一个最简单的示例插件",
+  "skills": "./skills/"
+}
+```
+
+对应的目录结构：
+
+```
+my-first-plugin/
+  ├── .codex-plugin/
+  │   └── plugin.json
+  └── skills/
+      └── hello/
+          └── SKILL.md
+```
+
+SKILL.md 的写法和普通技能一样：
+
+```markdown
+---
+name: hello
+description: 用友好的方式打招呼
+---
+
+热情地向用户问好，询问需要什么帮助。
+```
+
+### 3.3 完整清单字段
+
+当你准备正式发布一个插件时，清单会比最小版本丰富得多。完整的清单做三件事：标识插件、指向组件、提供安装界面的展示信息。
+
+```json
+{
+  "name": "my-plugin",
+  "version": "0.1.0",
+  "description": "打包可复用的技能和应用集成",
+  "author": {
+    "name": "你的团队",
+    "email": "team@example.com",
+    "url": "https://example.com"
+  },
+  "homepage": "https://example.com/plugins/my-plugin",
+  "repository": "https://github.com/example/my-plugin",
+  "license": "MIT",
+  "keywords": ["research", "crm", "productivity"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "My Plugin",
+    "shortDescription": "可复用的技能和工具集",
+    "longDescription": "把技能、MCP 服务器和应用连接器打包在一起，团队共享。",
+    "developerName": "你的团队",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://example.com",
+    "privacyPolicyURL": "https://example.com/privacy",
+    "termsOfServiceURL": "https://example.com/terms",
+    "defaultPrompt": [
+      "用 My Plugin 总结新的 CRM 备注",
+      "用 My Plugin 处理新的客户跟进"
+    ],
+    "brandColor": "#10A37F",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "screenshots": ["./assets/screenshot-1.png"]
+  }
+}
+```
+
+清单字段分三类：
+
+**标识类**：`name`、`version`、`description`、`author`、`homepage`、`repository`、`license`、`keywords`
+
+**组件指向类**：`skills`、`mcpServers`、`apps`、`hooks`——每个字段指向插件根目录下的一个路径
+
+**界面展示类**（`interface` 对象）：`displayName`、`shortDescription`、`longDescription` 控制标题和描述；`developerName`、`category`、`capabilities` 提供分类信息；`websiteURL`、`privacyPolicyURL`、`termsOfServiceURL` 提供外部链接；`defaultPrompt` 是安装后显示的示例提示；`brandColor`、`composerIcon`、`logo`、`screenshots` 控制视觉呈现。
+
+---
+
+## 4. 插件提供的 MCP 服务器
+
+这是插件最强大的能力之一——通过 `.mcp.json` 给 Agent 提供额外的工具。
+
+### 4.1 .mcp.json 的两种写法
+
+`.mcp.json` 支持两种格式。第一种是直接的服务器映射：
+
+```json
+{
+  "docs": {
+    "command": "docs-mcp",
+    "args": ["--stdio"]
+  }
+}
+```
+
+第二种是包裹在 `mcp_servers` 对象里：
+
+```json
+{
+  "mcp_servers": {
+    "docs": {
+      "command": "docs-mcp",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+
+两种写法效果一样，Codex 都能正确解析。推荐用第一种，更简洁。
+
+### 4.2 用户侧的 MCP 服务器配置
+
+用户安装你的插件后，可以在 `config.toml` 里控制插件提供的 MCP 服务器行为，不需要直接编辑插件的 `.mcp.json`。配置路径是 `plugins.<plugin>.mcp_servers.<server>`：
+
+```toml
+# ~/.codex/config.toml
+
+[plugins."my-plugin".mcp_servers.docs]
+enabled = true
+default_tools_approval_mode = "prompt"
+enabled_tools = ["search"]
+
+[plugins."my-plugin".mcp_servers.docs.tools.search]
+approval_mode = "approve"
+```
+
+可用的配置项：
+
+| 配置键 | 类型 | 说明 |
+|--------|------|------|
+| `enabled` | boolean | 启用或禁用该 MCP 服务器 |
+| `enabled_tools` | array | 允许暴露的工具白名单 |
+| `disabled_tools` | array | 在白名单之后应用的禁用列表 |
+| `default_tools_approval_mode` | `auto` / `prompt` / `approve` | 工具的默认审批模式 |
+| `tools.<name>.approval_mode` | `auto` / `prompt` / `approve` | 单个工具的审批模式覆盖 |
+
+这个设计思路很好——插件声明自己能提供什么，用户决定实际启用什么。插件的 `.mcp.json` 不需要改，所有定制都在用户侧的 config.toml 里完成。
+
+### 4.3 一个实际的 .mcp.json 示例
+
+假设你的插件需要提供一个文档搜索的 MCP 服务器：
+
+```json
+{
+  "doc-search": {
+    "command": "npx",
+    "args": ["-y", "doc-search-mcp", "--port", "3456"],
+    "env": {
+      "DOC_SEARCH_API_KEY": "${DOC_SEARCH_API_KEY}"
+    }
+  },
+  "code-lint": {
+    "command": "npx",
+    "args": ["-y", "code-lint-mcp", "--stdio"]
+  }
+}
+```
+
+一个插件可以同时提供多个 MCP 服务器。用户可以选择性地启用其中一部分。
+
+---
+
+## 5. 插件配置（plugins.*）
+
+除了 MCP 服务器的细粒度控制，config.toml 中还有几个与插件相关的重要配置。
+
+### 5.1 插件启停
+
+每个已安装的插件在 config.toml 中都有自己的配置节：
+
+```toml
+[plugins."my-plugin@marketplace-name"]
+enabled = true
+```
+
+`enabled = false` 会禁用插件但不卸载。插件名称后面的 `@marketplace-name` 是市场标识，区分来自不同来源的同名插件。
+
+### 5.2 tool_suggest 配置
+
+Codex 有一个工具建议系统，会根据上下文提示你可能需要的插件或连接器。你可以通过两个配置键控制这个行为：
+
+**禁用特定建议**：
+
+```toml
+[[tool_suggest.disabled_tools]]
+type = "plugin"
+id = "some-annoying-plugin"
+```
+
+**添加额外建议**：
+
+```toml
+[[tool_suggest.discoverables]]
+type = "connector"
+id = "my-custom-connector"
+
+[[tool_suggest.discoverables]]
+type = "plugin"
+id = "my-team-plugin"
+```
+
+这在你团队内部有自定义的连接器或插件，但它们不在官方市场里时特别有用。
+
+### 5.3 插件共享控制
+
+在企业管理场景下，管理员可以通过 `requirements.toml` 禁止团队成员在工作区内共享插件：
+
+```toml
+# requirements.toml（管理员配置）
+plugin_sharing = false
+```
+
+这个设置只对 ChatGPT 工作区内的插件分享功能生效，不影响市场分发。
+
+---
+
+## 6. 插件安全与权限
+
+### 6.1 安装不等于信任
+
+这是插件安全模型的核心原则。安装一个插件只是让它的技能和配置变得可用，但：
+
+- **Skills** 安装后立即可用，因为它们本质上是给 Agent 的指令
+- **Apps** 可能需要你在安装时或首次使用时完成外部服务的认证
+- **MCP Servers** 可能需要额外的设置或认证
+- **Hooks** 不会被自动信任。插件里的钩子属于非托管（non-managed）钩子，Codex 会跳过它们，直到你手动审查并信任
+
+### 6.2 插件钩子的信任审查
+
+当你安装的插件包含钩子时，Codex 会在钩子执行前提示你审查。这个审查是针对钩子定义的内容进行的——如果插件更新了钩子，你可能需要重新审查。
+
+钩子命令会收到两个插件特有的环境变量：
+
+- `PLUGIN_ROOT`：指向已安装插件的根目录
+- `PLUGIN_DATA`：指向插件的可写数据目录
+
+为了向后兼容，Codex 同时设置了 `CLAUDE_PLUGIN_ROOT` 和 `CLAUDE_PLUGIN_DATA`。
+
+### 6.3 数据流和权限边界
+
+安装插件后，你的现有审批设置（approval policy）依然有效。Codex 不会因为装了插件就绕过你的安全策略。当 Codex 通过插件的外部服务发送数据时，那个服务的隐私政策和服务条款适用。
+
+---
+
+## 7. 插件开发实战
+
+### 场景一：开发一个代码格式化插件
+
+假设你的团队统一使用 Prettier 做代码格式化，你想让 Codex 在每次修改代码后自动运行格式化。
+
+#### 第一步：创建插件目录
+
+```bash
+mkdir -p code-formatter/.codex-plugin
+mkdir -p code-formatter/skills/auto-format
+mkdir -p code-formatter/hooks
+mkdir -p code-formatter/assets
+```
+
+#### 第二步：写插件清单
+
+`code-formatter/.codex-plugin/plugin.json`：
+
+```json
+{
+  "name": "code-formatter",
+  "version": "1.0.0",
+  "description": "代码格式化工作流：自动运行 Prettier，确保代码风格一致",
+  "author": {
+    "name": "前端基建组"
+  },
+  "license": "MIT",
+  "keywords": ["formatter", "prettier", "code-style"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Code Formatter",
+    "shortDescription": "自动格式化代码",
+    "category": "Developer Tools",
+    "defaultPrompt": [
+      "格式化当前文件",
+      "格式化整个项目"
+    ]
+  }
+}
+```
+
+#### 第三步：写技能
+
+`code-formatter/skills/auto-format/SKILL.md`：
+
+```markdown
+---
+name: auto-format
+description: 使用 Prettier 格式化代码
+---
+
+## 何时使用
+
+当用户要求格式化代码，或者你刚刚修改了代码文件并需要确保风格一致时。
+
+## 工作流程
+
+1. 检查项目中是否有 Prettier 配置（.prettierrc、prettier.config.js 等）
+2. 如果没有配置，使用默认的 Prettier 配置
+3. 运行 `npx prettier --write` 格式化相关文件
+4. 报告格式化的文件数量和任何错误
+
+## 注意事项
+
+- 不要格式化 node_modules、dist、build 目录
+- 对于 .vue、.svelte 文件，确认相关 Prettier 插件已安装
+- 如果格式化失败，检查 Prettier 版本和配置文件是否兼容
+```
+
+#### 第四步：写钩子（可选）
+
+想让 Codex 在每次工具使用后自动检查是否需要格式化：
+
+`code-formatter/hooks/hooks.json`：
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": {
+          "tool_name": "apply_patch"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${PLUGIN_ROOT}/scripts/check-format.sh",
+            "statusMessage": "检查代码格式"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+然后创建检查脚本：
+
+`code-formatter/scripts/check-format.sh`：
+
+```bash
+#!/bin/bash
+# 检查最近的文件修改是否需要格式化
+CHANGED_FILES=$(git diff --name-only --diff-filter=M HEAD 2>/dev/null | grep -E '\.(js|ts|jsx|tsx|css|scss|json|md)$' || true)
+
+if [ -n "$CHANGED_FILES" ]; then
+  echo "以下文件已修改，建议运行格式化："
+  echo "$CHANGED_FILES"
+fi
+```
+
+#### 第五步：注册到本地市场
+
+创建市场文件让 Codex 能发现这个插件。你可以在项目级别或个人级别创建：
+
+**项目级**（只有这个项目的团队成员能看到）：`$REPO_ROOT/.agents/plugins/marketplace.json`
+
+**个人级**（你自己所有项目都能用）：`~/.agents/plugins/marketplace.json`
+
+```json
+{
+  "name": "local-plugins",
+  "interface": {
+    "displayName": "本地插件"
+  },
+  "plugins": [
+    {
+      "name": "code-formatter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/code-formatter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
+```
+
+把插件文件夹复制到市场配置指向的位置（比如 `$REPO_ROOT/plugins/code-formatter`），然后重启 Codex，打开 `/plugins` 就能看到你的插件了。
+
+### 场景二：开发一个 API 文档查询插件
+
+假设你的团队维护了一个 REST API，你想让 Codex 能直接查询 API 文档来辅助开发。
+
+#### 第一步：创建插件目录
+
+```bash
+mkdir -p api-docs-helper/.codex-plugin
+mkdir -p api-docs-helper/skills/query-api
+mkdir -p api-docs-helper/assets
+```
+
+#### 第二步：写插件清单
+
+`api-docs-helper/.codex-plugin/plugin.json`：
+
+```json
+{
+  "name": "api-docs-helper",
+  "version": "1.0.0",
+  "description": "查询项目 API 文档，辅助接口开发和调试",
+  "author": {
+    "name": "后端团队",
+    "email": "backend@example.com"
+  },
+  "repository": "https://github.com/example/api-docs-helper",
+  "license": "MIT",
+  "keywords": ["api", "docs", "rest"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "API Docs Helper",
+    "shortDescription": "查询 API 文档",
+    "longDescription": "通过 MCP 服务器连接 API 文档数据库，让 Codex 直接查询接口定义、参数说明和示例代码。",
+    "category": "Developer Tools",
+    "capabilities": ["Read"],
+    "defaultPrompt": [
+      "查询用户相关的 API 接口",
+      "这个接口需要哪些参数？"
+    ],
+    "brandColor": "#4A90D9",
+    "logo": "./assets/logo.png"
+  }
+}
+```
+
+#### 第三步：写技能
+
+`api-docs-helper/skills/query-api/SKILL.md`：
+
+```markdown
+---
+name: query-api
+description: 查询项目 API 文档，获取接口定义和用法
+---
+
+## 何时使用
+
+当用户询问项目 API 的用法、参数、返回值时，使用此技能。
+
+## 工作流程
+
+1. 分析用户的查询意图，确定需要查找的接口或资源
+2. 使用 api-docs MCP 服务器的 search 工具搜索相关文档
+3. 如果搜索结果不够精确，使用 get-endpoint 工具获取具体接口的完整定义
+4. 以清晰的结构整理信息返回给用户，包括：
+   - HTTP 方法和路径
+   - 请求参数（query、path、body）
+   - 响应格式和状态码
+   - 示例请求和响应（如果有）
+5. 如果用户要求，直接生成调用代码
+
+## 注意事项
+
+- API 文档可能与实际代码不同步，重要变更请以代码为准
+- 对于已废弃的接口，明确标注并建议替代方案
+```
+
+#### 第四步：写 MCP 服务器配置
+
+`api-docs-helper/.mcp.json`：
+
+```json
+{
+  "api-docs": {
+    "command": "npx",
+    "args": ["-y", "api-docs-mcp-server", "--stdio"],
+    "env": {
+      "API_DOCS_PATH": "${API_DOCS_PATH}",
+      "API_BASE_URL": "${API_BASE_URL}"
+    }
+  }
+}
+```
+
+这里用环境变量 `${API_DOCS_PATH}` 和 `${API_BASE_URL}` 让用户可以在自己的环境中配置文档路径和 API 基础 URL，不需要改插件本身。
+
+#### 第五步：用户安装后的配置
+
+用户安装这个插件后，可以在自己的 config.toml 中精细控制 MCP 服务器的行为：
+
+```toml
+# ~/.codex/config.toml
+
+[plugins."api-docs-helper@local-plugins".mcp_servers.api-docs]
+enabled = true
+default_tools_approval_mode = "prompt"
+enabled_tools = ["search", "get-endpoint", "list-tags"]
+
+[plugins."api-docs-helper@local-plugins".mcp_servers.api-docs.tools.search]
+approval_mode = "approve"
+
+[plugins."api-docs-helper@local-plugins".mcp_servers.api-docs.tools.get-endpoint]
+approval_mode = "approve"
+```
+
+#### 第六步：用 CLI 命令管理市场
+
+如果你不想手动编辑 marketplace.json，可以用 CLI 命令管理：
+
+```bash
+# 添加一个本地市场
+codex plugin marketplace add ./path/to/marketplace-root
+
+# 添加一个 GitHub 仓库作为市场
+codex plugin marketplace add owner/repo
+
+# 指定 Git 分支
+codex plugin marketplace add owner/repo --ref main
+
+# 使用稀疏检出（只下载特定目录）
+codex plugin marketplace add https://github.com/example/plugins.git --sparse .agents/plugins
+
+# 查看所有已配置的市场
+codex plugin marketplace list
+
+# 更新市场内容
+codex plugin marketplace upgrade
+
+# 更新指定市场
+codex plugin marketplace upgrade market-name
+
+# 移除市场
+codex plugin marketplace remove market-name
+```
+
+---
+
+## 8. 市场与分发
+
+### 8.1 市场的概念
+
+市场（Marketplace）本质上就是一个 JSON 文件，里面列出了可用的插件。Codex 从多个位置读取市场文件：
+
+| 位置 | 作用域 |
+|------|--------|
+| 官方 Plugin Directory | 所有用户可见的精选插件 |
+| `$REPO_ROOT/.agents/plugins/marketplace.json` | 项目级别 |
+| `$REPO_ROOT/.claude-plugin/marketplace.json` | 兼容旧版的位置 |
+| `~/.agents/plugins/marketplace.json` | 个人级别 |
+
+一个市场文件可以包含多个插件，也可以只包含一个。测试时放一个，随着团队积累慢慢扩展成多个。
+
+### 8.2 市场文件格式
+
+```json
+{
+  "name": "team-plugins",
+  "interface": {
+    "displayName": "团队插件集"
+  },
+  "plugins": [
+    {
+      "name": "code-formatter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/code-formatter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
+```
+
+`policy.installation` 的三个值：
+
+- `AVAILABLE`：用户可以自行决定是否安装
+- `INSTALLED_BY_DEFAULT`：默认安装
+- `NOT_AVAILABLE`：不允许安装（用于隐藏特定插件）
+
+`policy.authentication` 控制认证时机：
+
+- `ON_INSTALL`：安装时认证
+- `ON_FIRST_USE`：首次使用时认证
+
+### 8.3 Git 支持的市场源
+
+市场条目可以指向 Git 仓库，而不是本地目录：
+
+```json
+{
+  "name": "remote-helper",
+  "source": {
+    "source": "git-subdir",
+    "url": "https://github.com/example/codex-plugins.git",
+    "path": "./plugins/remote-helper",
+    "ref": "main"
+  },
+  "policy": {
+    "installation": "AVAILABLE",
+    "authentication": "ON_INSTALL"
+  },
+  "category": "Productivity"
+}
+```
+
+当 `source` 设为 `"url"` 时，插件在仓库根目录；设为 `"git-subdir"` 时，插件在子目录。可以用 `ref` 或 `sha` 来锁定版本。
+
+Codex 在解析市场时，如果某个条目的源无法访问，会跳过这个条目而不是让整个市场加载失败。
+
+### 8.4 插件缓存
+
+Codex 把安装的插件缓存在 `~/.codex/plugins/cache/$MARKETPLACE_NAME/$PLUGIN_NAME/$VERSION/`。本地插件的版本号是 `local`，Codex 从缓存路径加载已安装的副本。
+
+### 8.5 工作区共享
+
+如果你用的是 Codex App，安装并测试好插件后，可以直接在应用里分享给团队的 ChatGPT 工作区：
+
+1. 打开 Plugins 页面
+2. 进入 Created by you
+3. 选择 Share
+4. 添加工作区成员或复制分享链接
+
+团队成员会在 "Shared with you" 里看到你分享的插件。这个分享只在工作区内有效，不会发布到公开市场。
+
+管理员如果需要禁止这种分享，可以在 requirements.toml 里设置 `plugin_sharing = false`。
+
+---
+
+## 9. 开发工作流总结
+
+把前面的内容串起来，开发一个插件的典型流程是：
+
+1. **确定需求**：插件要解决什么问题？需要哪些组件（技能、MCP、App、钩子）？
+2. **创建目录结构**：`.codex-plugin/plugin.json` 是起点
+3. **写清单**：从最小版本开始，逐步添加组件指向和 interface 元数据
+4. **写组件**：SKILL.md 写指令，.mcp.json 写工具配置，hooks.json 写生命周期逻辑
+5. **注册到市场**：创建 marketplace.json，指向你的插件目录
+6. **本地测试**：重启 Codex，在 `/plugins` 里安装并测试
+7. **迭代**：修改插件内容后，更新插件目录里的文件并重启 Codex
+8. **分发**：通过市场文件分享给团队，或者推到 Git 仓库
+
+有一个快捷方式：用内置的 `@plugin-creator` 技能。它可以自动生成 `.codex-plugin/plugin.json` 和对应的 marketplace 条目。如果你已经有一个插件文件夹，也可以用 `@plugin-creator` 把它接入本地市场。
+
+如果你只是在自己的单个项目或个人工作流中迭代，先从本地 Skill 开始。当你需要跨团队分享、需要打包多个组件、或者需要一个稳定版本号管理时，再升级为插件。这是一个自然的演进路径：Skill -> Plugin -> Marketplace。
+
+---
+
+## 延伸阅读
+
+- [Codex 官方文档：Plugins 概览](https://developers.openai.com/codex/plugins) — 插件的安装、使用和管理
+- [Codex 官方文档：Build Plugins](https://developers.openai.com/codex/plugins/build) — 插件开发、市场配置和分发
+- [Codex 官方文档：Configuration Reference](https://developers.openai.com/codex/config-reference) — config.toml 和 requirements.toml 完整配置参考
+- 本系列第 38 篇：Skills 开发 — 插件中技能组件的详细写法
+- 本系列第 36 篇：MCP Server — 插件中 MCP 服务器组件的配置方法
+- 本系列第 39 篇：Hooks — 插件中生命周期钩子的开发方法
+- 本系列第 40 篇：Apps — 插件中应用连接器的集成方式

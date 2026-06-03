@@ -1,0 +1,745 @@
+# Codex CLI 模型与推理命令：/model、/fast、/personality、/plan、/goal
+
+> **TL;DR**：这五个斜杠命令控制 Codex CLI 的"大脑配置"——用哪个模型、跑多快、怎么说话、想多深、追什么目标。`/model` 切模型，`/fast` 开优先队列，`/personality` 选对话风格，`/plan` 进规划模式，`/goal` 设任务终点。配合 config.toml 中的推理强度和 service tier 配置，你能在同一会话里按需调整 Codex 的行为模式。本文按命令逐个拆解，覆盖用法、配置项、限制条件和实战工作流。
+
+---
+
+## 1. 模型选择基础
+
+在讲命令之前，先厘清一个容易混淆的概念：Codex CLI 里的"模型配置"不是只有一个开关，而是一组互相影响的参数。
+
+```
+模型配置 = 模型 + 推理强度 + 服务层级 + 通信风格
+                │          │           │
+                ▼          ▼           ▼
+           /model       /fast      /personality
+           config.toml  config.toml config.toml
+```
+
+这四层参数叠加在一起，决定了 Codex 生成代码的质量、速度和交互体验。单独调模型效果有限，真正的效率提升来自四个参数的组合调优。
+
+先回顾一下当前可用的主力模型（截至 2026 年 6 月）：
+
+| 模型 | 定位 | 速度 | 支持 Fast | 支持 personality |
+|------|------|------|-----------|-----------------|
+| GPT-5.5 | 最新旗舰 | 中 | 是 | 是 |
+| GPT-5.4 | 上代旗舰 | 中 | 是 | 是 |
+| GPT-5.4-mini | 轻量快速 | 快 | 否 | 是 |
+| GPT-5.3-Codex | 编程专用 | 中 | 否 | 是 |
+| GPT-5.3-Codex-Spark | 低延迟预览 | 最快 | 否 | 视版本 |
+
+注意最右边两列：Fast 模式和 personality 都不是所有模型都支持的。后面讲每个命令时会提到这个限制的由来——模型目录（model catalog）机制。
+
+### 模型目录机制
+
+Codex CLI 不是硬编码了"哪些模型支持哪些功能"，而是从 OpenAI 服务端维护的一份模型目录中读取这些信息。每次你启动 Codex，它会拉取最新的模型目录，里面记录了每个模型的：
+
+- 模型 ID（如 `gpt-5.5`）
+- 上下文窗口大小
+- 支持的 service tier（`flex`、`fast`）
+- 是否支持 personality 指令
+- 推理强度的可选范围
+- 默认参数
+
+这份目录是动态更新的。OpenAI 上线新模型或调整模型能力后，你不需要升级 Codex CLI 本身，下次启动就会自动获取新数据。
+
+这解释了为什么你的 `/fast` 或 `/personality` 命令有时候会"消失"——如果你当前选的模型在目录中标记为不支持这些功能，Codex 会自动隐藏对应的斜杠命令。不是命令坏了，是模型不支持。
+
+你也可以用自定义的模型目录扩展默认列表：
+
+```toml
+# config.toml
+model_catalog_json = "~/.codex/custom-models.json"
+```
+
+这对接入第三方 API Provider 的场景有用，后面服务层级部分会展开。
+
+---
+
+## 2. /model 切换模型
+
+### 基本用法
+
+在 Codex CLI 的 TUI 界面中输入 `/model`，会弹出一个模型选择菜单：
+
+```text
+> /model
+
+  gpt-5.5              最新旗舰，复杂编码首选
+  gpt-5.4              上代旗舰，日常开发默认
+  gpt-5.4-mini         轻量快速，日常够用
+  gpt-5.3-codex        编程专用 RL 训练
+  gpt-5.3-codex-spark  低延迟研究预览 (Pro)
+
+  ─────────────────────────────
+  Reasoning effort: [medium ▼]
+```
+
+方向键选择模型，回车确认。菜单下方还有一个推理强度选择器，你可以在这里一起调整。
+
+切换后，当前会话的后续所有对话都使用新模型。已有对话历史不会清除——Codex 会带着之前的上下文继续工作。但要注意一点：不同模型对上下文的理解能力不同。如果你在 GPT-5.4 下聊了 50 轮，突然切到 GPT-5.4-mini，mini 模型可能对之前复杂讨论的保留和理解不如 5.4。
+
+### /status 验证切换
+
+切换完模型后，用 `/status` 确认：
+
+```text
+> /status
+
+Model: gpt-5.5
+Reasoning effort: medium
+Service tier: flex
+Personality: friendly
+Fast mode: off
+```
+
+养成切完就查的习惯。特别是批量操作时——你可能以为自己切了 mini 模型在省额度，结果忘了切，一直在用 5.5 烧钱。
+
+### 启动时指定模型
+
+每次进会话再 `/model` 切换有点麻烦，有三种方式在启动时直接指定：
+
+```bash
+# 方式一：-m 参数（最常用）
+codex -m gpt-5.4
+
+# 方式二：--model 完整写法
+codex --model gpt-5.4-mini
+
+# 方式三：config.toml 全局默认
+# ~/.codex/config.toml
+model = "gpt-5.4"
+```
+
+`-m` 和 `config.toml` 的优先级：`-m` > 项目级 config > 用户级 config > 内置默认。命令行参数永远最高。
+
+### /model 的高级用法
+
+除了切模型，`/model` 菜单中的推理强度选择器也是一个快速调参入口。你不需要去改 config.toml，在这里选就行。Codex 会弹出两个选项：
+
+1. **Apply to global default**：修改全局推理强度，写入 config.toml
+2. **Apply to this session only**：只在当前会话生效，退出就失效
+
+大多数时候选第二个就行。你在一个长会话里遇到一个复杂问题，临时拉高推理强度到 `high`，做完之后自然退出，不影响全局配置。
+
+### 模型切换的注意事项
+
+切模型时有一个隐含成本：上下文格式转换。不同模型的系统指令格式和分词方式不同，切模型时 Codex 不会重新格式化已有的对话历史——它只是把之前的对话原文传给新模型。这意味着：
+
+- 新模型能"读"到之前的对话，但理解精度可能下降
+- 如果你在一个模型下做了大量深度讨论，切到更弱的模型后，新模型的回复质量可能突然降低
+- 最安全的做法是：简单任务期间切模型没问题，复杂任务中途不建议切
+
+一个实用的经验法则：**如果当前会话已经超过 20 轮对话，不要在中途切模型。开新会话更安全。**
+
+---
+
+## 3. /fast 切换服务层级
+
+### Fast 模式是什么
+
+前面提到，Fast 模式不是换模型，而是给同一个模型安排优先计算资源。类比一下：你在超市排队结账，普通模式排在普通通道，Fast 模式排在 VIP 通道。你买的商品（模型输出）是一样的，只是不用等那么久。
+
+具体来说：
+
+```text
+               Standard 模式                Fast 模式
+
+请求 ──→ [普通队列] ──→ 计算 ──→ 响应     请求 ──→ [优先队列] ──→ 计算 ──→ 响应
+         (较长等待)                      (较短等待)
+```
+
+OpenAI 服务端通过 API 参数 `service_tier` 区分两种队列。`flex` 是标准队列，`fast` 是优先队列。
+
+### 命令用法
+
+```text
+# 开启 Fast 模式
+> /fast on
+
+# 关闭 Fast 模式
+> /fast off
+
+# 查看状态
+> /fast status
+Fast mode: on (gpt-5.5 at 2.5x credits)
+```
+
+开启 `/fast on` 后，Codex 会确认一次："Fast 模式将消耗更多 credits，确定开启？"确认后才生效。这个确认可以关闭，后面会讲。
+
+### 持久化配置
+
+如果你希望每次启动都默认开启 Fast 模式：
+
+```toml
+# config.toml
+
+# 方式一：设置 service tier（推荐）
+service_tier = "fast"
+
+# 方式二：同时启用 feature gate
+service_tier = "fast"
+
+[features]
+fast_mode = true
+```
+
+两种方式效果一样。`service_tier = "fast"` 是核心配置，`features.fast_mode` 控制是否在 TUI 中显示 `/fast` 命令。把 tier 设成 `fast` 但关闭 feature gate，Fast 模式仍然生效，只是你看不到 `/fast` 命令。
+
+### 什么时候 Fast 模式不可用
+
+Fast 模式有三个前提条件，缺一不可：
+
+1. **模型目录标记为支持**：当前选择的模型在服务端目录中标记了支持 `fast` tier。目前只有 GPT-5.5 和 GPT-5.4 支持。如果你选的是 GPT-5.4-mini，`/fast` 命令会消失
+2. **feature gate 开启**：`features.fast_mode = true`（默认就是 true）
+3. **API Provider 支持**：如果你用的是自定义 Provider（比如通过 API Key 接入），那个 Provider 必须支持 service tier 参数。大多数第三方 Provider 不支持
+
+条件 3 值得展开说一下。Codex CLI 支持 `model_provider` 配置项来指定非 OpenAI 的 Provider。如果你的 Provider 不支持 Fast 队列，`/fast on` 会报错或被忽略。
+
+```toml
+# config.toml
+model_provider = "openai"  # 默认值，支持 Fast
+# model_provider = "azure"  # 取决于 Azure OpenAI 的配置
+# model_provider = "custom" # 取决于自定义 Provider 的实现
+```
+
+### Fast 模式的成本
+
+这是最重要的一点：Fast 模式花钱更多。
+
+| 模型 | Standard Credits | Fast Credits | 增幅 |
+|------|-----------------|-------------|------|
+| GPT-5.5 | 1x | 2.5x | +150% |
+| GPT-5.4 | 1x | 2x | +100% |
+| GPT-5.4-mini | 不支持 | — | — |
+
+如果你的 Plus 套餐 5 小时窗口里有 50 条 GPT-5.5 的额度，开启 Fast 后实际只能发 20 条。额度消耗速度是原来的 2.5 倍。
+
+Fast 模式值不值得用，取决于你对等待时间的敏感度。一个实际对比：
+
+- Standard GPT-5.5：中等复杂度的代码修改，首 token 延迟约 3-8 秒，完成整个回复约 15-30 秒
+- Fast GPT-5.5：同样任务，首 token 延迟约 1-3 秒，完成整个回复约 6-15 秒
+
+如果你在做高频迭代（比如结对编程，每分钟发一条指令），Fast 模式的体验提升很明显。如果你在让 Codex 做一次大型重构，总共就发 3-5 条指令，Fast 模式节省的时间可以忽略，但额度消耗翻倍。
+
+### 底部状态栏显示
+
+你可以通过 `/statusline` 命令在 TUI 底部状态栏中显示 Fast 模式状态：
+
+```text
+> /statusline
+```
+
+勾选 "Service Tier" 选项后，底部状态栏会显示当前的 service tier（`flex` 或 `fast`），让你不用每次 `/fast status` 就能一眼看到当前状态。
+
+---
+
+## 4. /personality 通信风格
+
+### personality 做什么
+
+`/personality` 控制 Codex 回复的语气和详细程度。这不是一个"花哨"的功能——它直接影响你阅读 Codex 输出的效率和舒适度。
+
+```text
+> /personality
+
+  friendly       热情、鼓励、详细解释
+  pragmatic       简洁、直接、聚焦行动
+  none            不使用 personality 指令
+```
+
+三种风格的区别，用同一个问题 "这段代码有个 bug 帮我修一下" 来对比：
+
+**friendly 风格**：
+
+```text
+当然！让我看看这段代码... 
+
+我在 handleLogin 函数中发现了一个问题。第 42 行的
+async/await 链中，错误没有被正确捕获。当 fetch 请求
+失败时，catch 块只处理了网络错误，没有处理 JSON 解析
+错误。
+
+我来帮你修复这个问题。修复方案是：
+1. 在 try 块中添加 response.ok 检查
+2. 在 catch 块中统一处理所有错误类型
+
+这样做之后，无论 fetch 失败还是返回了非 200 状态码，
+用户都能看到正确的错误提示 😊
+```
+
+**pragmatic 风格**：
+
+```text
+handleLogin 第 42 行：fetch 后缺少 response.ok 检查。
+JSON 解析错误会作为 unhandled rejection 抛出。
+
+修复：在 await response.json() 前加 if (!response.ok) throw Error(...)。
+```
+
+**none 风格**：
+
+```text
+--- src/auth/handleLogin.ts +3 -1
+
++ if (!response.ok) {
++   throw new Error(`HTTP ${response.status}: ${response.statusText}`);
++ }
+  return await response.json();
+```
+
+三种风格各有适用场景。friendly 适合学习阶段——你不仅想知道怎么修，还想理解为什么出问题。pragmatic 适合日常开发——你已经知道自己在做什么，只需要快速定位和修复。none 适合纯执行场景——你让 Codex 改代码，它只改代码，不多说一句话。
+
+### 设置 personality
+
+```text
+> /personality pragmatic
+```
+
+切换后立即生效。也可以在 config.toml 中持久化：
+
+```toml
+# config.toml
+personality = "pragmatic"
+
+# 确保 feature gate 开启
+[features]
+personality = true
+```
+
+### 什么时候 personality 不可用
+
+和 Fast 模式类似，personality 的可见性受两个条件控制：
+
+1. **模型目录标记为支持**：如果当前模型不支持 personality 指令，`/personality` 命令会被隐藏
+2. **feature gate 开启**：`features.personality = true`
+
+```toml
+# config.toml — 禁用 personality
+personality = "none"
+
+[features]
+personality = false
+```
+
+设置 `personality = "none"` 和 `features.personality = false` 的区别：前者告诉模型不要使用 personality 指令（模型正常回复，只是不加语气修饰），后者完全隐藏 `/personality` 命令。
+
+### personality 和 API 调用的关系
+
+personality 不是客户端的文本模板替换——它通过 system prompt 中的一段指令实现。Codex CLI 在构造 API 请求时，会根据 personality 设置注入不同的系统指令片段。这意味着：
+
+- 使用自定义 Provider 时，如果 Provider 不支持 system prompt，personality 可能不生效
+- personality 不影响 token 计费——注入的指令片段很短，通常不超过几十 token
+- 不同模型对 personality 指令的遵守程度不同。GPT-5.5 对 friendly/pragmatic 的风格区分比 GPT-5.4-mini 更准确
+
+### 选择建议
+
+| 场景 | 推荐风格 | 理由 |
+|------|---------|------|
+| 学习新技术 | friendly | 解释详细，有上下文 |
+| 日常开发 | pragmatic | 信息密度高，不废话 |
+| 批量自动化 | none | 纯执行，输出干净 |
+| 代码审查 | pragmatic 或 none | 聚焦问题本身 |
+| 结对编程 | friendly | 交互体验好 |
+
+---
+
+## 5. 推理强度配置
+
+推理强度（reasoning effort）是整个模型配置体系中对输出质量影响最大的参数。值得花篇幅讲清楚。
+
+### model_reasoning_effort
+
+`model_reasoning_effort` 控制模型在输出前"思考"多久。Codex 支持六个档位：
+
+| 档位 | 内部行为 | 输出特征 | 适用场景 |
+|------|---------|---------|---------|
+| `none` | 跳过推理 | 直接回答，无分析 | 纯格式化、机械操作 |
+| `minimal` | 极少推理 | 简短直接 | 查找替换、简单问答 |
+| `low` | 轻度推理 | 基本解释 | 代码解释、简单问答 |
+| `medium` | 适度推理（默认） | 有分析有结论 | 日常开发、修 bug |
+| `high` | 深度推理 | 多角度分析 | 架构设计、复杂重构 |
+| `xhigh` | 极限推理 | 全面分析 | 视模型而定 |
+
+一个更直观的理解：推理强度控制的是模型内部的 Chain-of-Thought 长度。`minimal` 几乎跳过内部推理步骤，`xhigh` 会做完整的多步推理链。这影响你看到的输出质量，也影响 token 消耗和响应速度。
+
+配置方式：
+
+```toml
+# config.toml — 全局默认
+model_reasoning_effort = "medium"
+
+# CLI 临时覆盖（只对当次会话生效）
+codex -c model_reasoning_effort=\"high\"
+```
+
+也可以通过 `/model` 菜单下方的推理强度选择器在 TUI 中调整。
+
+### 推理强度的实际影响
+
+用同一个任务对比不同档位的差异。任务是："UserService 中的 getUserById 方法有个 N+1 查询问题，帮我修"。
+
+**minimal**：
+
+```text
+在 getUserById 中改为预加载关联数据。使用 Prisma 的 include 参数。
+```
+
+**medium**：
+
+```text
+getUserById 当前对每个关联对象执行单独查询，导致 N+1 问题。
+修复方案：在 Prisma 查询中使用 include 预加载 posts 和 orders。
+
+修改前：await db.user.findUnique({ where: { id } })
+修改后：await db.user.findUnique({ where: { id }, include: { posts: true, orders: true } })
+```
+
+**high**：
+
+```text
+getUserById 的 N+1 问题分析：
+
+问题链：
+1. findUnique 查询用户（1 次）
+2. 后续代码中逐个查询用户的 posts（N 次）
+3. 再逐个查询每个 post 的 orders（N*M 次）
+
+根因：findUnique 只返回用户本身，关联数据通过后续的惰性加载获取。
+
+修复方案：使用 include 一次性预加载所有需要的关联数据。
+
+  await db.user.findUnique({
+    where: { id },
+    include: {
+      posts: {
+        include: { orders: true }
+      }
+    }
+  })
+
+注意事项：
+- 预加载会增加单次查询的响应时间
+- 如果 posts 数量很大，考虑加 skip/take 分页
+- getUserList 等批量方法也需要同样处理
+
+影响范围：
+- src/server/user.ts: getUserById (+4 行)
+- src/server/user.ts: getUserList (+6 行)
+```
+
+**xhigh**：
+
+和 `high` 类似，但会进一步分析：是否有其他调用点存在同样的 N+1 问题、预加载对缓存的影响、是否需要引入 DataLoader 模式等。
+
+可以看到，从 `minimal` 到 `high`，输出的信息量和分析深度有质的飞跃。但从 `high` 到 `xhigh`，边际收益递减——通常只是多了一些边界情况的考虑。
+
+### 推理强度和 token 消耗的关系
+
+推理强度越高，模型内部生成的 reasoning token 越多。这些 token 你通常看不到（默认不显示推理过程），但会计入 credit 消耗。
+
+粗略估算：
+
+| 档位 | 相对 token 消耗 | 相对响应时间 |
+|------|----------------|-------------|
+| minimal | 0.3x | 0.3x |
+| low | 0.5x | 0.5x |
+| medium | 1x（基准） | 1x |
+| high | 2-3x | 2-4x |
+| xhigh | 4-6x | 5-8x |
+
+这个比例是粗略估算，实际值取决于任务复杂度。简单任务用 `high`，token 消耗可能只比 `medium` 多 50%。复杂任务用 `high`，可能多 3 倍。
+
+关键结论：**推理强度不是越高越好。简单任务用高强度，浪费钱但不提升质量。复杂任务用低强度，省钱但输出质量不够。** 按任务复杂度匹配档位才是正道。
+
+### plan_mode_reasoning_effort
+
+这是推理强度的"分轨"配置。第 13 篇文章讲过 `/plan` 规划模式，这里聚焦于它的推理配置。
+
+```toml
+# config.toml — 推理强度分轨配置
+model_reasoning_effort = "medium"           # 执行阶段的推理强度
+plan_mode_reasoning_effort = "high"        # 规划阶段的推理强度
+```
+
+为什么要分轨？因为规划和执行对推理的需求不同：
+
+- **规划阶段**需要想得深——要理解全局架构、识别依赖关系、评估风险、设计执行路径。这是决策密集型工作
+- **执行阶段**需要跑得稳——按方案改代码、跑测试、确保行为不变。这是操作密集型工作
+
+一个类比：规划是"棋手思考走哪一步"（需要深度分析），执行是"棋手把棋子放上去"（需要准确无误）。两个阶段对推理深度的需求不一样。
+
+也可以在 TUI 中动态设置。`/model` 选择推理强度时，Codex 会问你要应用到哪里：
+
+```text
+Apply reasoning effort change to:
+  [1] Plan mode override only
+  [2] Global default and Plan mode override
+```
+
+选第一个只改规划阶段，选第二个两边都改。
+
+### model_reasoning_summary
+
+这个配置项控制模型是否在输出中附带推理过程的摘要。
+
+```toml
+# config.toml
+model_reasoning_summary = "auto"  # 可选：auto | concise | detailed | none
+```
+
+| 值 | 行为 |
+|------|------|
+| `auto` | 模型自己决定是否附带摘要（默认） |
+| `concise` | 附带一段简短的推理总结 |
+| `detailed` | 附带详细的推理步骤说明 |
+| `none` | 不附带任何推理摘要 |
+
+这个配置主要影响 Codex 输出中是否会出现类似 `[Reasoning: 分析了 3 种方案...]` 的段落。对于日常开发，`auto` 或 `none` 就够了——推理过程本身对修 bug 帮助不大。对于教学场景或复杂架构讨论，`detailed` 有助于理解模型的决策过程。
+
+注意：推理摘要和推理强度是两回事。`model_reasoning_summary` 只控制是否**展示**推理摘要，不影响模型实际推理的深度。`model_reasoning_effort` 才控制推理的深度。
+
+---
+
+## 6. 服务层级与服务计费
+
+### service tier 的配置层级
+
+Codex CLI 中 service tier 的配置有三个入口，优先级从高到低：
+
+```text
+1. /fast on|off           （TUI 命令，会话级）
+2. CLI 参数 --config       （启动参数，会话级）
+3. config.toml             （配置文件，持久化）
+```
+
+三者的交互规则：
+
+- `/fast on` 会覆盖 config.toml 中的 `service_tier = "flex"`，但只在当前会话生效
+- `/fast off` 会恢复到 config.toml 的设置
+- 如果 config.toml 没有设置 `service_tier`，默认是 `flex`
+- `/fast on` 不会写入 config.toml——想持久化需要手动改配置文件或确认提示
+
+### 不同计费模式的差异
+
+Codex CLI 支持两种计费模式：ChatGPT 套餐和 API Key。两者在 service tier 的行为上完全不同。
+
+**ChatGPT 套餐（Plus / Pro）**：
+
+- `service_tier = "flex"`：使用标准队列，消耗标准 credits
+- `service_tier = "fast"`：使用优先队列，消耗更多 credits（GPT-5.5 为 2.5x，GPT-5.4 为 2x）
+- 额度基于 5 小时滑动窗口
+
+**API Key**：
+
+- `service_tier` 参数取决于你的 API 账户配置
+- OpenAI API 的新版计费中，Fast tier 的输入 token 价格更高，但输出 token 价格可能更低或持平
+- 需要在 OpenAI API 账户中开启 Tier 1+ 才能使用 Fast tier
+- API Key 和 ChatGPT 套餐的额度完全独立
+
+如果你同时配置了 ChatGPT 认证和 API Key，Codex 默认使用 ChatGPT 套餐。想用 API Key 需要：
+
+```toml
+# config.toml
+model_provider = "openai"
+OPENAI_API_KEY = "sk-..."  # 也可以通过环境变量设置
+```
+
+### model_auto_compact_token_limit
+
+这个配置项虽然叫"自动压缩"，但和推理强度有间接关系。当上下文接近模型窗口上限时，Codex 会自动压缩对话历史。压缩后，模型能"看到"的信息减少，实际推理效果会下降。
+
+```toml
+# config.toml
+model_auto_compact_token_limit = 100000  # 当历史对话超过 100K token 时自动压缩
+```
+
+建议设置为模型上下文窗口的 50-60%。对于 GPT-5.5（200K 窗口），设 100K-120K 比较合理。设得太低会频繁压缩，丢失上下文；设得太高可能导致上下文溢出。
+
+关于自动压缩的更多细节，参见本系列第 11 篇《上下文管理》。
+
+---
+
+## 7. 模型切换实战工作流
+
+### 场景一：日常开发用快速模型，复杂问题切换推理模型
+
+这是最常见的混合使用场景。你大部分时间在用 GPT-5.4-mini 做日常开发（改样式、修 typo、写简单组件），偶尔遇到复杂问题（跨模块重构、性能调优）需要切到 GPT-5.5 + high effort。
+
+**推荐配置**：
+
+```toml
+# ~/.codex/config.toml
+
+# 日常默认：轻量快速
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+personality = "pragmatic"
+service_tier = "flex"
+```
+
+**工作流程**：
+
+```bash
+# 启动 Codex，默认 mini 模型
+codex
+
+# 日常开发：直接用 mini 模型
+> /model  # 确认当前是 gpt-5.4-mini
+
+> 把 Button 组件的 padding 从 8px 改成 12px
+> 运行 typecheck
+
+# 遇到复杂问题：切到 5.5
+> /model
+# 选择 gpt-5.5，推理强度选 high
+
+> 这个支付模块在并发场景下有竞态条件，帮我分析并修复
+> 运行测试，覆盖并发场景
+
+# 解决后切回来
+> /model
+# 选择 gpt-5.4-mini，推理强度选 medium
+```
+
+这种工作流的关键是：**mini 模型当主力，5.5 模型当专家顾问**。日常 80% 的任务用 mini 模型就够了，省下的额度留给那 20% 需要深度推理的场景。
+
+一个进阶技巧：如果你经常在同一个会话里切模型，可以定义两个 profile：
+
+```bash
+# ~/.codex/daily.config.toml
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+
+# ~/.codex/heavy.config.toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+```
+
+启动时选 profile：
+
+```bash
+codex --profile daily     # 日常开发
+codex --profile heavy     # 复杂任务
+```
+
+这比每次 `/model` 手动切换更方便，而且 config.toml 中的设置更可靠（不会因为忘记切回来而浪费额度）。
+
+### 场景二：预算敏感的模型使用策略
+
+如果你在 Plus 套餐下（$20/月，额度有限），需要精打细算地使用模型。
+
+**推荐配置**：
+
+```toml
+# ~/.codex/config.toml
+
+# 默认用最省的配置
+model = "gpt-5.4-mini"
+model_reasoning_effort = "low"
+service_tier = "flex"
+personality = "none"
+
+# 自动压缩阈值设低一点，减少 token 浪费
+model_auto_compact_token_limit = 80000
+
+[features]
+fast_mode = true  # 保留 Fast 开关，但默认关闭
+```
+
+**节省额度的策略**：
+
+1. **mini + low effort 作为默认**：90% 的日常任务用这套配置，一条消息消耗的 credits 大约是 5.5 + high effort 的 1/8 到 1/10
+
+2. **遇到需要深度推理的任务再提档**：`/model` 切到 5.4 或 5.5，提推理强度到 `medium` 或 `high`，做完立刻切回来
+
+3. **长会话定期 `/compact`**：不要等自动压缩触发。对话超过 15 轮后，主动 `/compact` 压缩一次，释放上下文空间
+
+4. **控制 AGENTS.md 大小**：AGENTS.md 的内容会占用上下文窗口。大项目的 AGENTS.md 可能几千行，每次对话都带上。按目录拆分成多个小文件，需要时才 mention
+
+5. **精简 MCP 服务器**：每个 MCP 服务器在启动时会注入工具描述到上下文中。如果你装了 10 个 MCP 服务器，光工具描述就可能吃掉上万 token。关掉不常用的
+
+6. **额度快用完时的应急策略**：
+
+```bash
+# 额度不足时，切到最省模式
+codex -m gpt-5.4-mini -c model_reasoning_effort=\"minimal\"
+
+# 或者，补充 API Key 作为备用额度
+export OPENAI_API_KEY="sk-..."
+codex -m gpt-5.4-mini  # 自动使用 API Key
+```
+
+7. **避免在额度和非额度之间频繁切换**：ChatGPT 套餐和 API Key 的额度独立计算，但切换本身需要改配置。如果你经常需要超额使用，不如一开始就用 API Key——至少计费是透明的，不会突然"额度用完"导致工作中断
+
+### 场景三：团队协作中的模型配置管理
+
+如果你在团队中使用 Codex CLI，模型配置的管理就不是一个个人偏好的问题了——它影响团队的代码一致性。
+
+**推荐做法**：
+
+在项目根目录放一个 `.codex/config.toml`，设置团队统一的模型配置：
+
+```toml
+# .codex/config.toml（项目级，提交到 git）
+
+# 团队统一使用 GPT-5.4，推理强度 medium
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+personality = "pragmatic"
+
+# 规划模式用高推理
+plan_mode_reasoning_effort = "high"
+```
+
+个人偏好放在 `~/.codex/config.toml` 中，项目配置会覆盖个人配置（在项目目录下工作时）。这样团队统一了基础模型和推理强度，但每个人仍然可以调整 personality 等个人偏好。
+
+注意：项目级配置不能覆盖认证、Provider、通知等安全相关配置。这是 Codex 的安全设计——你不能通过项目配置把别人的 API Key 或认证信息改掉。
+
+---
+
+## 8. 常见问题
+
+**`/model` 菜单里看不到某个模型？**
+
+模型可见性由模型目录控制。如果你看不到某个模型，可能的原因：你的套餐不支持该模型（比如 GPT-5.3-Codex-Spark 需要 Pro）、模型在你的区域尚未上线、或者 Codex CLI 版本太旧没有最新的模型目录。尝试 `npm i -g @openai/codex` 更新。
+
+**`/fast` 命令消失了？**
+
+当前模型不支持 Fast tier。切到 GPT-5.5 或 GPT-5.4 后 `/fast` 会重新出现。如果仍然看不到，检查 `features.fast_mode` 是否为 `true`。
+
+**`/personality` 命令消失了？**
+
+和 `/fast` 同理。当前模型不支持 personality，或 `features.personality` 被设为 `false`。
+
+**推理强度设为 high 但感觉没什么变化？**
+
+推理强度的效果取决于任务复杂度。对于"改个变量名"这种任务，`low` 和 `high` 的输出几乎一样——因为任务本身不需要深度推理。推理强度的差异在复杂任务（架构设计、跨模块调试、多文件重构）中才会明显体现。
+
+**plan_mode_reasoning_effort 和 model_reasoning_effort 会冲突吗？**
+
+不会。两者独立生效，作用于不同阶段。规划阶段用 `plan_mode_reasoning_effort` 的值，执行阶段用 `model_reasoning_effort` 的值。互不干扰。
+
+**可以用 API Key 用 GPT-5.5 吗？**
+
+取决于 OpenAI API 的模型可用性。截至 2026 年 6 月，GPT-5.5 在 ChatGPT 套餐中可用，API 端的可用性可能存在延迟。用 `codex -m gpt-5.5` 试一下，如果模型不存在会直接报错。
+
+---
+
+## 9. 下一步
+
+本文覆盖了 Codex CLI 中所有模型与推理相关的斜杠命令。这些命令的核心理念是：**模型能力、推理深度、服务速度、交互风格四个维度独立可调，按任务需求组合出最优配置。**
+
+下一篇将覆盖权限与安全类命令：`/permissions`、`/approve`、`/mcp`、`/sandbox`——这些命令控制 Codex 能做什么、不能做什么，是安全使用 Codex 的基础。
+
+---
+
+**延伸阅读**
+
+- [Codex Models 官方文档](https://developers.openai.com/codex/models) — 模型能力、定价和可用性
+- [Codex Speed 文档](https://developers.openai.com/codex/speed) — Fast tier 的详细说明和计费
+- [Codex Config Reference](https://developers.openai.com/codex/config-reference) — 全部配置项的权威参考
+- [Codex 斜杠命令文档](https://developers.openai.com/codex/cli/slash-commands) — `/model`、`/fast`、`/personality` 的命令语法
+- [Follow a Goal 用例](https://developers.openai.com/codex/use-cases/follow-goals) — `/goal` 的官方使用指南
+- 本系列第 06 篇《模型选择与切换》— 模型定位的深度分析
+- 本系列第 13 篇《规划模式 /plan》— `/plan` 和 `plan_mode_reasoning_effort` 的完整讲解

@@ -1,0 +1,434 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 源码 openai/codex — codex-rs/exec/ exec review 子命令
+2. zread.ai/openai/codex/16-non-interactive-exec-mode — exec review 完整参考
+3. zread.ai/openai/codex/22-configuration-reference — 配置参考（approvals_reviewer, auto_review, review_model）
+4. zread.ai/openai/codex/23-exec-policy-and-approvals — 执行策略与审批系统
+5. zread.ai/openai/codex/9-tool-system-and-execution — 工具系统中的 guardian 审批流
+6. zread.ai/openai/codex/20-python-sdk — SDK 中的 ApprovalMode（auto_review）
+7. zread.ai/openai/codex/17-app-server-protocol — app-server 中的审批路由
+8. zread.ai/openai/codex/13-mcp-integration — MCP 权限提示中的审批流程
+版本基准: 2026 年 6 月
+-->
+
+# Codex 自动审查系统：让 Agent 审查 Agent 的操作
+
+**TL;DR** Codex 的自动审查分两个维度：**操作审查**（Agent 执行命令时自动审批或拦截）和**代码审查**（Agent 审查代码变更）。操作审查由 `approvals_reviewer` 和 `auto_review` 配置控制——你可以让系统自动批准安全操作、拦截危险操作，不需要人工逐条审批。代码审查通过 `codex exec review` 或 `/review` 命令触发——Agent 读 diff、分析变更、给出评审意见。管理员可以通过 `guardian_policy_config` 下发云端策略，团队级控制审查标准。`review_model` 可以指定用不同的模型做审查。
+
+---
+
+## 1. 为什么需要自动审查
+
+Codex 的 Agent 能做很多事——读文件、写文件、跑命令。但"能做"不等于"应该做"。审批系统就是在"能"和"应该"之间加一道门。
+
+第一篇讲过三种审批模式：suggest（每步都问）、auto-edit（文件操作自动过，命令要问）、full-auto（全部自动）。这三种是"粗粒度"的——要么全问，要么全放。实际工作中有大量"中间地带"的操作：
+
+- `npm test` 安全，应该自动放
+- `rm -rf build/` 有风险，应该问一下
+- `curl https://evil.com/...` 绝对不行，直接拦
+
+手动审批可以处理这些，但问题是手动审批打断工作流。Agent 想执行 `npm test`，停下来等你点确认，你不在电脑前就卡住了。full-auto 模式倒是不会卡，但 `rm -rf` 也会直接跑。
+
+自动审查就是解决这个矛盾的。它的思路是：**把审批决策交给另一个 AI（或一套规则）来做**。安全的操作自动放行，危险的操作自动拦截，不确定的才推给人。这样 Agent 可以不间断地执行任务，同时有安全兜底。
+
+从源码上看，Codex 的自动审查涉及三个组件协作：
+
+1. **Exec Policy 引擎**：确定性规则系统，根据命令前缀判断 allow / prompt / forbidden
+2. **Guardian 审查器**：AI 驱动的审查系统，理解操作语义做判断
+3. **审批路由系统**：决定谁来审查——用户、guardian、还是跳过
+
+---
+
+## 2. 操作审查：自动审批系统
+
+### 2.1 审批路由：approvals_reviewer
+
+`approvals_reviewer` 是配置中的一个字段，控制"谁来审批"。它有几个可选值：
+
+| 值 | 行为 |
+|----|------|
+| `user`（默认） | 所有需要审批的操作推给终端前的用户 |
+| `auto_review` | 交给 guardian 自动审查系统 |
+
+在 `config.toml` 中设置：
+
+```toml
+approvals_reviewer = "auto_review"
+```
+
+设成 `auto_review` 后，当 Agent 想执行一个命令，流程变成：
+
+```
+Agent 请求执行命令
+    ↓
+Exec Policy 引擎判断
+    ↓ allow → 直接执行
+    ↓ prompt → 交给 guardian 审查
+    ↓ forbidden → 直接拦截
+```
+
+guardian 审查的结果同样是放行或拦截。只有 guardian 也拿不准的情况下，才会推给用户。
+
+### 2.2 auto_review.policy：审查策略
+
+光把审批路由设成 `auto_review` 还不够——你还需要告诉 guardian 你的审查标准。这就是 `auto_review.policy` 的作用。
+
+```toml
+[auto_review]
+policy = "禁止所有涉及删除文件和修改数据库的操作。允许读取、测试、构建、格式化。如果不确定，拒绝。"
+```
+
+`auto_review.policy` 是一段自然语言描述，告诉 guardian 你的团队认为什么是安全的、什么是危险的。guardian 会用这段描述来判断每个操作是否应该放行。
+
+几个策略示例：
+
+```toml
+# 宽松策略——只拦最危险的
+[auto_review]
+policy = "只拦截 rm -rf、DROP TABLE、以及访问外网的操作。其他全部放行。"
+
+# 严格策略——只放最安全的
+[auto_review]
+policy = "只允许读取文件、运行测试（npm test, pytest）、代码格式化（prettier, black）。其他操作一律拒绝。"
+
+# 项目特定策略
+[auto_review]
+policy = "允许所有操作，但禁止：1) 修改 migrations/ 目录 2) 修改 .env 文件 3) 执行 curl/wget 4) 删除 src/ 下的任何文件"
+```
+
+策略的写法没有固定格式——它就是一段自然语言指令。写得越具体，guardian 判断越准确。模糊的策略（比如"小心操作"）效果不好，因为它没有给出明确的判断标准。
+
+### 2.3 guardian_policy_config：管理员云端策略
+
+`auto_review.policy` 是本地配置——写在项目的 config.toml 里，项目成员可以自己改。在团队或企业环境中，管理员需要一种"从上面压下来、底下改不了"的策略。这就是 `guardian_policy_config`。
+
+```toml
+guardian_policy_config = "https://admin.example.com/codex-policy.md"
+```
+
+这个字段指向一个远程的 Markdown 文件，管理员维护。它的内容和 `auto_review.policy` 一样是自然语言描述的审查标准，但有两个关键区别：
+
+1. **不可覆盖**：用户不能在本地配置中覆盖云端策略。即使本地写了更宽松的策略，云端策略的限制仍然生效
+2. **集中管理**：管理员修改一个文件，全团队的审查标准同步更新
+
+从 Python SDK 的源码可以看到，审批模式的设计就反映了这种层级关系：
+
+| ApprovalMode | 审批策略 | 审查者 | 行为 |
+|--------------|---------|--------|------|
+| `auto_review`（默认） | `on_request` | `auto_review` | 系统自动批准安全操作，升级风险操作 |
+| `deny_all` | `never` | 无 | 不允许任何工具执行——只读模式 |
+
+### 2.4 routes_approval_to_guardian 和 strict_auto_review
+
+在工具系统的源码中有两个与 guardian 相关的标志：
+
+- **`routes_approval_to_guardian`**：当设为 true 时，所有审批请求都路由给 guardian 而不是用户
+- **`strict_auto_review`**：严格模式——即使是被 Exec Policy 标记为 `Skip`（不需要审批）的操作，也要经过 guardian 审查
+
+`strict_auto_review` 是一个值得多说两句的配置。正常情况下，Exec Policy 说 "allow" 的操作直接执行，不经过 guardian。但如果你不信任 Exec Policy 的判断（比如策略文件写得太宽松），可以开 strict 模式让 guardian 二次检查所有操作。
+
+实际使用建议：大部分团队不需要 strict 模式。如果你的 Exec Policy 写得好（第 47 篇讲过怎么写），它自己就能准确分类大部分命令。strict 模式适合安全要求极高的环境——比如金融系统、医疗系统——在这种场景下，多一层检查、多一份安心。
+
+### 2.5 /approve 命令：重试被拒绝的操作
+
+Agent 的操作被审批系统拒绝后，不是就完了。你可以用 `/approve` 命令手动重试：
+
+```
+Agent 想执行: npm publish
+审批结果: 拒绝（策略不允许发布）
+
+你输入: /approve
+结果: 命令重新执行
+```
+
+`/approve` 在交互模式下有用——你觉得 Agent 的操作是对的，但审查系统拦了，手动批准就行。
+
+在 exec 模式下，没有 `/approve`（因为没有人坐在终端前）。所以 exec 模式下的策略配置要更谨慎——被拒的操作就直接失败，没有人来救。
+
+---
+
+## 3. 代码审查：codex exec review
+
+操作审查审查的是"Agent 执行的命令"。代码审查审查的是"代码变更"——不管是人写的还是 Agent 写的。
+
+### 3.1 审查未提交的改动
+
+```bash
+codex exec review --uncommitted
+```
+
+这条命令让 Agent 审查你当前工作目录里所有未提交的改动——包括已暂存的（staged）、未暂存的（unstaged）、以及未跟踪的新文件。
+
+Agent 会：
+
+1. 读取所有变更的 diff
+2. 分析每个变更的影响
+3. 检查潜在的 bug、安全问题、代码风格问题
+4. 给出审查意见
+
+输出是一个结构化的审查报告，包含每个文件的评分、具体问题、改进建议。
+
+### 3.2 审查分支差异
+
+```bash
+codex exec review --base main
+```
+
+审查当前分支相对于 `main` 分支的所有改动。这在 PR 提交前特别有用——让 Agent 先帮你过一遍，找到你可能忽略的问题。
+
+### 3.3 审查特定提交
+
+```bash
+codex exec review --commit abc1234
+codex exec review --commit abc1234 --title "修复登录超时问题"
+```
+
+审查某个特定 commit 引入的改动。`--title` 是可选的，给 commit 一个描述性的标题，在审查报告中显示。
+
+### 3.4 自定义审查指令
+
+```bash
+codex exec review --uncommitted "重点关注安全问题，特别是 SQL 注入和 XSS"
+```
+
+在审查模式后面加上自定义指令。Agent 会按照你的要求来审查——比如重点看安全、重点看性能、或者只看某个目录。
+
+也可以从 stdin 读取自定义指令：
+
+```bash
+echo "只审查 src/api/ 目录下的改动" | codex exec review --base main -
+```
+
+### 3.5 TUI 中的 /review 命令
+
+在交互式 TUI 中，你可以用 `/review` 命令触发代码审查。它和 `codex exec review` 底层走的是同一套逻辑，但体验不同：
+
+- TUI 中 `/review` 的结果是流式显示的，你可以边看边追问
+- exec 模式 `codex exec review` 的结果是一次性输出
+
+两种方式的 Agent 能力完全一样，选择取决于你的工作流。
+
+### 3.6 review_model：用不同的模型做审查
+
+```toml
+review_model = "gpt-5.3-codex"
+```
+
+`review_model` 让你指定审查使用的模型，独立于日常对话的模型。为什么需要分开？因为审查和写代码对模型的要求不同：
+
+- 写代码需要模型能做复杂推理、理解大上下文
+- 审查需要模型对代码质量、安全模式有敏感度
+
+`gpt-5.3-codex` 是经过 RL 训练的编程专用模型，也是唯一支持代码审查功能的模型。如果你发现审查质量不好，试试切到这个模型。
+
+---
+
+## 4. 审查系统的完整流程
+
+把所有审查相关的配置串起来，完整的流程是这样的：
+
+```
+Agent 请求执行操作
+    ↓
+Exec Policy 引擎评估
+    ↓
+    ├─ allow → 检查 sandbox 约束 → 执行
+    ├─ prompt → 路由到审批者
+    │         ├─ approvals_reviewer = user → 弹给用户
+    │         └─ approvals_reviewer = auto_review → guardian 审查
+    │                   ├─ guardian 放行 → 执行
+    │                   ├─ guardian 拒绝 → 拒绝（用户可 /approve 重试）
+    │                   └─ guardian 不确定 → 弹给用户
+    └─ forbidden → 直接拒绝
+```
+
+有几个值得注意的设计细节：
+
+**"最严格者胜出"原则**：当多条规则匹配同一个命令时，最终决策取所有匹配中最严格的。一条 `forbidden` 规则可以压过任意多条 `allow` 规则。这确保了安全策略不会被宽松规则稀释。
+
+**动态策略修订**：当用户手动批准了一个被设为 `prompt` 的命令，Codex 会自动在策略文件中追加一条 `allow` 规则。下次同样的命令就不需要再审批了。这叫"记住此次批准"机制。修订系统使用文件锁（`flock`）防止多个 Codex 会话并发写入冲突，还会做去重检查避免规则堆积。
+
+**审批和沙箱是独立的**：审批决定"要不要做"，沙箱决定"技术上能不能做"。即使审批放行了，沙箱仍然可能拦截——比如审批让 Agent 执行 `rm /etc/passwd`，审批说可以，沙箱说不行，最终还是不行。
+
+---
+
+## 5. 配置示例
+
+### 5.1 个人开发者：宽松配置
+
+```toml
+# ~/.codex/config.toml
+model = "gpt-5.5"
+approvals_reviewer = "auto_review"
+
+[auto_review]
+policy = "允许所有日常开发操作。只拦截：1) 删除非 build/ 目录的文件 2) 修改 ~/.ssh/ 和 ~/.gnupg/ 3) 发送请求到非公司域名的外部 API"
+```
+
+个人开发，大部分操作信任 Agent。只防最危险的情况。
+
+### 5.2 团队项目：中等严格
+
+```toml
+# project/.codex/config.toml
+model = "gpt-5.5"
+approvals_reviewer = "auto_review"
+
+[auto_review]
+policy = """
+允许：读取任何文件，运行测试和 lint，安装依赖（npm install, pip install），代码格式化。
+需要审批：修改 package.json/Cargo.toml 的依赖版本，修改 .env 文件。
+禁止：删除 src/ 目录下的文件，修改 main 分支保护规则，执行 curl/wget。
+"""
+```
+
+团队项目需要更谨慎。明确列出允许、需要审批、禁止三类操作。
+
+### 5.3 企业环境：严格配置
+
+```toml
+# 由管理员通过 CI 环境变量注入
+approvals_reviewer = "auto_review"
+guardian_policy_config = "https://internal.example.com/policies/codex-review.md"
+
+[auto_review]
+policy = "只允许读取文件和运行只读命令。任何文件修改必须经过审批。禁止所有网络操作。"
+```
+
+企业环境中，云端策略由管理员维护，本地策略不能覆盖。双重保障。
+
+### 5.4 CI 环境：全自动
+
+```bash
+codex exec --ephemeral --sandbox workspace-write \
+  -c approvals_reviewer=auto_review \
+  -c 'auto_review.policy="只允许运行测试和 lint。禁止所有文件修改。"' \
+  "分析代码质量并给出改进建议"
+```
+
+CI 里跑只读分析。沙箱设为 workspace-write（万一需要临时文件），审批策略只允许测试和 lint。
+
+---
+
+## 6. 实战场景
+
+### 6.1 PR 提交前自动审查
+
+```bash
+#!/bin/bash
+# pre-pr-review.sh — 提交 PR 前自动审查
+
+branch=$(git branch --show-current)
+echo "审查分支: $branch"
+
+codex exec review --base main -o review-result.txt
+
+if grep -q "严重问题" review-result.txt; then
+  echo "审查发现严重问题，请修复后再提交 PR"
+  cat review-result.txt
+  exit 1
+fi
+
+echo "审查通过"
+```
+
+把这个脚本加到你的 PR 提交流程中，每次提 PR 前自动跑一遍审查。有严重问题就拦住。
+
+### 6.2 CI 失败后自动分析
+
+```bash
+# 从 CI 日志中提取错误
+curl -s "$CI_LOG_URL" | codex exec "分析这些 CI 错误日志，判断是代码问题还是环境问题，给出修复建议"
+```
+
+CI 挂了？不用自己看几百行日志，让 Codex 帮你分析。
+
+### 6.3 夜间代码质量巡检
+
+```bash
+#!/bin/bash
+# nightly-review.sh — 每晚自动审查当天提交
+
+today=$(date +%Y-%m-%d)
+commits=$(git log --since="$today 00:00" --until="$today 23:59" --oneline)
+
+if [ -z "$commits" ]; then
+  echo "今天没有提交"
+  exit 0
+fi
+
+echo "今天提交的 commits:"
+echo "$commits"
+
+# 审查今天的所有改动
+codex exec review --base main@{yesterday} -o "daily-review-$today.md"
+
+echo "审查报告已保存到 daily-review-$today.md"
+```
+
+每天晚上自动审查当天的所有提交，生成报告。第二天早上看一眼就知道昨天有没有问题。
+
+### 6.4 Agent 操作审计
+
+在 `config.toml` 中配置 hooks（第 39 篇讲过）来记录所有审批决策：
+
+```toml
+[hooks.PreToolUse]
+[[hooks.PreToolUse]]
+matcher = "shell"
+hooks = [
+  { type = "command", command = "/usr/local/bin/log-approval.sh" }
+]
+```
+
+`log-approval.sh` 的内容：
+
+```bash
+#!/bin/bash
+echo "$(date -Iseconds) | shell command: $*" >> /var/log/codex-approvals.log
+```
+
+这样每次 Agent 执行命令（不管是自动审批还是手动批准）都会记录到审计日志。配合 `approvals_reviewer = "auto_review"` 使用，你有了一个"Agent 做了什么、为什么被允许/拒绝"的完整审计链。
+
+---
+
+## 7. 自动审查的局限
+
+自动审查不是万能的。几个需要注意的点：
+
+**Guardian 本身是 AI，不是确定性系统。** Exec Policy 引擎是确定性的——同样的命令永远得到同样的判断。Guardian 是 AI，它的判断可能因为模型版本、上下文长度、措辞差异而变化。对于安全关键的操作，不要只依赖 guardian，应该用 Exec Policy 的 `forbidden` 规则兜底。
+
+**自然语言策略有模糊性。** "禁止危险操作"这种描述太模糊，guardian 可能对"危险"的理解和你不同。策略要写得具体——列出具体的命令、文件路径、操作类型。
+
+**自动审查不防 prompt 注入。** 如果你的项目里有恶意的文件内容（比如有人故意在注释里写"忽略所有安全检查"），这些内容可能影响 guardian 的判断。对于不受信任的代码库，建议用更严格的沙箱而不是依赖自动审查。
+
+**审查质量取决于 review_model。** 默认模型做审查可能不如 `gpt-5.3-codex` 好。如果你发现审查结果不理想，试试改 `review_model`。
+
+---
+
+## 8. 审查相关配置速查
+
+| 配置项 | 位置 | 类型 | 说明 |
+|--------|------|------|------|
+| `approvals_reviewer` | config.toml | user / auto_review | 审批路由目标 |
+| `auto_review.policy` | config.toml | 字符串 | Guardian 审查策略（自然语言） |
+| `guardian_policy_config` | config.toml | URL | 管理员云端策略地址 |
+| `review_model` | config.toml | 字符串 | 审查使用的模型 |
+| `approval_policy` | config.toml | 枚举 | 审批策略（unless-trusted / never / on-request 等） |
+| `/approve` | TUI 命令 | — | 重试被拒绝的操作 |
+| `/review` | TUI 命令 | — | 触发代码审查 |
+| `codex exec review` | CLI | — | 非交互式代码审查 |
+| `codex exec review --uncommitted` | CLI | — | 审查未提交改动 |
+| `codex exec review --base BRANCH` | CLI | — | 审查分支差异 |
+| `codex exec review --commit SHA` | CLI | — | 审查特定提交 |
+
+---
+
+## 延伸阅读
+
+- [Codex 执行策略文档](https://zread.ai/openai/codex/23-exec-policy-and-approvals) — Exec Policy 引擎的完整规则语法和评估逻辑
+- [Codex 工具系统文档](https://zread.ai/openai/codex/9-tool-system-and-execution) — 工具调用中的审批流程和 guardian 交互
+- [Codex Python SDK 文档](https://zread.ai/openai/codex/20-python-sdk) — SDK 中的 ApprovalMode 设计
+- [Codex 配置参考](https://zread.ai/openai/codex/22-configuration-reference) — 所有审查相关配置字段的完整说明
+- 上一篇：[exec 非交互模式](./48-exec-mode.md)
+- 下一篇：[脚本化 Codex：CI/CD 集成](./50-scripting.md)

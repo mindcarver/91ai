@@ -1,0 +1,279 @@
+# Codex CLI OpenTelemetry 可观测性：追踪、指标与日志
+
+> TL;DR：Codex 通过 `[otel]` 配置表接入 OpenTelemetry，把 agent 的痕迹（traces）、指标（metrics）和日志（logs）导出到你已有的可观测性平台。企业场景下，这是审计 Codex 行为、排查性能问题、追踪 token 消耗的必备手段。本文覆盖配置方法、三种导出器的使用场景，以及与 Grafana/Jaeger 等常见平台的对接。
+
+---
+
+## 1. 为什么 Codex 需要可观测性
+
+用 Codex 的人越来越多之后，一个问题开始显现：它干了什么、花了多少 token、每一步耗时多久——这些信息散落在终端输出里，没有一个结构化的地方汇总。
+
+在企业环境里这个问题更尖锐。管理员需要知道：
+
+- 团队成员用 Codex 做了什么操作
+- 哪些会话消耗了大量 token
+- Codex 跑命令时的延迟分布
+- 出了问题时能不能回溯 agent 的执行链路
+
+Codex 内置了 OpenTelemetry 支持，通过 `[otel]` 配置表把这些数据导出去，接到你现有的 OTel 收集器（比如 Jaeger、Grafana Tempo、Datadog）。
+
+## 2. OTel 配置总览
+
+配置写在 `~/.codex/config.toml` 的 `[otel]` 表下：
+
+```toml
+[otel]
+log_user_prompt = false    # 是否记录用户输入（默认关）
+environment = "dev"         # 环境标签，出现在 traces/metrics 中
+
+# 痕迹导出器（控制请求级别的追踪）
+[otel.trace_exporter]
+type = "otlp-http"
+endpoint = "https://otel-collector.example.com/v1/traces"
+protocol = "json"
+headers = { Authorization = "Bearer token" }
+
+# 指标导出器（控制 token、延迟等指标）
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "https://otel-collector.example.com/v1/metrics"
+protocol = "json"
+
+# 日志导出器（控制 Codex 内部日志）
+[otel.exporter]
+type = "otlp-http"
+endpoint = "https://otel-collector.example.com/v1/logs"
+protocol = "json"
+```
+
+三个导出器可以分别配置不同的 endpoint。如果你用同一个 OTel Collector 收集所有数据，endpoint 一样就行， Collector 会按数据类型分发。
+
+### TLS 配置
+
+如果 Collector 用了 TLS：
+
+```toml
+[otel.trace_exporter.tls]
+ca_certificate = "/path/to/ca.crt"
+
+# 如果需要客户端证书
+[otel.trace_exporter.tls]
+ca_certificate = "/path/to/ca.crt"
+client_certificate = "/path/to/client.crt"
+client_key = "/path/to/client.key"
+```
+
+## 3. 三种导出器
+
+### 3.1 trace_exporter（痕迹导出器）
+
+痕迹记录的是 Codex 的请求级行为。一次 `codex exec` 调用就是一个完整的 trace，内部的每一步（读文件、跑命令、写代码）是 span。
+
+典型的 trace 结构：
+
+```
+trace: codex exec "fix the CI failure"
+├─ span: model-inference (调用 LLM)
+├─ span: tool-read-file (读取 config.toml)
+├─ span: tool-run-command (跑 npm test)
+├─ span: tool-edit-file (修改 test.js)
+└─ span: model-inference (第二次调用 LLM)
+```
+
+每个 span 带有时间戳、持续时间和属性（比如读了哪个文件、跑了什么命令）。
+
+```toml
+[otel.trace_exporter]
+type = "otlp-http"
+endpoint = "https://jaeger.example.com:4318/v1/traces"
+```
+
+支持的导出协议：
+
+| type 值 | 说明 |
+|---------|------|
+| `otlp-http` | OTLP over HTTP（推荐） |
+| `otlp-grpc` | OTLP over gRPC |
+| `none` | 关闭痕迹导出（默认） |
+
+### 3.2 metrics_exporter（指标导出器）
+
+指标记录的是数值型的时序数据。Codex 导出的指标包括：
+
+| 指标 | 类型 | 含义 |
+|------|------|------|
+| `codex.tokens.input` | Counter | 输入 token 累计 |
+| `codex.tokens.output` | Counter | 输出 token 累计 |
+| `codex.requests.duration` | Histogram | 请求延迟分布 |
+| `codex.tool.calls` | Counter | 工具调用次数 |
+| `codex.sandbox.denials` | Counter | 沙箱拒绝次数 |
+
+```toml
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "https://prometheus-remote-write.example.com/v1/metrics"
+```
+
+默认的 metrics_exporter 是 `statsig`，这是 OpenAI 内部的指标收集。如果你不配自定义导出器，指标不会发到你的平台。
+
+### 3.3 exporter（日志导出器）
+
+日志记录 Codex 内部的运行时日志。`log_user_prompt = true` 时会额外记录用户输入——但这可能涉及隐私问题，生产环境默认关闭。
+
+```toml
+[otel.exporter]
+type = "otlp-http"
+endpoint = "https://log-collector.example.com/v1/logs"
+```
+
+日志级别由 Codex 内部控制，配置里只有导出目标可调。
+
+## 4. 安全注意事项
+
+`[otel]` 表的配置涉及多个约束（constrained）字段，管理员可以通过 managed config 锁定这些值：
+
+| 约束字段 | 防止什么 |
+|---------|---------|
+| `otel` | 防止绕过或篡改可观测性配置 |
+
+在企业部署中，管理员可以在系统级 config 里设置 OTel 导出，用户层无法覆盖。这样能确保所有 Codex 实例的行为都被追踪，不管团队成员的本地配置怎么改。
+
+`log_user_prompt` 的选择需要权衡：
+
+- **开**：可以审查 Codex 收到的指令，排查问题根因
+- **关**（默认）：保护用户隐私，避免在日志中记录敏感信息（API key、密码、商业数据）
+
+如果开了，日志会通过 OTel 导出器发送出去。确保你的日志收集器有适当的访问控制和数据保留策略。
+
+## 5. 实战：对接 Grafana Tempo + Loki
+
+一个常见的自建方案：Tempo 收 traces，Loki 收 logs，Prometheus 收 metrics。
+
+### 5.1 启动 OTel Collector
+
+```yaml
+# otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  otlphttp:
+    endpoint: http://tempo:4318  # traces → Tempo
+  otlphttp/metrics:
+    endpoint: http://prometheus:9090/api/v1/otlp  # metrics → Prometheus
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push  # logs → Loki
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [loki]
+```
+
+```bash
+otelcol --config otel-collector-config.yaml
+```
+
+### 5.2 配置 Codex
+
+```toml
+[otel]
+environment = "production"
+log_user_prompt = false
+
+[otel.trace_exporter]
+type = "otlp-http"
+endpoint = "http://localhost:4318/v1/traces"
+
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "http://localhost:4318/v1/metrics"
+
+[otel.exporter]
+type = "otlp-http"
+endpoint = "http://localhost:4318/v1/logs"
+```
+
+### 5.3 查看数据
+
+- **Traces**：Grafana → Explore → Tempo 数据源，按 `service.name=codex` 过滤
+- **Metrics**：Grafana Dashboard，查 `codex_tokens_input_total` 等
+- **Logs**：Grafana → Explore → Loki 数据源，按 `{service="codex"}` 过滤
+
+## 6. 实战：多 Agent 追踪
+
+Codex 的 subagent 机制会让一个任务产生多个并发 trace。每个 subagent 有自己的 trace，通过 parent span ID 关联回主 agent 的 trace。
+
+在 Jaeger 或 Tempo 里你会看到：
+
+```
+trace: codex exec "refactor auth module"
+├─ span: main-agent (主 agent)
+│   ├─ span: tool-spawn-agent (spawn subagent-1)
+│   └─ span: tool-spawn-agent (spawn subagent-2)
+├─ trace: subagent-1 (独立 trace)
+│   ├─ span: model-inference
+│   └─ span: tool-edit-file
+└─ trace: subagent-2 (独立 trace)
+    ├─ span: model-inference
+    └─ span: tool-run-command
+```
+
+跨 trace 的关联靠 link，不是 parent-child span 关系。这对追踪多 agent 任务的执行链路很有用——你可以看到哪个 subagent 花的时间最多、哪个出了错。
+
+## 7. 成本与性能影响
+
+OTel 导出对 Codex 性能的影响通常很小：
+
+- **HTTP 导出**：每个 span/指标/日志是一次 HTTP POST，在后台异步发送
+- **gRPC 导出**：基于长连接，开销更小
+- **网络延迟**：如果 Collector 不在本地，export 调用会多几十毫秒的 RTT
+
+如果 Collector 不可达，Codex 会丢弃无法发送的数据，不会阻塞主流程。这意味着 OTel 配置错误不会让 Codex 本身出问题——只是没有可观测性数据。
+
+## 8. 常见问题
+
+### 配置了 OTel 但看不到数据
+
+1. 检查 endpoint 是否可达：`curl -v <endpoint>`
+2. 检查 OTel Collector 的日志，确认收到了数据
+3. 确认 `trace_exporter.type` 不是 `none`
+4. 重启 Codex，让新配置生效
+
+### 只看到 traces 看不到 metrics
+
+默认的 `metrics_exporter` 是 `statsig`（OpenAI 内部），不导出到你的平台。需要显式配置：
+
+```toml
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "http://localhost:4318/v1/metrics"
+```
+
+### TLS 证书问题
+
+如果 Collector 用了自签名证书，需要配置 `ca_certificate` 指向 CA 证书路径。如果 Collector 用的证书由公共 CA 签发，通常不需要额外配置。
+
+## 延伸阅读
+
+- [OpenTelemetry 官方文档](https://opentelemetry.io/docs/)
+- [OTel Collector 配置参考](https://opentelemetry.io/docs/collector/configuration/)
+- [Grafana Tempo 部署指南](https://grafana.com/docs/tempo/latest/setup/)
+- [Codex 配置参考（zread 中文文档）](https://zread.ai/openai/codex/22-configuration-reference)
+- [Codex 架构概述](https://zread.ai/openai/codex/7-architecture-overview)

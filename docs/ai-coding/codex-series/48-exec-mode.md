@@ -1,0 +1,537 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 源码 openai/codex — codex-rs/exec/ 非交互执行引擎
+2. zread.ai/openai/codex/16-non-interactive-exec-mode — exec 模式完整文档
+3. zread.ai/openai/codex/2-quick-start — 快速入门中的 exec 用法
+4. zread.ai/openai/codex/22-configuration-reference — 配置参考
+5. zread.ai/openai/codex/23-exec-policy-and-approvals — 执行策略与审批
+6. Codex 源码 codex-rs/exec/src/cli.rs — CLI 参数定义
+7. Codex 源码 codex-rs/exec/src/lib.rs — 执行流程与事件处理
+8. Codex 源码 codex-rs/exec/src/exec_events.rs — JSONL 事件类型定义
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI exec 非交互模式：让 AI 编程 Agent 跑在脚本里
+
+**TL;DR** `codex exec` 是 Codex 的无头执行模式——没有 TUI 界面，不需要你坐在终端前等它。你给它一条指令，它自己跑完，把结果吐到 stdout 或者写到文件里。`--json` 输出 JSONL 事件流，`--ephemeral` 不留会话痕迹，`--sandbox` 控制沙箱边界，`-o` 把最终回复写到文件。`codex exec resume` 接着上次的会话继续跑。stdin 管道让它能和任何 Unix 工具串联。这是把 Codex 塞进 CI 流水线和自动化脚本的核心入口。
+
+---
+
+## 1. 为什么需要非交互模式
+
+前面四十几篇文章讲的都是在 TUI 里用 Codex——你坐在终端前，输入指令，看它实时执行，偶尔点个审批。这是日常写代码的场景。
+
+但有些场景你不能坐那里等：
+
+- CI 流水线里跑测试修复——机器跑，人不在
+- 凌晨三点的定时任务——自动检查代码质量
+- 批量处理——同时对十个仓库跑同样的操作
+- 脚本串联——先跑测试，失败了让 Codex 修，修完再跑
+
+这些场景有一个共同点：**不需要人盯着**。你要的是一个"扔任务进去、拿结果出来"的机制。
+
+`codex exec` 就是干这个的。它把 Codex 的 Agent 能力包装成一个命令行工具——接收指令，执行，输出结果，退出。整个过程不弹 TUI，不等你点审批，不跟你对话。
+
+从源码上看，`codex exec` 是 `codex-rs/exec/` 目录下的一个独立二进制文件 `codex-exec`。它和 TUI 版（`codex-rs/tui/`）共享同一个 Agent 循环和 app-server 内核，但用了一个无头的事件处理器（`EventProcessor`）替换了 Ratatui 渲染层。你可以把它理解成同一个引擎的两个前端：TUI 是"有人驾驶"模式，exec 是"自动驾驶"模式。
+
+---
+
+## 2. 基本用法
+
+### 2.1 最简单的调用
+
+```bash
+codex exec "找出 src/ 目录下所有的 TODO 注释"
+```
+
+这一行做了什么？
+
+1. 启动 Codex Agent（不弹 TUI）
+2. 把 "找出 src/ 目录下所有的 TODO 注释" 作为指令发送
+3. Agent 自己读文件、搜索、整理结果
+4. 把最终回复打印到 stdout
+5. 进程退出
+
+如果你在终端里手动跑这条命令，你会看到 stderr 上有进度输出（Agent 在做什么），stdout 上只有最终结果。这意味着你可以直接用管道捕获结果：
+
+```bash
+result=$(codex exec "统计这个项目的代码行数" 2>/dev/null)
+echo "$result"
+```
+
+`2>/dev/null` 把进度信息丢掉，只拿结果。
+
+### 2.2 没有提示词会怎样
+
+如果你直接跑 `codex exec` 不给提示词，它会从 stdin 读取。这是为了支持管道：
+
+```bash
+echo "给 parser.py 写单元测试" | codex exec
+```
+
+你也可以用 `-` 显式表示从 stdin 读取：
+
+```bash
+cat error_log.txt | codex exec -
+```
+
+更有用的是同时提供提示词和 stdin——stdin 的内容会作为补充上下文附在提示词后面：
+
+```bash
+git diff | codex exec "审查这些改动，找出潜在的 bug"
+```
+
+这里 "审查这些改动，找出潜在的 bug" 是主指令，`git diff` 的输出是补充材料。Codex 会把两者拼在一起发给模型。
+
+### 2.3 管道输入的完整规则
+
+提示词的解析遵循一个清晰的优先级链：
+
+| 调用方式 | 提示词来源 | stdin 来源 |
+|---------|-----------|-----------|
+| `codex exec "fix bug"` | 位置参数 | 无 |
+| `codex exec` | stdin | stdin（同一来源） |
+| `codex exec -` | stdin | stdin（显式标记） |
+| `echo "log" \| codex exec "analyze"` | 位置参数 | 管道内容（作为补充） |
+
+最后一种情况值得多说一句：当 stdin 有内容且同时提供了位置参数时，Codex 不会把 stdin 当主提示词，而是把它包装成 `<stdin>` 块附在后面。这个设计很合理——你的指令是"分析日志"，管道送进来的是日志内容。
+
+---
+
+## 3. 核心参数详解
+
+### 3.1 --ephemeral：不留痕迹
+
+```bash
+codex exec --ephemeral "检查代码格式"
+```
+
+正常情况下，Codex 每次执行都会在本地保存会话记录（rollout 文件）。这些记录让你可以用 `codex exec resume` 继续上次的对话。但有时候你不需要这个——比如 CI 里的一次性检查、定时任务的临时分析。
+
+`--ephemeral` 告诉 Codex 不要持久化会话文件。跑完就完了，不留记录。两个好处：
+
+- **不占磁盘**：长时间运行的自动化任务不会积累大量会话文件
+- **不留敏感信息**：如果提示词里包含临时的密钥或日志，跑完就消失
+
+### 3.2 --sandbox：沙箱控制
+
+```bash
+codex exec --sandbox workspace-write "运行测试并修复失败的用例"
+codex exec --sandbox read-only "只读审查代码质量"
+codex exec --sandbox danger-full-access "全权执行，不要限制我"
+```
+
+沙箱模式和 TUI 里的一样（第 29 篇讲过），但在 exec 模式下默认行为不同。TUI 模式下你可以手动审批操作，所以沙箱可以适当宽松。exec 模式下没有人工审批，所以**沙箱是最重要的安全防线**。
+
+三个模式的区别：
+
+| 模式 | 读文件 | 写文件 | 网络 | 适用场景 |
+|------|--------|--------|------|---------|
+| `read-only` | 可以 | 不可以 | 不可以 | 代码审查、只读分析 |
+| `workspace-write` | 可以 | 工作目录内 | 默认不可以 | 日常任务（默认推荐） |
+| `danger-full-access` | 可以 | 可以 | 可以 | 你知道自己在干什么 |
+
+在 CI 环境里，推荐 `workspace-write`。如果你跑在 Docker 容器里，容器本身就是一层隔离，那 `danger-full-access` 也可以接受——出了事直接销毁容器。
+
+还有一个终极开关 `--dangerously-bypass-approvals-and-sandbox`，它同时关掉审批和沙箱。名字里的 "dangerously" 不是开玩笑的——除非你在一次性容器里跑，否则不要用。
+
+### 3.3 --json：结构化输出
+
+```bash
+codex exec --json "列出所有 API 端点"
+```
+
+不加 `--json` 时，exec 模式把人类可读的进度输出到 stderr，最终回复输出到 stdout。加了 `--json` 后，stdout 输出变成 JSONL 格式——每行一个 JSON 对象，每个对象有一个 `type` 字段标识事件类型。
+
+这是给程序消费的接口。你可以用 `jq` 过滤、用 Python 解析、用任何语言处理。
+
+完整的 JSONL 事件生命周期：
+
+```
+thread.started → turn.started → item.started → item.updated → item.completed → ... → turn.completed
+```
+
+每个事件的含义：
+
+| 事件类型 | 触发时机 | 关键字段 |
+|---------|---------|---------|
+| `thread.started` | 新线程创建 | `thread_id` |
+| `turn.started` | Agent 开始处理 | （空） |
+| `item.started` | 新工作项开始 | `ThreadItem` |
+| `item.updated` | 工作项状态变化 | `ThreadItem` |
+| `item.completed` | 工作项完成 | `ThreadItem`（含最终状态） |
+| `turn.completed` | Agent 处理完成 | `Usage`（token 统计） |
+| `turn.failed` | Agent 处理失败 | `ThreadErrorEvent` |
+| `error` | 不可恢复的流错误 | `message` |
+
+每个 `ThreadItem` 有一个 `details` 字段，包含具体的工作类型：
+
+| 详情类型 | 描述 | 关键字段 |
+|---------|------|---------|
+| `agent_message` | Agent 的文本回复 | `text` |
+| `reasoning` | Agent 的推理过程 | `text` |
+| `command_execution` | 执行的 shell 命令 | `command`, `exit_code`, `aggregated_output` |
+| `file_change` | 文件变更 | `changes[]`（路径 + 类型） |
+| `mcp_tool_call` | MCP 工具调用 | `server`, `tool`, `result` |
+| `todo_list` | 任务计划 | `items[]` |
+
+一个实际例子——捕获所有执行的命令：
+
+```bash
+codex exec --json "修复 lint 错误" | jq -r 'select(.type=="item.completed") | .details | select(.command_execution) | .command_execution.command'
+```
+
+这行命令实时输出 Agent 执行的每一条 shell 命令。你可以在 CI 里用它做审计。
+
+### 3.4 -o / --output-last-message：保存最终回复
+
+```bash
+codex exec -o result.txt "分析这个项目的架构问题"
+```
+
+`-o` 把 Agent 的最终消息写入指定文件。同时 stderr 上仍然有进度输出，你可以在终端里看到实时进展。
+
+结合 `--json` 使用：
+
+```bash
+codex exec --json -o result.json "提取所有 API 端点"
+```
+
+这种组合下，`-o` 写入的是 Agent 的最终文本回复（不是 JSON），JSONL 事件流照常输出到 stdout。如果你要结构化输出，用下面这个参数。
+
+### 3.5 --output-schema：约束输出格式
+
+```bash
+codex exec --output-schema schema.json "提取所有 API 端点"
+```
+
+`--output-schema` 接受一个 JSON Schema 文件路径。Codex 会按照这个 schema 的结构输出结果。
+
+比如你的 schema 是这样的：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "method": { "type": "string" },
+          "path": { "type": "string" },
+          "handler": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+Codex 会尽量按这个结构输出。这对下游处理非常方便——你的脚本可以直接按固定格式解析结果，不用猜 Agent 输出的格式。
+
+### 3.6 --ignore-user-config 和 --ignore-rules
+
+```bash
+codex exec --ignore-user-config "分析代码"
+codex exec --ignore-rules "执行操作"
+```
+
+- `--ignore-user-config`：跳过 `~/.codex/config.toml`。在 CI 里有用——你不希望 CI 环境受到开发者个人配置的影响
+- `--ignore-rules`：跳过项目级和用户级的 `.rules` 文件。同样适合 CI——确保每次运行都是干净的策略
+
+两个都加就是完全干净的执行环境，不受任何本地配置影响。
+
+### 3.7 -c KEY=VALUE：运行时覆盖配置
+
+```bash
+codex exec -c model=gpt-5.4-mini -c approval_policy=never "快速修复 lint"
+```
+
+`-c` 可以重复使用，每次覆盖一个配置项。等价于临时修改 config.toml，但只对本次执行生效。
+
+常见的覆盖场景：
+
+```bash
+# 换个便宜的模型跑简单任务
+codex exec -c model=gpt-5.4-mini "格式化代码"
+
+# 调整审批策略
+codex exec -c approval_policy=never "跑测试"
+
+# 指定工作目录
+codex exec --cwd /path/to/project "分析代码结构"
+```
+
+### 3.8 CODEX_API_KEY 环境变量
+
+```bash
+export CODEX_API_KEY="sk-..."
+codex exec "分析代码"
+```
+
+在 CI 环境里，你不想让 Codex 走 ChatGPT 登录流程。设置 `CODEX_API_KEY` 环境变量，exec 模式会直接用这个 API key 认证，按 token 计费。
+
+安全管理方式：
+
+```bash
+# GitHub Actions 中从 secrets 读取
+export CODEX_API_KEY="${{ secrets.CODEX_API_KEY }}"
+codex exec --ephemeral "修复测试"
+
+# 本地脚本从密钥管理工具读取
+export CODEX_API_KEY=$(op read "op://vault/codex-key/api-key")
+codex exec "分析代码"
+```
+
+注意：不要把 API key 硬编码在脚本里，不要提交到 Git 仓库，不要在日志里打印。这是常识但值得反复强调。
+
+---
+
+## 4. codex exec resume：续接会话
+
+exec 模式默认是单次执行——跑完就退出。但有时候你需要多步操作：第一步分析代码，第二步根据分析结果写测试。`codex exec resume` 就是为此设计的。
+
+### 4.1 继续最近一次会话
+
+```bash
+# 第一步：分析代码
+codex exec "分析这个项目的模块结构，找出测试覆盖率最低的模块"
+
+# 第二步：继续上次会话
+codex exec resume --last "针对你找到的覆盖率最低的模块，生成单元测试"
+```
+
+`--last` 表示续接最近的会话。Agent 会记住之前的对话上下文。
+
+### 4.2 按 ID 续接
+
+```bash
+# 第一步：获取 thread_id
+thread_id=$(codex exec --json "分析代码" | jq -r 'select(.type=="thread.started") | .thread_id')
+echo "$thread_id"
+
+# 第二步：用 thread_id 续接
+codex exec resume "$thread_id" "根据分析结果生成测试"
+```
+
+从 JSONL 输出中提取 `thread_id`，然后在后续步骤中用它续接。这个模式在 CI 流水线里特别有用——你可以在不同的 pipeline 阶段之间传递上下文。
+
+### 4.3 resume 的参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `SESSION_ID` | 位置参数 | UUID 或线程名称；UUID 优先 |
+| `--last` | 标志 | 续接最近的会话 |
+| `--all` | 标志 | 显示所有会话（不过滤当前目录） |
+| `-i` | 路径 | 附加图片 |
+| `PROMPT` | 位置参数 | 续接后发送的提示词；`-` 从 stdin 读取 |
+
+有个容易踩的坑：当 `--last` 和位置参数同时出现时，位置参数会被解释为提示词而不是 session ID。这是 clap 参数解析的一个特殊处理——因为 `--last` 已经指定了"最近的会话"，位置参数自然就变成了"对它说什么"。
+
+---
+
+## 5. exec 模式的安全模型
+
+### 5.1 审批策略的默认行为
+
+在 TUI 模式下，审批策略默认是 `unless-trusted`——不认识的命令会弹窗让你确认。但 exec 模式下，默认策略是 **`AskForApproval::Never`**——永不询问。
+
+为什么？因为 exec 模式是设计给无人值守场景的。没有人在终端前点击"批准"，如果弹出审批请求，Agent 会卡住。
+
+这意味着 exec 模式的安全模型从"人工审批"变成了"沙箱隔离"。你不能靠审批拦住危险操作，只能靠沙箱物理上阻止它。
+
+### 5.2 沙箱优先级
+
+沙箱模式由多个来源解析，按以下优先级：
+
+1. `--dangerously-bypass-approvals-and-sandbox` → 完全放开（同时跳过 git 仓库检查）
+2. `--full-auto`（已废弃）→ workspace-write + 警告
+3. `--sandbox` 命令行参数 → 显式指定
+4. config.toml 中的 `sandbox_mode` → 配置值
+5. 权限 Profile 推断 → 根据文件系统和网络策略推断
+
+### 5.3 推荐的 CI 安全模式
+
+```bash
+# 推荐：在容器内跑，沙箱设为 workspace-write
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e CODEX_API_KEY \
+  codex-image \
+  codex exec --ephemeral --sandbox workspace-write \
+    "运行测试并修复失败用例"
+```
+
+容器提供物理隔离，workspace-write 沙箱提供应用层隔离。双重保护。
+
+### 5.4 退出码
+
+exec 模式通过进程退出码传递执行状态：
+
+| 退出码 | 含义 |
+|--------|------|
+| `0` | 成功完成 |
+| `1` | 失败、被中断、或遇到致命服务错误 |
+
+在脚本里你可以这样用：
+
+```bash
+if codex exec --ephemeral "运行测试"; then
+  echo "测试通过"
+else
+  echo "测试失败或 Agent 出错"
+fi
+```
+
+---
+
+## 6. 实战场景
+
+### 6.1 Git Diff 审查
+
+```bash
+# 审查当前分支的所有改动
+git diff main...HEAD | codex exec "审查这些代码改动，找出潜在的 bug 和改进建议"
+```
+
+把 diff 结果管道给 Codex，让它做代码审查。比自己在 diff 里一行行看效率高得多。
+
+### 6.2 日志分析
+
+```bash
+# 分析昨天的错误日志
+cat /var/log/app/error-$(date -d yesterday +%Y-%m-%d).log | \
+  codex exec -o analysis.md "分析这些错误日志，总结最常见的错误类型和可能的修复方案"
+```
+
+把错误日志喂给 Codex，让它总结模式、给出修复建议，结果写到 Markdown 文件。
+
+### 6.3 批量代码分析
+
+```bash
+# 对多个仓库做同样的分析
+for repo in ~/projects/*/; do
+  echo "=== 分析 $repo ==="
+  codex exec --cwd "$repo" --ephemeral \
+    "评估这个项目的代码质量，给出 1-10 分和改进建议"
+done
+```
+
+对 projects 目录下的每个仓库跑一遍分析。`--ephemeral` 确保不积累会话文件。
+
+### 6.4 结构化数据提取
+
+先准备 schema：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "outdated": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
+```
+
+然后执行：
+
+```bash
+codex exec --output-schema schema.json -o deps.json \
+  "检查 package.json 中的依赖，标注哪些版本过时了"
+```
+
+结果是一个结构化的 JSON 文件，下游脚本可以直接解析。
+
+### 6.5 多步 Pipeline
+
+```bash
+# 第一步：分析
+codex exec --json "分析代码库，找出需要重构的模块" > analysis.jsonl
+
+# 提取 thread_id
+thread_id=$(jq -r 'select(.type=="thread.started") | .thread_id' analysis.jsonl)
+
+# 第二步：根据分析结果重构
+codex exec resume "$thread_id" "对第一个模块进行重构"
+
+# 第三步：跑测试验证
+codex exec resume --last "运行测试确保重构没有破坏功能"
+```
+
+三步 pipeline：分析 → 重构 → 验证。每一步都在上一步的上下文基础上继续。
+
+### 6.6 使用本地模型
+
+```bash
+# 用 Ollama 跑本地模型
+codex exec --oss "解释这个函数的作用"
+
+# 指定使用 LM Studio
+codex exec --oss --local-provider lmstudio "生成文档"
+```
+
+`--oss` 开关让 Codex 使用本地模型提供商（Ollama 或 LM Studio）。不消耗 API 额度，但模型能力弱一些。
+
+---
+
+## 7. 完整参数速查表
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `PROMPT` | 位置参数 | — | 指令；省略或 `-` 从 stdin 读取 |
+| `--model` | 字符串 | 配置默认 | 使用的模型 |
+| `--sandbox` | 枚举 | 配置默认 | 沙箱模式 |
+| `--json` | 标志 | false | JSONL 输出到 stdout |
+| `-o` | 路径 | — | 最终消息写入文件 |
+| `--output-schema` | 路径 | — | JSON Schema 约束输出 |
+| `--ephemeral` | 标志 | false | 不持久化会话 |
+| `--ignore-user-config` | 标志 | false | 跳过用户配置 |
+| `--ignore-rules` | 标志 | false | 跳过规则文件 |
+| `--skip-git-repo-check` | 标志 | false | 允许非 Git 目录运行 |
+| `--oss` | 标志 | false | 使用本地模型 |
+| `--local-provider` | 字符串 | — | 指定本地模型提供商 |
+| `--cwd` | 路径 | 当前目录 | 工作目录 |
+| `--add-dir` | 路径 | — | 额外可写目录 |
+| `-i` | 路径 | — | 附加图片 |
+| `-c KEY=VALUE` | 可重复 | — | 覆盖配置项 |
+| `--color` | 枚举 | auto | 颜色输出控制 |
+
+---
+
+## 8. exec 和 TUI 的关系
+
+最后说清楚一个容易混淆的点：exec 模式不是 TUI 的简化版，它们是同一个引擎的两个前端。
+
+从源码结构看：
+
+```
+codex-rs/
+├── cli/         # 多工具入口，分发到 TUI / exec / app-server
+├── tui/         # Ratatui 全屏终端界面
+├── exec/        # 无头执行引擎
+├── core/        # 共享的 Agent 循环、工具系统
+└── app-server/  # JSON-RPC 服务端
+```
+
+TUI 和 exec 共享 `core/` 里的所有逻辑——工具调用、沙箱、配置加载、Agent 循环。区别只在最后一层的事件处理：TUI 用 Ratatui 渲染彩色界面，exec 用 `EventProcessor` 把事件转成文本或 JSONL。
+
+这意味着你在 TUI 里能做的事，exec 里都能做；你在 config.toml 里配的东西，exec 里都生效；你在 AGENTS.md 里写的规则，exec 里都遵守。只是没有屏幕了。
+
+---
+
+## 延伸阅读
+
+- [Codex CLI GitHub 仓库](https://github.com/openai/codex) — `codex-rs/exec/` 目录下是 exec 模式的完整源码
+- [Codex 非交互模式官方文档](https://zread.ai/openai/codex/16-non-interactive-exec-mode) — JSONL 事件 schema 和完整参数参考
+- [Codex 执行策略文档](https://zread.ai/openai/codex/23-exec-policy-and-approvals) — 审批策略和安全模型详解
+- 下一篇：[Codex 自动审查：让 Agent 审查 Agent](./49-auto-review.md)

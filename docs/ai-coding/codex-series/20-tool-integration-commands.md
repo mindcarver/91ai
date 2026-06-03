@@ -1,0 +1,492 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 源码 openai/codex — slash_command.rs 斜杠命令枚举定义与描述
+2. OpenAI Codex 源码 openai/codex — core-skills/src/injection.rs 技能注入与 $mention 语法解析
+3. OpenAI Codex 源码 openai/codex — config/src/types.rs 插件/应用/工具建议配置类型
+4. OpenAI Codex 源码 openai/codex — config/src/mcp_types.rs MCP 服务器与应用工具审批类型
+5. zread.ai/openai/codex/22-configuration-reference — 生命周期钩子事件表与配置参考
+6. zread.ai/openai/codex/11-skills-framework — 技能框架架构与显式/隐式调用机制
+7. zread.ai/openai/codex/12-plugin-system — 插件清单结构与聚合方法
+8. zread.ai/openai/codex/14-terminal-ui-tui — 斜杠命令 TUI 集成与多 Agent 线程
+9. zread.ai/openai/codex/19-prompt-engineering-and-context — AGENTS.md 集成与提示词分层
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 工具与集成命令：/skills、/apps、/plugins、/hooks、/agent、/ide、/mention
+
+> **TL;DR** — Codex CLI 不只是一个能读代码改代码的终端工具。它有一套完整的扩展生态：技能系统让你把领域知识打包成可复用的指令集，Apps 连接器把外部服务接入 Agent 工具链，Plugins 提供从社区市场安装的扩展包，Hooks 在 Agent 生命周期的关键节点插入自定义逻辑。再加上 /agent 多线程切换、/ide 从 IDE 注入上下文、/mention 附加文件，以及 /feedback 和 /logout 这类运维命令——这些"工具与集成类"命令是把你从"会用 Codex"推进到"用 Codex 搭建工作流"的关键。
+
+---
+
+## 1. Codex 的扩展生态
+
+用 Codex 做个小任务，你只需要会打字就行。但当你开始用它做日常开发——比如一个前端项目反复用到 React + Tailwind 的组合，或者每次部署都要走固定的 CI/CD 流程——你会发现自己在重复告诉 Codex 同样的背景信息。
+
+这就是扩展生态要解决的问题。Codex 把"让 Agent 变得更懂你的项目"这件事拆成了四个互相配合的机制：
+
+| 机制 | 命令 | 解决什么问题 |
+|------|------|-------------|
+| 技能系统 | `/skills` | 把领域知识打包，让 Agent 按规矩干活 |
+| 应用连接器 | `/apps` | 接入外部服务（GitHub、Notion、数据库等） |
+| 插件系统 | `/plugins` | 从市场安装社区贡献的扩展包 |
+| 生命周期钩子 | `/hooks` | 在 Agent 运行的关键节点触发自定义逻辑 |
+
+这四个机制共享一个底层设计原则：**清单驱动**。每个扩展都通过声明式的配置文件（SKILL.md、.app.json、manifest.json、hooks.json）来描述自己提供什么能力，Codex 的加载器负责发现、解析、聚合。你在 config.toml 里通过 `[plugins.xxx]`、`[apps.xxx]`、`[skills]` 等配置节来控制启用状态和权限。
+
+理解了这个架构，后面逐个看命令就不会觉得它们是散装的功能。
+
+---
+
+## 2. /skills 技能系统
+
+### 技能是什么
+
+一个技能就是一个文件夹，核心文件叫 `SKILL.md`。这个文件里写的是给 Agent 的指令——告诉它在什么场景下该怎么做。
+
+举个实际例子。假设你团队的前端项目统一用 React + TypeScript + Tailwind CSS，你们可以写一个技能：
+
+```
+~/.codex/skills/frontend-react/
+  └─ SKILL.md
+```
+
+SKILL.md 里写清楚你们的技术栈约定、目录结构规范、命名规则、测试要求。以后每次让 Codex 做前端相关的工作，调用这个技能就行了。
+
+### 技能的加载路径
+
+Codex 从多个位置发现技能，按优先级排列：
+
+- 插件贡献的技能（来自已安装插件的清单声明）
+- `~/.codex/skills/` — 用户级技能，所有项目可用
+- `.agents/skills/` — 项目级技能，只在当前项目生效
+
+多个技能根目录下的技能会被去重排序后合并。如果两个技能同名，只有路径完全匹配的那个会被选中——Codex 不会自动合并同名技能的内容。
+
+### 调用技能的方式
+
+有两种方式调用技能：
+
+**显式调用**：在输入中使用 `$技能名` 语法。比如输入 `$frontend-react 帮我创建一个新的用户列表组件`。Codex 的注入引擎会扫描你的输入文本，提取 `$` 后面的技能名，匹配到对应的 SKILL.md 文件后，把文件内容注入到发给模型的上下文里。
+
+也可以通过结构化的 `UserInput::Skill` 选择来调用——这就是你在 TUI 里输入 `/skills` 后看到的技能选择器做的事情。选中一个技能，Codex 会把它标记为"已提及"（mentioned），在下一轮对话中自动注入。
+
+**隐式调用**：当 Agent 运行过程中碰到技能文件里提到的脚本或文档路径时，即使你没有显式用 `$mention`，引擎也可能触发技能加载。这种触发取决于技能配置中的隐式策略设置。
+
+### /skills 命令的 TUI 行为
+
+在 TUI 中输入 `/skills`，会弹出一个技能选择器。你可以：
+
+1. 浏览所有已发现的技能（按项目级和用户级分组）
+2. 选择一个或多个技能注入到当前对话
+3. 查看每个技能的名称和来源路径
+
+选中后，Codex 会把对应 SKILL.md 的内容追加到提示词上下文中。你可以通过 `skills.config` 配置来覆盖技能的启用状态。
+
+### 技能注入的底层机制
+
+从源码角度看，技能注入经历几个步骤：
+
+1. **收集提及**：`collect_explicit_skill_mentions()` 函数遍历用户的输入，提取 `$skill-name` 格式的提及
+2. **解析匹配**：先按路径精确匹配，再按名称匹配（名称匹配只在无歧义时生效）
+3. **读取内容**：`build_skill_injections()` 异步读取每个被选中技能的 SKILL.md 文件
+4. **注入上下文**：将文件内容作为 `SkillInjection` 项插入到最终的提示词中
+
+每个注入都会被遥测系统记录（`codex.skill.injected` 指标），方便你追踪技能的使用情况。
+
+---
+
+## 3. /apps 连接器生态
+
+### Apps 是什么
+
+Apps（应用连接器）是 Codex 连接外部服务的桥梁。通过 Apps，Codex Agent 可以直接操作 GitHub 仓库、读写 Notion 页面、查询数据库——不需要你手动复制粘贴数据。
+
+每个 App 连接器在 `.app.json` 文件中定义，声明一个唯一的 `id` 和它提供的工具集。当 Codex 需要调用某个连接器的工具时，它通过 `AppConnectorId` 来定位。
+
+### /apps 命令的用法
+
+在 TUI 中输入 `/apps`，会显示连接器管理界面。你可以：
+
+- 浏览所有已配置的连接器
+- 查看每个连接器的状态和可用工具
+- 在输入中通过 `$app-slug` 语法引用连接器
+
+比如你安装了一个 GitHub 连接器（slug 为 `github`），输入 `$github` 就会在上下文中插入 GitHub 相关的提示词，让 Agent 知道它可以调用 GitHub API。
+
+### 连接器的配置
+
+在 config.toml 中，通过 `[apps]` 表控制连接器行为：
+
+```toml
+[apps]
+[apps._default]
+enabled = true
+destructive_enabled = true
+open_world_enabled = true
+
+[apps.github_drive]
+enabled = true
+default_tools_approval_mode = "auto"
+
+[apps.github_drive.tools]
+"repos/list" = { approval_mode = "auto" }
+"repos/delete" = { approval_mode = "prompt" }
+```
+
+几个关键字段：
+
+- `apps._default.enabled`：全局开关。设为 `false` 则所有连接器默认禁用
+- `apps.<id>.enabled`：单个连接器的启用状态
+- `apps.<id>.destructive_enabled`：是否允许破坏性操作（删除、覆盖等）
+- `apps.<id>.open_world_enabled`：是否允许对外部网络的访问
+- `apps.<id>.default_tools_approval_mode`：工具的默认审批模式——`auto`（自动通过）、`prompt`（每次询问）、`approve`（预批准）
+
+审批模式是 Codex 安全模型的重要组成部分。即使是自动模式，破坏性操作仍然会受到沙箱策略的约束。
+
+---
+
+## 4. /plugins 插件管理
+
+### 插件 vs 技能 vs Apps
+
+先搞清楚三者的关系：
+
+- **技能**是知识层面的事情——SKILL.md 告诉 Agent 该怎么做
+- **Apps 连接器**是能力层面的事情——让 Agent 能调用外部服务
+- **插件**是打包和分发层面的事情——一个插件可以同时包含技能、MCP 服务器、Apps 连接器和钩子
+
+换句话说，插件是"运载工具"。社区开发者把一组相关的能力打包成一个插件，发布到 Codex 市场，你通过 `/plugins` 安装后，其中的技能、连接器、钩子全部生效。
+
+### 插件清单的结构
+
+每个插件有一个 `manifest.json` 文件，声明它包含哪些能力：
+
+```json
+{
+  "name": "my-plugin",
+  "skills": "./skills/",
+  "mcp_servers": "./.mcp.json",
+  "apps": "./.app.json",
+  "hooks": "./hooks/hooks.json"
+}
+```
+
+清单中的路径必须使用 `./` 前缀表示相对于插件根目录。绝对路径会被拒绝——这是安全设计，防止插件读取插件目录之外的文件。
+
+### /plugins 命令的行为
+
+在 TUI 中输入 `/plugins`，会打开插件浏览器。界面分两个区域：
+
+1. **已安装插件**：显示你已经安装的插件列表，每个插件可以切换启用/禁用状态（Space 键切换）
+2. **可发现的插件**：从 Codex 市场拉取的可用插件列表
+
+从市场安装插件后，Codex 会：
+- 把插件文件放到本地存储目录
+- 解析清单，提取技能、MCP 服务器、Apps 连接器和钩子
+- 将这些能力注册到 Codex 的运行时
+
+### 插件的配置控制
+
+在 config.toml 中，你可以精细控制每个插件的行为：
+
+```toml
+[plugins.my-plugin]
+enabled = true
+
+[plugins.my-plugin.mcp_servers.my-server]
+enabled = true
+default_tools_approval_mode = "auto"
+enabled_tools = ["tool_a", "tool_b"]
+disabled_tools = ["tool_c"]
+
+[plugins.my-plugin.mcp_servers.my-server.tools.tool_a]
+approval_mode = "prompt"
+```
+
+这组配置让你可以：
+- 整体启用/禁用一个插件
+- 单独控制插件内每个 MCP 服务器的启用状态
+- 为每个服务器设置工具白名单和黑名单
+- 为每个工具单独设置审批模式
+
+---
+
+## 5. /hooks 生命周期钩子
+
+### 钩子的概念
+
+钩子是 Codex 事件系统中的回调机制。Agent 在运行过程中会经过一系列明确的生命周期节点——开始会话、提交提示词、调用工具、压缩历史——钩子让你在这些节点插入自定义逻辑。
+
+这类似于 Git 的 pre-commit hook 或 GitHub Actions 的 workflow triggers。区别在于，Codex 的钩子是 Agent 级别的，触发点是 Agent 的内部事件而非外部操作。
+
+### 支持的钩子事件
+
+Codex 定义了以下生命周期事件：
+
+| 事件 | 触发条件 | 典型用途 |
+|------|---------|---------|
+| `PreToolUse` | 工具执行之前 | 审计日志、权限检查、参数校验 |
+| `PermissionRequest` | 创建权限请求时 | 自定义审批逻辑 |
+| `PostToolUse` | 工具执行完成之后 | 结果校验、副作用处理、通知 |
+| `PreCompact` | 对话历史压缩之前 | 在压缩前保存关键信息 |
+| `PostCompact` | 压缩完成之后 | 验证压缩结果 |
+| `SessionStart` | 新会话开始时 | 初始化环境、加载配置、启动监控 |
+| `UserPromptSubmit` | 用户提交提示词时 | 输入过滤、提示词增强 |
+| `SubagentStart` | 子 Agent 生成时 | 初始化子 Agent 环境 |
+| `SubagentStop` | 子 Agent 完成时 | 清理子 Agent 资源 |
+| `Stop` | 会话停止时 | 最终清理、生成报告 |
+
+### 钩子的配置方式
+
+钩子在 config.toml 的 `[hooks]` 表中配置。每个事件接受一个匹配器组数组：
+
+```toml
+[hooks.PreToolUse]
+[[hooks.PreToolUse]]
+matcher = "shell"
+hooks = [
+  { type = "command", command = "/usr/local/bin/audit-log" }
+]
+
+[[hooks.PreToolUse]]
+matcher = "file_write"
+hooks = [
+  { type = "command", command = "/usr/local/bin/backup-before-write" }
+]
+```
+
+`matcher` 字段指定这个钩子组匹配哪些工具。上面的例子中，第一组匹配所有 shell 命令，第二组匹配所有文件写入操作。
+
+钩子处理器类型通常是 `command`——即执行一个外部命令。命令的退出码决定钩子的结果：0 表示通过（允许继续），非 0 表示拒绝（阻止操作）。
+
+### /hooks 命令的 TUI 行为
+
+输入 `/hooks` 会显示当前已配置的所有生命周期钩子。你可以：
+
+- 按事件类型浏览钩子
+- 查看每个钩子的匹配器和命令
+- 注意：管理类钩子（来自 requirements 或托管配置）不可通过 TUI 禁用——这是安全设计
+
+钩子的加载有优先级：托管配置层的钩子 > 用户配置层 > 项目配置层 > 会话配置层。管理员可以通过 `requirements.toml` 中设置 `allow_managed_hooks_only = true` 来强制只允许托管钩子，忽略所有其他来源的钩子配置。
+
+### 钩子和插件的关系
+
+插件可以通过清单中的 `hooks` 字段贡献钩子。这些钩子随着插件安装自动注册，不需要你手动在 config.toml 中配置。插件钩子和用户钩子在同一个事件管道中执行，但来源不同——通过 `/hooks` 命令可以看到所有来源的钩子。
+
+---
+
+## 6. /agent 多 Agent 切换
+
+### 为什么需要多 Agent
+
+Codex CLI 的 TUI 支持**协作式 Agent 线程**——多个 Agent 会话在同一个 TUI 实例中并发运行。这不是多开终端窗口，而是 Codex 内部的线程管理机制。
+
+典型场景：你在主线程里让 Codex 做一个功能开发，同时想启动一个侧边线程让它做代码审查。两个线程独立运行、独立维护上下文，互不干扰。
+
+### /agent 命令的用法
+
+输入 `/agent` 会弹出 Agent 选择器，显示所有活跃的线程。每个线程旁边有一个状态指示器——彩色圆点表示当前状态：
+
+- 绿色：空闲，可以接受新指令
+- 黄色：正在运行
+- 红色：等待用户审批
+- 灰色：已完成或暂停
+
+从选择器中选中一个线程，TUI 就切换到那个线程的对话上下文。你可以查看它的历史、给它新的指令、或者继续它之前的工作。
+
+### 侧边对话
+
+除了通过 `/agent` 切换，你还可以通过 `/side`（或简写 `/btw`）启动一个**瞬态侧边对话**。侧边对话会分叉当前会话的上下文，但不会独立持久化——它更像一个临时的工作区，适合快速提问或实验。
+
+`/side` 和 `/btw` 支持内联参数，比如 `/side 检查一下这个函数的时间复杂度`，直接带着问题进入侧边线程。
+
+### Agent 线程的嵌套深度
+
+Codex 可以配置 Agent 线程的最大嵌套深度。根会话从深度 0 开始，每生成一个子 Agent 深度 +1。通过 config.toml 中的 `agent.max_depth` 可以限制这个深度，防止递归生成 Agent 导致资源耗尽。
+
+```
+config.toml:
+[agent]
+max_depth = 3
+job_max_runtime_seconds = 300
+```
+
+`job_max_runtime_seconds` 限制了 Agent 作业工作器的最大运行时间，防止某个线程卡住不释放资源。
+
+---
+
+## 7. /ide 和 /mention 上下文注入
+
+### /ide：从 IDE 获取上下文
+
+Codex CLI 可以和 IDE（VS Code、Cursor、Windsurf 等）联动。当你在 IDE 中选中一段代码或打开了某些文件时，`/ide` 命令把这些信息注入到 Codex 的对话上下文中。
+
+在 TUI 中输入 `/ide`，Codex 会通过 App Server 协议（JSON-RPC）向 IDE 扩展请求当前的上下文信息，包括：
+
+- 你当前选中的代码片段
+- IDE 中打开的文件列表
+- 光标所在的文件和行号
+
+`/ide` 支持内联参数——你可以追加额外的文本说明，比如 `/ide 这个函数的输入校验逻辑有问题`。Codex 会把 IDE 上下文和你的附加说明一起发给模型。
+
+这个命令在任务进行中也可以使用（`available_during_task = true`），适合你在 Agent 工作过程中发现需要补充上下文的场景。
+
+### /mention：附加文件到对话
+
+`/mention` 是一种更精确的上下文注入方式。你可以指定具体的文件路径，Codex 会读取该文件的内容并附加到对话中。
+
+用法：
+
+```
+/mention src/lib/api.ts
+```
+
+Codex 会读取 `src/lib/api.ts` 的完整内容，把它作为上下文的一部分呈现给模型。你可以在同一条消息中同时 mention 多个文件。
+
+`/mention` 在侧边对话中也可以使用（`available_in_side_conversation = true`），在任务执行过程中也可以调用（`available_during_task = true`）——这是少数几个不受运行状态限制的命令之一。
+
+### $mention 和 /mention 的区别
+
+这里容易混淆：
+
+- `$skill-name`：引用技能，注入 SKILL.md 的指令内容
+- `/mention file.ts`：引用文件，注入文件本身的代码内容
+
+前者注入的是"该怎么做"的知识，后者注入的是"做了什么"的数据。两者可以同时使用。
+
+---
+
+## 8. /feedback 和 /logout
+
+### /feedback：发送诊断日志
+
+遇到 bug 或者奇怪的行为时，`/feedback` 命令可以帮你收集诊断信息并发送给 Codex 维护者。
+
+执行 `/feedback` 后，Codex 会自动收集以下信息：
+
+- 当前会话的配置信息（config.toml 的有效配置）
+- 环境信息（操作系统、Codex 版本、模型信息）
+- 最近的会话日志（截断到合理长度）
+- 钩子和插件的加载状态
+
+这些信息会被打包提交。你不需要手动复制粘贴日志或截图。
+
+需要注意的是，反馈功能可以通过 config.toml 中的 `feedback.enabled = false` 全局禁用。
+
+### /init：生成 AGENTS.md 脚手架
+
+`/init` 在当前目录生成一个 `AGENTS.md` 文件的脚手架。AGENTS.md 是 Codex 的项目级配置文件——它告诉 Agent 这个项目的结构、约定、技术栈偏好等信息。
+
+执行 `/init` 后，Codex 会根据当前目录的项目特征（比如检测到 package.json 就生成前端相关的模板，检测到 Cargo.toml 就生成 Rust 相关的模板）创建一个初始的 AGENTS.md。你需要手动编辑它，填入你项目的具体信息。
+
+AGENTS.md 支持嵌套：你可以在子目录中放置额外的 AGENTS.md，Codex 在处理该子目录下的文件时会合并所有层级的 AGENTS.md 指令。冲突时，嵌套更深的文件优先。
+
+### /logout：登出
+
+`/logout` 清除本地存储的认证凭证。Codex 的凭证默认存储在 `CODEX_HOME/auth.json` 中（`CODEX_HOME` 通常是 `~/.codex`）。
+
+执行 `/logout` 后，你需要重新运行 `codex login` 来重新认证。这个命令适用于：
+
+- 切换账号时
+- 凭证过期或损坏时
+- 在共享机器上清除会话时
+
+凭证存储方式可以通过 `auth_credentials_store` 配置项调整：`file`（文件存储，默认）、`keyring`（系统钥匙串）、`auto`（优先钥匙串，回退文件）、`ephemeral`（仅内存，进程结束即清除）。
+
+---
+
+## 9. 集成配置实战
+
+### 场景一：搭建 TypeScript 项目的工作环境
+
+假设你有一个 TypeScript 全栈项目，前端用 React，后端用 Express，部署用 Docker。你希望 Codex 一启动就"知道"这些信息。
+
+**第一步**：用 `/init` 生成基础 AGENTS.md，然后编辑：
+
+```markdown
+# 项目约定
+
+## 技术栈
+- 前端：React 18 + TypeScript + Tailwind CSS
+- 后端：Express + TypeScript + Prisma ORM
+- 数据库：PostgreSQL
+- 部署：Docker Compose
+
+## 目录结构
+src/
+  client/    # React 前端
+  server/     # Express 后端
+  shared/     # 前后端共享类型
+
+## 代码规范
+- 使用 pnpm 作为包管理器
+- 提交信息遵循 Conventional Commits
+- 组件使用函数式组件 + hooks
+```
+
+**第二步**：创建一个前端技能
+
+```
+.agents/skills/react-frontend/SKILL.md
+```
+
+写入 React 组件开发的规范和常见模式。
+
+**第三步**：通过 config.toml 确保技能已启用
+
+```toml
+[skills]
+enabled = true
+```
+
+之后每次在这个项目目录下启动 Codex，Agent 都会自动加载 AGENTS.md 和项目级技能。你不需要每次都重复说明技术栈。
+
+### 场景二：团队共享的 hooks 配置
+
+假设你的团队要求：所有对生产数据库的写操作必须经过审计日志记录。
+
+**钩子配置**：
+
+```toml
+[hooks.PreToolUse]
+[[hooks.PreToolUse]]
+matcher = "shell"
+hooks = [
+  { type = "command", command = "scripts/audit-write-ops.sh" }
+]
+```
+
+`scripts/audit-write-ops.sh` 检查当前命令是否涉及数据库写操作，如果是就记录到审计日志。脚本退出码为 0 允许执行，非 0 阻止执行。
+
+这个配置可以提交到项目的 config.toml 中，团队成员 clone 下来就自动生效。如果团队使用托管模式，管理员可以在 `requirements.toml` 中设置 `allow_managed_hooks_only = true`，防止个人覆盖掉审计钩子。
+
+### 场景三：多 Agent 协作开发
+
+场景：你在做一次大型重构，同时需要保持 CI 绿色。
+
+**主线程**：执行重构任务
+
+```
+把所有的 class 组件重构为函数式组件，使用 hooks 替代生命周期方法
+```
+
+**侧边线程**（`/side`）：监控 CI 状态
+
+```
+/btw 每次主线程有新的 commit 时，检查 CI 是否通过
+```
+
+**Agent 选择器**（`/agent`）：你可以在两个线程之间自由切换。在侧边线程发现 CI 失败时切回主线程修复，在主线程完成一个模块后切到侧边线程确认。
+
+两个线程共享同一个文件系统（都在同一个项目目录下工作），但维护独立的对话历史和上下文。这样你可以同时关注重构进度和 CI 状态，而不需要打开两个终端。
+
+---
+
+## 延伸阅读
+
+- 本系列第 11 篇：[上下文管理](11-context-management.md) — /status、/compact 等 token 管理命令
+- 本系列第 13 篇：[Plan 模式](13-plan-mode.md) — /plan、/goal 等规划命令
+- [Codex 配置参考](https://developers.openai.com/codex/config-reference) — config.toml 完整字段文档
+- [Codex 技能框架](https://zread.ai/openai/codex/11-skills-framework) — 技能加载、注入和调用的完整架构
+- [Codex 插件系统](https://zread.ai/openai/codex/12-plugin-system) — 插件清单结构与聚合方法
+- [Codex 提示词工程](https://zread.ai/openai/codex/19-prompt-engineering-and-context) — AGENTS.md 分层集成机制

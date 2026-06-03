@@ -1,0 +1,303 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI 官方文档 developers.openai.com/codex/concepts/subagents — 模型选择与 Agent 配置
+2. OpenAI 官方文档 developers.openai.com/codex/config-reference — agents.* 配置项完整参考
+3. OpenAI Codex 源码 openai/codex — codex-rs/core/src/agent_graph/ Agent 图执行与角色定义
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 自定义 Agent 角色：给子代理设定专业身份
+
+> TL;DR：在 `config.toml` 的 `[agents.<name>]` 段可以定义自定义 Agent 角色——每个角色有独立的描述、配置文件和昵称池。当你在指令中要求派生特定类型的子代理时，Codex 会根据角色描述选择合适的配置。比如你可以定义一个"安全审查员"角色，配置更强的推理模型和专门的安全检查指令；一个"快速扫描员"角色，用便宜的小模型做快速代码扫描。本文覆盖角色定义、配置文件继承、模型和推理强度选择，以及三个实战角色配置。
+
+---
+
+## 1. 为什么需要自定义 Agent 角色
+
+默认情况下，当你要求 Codex 派生子代理时，所有子代理使用相同的模型和配置。这在简单场景下没问题，但当你有明确的分工需求时，就不够用了。
+
+举个例子：你让 Codex 做一次完整的代码审查，要求安全、性能、可维护性三个维度并行分析。默认配置下：
+
+- 三个子代理用同一个模型（可能是 gpt-5.5，token 单价高）
+- 没有针对性的指令——安全审查员不知道自己该重点关注什么
+- 你无法区分三个子代理的输出，它们在 `/agent` 列表里都叫 "Agent 1"、"Agent 2"
+
+自定义角色解决这三个问题：
+
+1. **模型分配**：不同角色用不同的模型和推理强度
+2. **指令注入**：每个角色有专门的职责描述，子代理知道自己该怎么做
+3. **身份标识**：角色有可选的昵称池，在 TUI 中更容易区分
+
+## 2. 角色定义结构
+
+在 `config.toml` 中用 `[agents.<name>]` 定义角色：
+
+```toml
+[agents.security-reviewer]
+description = "安全审查专家，重点检查 OWASP Top 10 漏洞、敏感信息泄露和不安全的依赖"
+config_file = "agents/security-reviewer.config.toml"
+nickname_candidates = ["安全审查员", "security-bot", "owl"]
+
+[agents.quick-scanner]
+description = "快速代码扫描，用低成本模型做基础检查：代码风格、未使用的导入、简单的 bug 模式"
+nickname_candidates = ["快速扫描", "scanner"]
+
+[agents.test-writer]
+description = "测试编写专家，为给定函数或模块生成完整的单元测试，优先边界条件和异常路径"
+config_file = "agents/test-writer.config.toml"
+nickname_candidates = ["测试专家", "test-bot"]
+```
+
+### 三个字段
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `description` | 是 | 角色的职责描述，Codex 用它来决定何时派生这个角色 |
+| `config_file` | 否 | 该角色专用的 TOML 配置文件，可以覆盖模型、推理强度等 |
+| `nickname_candidates` | 否 | 昵称池，子代理在 TUI 中显示时从中随机选取一个 |
+
+### description 的写法要点
+
+`description` 是最重要的字段。它有两个作用：
+
+1. **选择**：当你发出指令时，Codex 根据 description 判断该派哪个角色
+2. **指导**：子代理启动后，description 会注入到它的上下文中，告诉它该怎么做
+
+所以 description 应该包含：
+- **角色身份**："安全审查专家"
+- **关注领域**："重点检查 OWASP Top 10、敏感信息泄露"
+- **工作方式**："逐文件分析，对每个发现给出严重等级和修复建议"
+
+反面例子（太模糊）：
+
+```toml
+[agents.reviewer]
+description = "审查代码"  # 太笼统，Codex 不知道什么时候该用它
+```
+
+### nickname_candidates 的用途
+
+昵称是可选的。如果不设，子代理在 TUI 中显示为默认的 "Agent 1"、"Agent 2"。设了昵称后，显示更直观：
+
+```
+● 主线程 (active)
+  ○ 安全审查员 — completed
+  ○ 快速扫描 — completed  
+  ○ 测试专家 — in progress
+```
+
+Codex 从池中随机选一个昵称。如果同一个角色派生多个实例，每个实例可能显示不同的昵称（帮助区分）。
+
+## 3. 配置文件继承
+
+`config_file` 是角色专用的配置层。它是一个独立的 TOML 文件，可以覆盖主 config.toml 中的设置。
+
+### 配置文件结构
+
+假设你在 `~/.codex/agents/security-reviewer.config.toml` 中定义：
+
+```toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+
+[features]
+web_search = "live"  # 安全审查需要查最新的 CVE
+```
+
+当 Codex 派生一个 "security-reviewer" 角色的子代理时，它会：
+1. 加载主 config.toml 作为基础
+2. 加载 `security-reviewer.config.toml` 覆盖特定项
+3. 子代理使用合并后的配置
+
+### 覆盖规则
+
+`config_file` 中的设置优先级高于主 config.toml，但低于 requirements.toml（管理员配置）。这意味着：
+- 角色可以用更贵的模型——但管理员在 requirements.toml 中限制了可用模型时，以管理员为准
+- 角色可以启用特殊功能（如 live web search）——但管理员限制了 `allowed_web_search_modes` 时，以管理员为准
+
+### 相对路径解析
+
+`config_file` 支持相对路径。如果路径不是绝对路径，它相对于声明这个角色的配置文件目录解析：
+
+```toml
+# 在 ~/.codex/config.toml 中
+[agents.security-reviewer]
+config_file = "agents/security-reviewer.config.toml"
+# 解析为 ~/.codex/agents/security-reviewer.config.toml
+```
+
+```toml
+# 在项目 .codex/config.toml 中
+[agents.project-linter]
+config_file = "agents/linter.config.toml"  
+# 解析为 .codex/agents/linter.config.toml
+```
+
+## 4. 模型和推理强度选择
+
+不同角色适合不同的模型配置。核心权衡是**能力 vs 成本**。
+
+### 按任务复杂度选模型
+
+| 任务复杂度 | 推荐模型 | 理由 |
+|-----------|---------|------|
+| 简单模式匹配（代码风格、导入清理） | gpt-5.4-mini | 不需要深度推理，便宜快速 |
+| 中等复杂度（测试生成、文档更新） | gpt-5.4 | 平衡能力和成本 |
+| 高复杂度（安全审查、架构分析） | gpt-5.5 | 需要多步推理和上下文理解 |
+
+### 按任务性质选推理强度
+
+`model_reasoning_effort` 有五个级别：
+
+| 级别 | 适用场景 | Token 消耗 |
+|------|---------|-----------|
+| `low` | 简单扫描、格式检查 | 低 |
+| `medium` | 大多数日常任务 | 中 |
+| `high` | 安全审查、逻辑分析 | 高 |
+| `xhigh` | 极其复杂的推理（模型相关） | 很高 |
+
+### 配置示例
+
+安全审查员（需要最强配置）：
+
+```toml
+# ~/.codex/agents/security-reviewer.config.toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+web_search = "live"
+```
+
+快速扫描员（便宜快速）：
+
+```toml
+# ~/.codex/agents/quick-scanner.config.toml
+model = "gpt-5.4-mini"
+model_reasoning_effort = "low"
+```
+
+测试编写者（平衡配置）：
+
+```toml
+# ~/.codex/agents/test-writer.config.toml
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+```
+
+## 5. 全局 Agent 配置
+
+除了角色定义，`[agents]` 段还有几个全局设置：
+
+```toml
+[agents]
+max_threads = 6                  # 最大并发线程
+max_depth = 1                     # 最大嵌套深度
+job_max_runtime_seconds = 1800   # 单 worker 超时
+```
+
+这些设置影响所有子代理，不能按角色单独配置。详细说明见第 43 篇。
+
+## 6. 实战角色配置
+
+### 场景一：代码审查团队
+
+一个完整的代码审查团队需要三个角色：
+
+```toml
+[agents.security-reviewer]
+description = "安全审查专家。逐文件检查：SQL 注入、XSS、CSRF、敏感信息硬编码、不安全的反序列化、未验证的用户输入。对每个发现标明严重等级（critical/high/medium/low），给出具体修复代码。"
+config_file = "agents/security-reviewer.config.toml"
+nickname_candidates = ["安全审查员", "sec-team"]
+
+[agents.perf-reviewer]
+description = "性能审查专家。检查：O(n²) 以上复杂度的算法、N+1 查询模式、不必要的全量数据加载、缺少缓存的热点路径、大循环内的内存分配。给出具体的性能改进建议。"
+config_file = "agents/perf-reviewer.config.toml"
+nickname_candidates = ["性能专家", "perf-team"]
+
+[agents.style-reviewer]
+description = "代码风格审查。检查：命名规范、函数长度（超过 50 行标出）、圈复杂度（超过 10 标出）、重复代码片段、未使用的变量和导入。快速扫描，不需要深度推理。"
+config_file = "agents/style-reviewer.config.toml"
+nickname_candidates = ["风格审查", "style-bot"]
+```
+
+对应的配置文件：
+
+```toml
+# agents/security-reviewer.config.toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+
+# agents/perf-reviewer.config.toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+
+# agents/style-reviewer.config.toml
+model = "gpt-5.4-mini"
+model_reasoning_effort = "low"
+```
+
+使用方式：
+
+```
+> 用代码审查团队审查 src/ 目录。派三个角色：security-reviewer、perf-reviewer、style-reviewer。
+> 等全部完成后，按严重等级汇总所有发现。
+```
+
+### 场景二：多语言文档生成
+
+一个需要为 API 生成多语言文档的团队：
+
+```toml
+[agents.doc-writer-zh]
+description = "中文技术文档写作专家。根据代码和注释生成清晰的中文 API 文档，包含参数说明、返回值、使用示例和常见问题。风格简洁专业。"
+config_file = "agents/doc-writer.config.toml"
+nickname_candidates = ["中文文档"]
+
+[agents.doc-writer-en]
+description = "English technical documentation writer. Generate clear API documentation from code and comments, including parameter descriptions, return values, usage examples, and common pitfalls."
+config_file = "agents/doc-writer.config.toml"
+nickname_candidates = ["English Docs"]
+```
+
+### 场景三：数据库迁移助手
+
+```toml
+[agents.migration-analyzer]
+description = "数据库迁移分析专家。分析 schema 变更的影响范围：哪些查询需要修改、哪些索引需要重建、是否有破坏性变更（列删除、类型变更）。输出迁移风险评估。"
+config_file = "agents/migration.config.toml"
+nickname_candidates = ["迁移分析"]
+
+[agents.migration-generator]
+description = "数据库迁移脚本生成器。根据分析结果生成安全的迁移 SQL：优先 additive 变更、包含回滚脚本、标注不可逆操作。"
+config_file = "agents/migration.config.toml"
+nickname_candidates = ["迁移生成"]
+```
+
+```toml
+# agents/migration.config.toml
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+```
+
+## 7. 常见问题
+
+### 角色没被使用？
+
+检查 `description` 是否足够具体。Codex 需要从你的指令中判断该派哪个角色。如果你的描述太模糊（比如"帮忙写代码"），Codex 不确定该不该用这个角色。
+
+### 子代理用了错误的模型？
+
+确认 `config_file` 路径正确，且文件中的模型名拼写正确。用 `/debug-config` 可以看到实际加载的配置。
+
+### 昵称显示不对？
+
+`nickname_candidates` 中的名字是随机选的。如果你看到默认的 "Agent 1" 而不是昵称，可能是因为没有设置这个字段，或者路径有误。
+
+---
+
+## 延伸阅读
+
+- [第 43 篇：多 Agent 协作总览](43-multi-agent.md) — 子代理的概念和基本工作流
+- [第 45 篇：/fork 与 /side](45-fork-side.md) — 对话分叉的轻量替代
+- [第 22 篇：配置文件体系总览](22-config-overview.md) — 配置文件加载优先级
+- [第 6 篇：模型选择与切换](06-model-selection.md) — 模型特性和选型指南
+- [OpenAI 官方文档：Subagents](https://developers.openai.com/codex/concepts/subagents) — 完整的子代理配置参考

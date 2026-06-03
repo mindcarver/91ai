@@ -1,0 +1,356 @@
+# 提示工程：让 Codex 听懂你
+
+> TL;DR：给 Codex 写提示和给 ChatGPT 写提示是两回事。Codex 有代码上下文、文件访问、工具调用能力，你的提示应该利用这些优势而不是重复 ChatGPT 的套路。核心原则：具体 > 模糊、约束 > 自由、结构 > 散文。本文覆盖 Codex 专属的提示技巧、好的坏的对比例子、AGENTS.md 的正确用法，以及上下文管理策略。
+
+---
+
+## 1. Codex 提示和 ChatGPT 提示的区别
+
+很多人把 Codex 当成"终端版 ChatGPT"，用同样的方式写提示。这是个错误。
+
+ChatGPT 没有你的代码上下文。你需要在提示里把所有信息都塞进去：文件内容、错误信息、项目结构、技术栈版本。提示往往很长，因为 ChatGPT 从零开始。
+
+Codex 不一样。它能读你的文件、跑你的命令、看你的 git 历史。你不需要告诉它"我的项目用了 Express"，它自己会看 package.json。你不需要贴错误日志的全文，它可以读日志文件。
+
+这带来的提示策略变化：
+
+| 维度 | ChatGPT 提示 | Codex 提示 |
+|------|-------------|-----------|
+| 上下文 | 全靠用户描述 | Codex 自动获取 |
+| 具体性 | 需要非常具体 | 可以简略，Codex 会自己看 |
+| 文件引用 | 贴内容到提示里 | 用 `/mention` 指向文件 |
+| 迭代方式 | 换提示重新问 | 在同一会话中继续对话 |
+| 结构化 | 写得很详细 | 给方向和约束就行 |
+
+## 2. 基本原则
+
+### 2.1 说清楚你要什么
+
+```
+# 差
+"help me with the auth module"
+
+# 好
+"把 JWT 验证中间件从 src/middleware/auth.js 迁移到
+ session-based 认证，保留现有的路由结构不变，
+确保 /api/admin 下的路由仍然受保护"
+```
+
+差的提示有太多可能的理解。好的提示只有一个合理的理解方向。
+
+### 2.2 指向具体文件
+
+不要让 Codex 自己去猜哪些文件相关。用 `/mention` 缩小它的搜索范围：
+
+```
+修复用户注册表单验证不生效的 bug
+/mention src/components/RegistrationForm.tsx
+/mention src/utils/validators.ts
+/mention tests/registration.test.ts
+```
+
+这比说"找找注册相关的代码"高效得多。Codex 不用花 token 搜索文件，直接看指定的文件开始分析。
+
+### 2.3 给约束而不是给自由
+
+```
+# 差
+"重构这个模块让它更好"
+
+# 好
+"重构 src/utils/date-formatter.ts：
+- 把 switch-case 改成 lookup map
+- 不要修改函数签名（参数和返回值类型不变）
+- 确保现有测试仍然通过
+- 添加注释说明为什么用 lookup map"
+```
+
+第一个提示 Codex 可能会做一堆你不想要的改动。第二个提示给了明确的边界。
+
+### 2.4 一次一件事
+
+不要在一个提示里塞多个不相关的请求。Codex 的上下文窗口有限，多任务同时进行会让每个任务的质量下降。
+
+```
+# 差
+"修复注册 bug，顺便把登录页面也改了，还有记得更新 README"
+
+# 好（分三次）
+"修复注册 bug"         → 等完成 →
+"改登录页面的布局"     → 等完成 →
+"更新 README 里关于认证的部分"
+```
+
+## 3. Codex 专属技巧
+
+### 3.1 利用 plan 模式
+
+对于复杂改动，先让 Codex 规划再执行：
+
+```
+/plan 把数据库从 PostgreSQL 迁移到 PlanetScale，
+要求零停机时间，现有 API 接口不变
+```
+
+看 Codex 的方案，确认方向对之后再切回执行模式。这比直接让它改要稳得多——方向一旦错了，后面越改越乱。
+
+### 3.2 用 /goal 保持聚焦
+
+长任务容易跑偏。用 `/goal` 给 Codex 一个锚点：
+
+```
+/goal 修复所有 TypeScript 类型错误，不添加新的 @ts-ignore
+```
+
+Codex 会在整个会话中记住这个目标，不会中途去做别的事情。
+
+### 3.3 用 /side 做快速验证
+
+不确定某件事该怎么做时，开一个 side conversation：
+
+```
+/side 检查一下 src/api/routes.ts 里的 rate limiter 逻辑，
+看看在并发 100 的时候会不会有问题
+```
+
+side 会话的结果不会进入主会话的上下文，不会污染主任务的 token 预算。
+
+### 3.4 利用图片输入
+
+截个图比描述一百个字有用：
+
+```
+codex -i screenshot.png "这个错误页面是什么原因导致的"
+```
+
+适用于：UI bug、错误提示、设计稿对照。
+
+### 3.5 用 AGENTS.md 持久化项目知识
+
+不要每次都重复告诉 Codex "我们用的是 Next.js 14 + App Router + Prisma"。把这些写进 AGENTS.md：
+
+```markdown
+# AGENTS.md
+
+## 技术栈
+- Next.js 14 (App Router)
+- Prisma (PostgreSQL)
+- Tailwind CSS
+- Vitest for testing
+
+## 约定
+- 所有 API 路由放在 src/app/api/ 下
+- 组件用 PascalCase 命名
+- 测试文件和源文件同目录，命名为 *.test.ts
+- 不使用 any 类型，不添加 @ts-ignore
+
+## 测试
+- 跑测试用 `npx vitest run`
+- 提交前必须所有测试通过
+```
+
+用 `/init` 可以让 Codex 自动生成一个 AGENTS.md 骨架，然后你手动补充。
+
+## 4. 好的和坏的提示对比
+
+### 4.1 修 Bug
+
+```
+# 差
+"有个 bug，登录之后页面白屏，帮我修一下"
+
+# 好
+"用户登录后出现白屏。
+1. 打开浏览器 DevTools Console，把错误日志截图或复制过来
+2. 用 /review 检查最近的改动
+3. 重现步骤：登录 → 跳转到 dashboard → 页面白屏
+4. 只有 Chrome 有这个问题，Firefox 正常"
+```
+
+### 4.2 写代码
+
+```
+# 差
+"帮我写一个 API"
+
+# 好
+"在 src/app/api/users/route.ts 添加 GET /api/users/:id 端点：
+- 从数据库查询用户信息（用 Prisma）
+- 只返回 public 字段（id、name、avatar）
+- 404 时返回标准错误格式：{ error: 'User not found' }
+- 参考 src/app/api/posts/route.ts 的代码风格"
+```
+
+### 4.3 重构
+
+```
+# 差
+"把这个文件重构一下"
+
+# 好
+"重构 src/utils/validators.ts：
+- 当前有 3 个重复的 email 验证函数，合并成一个
+- 把 string 验证函数的返回类型从 string | null 改成 { valid: boolean; error?: string }
+- 不要改调用方的代码（我会单独处理）
+- 先跑测试确认没有破坏现有行为"
+```
+
+## 5. 上下文管理
+
+### 5.1 长会话的处理
+
+一个会话做太多事，Codex 会开始"忘记"前面的内容。这是上下文窗口的限制。
+
+处理方式：
+
+1. **用 `/compact`** 压缩历史对话，释放 token 空间
+2. **拆分会话**：一个任务做完就用 `/new` 开新会话
+3. **用 `/resume` 接着做**：新会话可以从旧会话中断的地方继续
+
+### 5.2 什么时候该开新会话
+
+- 当前任务的上下文已经很大（>50% token 使用）
+- 新任务和当前任务完全无关
+- 前一个任务失败了，想换思路重新来
+
+```bash
+# 保存进度，开新会话
+/new
+# 新会话里
+/resume  # 或者直接开始新任务
+```
+
+### 5.3 给 Codex 足够的上下文起点
+
+新会话开始时，用一句话概括背景：
+
+```
+"我在做一个 Next.js 电商项目。刚完成了购物车模块，
+现在开始做支付模块。参考 src/app/api/cart/ 的代码风格。"
+```
+
+比直接说"写支付模块"强，因为 Codex 知道了项目类型、技术栈、代码风格和当前进度。
+
+## 6. 反模式清单
+
+| 反模式 | 问题 | 正确做法 |
+|--------|------|---------|
+| "帮我看看" | 太模糊，Codex 不知道看什么 | 指向具体文件和问题 |
+| "简单地做 X" | 如果真简单你不会问 | 描述具体需求 |
+| 一次提 5 个需求 | 每个做得都马虎 | 一个一个来 |
+| 不给约束 | Codex 可能做你不想做的事 | 列出明确边界 |
+| 贴贴错误日志 | Codex 可以自己读文件 | 给文件路径 |
+| 不验证结果 | 改了不一定对 | 跑测试，用 /review 检查 |
+| 用 ChatGPT 语气 | Codex 是工具不是聊天伙伴 | 直接、技术化 |
+
+## 7. 不同场景的提示策略
+
+### 7.1 快速问答
+
+当你只需要一个答案，不需要 Codex 改代码：
+
+```
+codex "这个项目的 API 认证用的是什么方案？"
+```
+
+单行提示 + 非交互模式，几秒拿到答案。
+
+### 7.2 中等任务
+
+涉及修改代码但范围明确：
+
+```
+codex "给 src/api/users.ts 添加分页参数 offset 和 limit，
+默认 offset=0, limit=20, 最大 limit=100"
+```
+
+给 Codex 足够的上下文（文件路径 + 具体需求），但不要过度约束实现细节。
+
+### 7.3 大型重构
+
+多文件、多步骤的改动：
+
+```
+先读一下 src/models/ 目录下所有模型文件，
+了解当前的 ORM 使用模式。
+/mention src/models/
+```
+
+然后分步进行：
+
+```
+/plan 把 Prisma schema 里的 User 模型拆分成
+UserProfile 和 UserAuth 两个模型...
+```
+
+大型重构一定要用 plan 模式先规划，避免 Codex 一次改太多文件导致漂移。
+
+### 7.4 不熟悉的代码库
+
+接手不熟悉的项目时，让 Codex 先帮你理解：
+
+```
+先不要改任何东西。读一下这个项目的整体结构，
+告诉我：
+1. 入口文件在哪里
+2. 路由是怎么组织的
+3. 数据层用了什么
+4. 有没有测试框架
+```
+
+理解之后再动笔，比直接改要稳得多。
+
+### 7.5 对话式调试
+
+调试时的提示应该包含具体的观察和假设：
+
+```
+# 差
+"跑不起来了"
+
+# 好
+"执行 npm run dev 后报错：
+TypeError: Cannot read properties of undefined (reading 'map')
+  at src/utils/transform.js:12
+
+我怀疑是因为上游 API 返回的数据结构变了，
+从数组变成了对象。帮我验证这个假设。"
+```
+
+给 Codex 你的假设让它验证，比让它从零开始推理更高效。
+
+## 8. 提示模板库
+
+### 代码审查
+
+```
+/review 检查 src/api/ 下最近改动的文件，
+关注：安全性（SQL 注入、XSS）、
+错误处理是否完整、
+是否有硬编码的敏感值。
+```
+
+### 生成测试
+
+```
+为 src/services/auth.ts 的 login 和 register 函数
+生成单元测试。要求：
+- 覆盖正常路径和异常路径
+- mock 数据库调用
+- 测试文件放在同目录下，命名为 auth.test.ts
+```
+
+### 文档更新
+
+```
+这个模块的 README 过时了，读一下 src/modules/payment/ 的当前实现，
+然后更新 README.md，包括 API 接口说明和使用示例。
+```
+
+## 延伸阅读
+
+- [Codex CLI 官方最佳实践](https://developers.openai.com/codex/best-practices)
+- [AGENTS.md 配置参考](https://developers.openai.com/codex/agents-md)
+- [规划模式详解（第 13 篇）](./13-plan-mode.md)
+- [目标追踪详解（第 14 篇）](./14-goal-tracking.md)
+- [上下文管理详解（第 11 篇）](./11-context-management.md)

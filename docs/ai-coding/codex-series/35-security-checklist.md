@@ -1,0 +1,436 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex 官方文档: Agent approvals & security — 审批与安全机制总览
+2. Codex 官方文档: Configuration Reference — 所有安全相关配置项
+3. Codex 官方文档: Sandboxing and Security — 沙箱实现与最佳实践
+4. 本系列第 30-34 篇: 安全篇全部文章的要点汇总
+5. OpenSSF 安全框架: Supply chain security best practices
+6. OWASP AI Security: Large Language Model security guidelines
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 安全最佳实践清单：从个人到企业的完整检查表
+
+> TL;DR：安全篇的前五篇文章拆解了 Codex CLI 安全体系的各个组件——审批策略、自动审核、权限 Profile、网络隔离、依赖管理。本篇把它们组装成一份可直接使用的检查清单，覆盖五个维度：账号与认证、沙箱与文件系统、审批与权限、网络与搜索、依赖管理。每个维度分"个人开发者"和"团队/企业"两个层级，列出了必须做、推荐做、可选做三个优先级。你可以按清单逐项检查自己的 Codex 配置，快速定位安全短板。
+
+---
+
+## 1. 检查清单的使用方法
+
+这份清单按五个安全维度组织，每个维度下列出具体的检查项。每项标注了优先级和适用环境：
+
+- **必须**：不做就有实际安全风险，所有环境都应该配置
+- **推荐**：显著提升安全水平，建议配置
+- **可选**：额外安全加固，按需配置
+
+检查方式：对照清单逐项审查你的 `~/.codex/config.toml`、项目级的 `requirements.toml` / `AGENTS.md` / `.rules` 文件。标记为"未通过"的项就是需要改进的地方。
+
+---
+
+## 2. 账号与认证
+
+### 个人开发者
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 2.1 | API Key 不硬编码在项目文件中 | 必须 | `grep -r "sk-" . --include="*.py" --include="*.js" --include="*.ts"` 应该没有结果 |
+| 2.2 | API Key 不出现在环境变量策略的排除列表中 | 必须 | 检查 `config.toml` 的 `[shell_environment_policy].exclude` |
+| 2.3 | 使用环境变量或 `.env` 文件存储凭证 | 推荐 | `OPENAI_API_KEY` 应该从环境变量读取，不写在代码里 |
+| 2.4 | `.env` 文件在 `.gitignore` 中 | 必须 | `grep ".env" .gitignore` 应该有匹配 |
+| 2.5 | 不使用已泄露的 API Key | 必须 | OpenAI 后台检查 API Key 的使用记录，确认没有被他人使用 |
+
+### 团队/企业
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 2.6 | 团队使用统一的 API Key 管理方案 | 推荐 | 不应该把 API Key 提交到 Git，通过 CI secrets 或密钥管理服务分发 |
+| 2.7 | API Key 有使用限额和告警 | 推荐 | OpenAI 后台设置 spending limit 和异常使用告警 |
+| 2.8 | 敏感项目的 API Key 独立管理 | 推荐 | 金融/医疗项目的 API Key 和普通项目分开，单独设限额 |
+
+---
+
+## 3. 沙箱与文件系统
+
+### 个人开发者
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 3.1 | 不使用 `danger-full-access` 作为日常默认 | 必须 | `config.toml` 中 `sandbox_mode` 或 `default_permissions` 不是 `danger-full-access` |
+| 3.2 | 默认沙箱模式为 `workspace-write` 或 `read-only` | 必须 | `sandbox_mode = "workspace-write"` 或使用对应的权限 Profile |
+| 3.3 | `.env` 和 `.env.*` 文件在文件系统规则中被 deny | 推荐 | `[permissions.*.filesystem]` 中有 `":workspace_roots/.env*" = "deny"` |
+| 3.4 | `.git` 目录在文件系统规则中被 deny | 推荐 | `[permissions.*.filesystem]` 中有 `":workspace_roots/.git" = "deny"` |
+| 3.5 | `~/.ssh` 和 `~/.gnupg` 在文件系统规则中被 deny | 推荐 | 文件系统规则中有 `"${HOME}/.ssh" = "deny"` 和 `"${HOME}/.gnupg" = "deny"` |
+| 3.6 | `/etc` 目录在文件系统规则中被 deny | 推荐 | 文件系统规则中有 `"/etc" = "deny"` |
+| 3.7 | 项目 `AGENTS.md` 中有文件访问限制说明 | 可选 | AGENTS.md 中列出了 Codex 不应该访问的文件或目录 |
+
+### 团队/企业
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 3.8 | `requirements.toml` 中有 `[filesystem]` 约束 | 推荐 | 系统级配置限制了 Codex 的文件访问范围 |
+| 3.9 | 敏感项目强制使用 `read-only` 沙箱 | 推荐 | `requirements.toml` 中 `allowed_approval_policies` 不包含 `never` |
+| 3.10 | Windows 环境下沙箱级别不是 `Disabled` | 必须 | Windows sandbox 至少是 `elevated` 或 `unelevated` |
+
+### 个人开发者快速配置模板
+
+```toml
+# ~/.codex/config.toml — 安全优先的个人配置
+
+default_permissions = "daily-dev"
+
+[permissions.daily-dev.filesystem]
+":workspace_roots" = "write"
+":workspace_roots/.env*" = "deny"
+":workspace_roots/.git" = "deny"
+"${HOME}/.ssh" = "deny"
+"${HOME}/.gnupg" = "deny"
+"${HOME}/.aws" = "deny"
+"/etc" = "deny"
+```
+
+---
+
+## 4. 审批与权限
+
+### 个人开发者
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 4.1 | 不使用 `never` 作为日常默认的 `approval_policy` | 必须 | `config.toml` 中 `approval_policy` 是 `on-request` 或 `untrusted` |
+| 4.2 | `auto_review` 的策略写法具体明确 | 推荐 | 策略列出了具体的命令名和路径，而不是"允许安全的操作" |
+| 4.3 | `auto_review` 的 `review_model` 设置合理 | 可选 | 如果日常审批频繁，用 `o4-mini` 降低成本和延迟 |
+| 4.4 | 项目级 `.rules` 文件中定义了危险命令规则 | 推荐 | `DROP TABLE`、`rm -rf /`、`sudo` 等命令有 `prompt` 或 `forbidden` 规则 |
+| 4.5 | 熟悉 `/approve` 的使用时机 | 推荐 | 知道什么时候该手动批准、什么时候该调整策略 |
+
+### 团队/企业
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 4.6 | `requirements.toml` 中有 `allowed_approval_policies` 约束 | 推荐 | 限制了团队成员可用的审批策略范围 |
+| 4.7 | `requirements.toml` 中有 `allowed_approvals_reviewers` 约束 | 推荐 | 对于高合规要求的项目，强制人工审批 |
+| 4.8 | `guardian_policy_config` 已在企业管理后台配置 | 可选 | 企业版用户配置云端策略作为最终兜底 |
+| 4.9 | 团队共享的 execpolicy 规则提交到 Git | 推荐 | `.rules` 文件或 `requirements.toml` 中的 `prefix_rules` 在版本控制中 |
+| 4.10 | `forbidden` 规则覆盖了最危险的操作 | 必须 | `rm -rf /` 和绝对路径删除操作标记为 `forbidden` |
+
+### 个人开发者快速配置模板
+
+```toml
+# ~/.codex/config.toml — 审批与权限配置
+
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+review_model = "o4-mini"
+
+[auto_review]
+policy = """
+允许运行 pytest、cargo test、npm test、bun test 命令。
+允许运行 cargo build、npm run build 命令。
+允许运行 git diff、git log、git status 命令。
+允许读写 src/、tests/、lib/ 目录。
+允许 npm install 和 pip install。
+拒绝 sudo 命令。
+拒绝任何包含 DROP TABLE、DELETE FROM、TRUNCATE 的 SQL。
+拒绝 rm -rf 命令。
+拒绝访问 /etc/、~/.ssh/、~/.aws/、~/.gnupg/ 目录。
+"""
+```
+
+---
+
+## 5. 网络与搜索
+
+### 个人开发者
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 5.1 | 沙箱网络访问默认关闭 | 必须 | `sandbox_workspace_write.network_access = false` |
+| 5.2 | 需要网络时使用域名白名单 | 推荐 | `features.network_proxy.domains` 或 `[permissions.*.network].domains` 中有白名单 |
+| 5.3 | `web_search` 不是 `live` 作为日常默认 | 推荐 | 日常用 `cached`，只在需要时切到 `live` |
+| 5.4 | 搜索域名有限制 | 可选 | `[tools.web_search].allowed_domains` 限定了搜索范围 |
+| 5.5 | 不使用 `--yolo` 标志 | 必须 | 日常使用中不应该需要这个标志 |
+
+### 团队/企业
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 5.6 | `requirements.toml` 中有 `[network]` 域名约束 | 推荐 | 限制了可访问的域名范围 |
+| 5.7 | `allowed_web_search_modes` 限制了搜索模式 | 可选 | 高安全环境只允许 `cached` 或 `disabled` |
+| 5.8 | 代理配置正确且不使用非 loopback 代理 | 必须 | `socks_url` 指向 `127.0.0.1`，`dangerously_allow_non_loopback_proxy` 未开启 |
+| 5.9 | 敏感环境完全断网 | 推荐 | 高安全项目的沙箱网络和搜索都关闭 |
+
+### 个人开发者快速配置模板
+
+```toml
+# ~/.codex/config.toml — 网络安全配置
+
+web_search = "cached"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "github.com" = "allow"
+  "api.github.com" = "allow"
+  "crates.io" = "allow"
+  "*" = "deny"
+}
+```
+
+---
+
+## 6. 依赖管理
+
+### 个人开发者
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 6.1 | Python 项目使用锁定文件 | 推荐 | 有 `uv.lock`、`requirements.txt` 带 `--require-hashes`，或 `poetry.lock` |
+| 6.2 | JavaScript 项目有 `package-lock.json` | 推荐 | 文件存在且提交到 Git |
+| 6.3 | AGENTS.md 中约定了依赖安装方式 | 推荐 | 明确写了用 `npm ci` 还是 `npm install`，用 `uv` 还是 `pip` |
+| 6.4 | 安装依赖后运行漏洞扫描 | 可选 | `npm audit` 或 `pip audit` 在安装后执行 |
+| 6.5 | 不在 `danger-full-access` 模式下安装依赖 | 推荐 | 依赖安装在受控的沙箱中进行 |
+
+### 团队/企业
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 6.6 | CI/CD 中使用锁定文件安装依赖 | 必须 | CI pipeline 用 `npm ci` 或 `uv sync`，不解析新版本 |
+| 6.7 | 使用私有包管理器注册表 | 可选 | 企业内部有 artifact 管理或私有 registry |
+| 6.8 | `.npmrc` 配置了 `ignore-scripts=true` | 推荐 | 阻止 npm 包的 postinstall 脚本执行 |
+| 6.9 | 依赖安装的域名在白名单中 | 推荐 | pypi.org、files.pythonhosted.org、registry.npmjs.org 等在域名白名单中 |
+
+---
+
+## 7. 环境变量安全
+
+| # | 检查项 | 优先级 | 检查方式 |
+|---|---|---|---|
+| 7.1 | 内置敏感变量过滤未关闭 | 必须 | `shell_environment_policy.ignore_default_excludes` 不是 `true` |
+| 7.2 | 额外排除已知敏感变量 | 推荐 | `exclude` 列表包含 `^AWS_`、`^STRIPE_`、`^DATABASE_URL$` 等模式 |
+| 7.3 | `set` 中没有硬编码的密钥 | 必须 | `[shell_environment_policy].set` 中的值不包含密钥、密码、token |
+| 7.4 | 不使用 `inherit = "none"` 后忘记配置 PATH | 推荐 | 如果设了 `inherit = "none"`，确认 `set` 中有 `PATH` |
+| 7.5 | `experimental_use_profile` 不影响必要的环境变量 | 可选 | 如果开启了 profile 加载，确认 Codex 能拿到需要的变量 |
+
+### 快速配置模板
+
+```toml
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = [
+    "^AWS_",
+    "^GOOGLE_APPLICATION_CREDENTIALS$",
+    "^DATABASE_URL$",
+    "^FIREBASE_",
+    "^STRIPE_",
+    "^TWILIO_",
+    "^SENDGRID_",
+    "^OPENAI_API_KEY$",    # 不让 Codex 拿到你的 API Key（它通过内部通道使用）
+]
+```
+
+---
+
+## 8. 完整配置模板
+
+### 个人安全配置（复制到 ~/.codex/config.toml）
+
+```toml
+# Codex CLI 安全配置 — 个人开发者
+# 适合日常开发，平衡安全与效率
+
+# 默认权限 Profile
+default_permissions = "daily-dev"
+
+# 审批策略
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+review_model = "o4-mini"
+
+# 自动审核策略
+[auto_review]
+policy = """
+允许运行 pytest、cargo test、npm test、bun test 命令。
+允许运行 cargo build、npm run build 命令。
+允许运行 git diff、git log、git status 命令。
+允许读写 src/、tests/、lib/ 目录。
+允许 npm install 和 pip install。
+拒绝 sudo 命令。
+拒绝任何包含 DROP TABLE、DELETE FROM、TRUNCATE 的 SQL。
+拒绝 rm -rf 命令。
+拒绝访问 /etc/、~/.ssh/、~/.aws/、~/.gnupg/ 目录。
+"""
+
+# 搜索
+web_search = "cached"
+
+# 沙箱
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+
+# 权限 Profile
+[permissions.daily-dev.filesystem]
+":workspace_roots" = "write"
+":workspace_roots/.env*" = "deny"
+":workspace_roots/.git" = "deny"
+"${HOME}/.ssh" = "deny"
+"${HOME}/.gnupg" = "deny"
+"${HOME}/.aws" = "deny"
+"/etc" = "deny"
+
+[permissions.daily-dev.network]
+enabled = true
+mode = "limited"
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "crates.io" = "allow"
+  "github.com" = "allow"
+  "api.github.com" = "allow"
+  "*" = "deny"
+}
+
+# 环境变量
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = [
+    "^AWS_",
+    "^GOOGLE_APPLICATION_CREDENTIALS$",
+    "^DATABASE_URL$",
+    "^FIREBASE_",
+    "^STRIPE_",
+    "^TWILIO_",
+]
+```
+
+### 企业安全配置（requirements.toml）
+
+```toml
+# /etc/codex/requirements.toml — 系统级安全约束
+
+# 审批策略约束
+allowed_approval_policies = ["on-request", "untrusted"]
+allowed_approvals_reviewers = ["user"]
+
+# 搜索约束
+allowed_web_search_modes = ["cached"]
+
+# 网络约束
+[network]
+mode = "allow"
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "api.github.com" = "allow"
+  "github.com" = "allow"
+  "crates.io" = "allow"
+}
+
+# 文件系统约束
+[filesystem]
+read = ["${HOME}/projects/*", "/tmp/*"]
+write = ["${HOME}/projects/*"]
+
+# 命令执行规则
+[[rules.prefix_rules]]
+pattern = "DROP TABLE"
+decision = "forbidden"
+justification = "合规要求：禁止自动删除数据库表"
+
+[[rules.prefix_rules]]
+pattern = "DELETE FROM"
+decision = "prompt"
+justification = "数据删除需要人工确认"
+
+[[rules.prefix_rules]]
+pattern = "rm -rf /"
+decision = "forbidden"
+justification = "绝对禁止递归删除根目录"
+
+[[rules.prefix_rules]]
+pattern = "sudo "
+decision = "prompt"
+justification = "提权操作需要确认"
+```
+
+---
+
+## 9. 常见问题
+
+### 安全配置太严格，Codex 什么都做不了
+
+从宽松配置开始，逐步收紧。先确保 Codex 能正常完成日常任务（改代码、跑测试），然后在发现具体的安全风险点时针对性地添加规则。不要一开始就用 `untrusted` + 网络关闭 + 全部 deny 的极端配置。
+
+### 配置文件太多，记不住哪些该改什么
+
+本文的完整配置模板可以直接复制使用。如果你只需要最小安全基线，关注以下三项：
+
+1. `approval_policy = "on-request"`（不要 `never`）
+2. `sandbox_workspace_write.network_access = false`（默认关闭网络）
+3. `[shell_environment_policy].exclude` 排除敏感变量
+
+这三项覆盖了最常见的三个风险面：无审批执行、网络访问、环境变量泄露。
+
+### 团队成员不遵守安全配置
+
+通过 `requirements.toml`（系统级）强制执行。个人 `config.toml` 无法绕过系统级约束。把 `requirements.toml` 的管理交给安全团队，通过配置管理工具（Ansible、Chef 等）分发到开发者机器上。
+
+### 怎么知道自己的配置有没有生效
+
+检查方式：
+
+```bash
+# 查看当前生效的配置
+codex --help
+
+# 在 Codex TUI 中查看配置
+> /debug-config
+
+# 查看 MCP 服务器状态
+> /mcp verbose
+
+# 查看当前权限
+> /permissions
+```
+
+---
+
+## 10. 安全篇总结
+
+本安全篇的六篇文章覆盖了 Codex CLI 安全体系的完整维度：
+
+| 篇 | 主题 | 核心内容 |
+|---|---|---|
+| 第 30 篇 | 审批策略详解 | `approval_policy` 四种模式、`granular` 五维度、`auto_review`、execpolicy、`requirements.toml` |
+| 第 31 篇 | 自动审核与权限持久化 | `approvals_reviewer`、`[auto_review].policy` 写法、`review_model`、`/approve` 重试、权限记忆机制 |
+| 第 32 篇 | 权限 Profile 机制 | 内置 Profile、自定义语法、文件系统路径规则、网络域名策略、`extends` 继承 |
+| 第 33 篇 | 网络安全与隔离 | 搜索通道 vs 沙箱网络、操作系统级隔离、域名策略、代理配置、Cyber Safety |
+| 第 34 篇 | 依赖安全 | pip/npm 安全机制、哈希校验、锁定文件、域名白名单、AGENTS.md 约定 |
+| 第 35 篇 | 安全最佳实践清单 | 五维度检查表、个人/企业配置模板、快速安全基线 |
+
+理解这些安全配置不是目的——把它们落实到你的实际配置中才是。建议花 10 分钟对照清单检查你的 Codex 配置，修复标记为"未通过"的项。
+
+---
+
+**延伸阅读**
+
+- [Codex 官方文档 - Agent approvals & security](https://developers.openai.com/codex/agent-approvals-security) — 审批与安全机制的官方总览
+- [Codex 官方文档 - Configuration Reference](https://developers.openai.com/codex/config-reference) — 所有安全相关配置项完整参考
+- [Codex 官方文档 - Sandboxing and Security](https://developers.openai.com/codex/sandboxing-security) — 沙箱实现与安全最佳实践
+- [Codex 官方文档 - requirements.toml](https://developers.openai.com/codex/requirements-toml) — 项目级安全约束配置
+- [OpenSSF Best Practices](https://openssf.org/resources/) — 开源软件供应链安全框架
+- 本系列第 30-34 篇 — 安全篇完整文章链
+
+---
+
+*本文基于 Codex CLI 官方文档、安全最佳实践和 2026 年 6 月的安全态势撰写。安全是一个持续的过程，建议定期回顾和更新安全配置。*

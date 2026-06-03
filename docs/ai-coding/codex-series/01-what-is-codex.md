@@ -1,0 +1,345 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI 官方定价页: https://developers.openai.com/codex/pricing
+2. Codex App 功能页: https://developers.openai.com/codex/app/features
+3. Codex IDE 扩展页: https://developers.openai.com/codex/ide
+4. Codex App 发布公告: https://openai.com/index/introducing-the-codex-app/
+5. GitHub 仓库 openai/codex: Rust monorepo, 75.6K+ stars
+6. 对比文章: termdock.com, catdoes.com, blakecrosley.com, nimbalyst.com
+7. Reddit 讨论: r/ChatGPTCoding, r/codex, r/OpenAI
+8. 沙箱分析: agent-safehouse.dev, developers.openai.com/codex/concepts/sandboxing
+版本基准: 2026 年 6 月，Codex 使用 GPT-5.5/GPT-5.4/GPT-5.3-Codex 系列模型
+-->
+
+# Codex 是什么：OpenAI 的 AI 编程助手四种形态全介绍
+
+**TL;DR：** Codex 是 OpenAI 的编程 Agent（不是聊天机器人），能读代码、改代码、跑命令、搜索网络。它有四种运行环境：CLI（终端）、桌面 App、IDE 插件、Web 浏览器。底层跑在 GPT-5.5 / GPT-5.4 / GPT-5.3-Codex 系列模型上，ChatGPT Plus（$20/月）及以上套餐都包含 Codex 使用额度。
+
+## Codex 是什么
+
+一句话：Codex 是 OpenAI 做的 AI 编程 Agent。
+
+"Agent"这个词在这里有实际含义——它不是你问一句它答一句的聊天机器人。你给它一个任务描述，比如"给这个 React 项目加上暗色模式"，它会自己读项目结构、找到相关文件、修改代码、运行测试、报结果。整个过程你可以在旁边看着，也可以让它自己跑。
+
+Codex 能做四类事：
+
+- **读代码**：打开文件、理解项目结构、搜索符号
+- **改代码**：编辑已有文件、创建新文件、应用 patch
+- **跑命令**：在沙箱里执行 shell 命令（编译、测试、lint）
+- **搜索网络**：查文档、找 API 参考
+
+这四件事串起来，就构成了一条完整的编程工作流。你不需要手动拆解任务再一步步喂给它——你描述目标，它自己规划步骤。
+
+### 和 ChatGPT 的关系
+
+ChatGPT 是通用对话产品，什么话题都能聊。Codex 是 ChatGPT 体系下的编程专用品。二者的区别在于工具调用能力：ChatGPT 只能生成文本回复，Codex 可以实际操作你的文件系统和终端。
+
+从账号层面看，Codex 没有独立订阅。你用 ChatGPT Plus、Pro、Business、Edu 或 Enterprise 账号登录，Codex 的额度就包含在里面。这也意味着 Codex 的用户身份、计费体系、管理后台全部复用 ChatGPT 的基础设施。
+
+### 背后的模型
+
+Codex 目前跑在三个模型上（截至 2026 年 6 月）：
+
+| 模型 | 定位 | 速度 | 质量 |
+|------|------|------|------|
+| GPT-5.5 | 最新旗舰 | 中等 | 最高 |
+| GPT-5.4 | 上代旗舰 | 中等 | 高 |
+| GPT-5.4-mini | 轻量模型 | 快 | 日常够用 |
+| GPT-5.3-Codex | 编程专用 | 中等 | 编程最优 |
+
+其中 GPT-5.3-Codex 是专门为编程任务经过 RL（强化学习）训练的版本，也是唯一支持云端任务和代码审查的模型。GPT-5.5 是 2026 年的新版本，OpenAI 声称它用更少的 token 达到了和 GPT-5.4 相当甚至更好的效果。
+
+还有一个 GPT-5.3-Codex-Spark，是研究预览版，主打低延迟，目前只有 Pro 用户能用。
+
+## 四种运行环境对比
+
+Codex 有四种形态：CLI、桌面 App、IDE 插件、Web。它们共享同一套账号和模型，但面向不同的使用场景。
+
+### Codex CLI：终端里的 Agent
+
+Codex CLI 是整个 Codex 产品线的起点。2025 年 4 月首次发布，用 Rust 写的，开源（github.com/openai/codex，75.6K+ stars）。从仓库结构看，`codex-rs/` 目录下有完整的 Rust 工具链：Cargo workspace、Bazel 构建、Linux/macOS/Windows 三平台沙箱实现。
+
+安装一条命令：
+
+```bash
+npm install -g @openai/codex
+```
+
+CLI 的特点：
+
+- **纯终端交互**：没有图形界面，所有操作通过命令行完成。启动后进入一个 TUI（Terminal User Interface），底部是输入框，上方是对话和文件变更预览
+- **沙箱隔离**：macOS 用 Seatbelt（Apple 的系统级沙箱框架），Linux 用 Bubblewrap + Landlock + seccomp，Windows 用自建的 `windows-sandbox-rs`。不管哪个平台，Codex 跑的命令都被限制在工作目录内
+- **三种审批模式**：`suggest`（每步都要你确认）、`auto-edit`（文件编辑自动通过，跑命令需要确认）、`full-auto`（全自动，所有操作直接执行）
+- **配置文件**：项目根目录放一个 `config.toml`，或者用户目录 `~/.codex/config.toml`。可以配模型、沙箱策略、MCP 服务器、Skills 等
+- **开源**：核心代码在 GitHub 上，你可以审计沙箱实现、提交 PR、fork 后自行修改
+
+CLI 的配置体系围绕 `AGENTS.md` 文件组织——放在项目根目录，写上项目规则、技术栈、禁止事项，Codex 每次开始任务时会读取这个文件作为上下文。和 Claude Code 的 `CLAUDE.md` 概念一样，但文件名不同。
+
+### Codex App：桌面上的 Agent 指挥中心
+
+2026 年 3 月 4 日发布，macOS 先行，Windows 在同一天跟进。这不是 IDE，也不是 CLI 的图形包装——OpenAI 把它定义成"Agent 编排工作区"（agent orchestration workspace）。
+
+核心能力：
+
+- **多线程并行**：一个窗口里跑多个 Codex 线程，每个线程绑一个项目。你可以让 Agent A 做前端重构，同时让 Agent B 写后端接口，互不干扰
+- **Git Worktree 集成**：每个线程可以选择 Local（直接改项目目录）或 Worktree（创建隔离的 Git worktree）。多个 Agent 同时改同一个仓库不会冲突
+- **内置终端**：每个线程有一个终端窗口（`Cmd+J` 切换），可以手动跑命令，Codex 也能读取终端输出
+- **Diff 审查**：Agent 改完代码后，你看到一个 diff 面板，可以按 chunk 批准或拒绝，也能加行内注释让 Agent 继续修改
+- **Automations（自动化）**：设定定时任务，比如每天凌晨跑 issue triage、CI 失败总结。Automations 在后台 worktree 里跑，完成后推到审查队列
+- **Skills（技能）**：可复用的指令包，绑定了特定工具和工作流。内置的技能包括 Figma 设计稿转代码、部署到 Vercel/Netlify、生成图片等
+- **In-app Browser**：内置浏览器，可以预览本地开发服务器、在页面上标注问题让 Agent 修复
+- **Computer Use**：让 Agent 直接操控桌面应用（点击、输入），用于 GUI 测试。注意这个功能在欧洲经济区、英国和瑞士不可用
+- **语音输入**：按住 `Ctrl+M` 说话，语音转文字后编辑发送
+
+App 和 CLI 共享配置（MCP 服务器、Skills、AGENTS.md）。如果你同时装了 IDE 插件，三者还会自动同步上下文。
+
+### Codex IDE Extension：编辑器里的编程搭档
+
+VS Code 插件，同时支持 Cursor、Windsurf、VS Code Insiders，还有 JetBrains 全家桶（IntelliJ、PyCharm、WebStorm、Rider 等）。macOS、Windows、Linux 三平台可用。
+
+安装后出现在编辑器侧边栏。它的优势在于和代码编辑流程的融合：
+
+- **编辑器上下文**：自动获取你当前打开的文件、选中的代码片段。用 `@file` 引用其他文件。不需要复制粘贴代码到聊天框
+- **模型切换**：下拉菜单切换 GPT-5.5、GPT-5.4、GPT-5.4-mini
+- **推理力度调节**：`low`、`medium`、`high` 三档，权衡速度和深度
+- **审批模式**：`Chat`（纯聊天不改文件）、`Agent`（需要确认才改文件）、`Agent (Full Access)`（全自动）
+- **委派到云端**：长任务可以推到 Codex Cloud 跑，不占本地资源。跑完后在 IDE 里预览 diff、申请 follow-up、一键应用变更
+- **图片生成**：在编辑器里直接生成 UI 素材、图标等
+- **快捷键**：可自定义键盘快捷键绑定 Codex 命令
+
+这个形态最适合日常写代码的流程——你一边写代码，一边在侧边栏跟 Codex 对话，让它帮你补完函数、修 bug、重构。不需要切换窗口。
+
+### Codex Web：浏览器里的云端版本
+
+访问 chatgpt.com/codex，用浏览器直接用。不需要装任何东西。
+
+Codex Web 的工作方式是云端的：你的代码库连接到 GitHub，Codex 在 OpenAI 的云环境里 clone 代码、跑任务、提交 PR。所有计算发生在服务器端，你本地只需要一个浏览器。
+
+它支持：
+
+- **Cloud Environments（云环境）**：配置 Codex 运行时的依赖（语言版本、工具链、linter），类似 Dockerfile 但更轻量
+- **GitHub 集成**：直接对 GitHub 仓库发任务，Codex 会创建分支、提交变更、开 PR
+- **@codex 命令**：在 GitHub PR 里 `@codex review this`，Codex 自动做代码审查
+- **Slack / Linear 集成**：通过 Slack 消息或 Linear issue 触发 Codex 任务
+
+Codex Web 的局限性在于它只能操作 GitHub 上的代码，不能碰你本地的文件系统。如果你的项目不在 GitHub 上，或者需要操作本地数据库、本地服务，就得用 CLI 或 App。
+
+### 四种环境对比表
+
+| 维度 | CLI | App | IDE Extension | Web |
+|------|-----|-----|---------------|-----|
+| **运行方式** | 终端 TUI | 桌面原生应用 | 编辑器侧边栏 | 浏览器 |
+| **安装** | `npm install -g @openai/codex` | 下载 dmg/exe | VS Code Marketplace / JetBrains 插件市场 | 无需安装 |
+| **代码访问** | 本地文件系统 | 本地文件系统 | 编辑器打开的文件 + 本地 | GitHub 仓库 |
+| **多 Agent 并行** | 需要手动开多个终端 | 内置，Worktree 隔离 | 单线程 | 云端并行 |
+| **沙箱** | Seatbelt / Bubblewrap / Windows Sandbox | 同 CLI | 同 CLI | 云端隔离 |
+| **审批模式** | suggest / auto-edit / full-auto | Chat / Agent / Full Access | Chat / Agent / Full Access | 云端自动 |
+| **模型支持** | GPT-5.5, 5.4, 5.4-mini, 5.3-Codex | 同 CLI + 5.3-Codex-Spark | 同 CLI | GPT-5.3-Codex（云端任务） |
+| **Skills / MCP** | 支持 | 支持 | 支持 | 有限 |
+| **平台** | macOS, Linux, Windows | macOS, Windows | macOS, Linux, Windows | 任何有浏览器的设备 |
+| **开源** | 是 | 否 | 否 | 否 |
+| **适用场景** | 终端工作流、CI 集成、自动化 | 多任务并行、项目管理 | 日常编码 | 远程、临时任务、GitHub 集成 |
+| **价格** | 含在 ChatGPT 订阅内，或 API Key 按量付费 | 同 CLI | 同 CLI | 同 CLI |
+
+## 每种形态的适用人群
+
+### CLI → 终端重度用户
+
+如果你每天在终端里待的时间比编辑器多，CLI 是你的首选。DevOps 工程师、SRE、喜欢 tmux 多窗口工作流的人、用 Vim/Neovim 写代码的人——你们不会想为了用 AI 编程助手而打开一个 GUI。
+
+CLI 还适合 CI/CD 场景。Codex 提供了 `codex exec` 非交互模式和 Codex SDK，可以写脚本让 Codex 自动修复 issue、跑代码审查。结合 API Key 按量付费，适合在流水线里批量使用。
+
+我见过有人用 CLI 配合 tmux，一个 pane 跑 Codex 做前端重构，另一个 pane 跑 Codex 写测试，第三个 pane 手动检查结果。纯键盘操作，不碰鼠标。
+
+### App → 想要图形界面管理多任务的人
+
+Codex App 的目标用户是那些需要同时跑多个编程任务、但不想折腾终端分屏的人。产品经理可以用它让 Codex 修 bug（不需要装 IDE）。技术负责人可以同时派多个 Agent 做不同模块的重构，然后在 App 里统一审查 diff。
+
+App 的 Automations 功能对团队 Lead 特别有用——设一个每天早上 8 点跑的自动化，让 Codex 检查昨天遗留的 CI 失败、总结 issue 变化、生成日报。你到工位时报告已经准备好了。
+
+有一点要注意：App 目前不支持 Linux。如果你是 Linux 桌面用户，只能用 CLI 或 IDE 插件。
+
+### IDE → 日常开发的程序员
+
+这是覆盖面最广的形态。不管你用 VS Code 还是 JetBrains 全家桶，装个插件就能用。不需要改变现有的工作流程——你在编辑器里写代码，遇到问题就在侧边栏问 Codex，它直接在当前项目上下文里回答。
+
+IDE 插件的优势在于上下文感知。它知道你光标在哪个文件、选中了哪段代码、项目用了什么框架。你在聊天框里说"这个函数有 bug"，它已经知道"这个函数"指的是哪个。不需要手动贴代码。
+
+如果你同时用 Cursor 或 Windsurf，Codex 插件也能装在这些编辑器里。这意味着你可以在同一个 IDE 里同时用 Cursor AI 和 Codex——虽然有点冗余，但有些人确实这么做，用不同模型对比结果。
+
+### Web → 不想装东西的人
+
+几种情况适合用 Web 版：
+
+1. 你在别人的电脑上临时需要 AI 编程帮助
+2. 你的项目已经在 GitHub 上，只需要 Codex 做代码审查或自动修复
+3. 你用 iPad 或轻量设备，装不了桌面软件
+4. 团队想用 Slack / Linear 集成触发 Codex 任务
+
+Web 版的局限很明显：只能操作 GitHub 仓库，不能碰本地环境。如果你的工作流依赖本地数据库、Docker 容器、或者内网服务，Web 版帮不上忙。
+
+## Codex 和其他 AI 编程工具的关系
+
+这一节把 Codex 放在整个 AI 编程工具的版图里看。只讨论主要竞品，不穷举。
+
+### Codex vs Claude Code：两个终端 Agent 的正面交锋
+
+这是目前讨论度最高的对比。两者定位相同：终端里跑的编程 Agent，都能读文件、改文件、执行命令。
+
+**底层模型**：Codex 用 GPT-5.5 / 5.4 / 5.3-Codex 系列，Claude Code 用 Claude Opus / Sonnet 系列。社区共识是 Claude Code 在代码质量和长上下文推理上略胜，Codex 在速度和单任务成本上占优。一个 Reddit 用户的总结比较到位："Claude Code 代码质量更好但更慢，Codex 更快更省但偶尔需要人工干预。"
+
+**架构**：Codex CLI 用 Rust 写的（从 GitHub 仓库的 `codex-rs/` 目录可以确认），Claude Code 用 Node.js。Rust 带来的好处是启动快、内存占用低、原生沙箱集成（Seatbelt / Bubblewrap 的 Rust binding 直接内嵌）。Node.js 的好处是生态丰富、MCP 服务器集成方便。
+
+**配置体系**：Codex 用 `config.toml` + `AGENTS.md`，Claude Code 用 JSON settings + `CLAUDE.md`。文件格式不同但哲学类似——都是项目级配置文件，写上规则和上下文，让 Agent 遵守。Codex 的 TOML 在配置项多的时候更清晰（嵌套结构），Claude Code 的 JSON 在编程集成时更方便。
+
+**沙箱**：Codex 的沙箱更严格。它在 OS 内核层面隔离（macOS 的 Seatbelt、Linux 的 Landlock + seccomp），Agent 写不了工作目录之外的文件。Claude Code 的沙箱实现类似（也用 Seatbelt 和 Bubblewrap），但默认策略更宽松。
+
+**生态**：Claude Code 有 MCP（Model Context Protocol）生态，大量社区 MCP 服务器可以即插即用。Codex 也支持 MCP，但起步晚，社区 MCP 服务器兼容性参差不齐。反过来，Codex 有 Skills 系统——打包好的指令 + 脚本 + 工具配置，可以直接用或 check 进仓库共享给团队。
+
+**定价**：两者起步价都是 $20/月（ChatGPT Plus / Claude Pro）。重度使用时 Codex 的按量计费更便宜（GPT-5.4-mini 每条消息约 2 credits），Claude Code 的 Opus 模型消耗更多 token。但 Claude Code 的 Max 套餐（$100/月或 $200/月）提供固定用量上限，对预算敏感的团队更友好。
+
+实际选择取决于你的偏好：如果你主要用 OpenAI 的模型、喜欢 Rust 工具、需要更严格的沙箱，选 Codex。如果你看重代码质量、已经用 Anthropic 的模型、依赖 MCP 生态，选 Claude Code。两个都试一下也行——我自己就是两个都装了。
+
+### Codex vs Cursor
+
+这两个不是直接竞品，而是可以共存的。
+
+Cursor 是一个 IDE（基于 VS Code fork），内置了 AI 功能（Tab 补全、对话、Agent 模式）。Codex 是一个 Agent，可以以插件形式装在 Cursor 里。
+
+实际使用中，有些人用 Cursor 的 Tab 补全做日常写代码（逐行建议），用 Codex 插件做大任务（重构、添加功能）。因为 Cursor 本身也支持切换模型（可以用 GPT-4o、Claude 等），两个工具在编辑器里共存没有冲突。
+
+真正需要选的场景是：你是否愿意换编辑器？如果你已经习惯 VS Code 且不想换，装 Codex 插件就够了。如果你愿意换到 Cursor，那 Cursor 的内置 AI + Codex 插件可以同时用。
+
+### Codex vs GitHub Copilot
+
+这两个工具解决的是不同层次的问题。
+
+GitHub Copilot 的核心是**代码补全**：你打几个字符，它预测你接下来要写什么。它能做的就是在当前文件里插入代码片段。Copilot 也能对话，但它的 Agent 能力有限——不能跨文件编辑，不能跑命令，不能执行测试。
+
+Codex 是**编程 Agent**：你描述一个任务，它规划步骤、跨多个文件修改、跑测试验证、提交结果。Copilot 是你写一行它补一行，Codex 是你说一句话它做一整个功能。
+
+价格上 Copilot 更便宜（$10/月 Individual，$19/月 Business），但功能范围也窄。很多开发者两个都用——Copilot 做行内补全，Codex 做大任务。
+
+### Codex vs Windsurf / Amp / 等新兴 Agent
+
+Windsurf（Codeium 出品）是另一个 IDE + AI Agent 的方案。它的 Cascade 功能类似于 Codex 的 Agent 模式，能跨文件编辑和执行命令。Windsurf 的优势是免费额度更多，劣势是模型选择有限（主要用自己的模型）。
+
+Amp（Sourcegraph 出品）定位更偏向大型代码库的搜索 + 理解 + 修改，适合巨型企业级 monorepo。
+
+这些工具各有侧重，但核心功能（读代码、改代码、跑命令）大同小异。选择时看三点：你用什么模型、你的代码库多大、你愿意付多少钱。
+
+## Codex 的核心工作原理
+
+把 Codex 的运行机制拆开来看，是一个循环：
+
+```
+用户描述任务 → Agent 推理 → 调用工具 → 观察结果 → 继续推理 → 返回结果
+```
+
+每一步具体做什么：
+
+1. **接收任务**：你输入一条自然语言指令，比如"把所有的 class component 改成 function component"
+2. **规划**：Agent 读取 AGENTS.md、项目结构、相关文件，制定执行计划
+3. **调用工具**：Agent 决定下一步做什么。可用的工具包括：读文件（`read_file`）、写文件（`write_file`）、执行 shell 命令（`shell`）、搜索网络（`web_search`）
+4. **审批**：根据你选择的审批模式，Codex 可能在执行前暂停等你说"继续"，也可能直接执行
+5. **观察**：Agent 看到工具执行的结果（文件内容、命令输出、搜索结果）
+6. **循环**：Agent 判断任务是否完成。没完成就回到第 3 步继续
+7. **返回**：任务完成，Agent 汇报结果
+
+### 沙箱机制
+
+所有本地操作都在沙箱里执行。沙箱的作用是限制 Codex 的权限——它只能在你指定的工作目录内读写文件，不能碰系统文件、不能访问其他目录、默认没有网络权限。
+
+不同平台的沙箱实现：
+
+- **macOS**：Seatbelt（`sandbox-exec`），Apple 的系统级沙箱。通过 profile 文件定义允许的文件路径和系统调用
+- **Linux**：Bubblewrap（创建隔离的 mount namespace）+ Landlock（Linux 5.13+ 的文件系统访问控制）+ seccomp（系统调用过滤）
+- **Windows**：OpenAI 自己用 Rust 写的 `windows-sandbox-rs`，因为 Windows 没有类似 Seatbelt 的内置框架。使用 restricted tokens、filesystem ACLs、dedicated isolation
+
+沙箱有几种模式：
+
+- **network-read**：只能读网络（查缓存）
+- **workspace-write**：可以写工作目录，不能访问网络
+- **full-access**：完全开放（需要 `danger-full-access` 标志）
+
+### 审批模式
+
+Codex 有三个审批级别（在 IDE 插件里叫 Chat / Agent / Full Access）：
+
+- **suggest（Chat）**：最保守。Codex 只能建议修改，你手动应用。适合不确定 Agent 能力的新手
+- **auto-edit（Agent）**：文件修改自动执行，但跑 shell 命令前要你确认。这是推荐默认值——大部分时间不用管，危险操作有人工把关
+- **full-auto（Full Access）**：全自动，包括跑命令。适合你信任 Agent、或者跑自动化任务的场景
+
+还有一种 **auto-review** 模式：审批请求不等你手动确认，而是自动走一套审查策略（团队可配置）。这样长时间任务不会被审批打断，但高风险操作仍然会被拦下。
+
+## 价格与套餐
+
+Codex 没有独立定价，全部绑定 ChatGPT 套餐。以下是各套餐的 Codex 权益（2026 年 6 月数据）。
+
+### 个人套餐
+
+| 套餐 | 月费 | Codex 权益 |
+|------|------|-----------|
+| Free | $0 | 限时体验，快速编程任务 |
+| Go | $8 | 轻量编程任务 |
+| Plus | $20 | CLI + App + IDE + Web，GPT-5.5/5.4/5.4-mini/5.3-Codex |
+| Pro 5x | $100 | Plus 全部 + 5x 用量 + GPT-5.3-Codex-Spark |
+| Pro 20x | $200 | Plus 全部 + 20x 用量 + GPT-5.3-Codex-Spark |
+
+Plus 的具体用量（每 5 小时窗口）：
+
+- GPT-5.5：15-80 条本地消息
+- GPT-5.4：20-100 条本地消息
+- GPT-5.4-mini：60-350 条本地消息
+- GPT-5.3-Codex：30-150 条本地消息 / 10-60 个云端任务
+
+消息消耗量取决于任务复杂度和上下文长度。一个简单的"改个函数签名"可能只占 1 条，一个大型的"重构整个模块"可能消耗 5-10 条的额度。
+
+### 企业套餐
+
+| 套餐 | 月费 | 额外能力 |
+|------|------|----------|
+| Business | 按用量付费 | SAML SSO、MFA、团队管理、不限训练承诺 |
+| Enterprise | 联系销售 | SCIM、EKM、RBAC、审计日志、数据驻留控制 |
+| Edu | 联系销售 | 同 Enterprise，面向教育机构 |
+
+Enterprise 和 Edu 没有固定速率限制，用量随 credits 弹性扩展。
+
+### API Key 按量计费
+
+如果你不想订阅 ChatGPT，或者需要在 CI/CD 环境里用 Codex，可以用 API Key。只收 token 费用，没有月费。
+
+API Key 的限制：
+- 只能用 CLI / SDK / IDE 插件（不能使用 Codex App 和 Web）
+- 不能使用云端功能（GitHub 代码审查、Slack 集成等）
+- 新模型延迟发布（GPT-5.3-Codex 和 Spark 会晚一段时间才开放给 API）
+
+### 免费的可能性
+
+Free 和 Go 套餐目前提供限时体验。如果你不想付费，可以用本地模型跑 Codex CLI——仓库里的 `codex-rs/ollama/` 和 `codex-rs/lmstudio/` 目录表明它支持 Ollama 和 LM Studio 作为本地模型后端。不过本地模型的编程能力远不如 GPT-5 系列，只能做简单任务。
+
+## 你应该从哪个开始
+
+根据你的使用场景选：
+
+- **日常写代码**：装 IDE 插件。VS Code 用户直接从 Marketplace 搜索 "Codex" 安装。你写代码时它在侧边栏候着，随时能用
+- **管理多个并行任务**：装 Codex App。需要同时跑多个 Agent、或者想做自动化定时任务时用
+- **终端党 / CI 集成**：用 CLI。`npm install -g @openai/codex`，配好 API Key 就能跑
+- **临时用一下 / 只有 GitHub 项目**：打开 chatgpt.com/codex，浏览器里直接用
+- **团队统一管理**：Business 或 Enterprise 套餐，配 SSO 和审计日志
+
+大多数人的路径是这样的：先装 IDE 插件试试手，发现需要一个更重的任务管理界面时再装 App，CI 场景用 CLI + API Key。Web 版是兜底方案，任何设备都能用但功能最少。
+
+关于模型选择：日常写代码用 GPT-5.5（默认就是它），简单任务切 GPT-5.4-mini 省额度，需要云端任务和代码审查时用 GPT-5.3-Codex。
+
+---
+
+**下一篇**：[Codex 安装指南：从零开始配置你的编程 Agent](./02-install-setup.md)（即将发布）
+
+## 延伸阅读
+
+- [OpenAI Codex 官方文档](https://developers.openai.com/codex) — 涵盖 CLI、App、IDE Extension、Web 的完整文档
+- [Codex CLI GitHub 仓库](https://github.com/openai/codex) — 开源代码，75.6K+ stars，可以看沙箱实现的源码
+- [Codex App 发布公告](https://openai.com/index/introducing-the-codex-app/) — 2026 年 3 月的官方博客，详细介绍了多 Agent 编排和 Skills
+- [Claude Code vs Codex CLI 对比](https://www.termdock.com/en/blog/claude-code-vs-codex-cli) — 2026 年第三方深度对比，覆盖基准测试和实际体验
+- [Codex 沙箱安全分析](https://agent-safehouse.dev/docs/agent-investigations/codex) — 独立安全研究，详细拆解了各平台的沙箱实现

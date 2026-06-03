@@ -1,0 +1,331 @@
+# Codex CLI Windows 部署专题：三种运行模式与沙箱配置
+
+> TL;DR：Codex 在 Windows 上有三种运行方式——原生 elevated 沙箱（推荐）、原生 unelevated 沙箱（降级备选）、WSL2（Linux 原生环境）。原生沙箱通过受限令牌 + ACL + 防火墙规则隔离文件系统和网络；WSL2 使用 Linux 的 bubblewrap 沙箱。Windows 11 是推荐版本，企业环境可能需要 IT 配合才能启用 elevated 沙箱。本文覆盖安装、沙箱配置、WSL2 工作流、常见问题和排错。
+
+---
+
+## 1. 为什么 Windows 部署值得单独写一篇
+
+Codex CLI 的核心是 Rust 写的，跨平台没问题。但安全沙箱的实现高度依赖操作系统原语——macOS 用 Seatbelt（sandbox-exec），Linux 用 bubblewrap + Landlock，Windows 用受限令牌（Restricted Token）+ ACL + WFP 防火墙过滤。这三套东西完全不同，Windows 的坑也最多。
+
+而且 Windows 开发者的环境差异比 macOS/Linux 大得多：有的用原生 PowerShell，有的用 WSL2，有的在 AD 域控的企业机器上，有的用个人笔记本。沙箱模式能不能用、怎么用，取决于你的 Windows 版本、权限和企业策略。
+
+如果你只是想在 Windows 上跑 `codex "explain this code"`，可能不需要知道这些细节。但要让 Codex 真正改你的代码、跑命令，沙箱必须配对——配不对，要么 Codex 什么都干不了，要么它干太多。
+
+## 2. Windows 上的三种运行模式
+
+### 2.1 原生 elevated 沙箱（推荐）
+
+这是 OpenAI 为 Windows 构建的完整沙箱方案。核心思路：创建专用的低权限沙箱用户，通过文件系统 ACL 限制读写范围，用防火墙规则阻断未授权的网络访问。
+
+```toml
+# ~/.codex/config.toml
+[windows]
+sandbox = "elevated"
+```
+
+elevated 沙箱做了这些事情：
+
+1. **创建专用沙箱用户**：Codex 在首次启动时通过管理员提权创建本地用户，这个用户的权限被严格限制
+2. **文件系统边界**：通过 ACL（访问控制列表）对工作区外的路径施加写入拒绝和读取拒绝
+3. **网络隔离**：配置防火墙规则，阻止沙箱内的进程访问网络（除非你显式批准）
+4. **本地策略变更**：调整沙箱用户所需的登录权限
+
+elevated 模式还默认使用 private desktop 做更强的 UI 隔离。如果遇到兼容性问题可以关掉：
+
+```toml
+[windows]
+sandbox = "elevated"
+sandbox_private_desktop = false
+```
+
+### 2.2 原生 unelevated 沙箱（降级备选）
+
+当 elevated 沙箱因为企业策略无法完成设置时，Codex 会自动回退到 unelevated 模式：
+
+```toml
+[windows]
+sandbox = "unelevated"
+```
+
+unelevated 模式的区别：
+
+| 特性 | elevated | unelevated |
+|------|----------|------------|
+| 沙箱用户 | 创建专用低权限用户 | 从当前用户派生受限令牌 |
+| 文件系统隔离 | ACL + 用户边界 | 仅 ACL |
+| 网络隔离 | 专用防火墙规则 | 环境级离线控制 |
+| 强度 | 高 | 中（仍有保护，但弱于 elevated） |
+
+unelevated 的好处是不需要管理员提权就能运行。在企业环境中，很多机器不允许创建本地用户或改防火墙规则，这时 unelevated 是唯一能用的原生方案。但它的隔离强度确实不如 elevated，长期使用应该跟 IT 团队沟通解决 elevated 的权限问题。
+
+### 2.3 WSL2 模式
+
+如果你需要 Linux 原生环境，或者原生沙箱两个模式都不可用，WSL2 是第三条路。WSL2 里的 Codex 使用 Linux 的 bubblewrap + Landlock 沙箱，和 macOS/Linux 上的行为一致。
+
+```powershell
+# 从 PowerShell（管理员）安装 WSL
+wsl --install
+
+# 进入 WSL
+wsl
+
+# 在 WSL 里安装 Codex
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+codex
+```
+
+WSL1 在 Codex 0.114 后不再支持（Linux 沙箱迁移到了 bubblewrap）。如果还在用 WSL1，需要升级到 WSL2。
+
+### 模式选择决策
+
+```
+你的项目在 Windows 原生路径下？
+├─ 是 → 尝试 elevated 沙箱
+│       ├─ 设置成功 → 用 elevated ✅
+│       └─ 设置失败（企业策略）
+│           ├─ 用 unelevated 临时顶上
+│           └─ 联系 IT 解决 elevated 权限
+└─ 否（需要 Linux 工具链）
+    └─ 用 WSL2 ✅
+```
+
+## 3. Windows 版本要求
+
+| Windows 版本 | 支持程度 | 说明 |
+|-------------|---------|------|
+| Windows 11 | 推荐 | 最佳体验，企业部署首选 |
+| 较新的 Windows 10（1809+） | 尽力支持 | 依赖 ConPTY 等现代控制台组件 |
+| 旧版 Windows 10 | 不推荐 | 缺少必要组件，企业环境下容易失败 |
+
+环境前提：
+
+- `winget` 应该可用。如果没有，更新 Windows 或手动安装 Windows Package Manager
+- elevated 沙箱需要管理员批准的设置流程
+- 企业管理的设备可能屏蔽所需的设置步骤
+
+## 4. 安装
+
+### 4.1 原生安装
+
+```powershell
+# 方法一：一键安装脚本（推荐）
+irm https://chatgpt.com/codex/install.ps1 | iex
+
+# 方法二：npm
+npm install -g @openai/codex
+
+# 方法三：Homebrew（如果在 Windows 上有 Homebrew）
+brew install --cask codex
+```
+
+安装完成后直接在 PowerShell 里运行：
+
+```
+codex
+```
+
+### 4.2 WSL2 安装
+
+```powershell
+# PowerShell（管理员）
+wsl --install
+wsl
+```
+
+然后在 WSL shell 里：
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+codex
+```
+
+### 4.3 VS Code 集成
+
+在 WSL 中使用 VS Code：
+
+```bash
+# 从 WSL shell 启动 VS Code
+cd ~/code/your-project
+code .
+```
+
+确认连接状态：VS Code 状态栏应该显示绿色的 `WSL: <distro>`。如果没有，按 `Ctrl+Shift+P` 选择 `WSL: Reopen Folder in WSL`。
+
+如果 IDE 扩展装了但没反应，可能缺少 C++ 开发工具：
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e
+```
+
+装完后重启 VS Code。
+
+## 5. 沙箱权限与读取目录
+
+Windows 沙箱默认只允许 Codex 访问工作目录。如果命令需要读取工作目录外的路径，用 `/sandbox-add-read-dir`：
+
+```
+/sandbox-add-read-dir C:\absolute\directory\path
+```
+
+路径必须是已存在的绝对目录。授权后在当前会话中生效，Codex 之后的命令就能读取该目录。
+
+这个命令只在 Windows 原生模式下可用——WSL2 用的是 Linux 沙箱，没有这个限制（但 Linux 沙箱有自己的路径规则）。
+
+## 6. GitHub Actions 中的 Windows
+
+在 GitHub Actions 的 Windows runner 上运行 Codex 时，必须设置 `safety-strategy: unsafe`，因为 GitHub 托管的 Windows runner 没有可用的沙箱：
+
+```yaml
+- name: Run Codex on Windows
+  uses: openai/codex-action@v1
+  with:
+    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+    safety-strategy: unsafe  # Windows 必须
+    sandbox: danger-full-access
+    prompt: "Review the changes in this PR"
+```
+
+如果你传了其他 safety-strategy 值，action 会直接报错退出。这是因为 GitHub 的 Windows runner 不具备 Windows 沙箱所需的管理员权限和系统配置。
+
+`unsafe` 意味着 Codex 以 runner 的默认用户身份运行（通常有 sudo），不做任何权限降级。在 CI 环境中这可以接受，因为 runner 本身就是临时的。但不要在多租户的持久环境里用这个设置。
+
+## 7. WSL2 中的性能优化
+
+### 7.1 文件路径
+
+不要在 `/mnt/c/...` 下工作。跨文件系统的 I/O 很慢，而且容易出符号链接和权限问题。把代码放在 Linux 原生路径下：
+
+```bash
+mkdir -p ~/code && cd ~/code
+git clone https://github.com/your/repo.git
+cd repo
+```
+
+### 7.2 内存和 CPU
+
+大型项目在 WSL2 里可能吃紧。按需调整：
+
+```powershell
+# 更新 WSL
+wsl --update
+# 重启 WSL（会释放并重新分配资源）
+wsl --shutdown
+```
+
+### 7.3 Windows 访问 WSL 文件
+
+在 Windows 资源管理器中输入 `\\wsl$\Ubuntu\home\<user>` 可以访问 WSL 里的文件。
+
+## 8. 常见问题与排错
+
+### 8.1 elevated 沙箱设置失败
+
+最常见原因：
+
+- UAC 或管理员提权提示被拒绝
+- 机器不允许创建本地用户或组
+- 机器不允许修改防火墙规则
+- 企业策略阻止沙箱用户所需的登录权限
+
+处理步骤：
+
+1. 再次尝试并批准管理员提权
+2. 联系 IT 团队，确认是否允许本地用户创建、防火墙配置和沙箱用户登录权限
+3. 暂时用 `unelevated` 模式继续工作
+
+### 8.2 Codex 自动切换到 unelevated
+
+说明 elevated 设置失败。Codex 仍能运行，但隔离强度降低。长期方案还是让 IT 解决 elevated 的权限问题。
+
+### 8.3 错误 1385
+
+如果沙箱命令报 1385 错误，说明 Windows 拒绝了沙箱用户需要的登录类型。Codex 创建了沙箱用户，但 Windows 策略阻止这些用户启动命令。
+
+处理：
+
+1. 让 IT 检查 Codex 沙箱用户的登录权限
+2. 比较不同机器/团队的组策略差异
+3. 临时用 unelevated 顶上
+4. 收集 `CODEX_HOME/.sandbox/sandbox.log` 连同 Windows 版本发诊断
+
+### 8.4 Everyone 写权限警告
+
+Codex 提示某些目录对 Everyone 可写，说明 Windows 权限过宽，沙箱无法完全保护这些目录。
+
+处理：
+
+1. 检查 Codex 列出的目录
+2. 移除这些目录的 Everyone 写权限
+3. 重启 Codex 或重新运行沙箱设置
+
+### 8.5 沙箱之前能用现在不行
+
+可能原因：移动了仓库、修改了机器权限、更改了 Windows 策略或其他系统配置变更。
+
+处理：
+
+1. 重启 Codex
+2. 重新尝试 elevated 设置
+3. 用 unelevated 临时顶上
+4. 收集 sandbox.log 诊断
+
+### 8.6 发送诊断
+
+如果以上都解决不了，发送 `CODEX_HOME/.sandbox/sandbox.log` 给 OpenAI，附带以下信息：
+
+- 你在做什么
+- 用的是 elevated 还是 unelevated
+- app 或终端中显示的错误信息
+- 是否看到 1385 或其他 Windows/PowerShell 错误
+- Windows 11 还是 Windows 10
+
+**不要发送** `CODEX_HOME/.sandbox-secrets/` 目录的内容，那里有敏感信息。
+
+## 9. PowerShell 与路径处理
+
+Windows 的路径分隔符是 `\`，但 Codex 的很多操作基于 Git 和 Unix 风格路径。几个注意点：
+
+```powershell
+# Codex 在 Windows 上用正斜杠也能工作
+codex --cd "C:/Users/you/project"
+
+# 但 PowerShell 的反斜杠也行
+codex --cd "C:\Users\you\project"
+```
+
+Git Bash 或 WSL 里的路径转换：
+
+```bash
+# WSL 里访问 Windows 路径
+ls /mnt/c/Users/you/project
+
+# Windows 路径转 WSL 路径
+wslpath -u "C:\Users\you\project"
+# => /mnt/c/Users/you/project
+```
+
+在 WSL 里不要把代码放在 `/mnt/c/` 下——性能差，而且符号链接行为不同。
+
+## 10. 安全配置建议
+
+| 场景 | 推荐配置 |
+|------|---------|
+| 个人 Windows 11 | elevated 沙箱 + Auto 审批 |
+| 企业 Windows 11（IT 配合） | elevated 沙箱 + Read-only 审批 |
+| 企业 Windows（IT 不配合） | unelevated 沙箱 + Read-only 审批 |
+| GitHub Actions | `safety-strategy: unsafe` + workspace-write |
+| WSL2 | Linux bubblewrap 沙箱 + Auto 审批 |
+| 不信任的仓库 | 任何模式 + Read-only 审批 |
+
+核心原则：在 Windows 上，elevated 沙箱的隔离强度接近 macOS/Linux 的沙箱水平。unelevated 有一定保护但不够强。WSL2 的行为和 Linux 一致，适合已经活在 WSL 生态里的开发者。
+
+不要在 Windows 上对不信任的仓库使用 Full Access 模式。Codex 在 Full Access 下不受文件系统和网络限制，误操作的恢复成本比 macOS/Linux 更高（Windows 没有 `sudo` 的等效物来限制横向移动）。
+
+## 延伸阅读
+
+- [Codex Windows 官方文档](https://developers.openai.com/codex/windows)
+- [OpenAI 博客：构建 Windows 沙箱](https://openai.com/index/building-codex-windows-sandbox/)
+- [openai/codex-action GitHub 仓库](https://github.com/openai/codex-action)（Windows CI 配置）
+- [Codex CLI 沙箱与安全（zread 中文文档）](https://zread.ai/openai/codex/10-sandboxing-and-security)
+- [VS Code WSL 官方教程](https://code.visualstudio.com/docs/remote/wsl)

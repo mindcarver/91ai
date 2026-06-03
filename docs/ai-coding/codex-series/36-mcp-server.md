@@ -1,0 +1,435 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 源码 openai/codex — codex-mcp/src/lib.rs MCP 客户端编排
+2. OpenAI Codex 源码 openai/codex — mcp-server/src/lib.rs MCP 服务器暴露
+3. OpenAI Codex 源码 openai/codex — config/src/mcp_types.rs MCP 服务器配置类型
+4. OpenAI Codex 源码 openai/codex — codex-mcp/src/connection_manager.rs 连接生命周期
+5. zread.ai/openai/codex/13-mcp-integration — MCP 双向集成架构
+6. zread.ai/openai/codex/22-configuration-reference — MCP 服务器配置字段
+7. zread.ai/openai/codex/15-cli-commands — codex mcp CLI 子命令
+版本基准: 2026 年 6 月，Codex CLI v0.200+
+-->
+
+# Codex CLI MCP 服务器接入：把外部工具变成 Agent 的能力
+
+> TL;DR：Codex CLI 通过 MCP（Model Context Protocol）协议连接外部工具服务器，让 Agent 能调用 GitHub API、查询数据库、操作 Figma 设计稿等。配置写在 `config.toml` 的 `[mcp_servers]` 表里，支持 stdio（本地进程）和 StreamableHttp（远程服务）两种传输方式。会话中用 `/mcp` 查看工具列表和服务器状态。Codex 自身也能作为 MCP 服务器暴露出去，供 Claude Code、Cursor 等其他 Agent 调用。
+
+---
+
+## 1. 为什么 MCP 是 Codex 扩展能力的核心通道
+
+Codex CLI 内置了一组工具——读写文件、执行 shell 命令、搜索代码——这些工具覆盖了日常开发的 80% 场景。但剩下 20% 往往是项目特有的：调用公司内部的部署平台、从 Linear 拉需求、往 Figma 读设计规格、查 Redis 缓存状态。
+
+如果你每次都要手动把查到的数据贴给 Codex，Agent 的自主性就打折了。MCP 解决的是"让 Agent 自己伸手拿数据"的问题。它的全称是 Model Context Protocol，由 Anthropic 在 2024 年底提出，现在已经成了 AI Agent 工具接入的事实标准——OpenAI、Microsoft、Google 都在跟进。
+
+在 Codex 的架构里，MCP 扮演的是一个**双向桥梁**的角色：
+
+- **MCP 客户端**：Codex 作为客户端，连接外部 MCP 服务器，获取额外的工具。比如连一个 GitHub MCP 服务器，Codex 就多了 `create_issue`、`list_prs` 这些工具
+- **MCP 服务器**：Codex 自身作为服务器，把自己的 Agent 能力暴露给其他 MCP 兼容的客户端。比如在 Claude Code 里通过 MCP 调用 Codex 的推理能力
+
+双向架构意味着 Codex 既能"吃"外部能力，也能被别人"吃"。从源码看，三个 Rust crate 分工明确：`codex-mcp` 负责客户端编排，`mcp-server` 负责服务器暴露，`rmcp-client` 负责底层的 RMCP 传输协议。
+
+## 2. 配置 MCP 服务器
+
+### 2.1 基本配置结构
+
+MCP 服务器在 `config.toml` 的 `[mcp_servers]` 表中配置。每个服务器是一个子表，名称是自定义的标识符：
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+```
+
+这个配置告诉 Codex：有一个叫 `github` 的 MCP 服务器，通过 `npx` 启动 `@anthropic/mcp-github` 包，启动时注入 `GITHUB_TOKEN` 环境变量。`env:` 前缀表示值从当前 shell 的环境变量中读取，不会把明文 token 写进配置文件。
+
+### 2.2 两种传输方式
+
+Codex 支持两种 MCP 传输协议，适用场景不同：
+
+| 传输方式 | 配置字段 | 工作原理 | 适用场景 |
+|---------|---------|---------|---------|
+| **stdio** | `command` + `args` + `env` + `cwd` | 启动子进程，通过 stdin/stdout 通信 | 本地工具、CLI 工具包 |
+| **StreamableHttp** | `url` + `bearer_token_env_var` + `http_headers` | HTTP/2 + SSE，可选 bearer token | 远程 SaaS、云端服务 |
+
+**stdio 服务器配置示例**：
+
+```toml
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@anthropic/mcp-filesystem", "/home/user/projects"]
+```
+
+**StreamableHttp 服务器配置示例**：
+
+```toml
+[mcp_servers.my-remote-service]
+url = "https://mcp.example.com/sse"
+bearer_token_env_var = "MY_SERVICE_API_KEY"
+```
+
+对于 stdio 服务器，Codex 会 spawn 一个子进程。子进程的 stdin/stdout 作为 JSON-RPC 的通信通道。这种模式适合在本地运行的工具——比如基于 Python 的数据库查询工具、基于 Node.js 的文件系统操作工具。
+
+对于 StreamableHttp 服务器，Codex 通过 HTTP/2 连接到远程服务端点，使用 Server-Sent Events (SSE) 接收流式响应。这种模式适合云端托管的服务——比如公司内部的 API 网关、第三方 SaaS 的 MCP 接口。
+
+### 2.3 完整配置字段参考
+
+```toml
+[mcp_servers.my-server]
+command = "npx"                           # stdio 模式必需
+args = ["-y", "@my/mcp-server"]          # 命令参数
+environment_id = "local"                  # 环境标识
+enabled = true                            # 是否启用
+required = false                          # 启动失败是否中止会话
+startup_timeout_sec = 30                  # 启动超时（秒）
+tool_timeout_sec = 60                     # 单次工具调用超时（秒）
+default_tools_approval_mode = "auto"      # 工具默认审批模式
+
+# 工具白名单（空则允许全部）
+enabled_tools = ["tool_a", "tool_b"]
+
+# 工具黑名单
+disabled_tools = ["tool_c"]
+
+# 单个工具的审批覆盖
+[mcp_servers.my-server.tools.tool_a]
+approval_mode = "prompt"
+
+# 环境变量注入
+[mcp_servers.my-server.env_vars]
+API_KEY = "env:MY_API_KEY"
+DEBUG = "true"
+```
+
+关键字段说明：
+
+| 字段 | 类型 | 默认值 | 作用 |
+|-----|------|-------|------|
+| `command` | string | 无（stdio 必需） | 启动服务器的命令 |
+| `args` | array | `[]` | 命令参数 |
+| `enabled` | boolean | `true` | 是否初始化这个服务器 |
+| `required` | boolean | `false` | 为 true 时，启动失败会中止整个会话 |
+| `startup_timeout_sec` | number | `30` | 等待服务器就绪的最长时间 |
+| `tool_timeout_sec` | number | `120` | 单次工具调用的超时时间 |
+| `default_tools_approval_mode` | enum | 无 | `auto`、`prompt`、`approve` |
+| `enabled_tools` | array | 无 | 工具白名单 |
+| `disabled_tools` | array | 无 | 工具黑名单 |
+
+### 2.4 CLI 快捷命令
+
+不用手写 config.toml，Codex 提供了 CLI 命令来管理 MCP 服务器：
+
+```bash
+# 添加 stdio 服务器
+codex mcp add my-server -- npx -y @my/mcp-server
+
+# 添加时注入环境变量
+codex mcp add my-server --env API_KEY=xxx -- npx -y @my/mcp-server
+
+# 添加 StreamableHttp 服务器
+codex mcp add my-remote --url https://mcp.example.com/sse
+
+# 移除服务器
+codex mcp remove my-server
+
+# OAuth 登录（针对需要 OAuth 认证的服务器）
+codex mcp login my-server --scopes repo,read:user
+
+# 注销
+codex mcp logout my-server
+```
+
+`add` 命令会把配置写入用户级的 `~/.codex/config.toml`，等价于手动编辑配置文件。
+
+## 3. 会话中的 MCP 交互
+
+### 3.1 /mcp 命令
+
+在 Codex TUI 中输入 `/mcp`，会显示当前会话中所有 MCP 服务器的状态概览：
+
+```
+MCP Servers:
+  github      ✓ connected    12 tools
+  filesystem  ✓ connected     4 tools
+  db-query    ⚠ connecting...
+  remote-api  ✗ auth required
+```
+
+每个服务器旁边有状态指示器，告诉你连接是否成功。如果服务器启动失败或需要认证，会在对应行显示错误信息。
+
+使用 `/mcp verbose` 可以看到更详细的信息，包括每个服务器的工具列表、认证状态、传输方式。
+
+### 3.2 工具在对话中怎么出现
+
+MCP 工具和 Codex 内置工具共享同一个工具注册表。配置好 MCP 服务器后，Codex 在启动会话时会自动连接所有启用的服务器，获取它们的工具列表，注册到工具路由器中。
+
+在运行时，Codex 看到的工具名称是经过命名空间处理的。每个 MCP 工具会被加上前缀 `mcp__<server_name>__`，确保不会和内置工具冲突。比如 GitHub 服务器的 `create_issue` 工具，在 Codex 内部会变成 `mcp__github__create_issue`。
+
+这个命名转换对用户是透明的。你只需要正常地跟 Codex 说"帮我创建一个 GitHub issue"，它会自己判断应该调用哪个 MCP 工具。
+
+### 3.3 审批机制
+
+MCP 工具调用受 Codex 审批策略的约束。你可以为每个服务器配置不同的审批模式：
+
+```toml
+[mcp_servers.github]
+default_tools_approval_mode = "auto"    # 工具调用自动通过
+
+[mcp_servers.production-db]
+default_tools_approval_mode = "prompt"  # 每次调用都询问
+```
+
+也可以精细到单个工具级别：
+
+```toml
+[mcp_servers.github]
+default_tools_approval_mode = "auto"
+
+[mcp_servers.github.tools.delete_repo]
+approval_mode = "prompt"  # 删除仓库必须手动确认
+```
+
+`auto` 模式适合只读操作或低风险工具。对于会修改外部状态的破坏性操作（删除数据、发生产部署），建议用 `prompt` 模式多一道确认。
+
+## 4. 连接生命周期
+
+### 4.1 启动流程
+
+当 Codex 启动一个新会话时，MCP 连接管理器会执行以下步骤：
+
+1. **并行启动**：所有配置的服务器同时启动，不是串行等待。每个服务器建立连接、完成 MCP 握手（协议版本、能力协商、客户端信息）、获取工具列表
+2. **启动快照**：对于已连接的服务器，工具列表会立即加载到模型上下文中，让 Agent 可以马上开始使用
+3. **状态通知**：每个服务器通过事件通道发送启动进度——连接中、已连接、连接失败。TUI 实时显示这些状态
+4. **超时处理**：如果服务器在 `startup_timeout_sec`（默认 30 秒）内没有就绪，标记为启动失败。标记为 `required = true` 的服务器启动失败会导致整个会话中止
+5. **工具过滤**：根据配置的 `enabled_tools` 和 `disabled_tools` 过滤工具列表
+
+### 4.2 OAuth 认证
+
+对于 StreamableHttp 服务器，Codex 支持完整的 OAuth 2.0 授权码流程。当服务器需要认证时：
+
+- Codex 会探测服务器的 `/.well-known/oauth-authorization-server` 端点
+- 如果发现 OAuth 元数据，在 TUI 中显示认证 URL
+- 你在浏览器中完成授权后，Codex 自动获取并存储 token
+- Token 存储位置取决于 `mcp_oauth_credentials_store` 配置，默认存在 `~/.codex/.credentials.json`
+
+对于不需要 OAuth 的场景，可以用 `bearer_token_env_var` 指定一个环境变量名，Codex 从中读取 token 直接使用。
+
+### 4.3 工具调用的执行流程
+
+从模型决定调用一个 MCP 工具到结果返回，经过以下步骤：
+
+1. 模型输出 `FunctionCall`，工具名称包含 MCP 命名空间前缀
+2. 工具路由器解析命名空间，提取目标服务器名称和原始工具名称
+3. **PreToolUse 钩子**执行（如果配置了的话）——可以拦截、修改或放行调用
+4. 审批策略检查——根据服务器的 `default_tools_approval_mode` 和工具级别配置决定是否需要人工确认
+5. 通过 `RmcpClient` 将调用发送到对应的 MCP 服务器
+6. 等待服务器响应（受 `tool_timeout_sec` 限制）
+7. **PostToolUse 钩子**执行
+8. 结果返回给模型
+
+整个过程中，Codex 的内置工具和 MCP 工具走的是同一条执行管道。从模型的角度看，它们没有区别——都是可调用的工具。
+
+## 5. Codex 作为 MCP 服务器
+
+### 5.1 反向暴露
+
+Codex CLI 不只能连接外部 MCP 服务器，它自身也能作为 MCP 服务器被其他 Agent 调用。启动方式：
+
+```bash
+codex mcp-server
+```
+
+这个命令启动一个基于 stdio 的 MCP 服务器进程。其他 MCP 兼容的客户端（Claude Code、Cursor、自定义编排器）可以通过 JSON-RPC 和它通信。
+
+服务器暴露一个名为 `codex` 的工具，参数如下：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `prompt` | string（必需） | 发给 Codex 的初始提示词 |
+| `model` | string | 覆盖模型选择 |
+| `cwd` | string | 工作目录 |
+| `approval-policy` | enum | `untrusted`、`on-failure`、`on-request`、`never` |
+| `sandbox` | enum | `read-only`、`workspace-write`、`danger-full-access` |
+| `config` | object | 任意 config.toml 覆盖 |
+| `developer-instructions` | string | 注入为 developer 角色消息 |
+| `compact-prompt` | string | 压缩对话时使用的提示词 |
+
+### 5.2 在 Claude Code 中调用
+
+一个典型的用法是在 Claude Code 的配置中接入 Codex 作为 MCP 服务器：
+
+```json
+// ~/.claude/settings.json
+{
+  "mcpServers": {
+    "codex": {
+      "command": "codex",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+配置完成后，Claude Code 就可以通过 `codex` MCP 工具调用 Codex 的推理能力。这在以下场景有用：
+
+- 需要用 GPT 系列模型处理某个子任务，但主对话用的是 Claude
+- 想让另一个 Agent 独立完成一段代码编写，避免上下文干扰
+- 多 Agent 编排中，Codex 作为"代码专家"节点参与协作
+
+### 5.3 审批机制的特殊处理
+
+当 Codex 作为 MCP 服务器被调用时，如果 Codex Agent 内部需要执行 shell 命令或修改文件，它不能弹出终端提示——因为它运行在另一个 Agent 的进程里。这时它会通过 MCP 的 **elicitation** 机制，向宿主发送一个审批请求。宿主 Agent 收到请求后，需要实现一个 elicitation handler 来处理。
+
+如果你的宿主不支持 elicitation（比如一个简单的 MCP 客户端），那么所有需要审批的操作都会阻塞。解决办法是在调用时指定 `approval-policy: "never"`，让 Codex 在 full-auto 模式下运行，但这意味着放弃审批控制。
+
+## 6. 实战案例
+
+### 案例一：接入 GitHub MCP 服务器
+
+场景：让 Codex 能直接操作 GitHub——创建 issue、查看 PR、触发 CI。
+
+**配置**：
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env_vars = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+default_tools_approval_mode = "auto"
+```
+
+确保 `GITHUB_TOKEN` 环境变量已设置。然后启动 Codex：
+
+```
+> /mcp
+
+MCP Servers:
+  github  ✓ connected  15 tools
+
+> 列出 openai/codex 仓库最近 5 个未分配的 issue，帮我看哪些适合新手
+
+Codex 调用 mcp__github__list_issues...
+找到了 5 个未分配的 issue：
+1. #1234 - Fix typo in README (labels: good-first-issue)
+2. #1235 - ...
+```
+
+Codex 拿到 GitHub 数据后，结合自己的推理能力帮你分析和筛选。
+
+### 案例二：接入数据库查询工具
+
+场景：让 Codex 查询项目数据库，用于调试和数据分析。
+
+**配置**：
+
+```toml
+# 项目级 .codex/config.toml
+[mcp_servers.db-query]
+command = "python"
+args = ["-m", "db_mcp_server"]
+cwd = "/path/to/project/tools"
+env_vars = { DATABASE_URL = "env:DATABASE_URL" }
+default_tools_approval_mode = "prompt"
+startup_timeout_sec = 10
+tool_timeout_sec = 30
+```
+
+注意这里用 `prompt` 模式——数据库查询可能有副作用，手动确认更安全。
+
+```
+> 查一下 users 表里 email_verified_at 为 null 的用户有多少，按注册日期倒序取前 10
+
+Codex:
+我需要调用数据库查询工具来执行这个操作。
+  工具: mcp__db-query__execute_sql
+  SQL: SELECT id, email, created_at FROM users WHERE email_verified_at IS NULL ORDER BY created_at DESC LIMIT 10
+
+[批准] [拒绝]
+
+> 批准
+
+结果: 10 行数据...
+```
+
+### 案例三：多服务器协作
+
+场景：同时接入 GitHub、Linear、文件系统三个 MCP 服务器，实现"从需求到代码"的自动化。
+
+```toml
+[mcp_servers.linear]
+command = "npx"
+args = ["-y", "@anthropic/mcp-linear"]
+env_vars = { LINEAR_API_KEY = "env:LINEAR_API_KEY" }
+default_tools_approval_mode = "auto"
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env_vars = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+default_tools_approval_mode = "auto"
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@anthropic/mcp-filesystem", "/home/user/projects/my-app"]
+```
+
+```
+> 从 Linear 获取 FEAT-123 这个需求，创建对应的 GitHub issue，然后在 src/features/ 下创建功能分支目录
+
+Codex:
+1. 从 Linear 获取需求详情...（mcp__linear__get_issue）
+2. 创建 GitHub issue...（mcp__github__create_issue）
+3. 创建目录结构...（mcp__filesystem__create_directory）
+```
+
+三个 MCP 服务器的工具在同一个对话中无缝协作。模型负责编排调用顺序和数据传递。
+
+## 7. 常见问题
+
+**MCP 服务器启动失败怎么办？**
+
+先看 `/mcp` 输出的状态信息。常见原因：npm 包名写错、依赖未安装、环境变量缺失。可以用 `startup_timeout_sec` 调大超时时间——有些服务器（特别是需要下载依赖的 npx 包）首次启动较慢。
+
+**多个 MCP 服务器有同名工具会冲突吗？**
+
+不会。Codex 的工具命名空间机制会自动处理。每个工具加上 `mcp__<server_name>__` 前缀，保证全局唯一。如果前缀加工具名总长超过 64 字节（API 限制），Codex 会自动截断并追加 hash 确保唯一性。
+
+**stdio 服务器的子进程会在会话结束后自动清理吗？**
+
+会。`McpConnectionManager` 在会话结束时执行优雅关闭：取消启动 token、排空所有客户端连接、停止 `RmcpClient`、终止 stdio 子进程。正常退出不会留下孤儿进程。
+
+**MCP 工具调用能被 hooks 拦截吗？**
+
+可以。`PreToolUse` 钩子的 matcher 可以匹配 MCP 工具名称。比如你想记录所有 GitHub 工具调用的审计日志：
+
+```toml
+[hooks.PreToolUse]
+[[hooks.PreToolUse]]
+matcher = "mcp__github"
+hooks = [
+  { type = "command", command = "/usr/local/bin/log-github-calls.sh" }
+]
+```
+
+**Codex 作为 MCP 服务器时能用 /plan 模式吗？**
+
+可以，但方式不同。你通过 `codex` 工具的参数传入配置，比如 `"config": {"plan_mode_reasoning_effort": "high"}`。或者在宿主 Agent 的提示词中告诉 Codex 先规划再执行。
+
+## 8. 下一步
+
+- 把常用的 MCP 服务器配置到项目的 `.codex/config.toml` 中，让团队成员共享
+- 尝试 `codex mcp-server` 把 Codex 接入你现有的多 Agent 编排系统
+- 结合本系列第 39 篇《Hooks 钩子机制》，为 MCP 工具调用配置审计和验证钩子
+- 阅读本系列下一篇：《Codex CLI MCP 工具开发实战》
+
+---
+
+**延伸阅读**
+
+- [MCP 协议规范](https://modelcontextprotocol.io) — MCP 协议的官方定义，包含传输方式、工具定义、资源暴露等全部细节
+- [Codex 源码：MCP 集成](https://zread.ai/openai/codex/13-mcp-integration) — 双向 MCP 架构的完整技术文档
+- [Codex 配置参考](https://zread.ai/openai/codex/22-configuration-reference) — `[mcp_servers]` 全部字段的权威说明
+- [Anthropic MCP 服务器仓库](https://github.com/anthropics/mcp-servers) — 官方提供的 MCP 服务器集合（GitHub、文件系统、PostgreSQL 等）

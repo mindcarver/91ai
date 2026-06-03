@@ -1,0 +1,644 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Model Context Protocol 规范 — MCP 服务器的工具定义、资源暴露、提示词模板
+2. OpenAI Codex 源码 openai/codex — codex-mcp/src/rmcp_client.rs RMCP 传输实现
+3. OpenAI Codex 源码 openai/codex — codex-mcp/src/tools.rs 工具命名空间与过滤
+4. Anthropic MCP SDK — @anthropic-ai/sdk-mcp TypeScript MCP 服务器开发
+5. @anthropic/mcp-github — 官方 GitHub MCP 服务器实现参考
+6. @anthropic/mcp-postgres — 官方 PostgreSQL MCP 服务器实现参考
+7. zread.ai/openai/codex/13-mcp-integration — 工具过滤、命名空间、沙箱传播
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI MCP 工具开发实战：从零搭建自己的工具服务器
+
+> TL;DR：MCP 服务器本质上是一个通过 stdin/stdout 或 HTTP 交换 JSON-RPC 消息的进程。开发一个 MCP 服务器只需三步：定义工具（名称、参数 schema、执行逻辑）、实现 MCP 协议握手、处理工具调用请求。Python 用 `mcp` 库，TypeScript 用 `@anthropic-ai/sdk-mcp`，都能快速上手。本文用一个"项目文档索引器"作为实战项目，从设计到测试到接入 Codex，走完完整开发流程。
+
+---
+
+## 1. 为什么值得自己开发 MCP 服务器
+
+社区已经有不少现成的 MCP 服务器——GitHub、PostgreSQL、文件系统、Slack、Notion。如果你的需求恰好被覆盖，直接配置就行，不用自己写。
+
+但现实情况往往是：你的团队有内部 API、自建的运维平台、定制的数据库 schema、特殊的部署流水线。这些系统没有现成的 MCP 服务器，而把数据导出再贴给 Codex 的方式又太低效。
+
+自己开发 MCP 服务器的收益是直接的：
+
+- **Agent 自主性**：Codex 能自己查数据、调 API，不需要人当中间人
+- **可复用性**：写一次，所有支持 MCP 的 Agent 都能用（Codex、Claude Code、Cursor）
+- **可组合性**：多个 MCP 服务器的工具在同一个对话中协作，模型负责编排
+
+从开发成本看，一个简单的 MCP 服务器（1-3 个工具）用 Python 或 TypeScript 写，有现成 SDK 的情况下，一两百行代码就能搞定。复杂的也不到一天。
+
+## 2. MCP 协议速览
+
+### 2.1 通信模型
+
+MCP 基于 JSON-RPC 2.0。客户端（Codex）和服务器之间交换三种消息：
+
+| 消息类型 | 方向 | 用途 |
+|---------|------|------|
+| **请求 (Request)** | 客户端 → 服务器 | 调用工具、列出资源、获取提示词 |
+| **响应 (Response)** | 服务器 → 客户端 | 返回结果、错误 |
+| **通知 (Notification)** | 双向 | 进度更新、日志消息 |
+
+对于 stdio 传输方式，消息用换行符分隔的 JSON 传输。服务器从 stdin 读取请求，往 stdout 写入响应。
+
+### 2.2 协议握手
+
+连接建立后，客户端发送 `initialize` 请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "codex",
+      "version": "0.200.0"
+    }
+  }
+}
+```
+
+服务器返回自己的能力和信息：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "tools": {}
+    },
+    "serverInfo": {
+      "name": "my-project-tools",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+握手完成后，客户端发送 `notifications/initialized` 通知，连接就绪。
+
+### 2.3 工具调用流程
+
+```
+客户端                                  服务器
+  │                                       │
+  │── tools/list ──────────────────────→ │
+  │←── { tools: [...] } ─────────────── │
+  │                                       │
+  │── tools/call { name, arguments } ──→ │
+  │←── { content: [...] } ───────────── │
+```
+
+模型决定调用某个工具后，Codex 发送 `tools/call` 请求，服务器执行并返回结果。
+
+## 3. 用 Python 开发 MCP 服务器
+
+### 3.1 环境准备
+
+```bash
+pip install mcp
+```
+
+`mcp` 是 Anthropic 维护的 Python SDK，封装了 JSON-RPC 通信、协议握手、stdio 传输等底层细节。
+
+### 3.2 最小可运行示例
+
+先写一个"echo"服务器——把输入原样返回。这个例子展示了 MCP 服务器的基本骨架：
+
+```python
+#!/usr/bin/env python3
+"""最简 MCP 服务器：echo 工具"""
+
+import asyncio
+import json
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+# 创建服务器实例
+server = Server("echo-server")
+
+
+@server.list_tools()
+async def list_tools() -> list:
+    """声明可用工具列表"""
+    return [
+        {
+            "name": "echo",
+            "description": "返回你发送给它的任何内容",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "要回显的消息"
+                    }
+                },
+                "required": ["message"]
+            }
+        }
+    ]
+
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list:
+    """处理工具调用"""
+    if name == "echo":
+        return [
+            {
+                "type": "text",
+                "text": arguments["message"]
+            }
+        ]
+    raise ValueError(f"未知工具: {name}")
+
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+把这个文件保存为 `echo_server.py`，在 Codex 的 config.toml 中配置：
+
+```toml
+[mcp_servers.echo]
+command = "python"
+args = ["/path/to/echo_server.py"]
+```
+
+启动 Codex 后输入 `/mcp`，应该能看到 `echo` 服务器已连接，提供 1 个工具。
+
+### 3.3 实战项目：项目文档索引器
+
+现在开发一个实用的 MCP 服务器——扫描项目目录中的 markdown 文件，建立索引，让 Codex 能快速查找项目文档内容。
+
+```python
+#!/usr/bin/env python3
+"""项目文档索引器 MCP 服务器"""
+
+import asyncio
+import json
+import os
+from pathlib import Path
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+
+server = Server("doc-indexer")
+
+# 项目根目录，从环境变量或配置获取
+PROJECT_ROOT = os.environ.get("DOC_INDEXER_ROOT", os.getcwd())
+
+# 支持的文件扩展名
+DOC_EXTENSIONS = {".md", ".mdx", ".rst", ".txt"}
+
+
+def scan_docs(root: str, max_depth: int = 5) -> list[dict]:
+    """扫描目录中的文档文件"""
+    docs = []
+    root_path = Path(root)
+
+    for ext in DOC_EXTENSIONS:
+        for filepath in root_path.rglob(f"*{ext}"):
+            # 限制扫描深度
+            depth = len(filepath.relative_to(root_path).parts)
+            if depth > max_depth:
+                continue
+
+            try:
+                content = filepath.read_text(encoding="utf-8")
+                docs.append({
+                    "path": str(filepath.relative_to(root_path)),
+                    "title": extract_title(content, filepath.name),
+                    "size": len(content),
+                    "first_line": content.split("\n")[0].strip()[:200]
+                })
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+    return docs
+
+
+def extract_title(content: str, filename: str) -> str:
+    """从 markdown 内容中提取标题"""
+    for line in content.split("\n"):
+        line = line.strip()
+        if line.startswith("# "):
+            return line[2:].strip()
+    return filename
+
+
+def read_doc(root: str, rel_path: str) -> str:
+    """读取文档内容"""
+    full_path = Path(root) / rel_path
+    if not full_path.exists() or not full_path.is_file():
+        raise FileNotFoundError(f"文件不存在: {rel_path}")
+    return full_path.read_text(encoding="utf-8")
+
+
+def search_docs(root: str, query: str) -> list[dict]:
+    """在文档中搜索关键词"""
+    results = []
+    root_path = Path(root)
+
+    for ext in DOC_EXTENSIONS:
+        for filepath in root_path.rglob(f"*{ext}"):
+            try:
+                content = filepath.read_text(encoding="utf-8")
+                lines = content.split("\n")
+                matches = []
+                for i, line in enumerate(lines):
+                    if query.lower() in line.lower():
+                        matches.append({
+                            "line_number": i + 1,
+                            "content": line.strip()[:200]
+                        })
+                if matches:
+                    results.append({
+                        "path": str(filepath.relative_to(root_path)),
+                        "match_count": len(matches),
+                        "matches": matches[:5]  # 每个文件最多返回 5 个匹配
+                    })
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+    return results[:10]  # 最多返回 10 个文件
+
+
+@server.list_tools()
+async def list_tools() -> list:
+    return [
+        {
+            "name": "list_docs",
+            "description": "列出项目中的所有文档文件，返回路径和标题",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "扫描深度（默认 5）",
+                        "default": 5
+                    }
+                }
+            }
+        },
+        {
+            "name": "read_doc",
+            "description": "读取指定文档的完整内容",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文档相对于项目根目录的路径"
+                    }
+                },
+                "required": ["path"]
+            }
+        },
+        {
+            "name": "search_docs",
+            "description": "在所有文档中搜索关键词",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    ]
+
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list:
+    if name == "list_docs":
+        docs = scan_docs(PROJECT_ROOT, arguments.get("max_depth", 5))
+        # 截取每个文档的前 200 字符作为摘要
+        summary = [
+            f"- {d['path']}: {d['title']} ({d['size']} 字符)"
+            for d in docs
+        ]
+        return [{"type": "text", "text": "\n".join(summary)}]
+
+    elif name == "read_doc":
+        try:
+            content = read_doc(PROJECT_ROOT, arguments["path"])
+            return [{"type": "text", "text": content}]
+        except FileNotFoundError as e:
+            return [{"type": "text", "text": f"错误: {e}"}]
+
+    elif name == "search_docs":
+        results = search_docs(PROJECT_ROOT, arguments["query"])
+        if not results:
+            return [{"type": "text", "text": "未找到匹配的文档"}]
+        output = []
+        for r in results:
+            output.append(f"\n## {r['path']} ({r['match_count']} 处匹配)")
+            for m in r["matches"]:
+                output.append(f"  L{m['line_number']}: {m['content']}")
+        return [{"type": "text", "text": "\n".join(output)}]
+
+    raise ValueError(f"未知工具: {name}")
+
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**接入 Codex**：
+
+```toml
+# 项目级 .codex/config.toml
+[mcp_servers.doc-indexer]
+command = "python"
+args = ["tools/doc_indexer.py"]
+cwd = "."
+default_tools_approval_mode = "auto"
+```
+
+**使用效果**：
+
+```
+> 项目里有哪些关于 API 认证的文档？
+
+Codex 调用 mcp__doc-indexer__search_docs(query="API 认证")...
+
+找到以下匹配：
+
+## docs/auth/api-authentication.md (3 处匹配)
+  L15: ## API 认证流程
+  L42: Token 验证中间件
+  L78: OAuth 2.0 集成
+
+## docs/api/README.md (1 处匹配)
+  L23: 认证方式见 auth 模块文档
+
+> 读取 docs/auth/api-authentication.md 的内容
+
+Codex 调用 mcp__doc-indexer__read_doc(path="docs/auth/api-authentication.md")...
+```
+
+这个服务器的价值在于：它让 Codex 能主动搜索项目文档，而不是被动等你把文档内容贴给它。在大型项目中，文档可能有几百个文件，靠 `/mention` 逐个附加不现实。
+
+## 4. 用 TypeScript 开发 MCP 服务器
+
+TypeScript 的 MCP 服务器用 `@anthropic-ai/sdk-mcp` 库。以下是一个文件统计分析工具：
+
+```typescript
+// file-stats-server.ts
+import { Server } from "@anthropic-ai/sdk-mcp";
+import { StdioServerTransport } from "@anthropic-ai/sdk-mcp/stdio";
+import { readdir, stat, readFile } from "fs/promises";
+import { join, extname } from "path";
+
+const server = new Server(
+  { name: "file-stats", version: "1.0.0" },
+  { capabilities: { tools: {} } }
+);
+
+server.setRequestHandler(
+  { method: "tools/list" },
+  async () => ({
+    tools: [
+      {
+        name: "count_lines",
+        description: "统计目录中各类文件的行数",
+        inputSchema: {
+          type: "object",
+          properties: {
+            directory: { type: "string", description: "目录路径" },
+            extension: { type: "string", description: "文件扩展名过滤（如 .ts）" },
+          },
+          required: ["directory"],
+        },
+      },
+      {
+        name: "find_large_files",
+        description: "查找超过指定大小的文件",
+        inputSchema: {
+          type: "object",
+          properties: {
+            directory: { type: "string" },
+            min_size_kb: { type: "number", default: 100 },
+          },
+          required: ["directory"],
+        },
+      },
+    ],
+  })
+);
+
+server.setRequestHandler(
+  { method: "tools/call" },
+  async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === "count_lines") {
+      const dir = args.directory as string;
+      const ext = (args.extension as string) || "";
+      let totalLines = 0;
+      let fileCount = 0;
+      const stats: Record<string, number> = {};
+
+      async function walk(d: string) {
+        const entries = await readdir(d, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = join(d, entry.name);
+          if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+            await walk(full);
+          } else if (entry.isFile()) {
+            const fileExt = extname(entry.name);
+            if (!ext || fileExt === ext) {
+              const content = await readFile(full, "utf-8").catch(() => "");
+              const lines = content.split("\n").length;
+              totalLines += lines;
+              fileCount++;
+              stats[fileExt] = (stats[fileExt] || 0) + lines;
+            }
+          }
+        }
+      }
+
+      await walk(dir);
+      return {
+        content: [{
+          type: "text",
+          text: `统计结果:\n总文件数: ${fileCount}\n总行数: ${totalLines}\n按类型: ${JSON.stringify(stats, null, 2)}`,
+        }],
+      };
+    }
+
+    if (name === "find_large_files") {
+      // 类似实现...
+    }
+
+    throw new Error(`未知工具: ${name}`);
+  }
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+## 5. 开发规范与最佳实践
+
+### 5.1 工具设计原则
+
+| 原则 | 说明 | 反例 |
+|------|------|------|
+| **单一职责** | 每个工具只做一件事 | "analyze_and_fix_all" |
+| **明确命名** | 工具名用动词开头 | `data`（改成 `query_database`） |
+| **详细描述** | `description` 要说清楚工具做什么、适用场景 | "获取数据"（改成"从 PostgreSQL 的 users 表按条件查询记录"） |
+| **严格 schema** | `inputSchema` 要完整定义类型和必填项 | 省略 `required` 字段 |
+| **安全默认值** | 查询类工具加 limit、深度限制 | 不限制返回数量 |
+| **错误信息** | 返回可操作的错误描述 | "Error occurred" |
+
+### 5.2 性能考虑
+
+- **启动时间**：stdio 服务器每次会话启动都会被 Codex spawn。Python 服务器如果依赖量大，首次启动可能要 5-10 秒。用 `startup_timeout_sec` 调大超时值
+- **响应时间**：单次工具调用有 `tool_timeout_sec` 限制（默认 120 秒）。对于耗时操作，考虑分页或异步处理
+- **扫描深度**：文件扫描类工具一定要限制递归深度和文件数量。无限制的递归会卡死整个会话
+
+### 5.3 安全注意事项
+
+- **不要在工具中硬编码密钥**。通过 `env_vars` 从环境变量注入
+- **文件操作限制路径**。不要让工具访问工作目录之外的文件。在服务器代码中校验路径，不要信任客户端传来的路径参数
+- **SQL 注入防护**。数据库工具用参数化查询，不要拼接 SQL 字符串
+- **资源消耗控制**。查询返回的行数、文件大小、扫描深度都要有上限
+
+### 5.4 测试方法
+
+MCP 服务器的测试分两层：
+
+**单元测试**——测试工具的业务逻辑，脱离 MCP 协议：
+
+```python
+import pytest
+
+def test_scan_docs_finds_markdown():
+    docs = scan_docs("/tmp/test-docs", max_depth=2)
+    assert len(docs) > 0
+    assert all(d["path"].endswith(".md") for d in docs)
+
+def test_search_docs_returns_matches():
+    results = search_docs("/tmp/test-docs", "认证")
+    assert len(results) > 0
+```
+
+**集成测试**——测试 MCP 协议通信：
+
+```python
+import subprocess
+import json
+
+def test_mcp_handshake():
+    proc = subprocess.Popen(
+        ["python", "doc_indexer.py"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, "DOC_INDEXER_ROOT": "/tmp/test-docs"}
+    )
+    # 发送 initialize 请求
+    init_request = json.dumps({
+        "jsonrpc": "2.0", "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1.0"}
+        }
+    })
+    proc.stdin.write(init_request + "\n")
+    proc.stdin.flush()
+
+    # 读取响应
+    response = proc.stdout.readline()
+    result = json.loads(response)
+    assert result["result"]["serverInfo"]["name"] == "doc-indexer"
+    proc.terminate()
+```
+
+## 6. 从插件分发 MCP 服务器
+
+如果你开发的 MCP 服务器想分享给团队或社区，可以打包成 Codex 插件。插件本质上是一个包含 `manifest.json` 的目录：
+
+```json
+{
+  "name": "my-project-tools",
+  "version": "1.0.0",
+  "description": "项目文档索引器和代码统计工具",
+  "mcp_servers": "./.mcp.json",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}
+```
+
+`.mcp.json` 文件定义 MCP 服务器配置：
+
+```json
+{
+  "doc-indexer": {
+    "command": "python",
+    "args": ["-m", "doc_indexer"],
+    "cwd": ".",
+    "default_tools_approval_mode": "auto"
+  }
+}
+```
+
+打包后可以通过 Codex 插件市场分发，或者直接放在项目的 `.codex/plugins/` 目录下。具体打包流程在第 41 篇《Plugins 插件开发》中展开。
+
+## 7. 常见问题
+
+**stdio 服务器能打印调试信息吗？**
+
+不能随便 print。stdio 传输方式用 stdin/stdout 交换 JSON-RPC 消息，任何非 JSON 输出都会导致协议解析失败。调试信息写到 stderr——Codex 不会读取 stderr，但日志会出现在进程的 stderr 流中。
+
+**服务器崩溃了 Codex 会怎样？**
+
+`McpConnectionManager` 会收到连接错误，发送 `McpStartupFailure` 事件。TUI 显示连接失败状态。如果服务器标记为 `required = true`，整个会话会中止。如果不是 required，Codex 继续运行，只是没有那个服务器的工具可用。
+
+**能开发 StreamableHttp 服务器吗？**
+
+可以。MCP 规范支持 HTTP 传输，但开发复杂度比 stdio 高——需要处理 HTTP/2、SSE、CORS 等问题。对于团队内部使用，stdio 服务器更实际。如果你的工具需要被多个客户端共享（不是每个客户端单独 spawn 进程），才需要考虑 HTTP 方式。
+
+**Python 和 TypeScript 选哪个？**
+
+看团队技术栈和你自己的熟悉程度。Python 的 `mcp` 库更成熟稳定，适合数据处理、数据库操作类工具。TypeScript 的 `@anthropic-ai/sdk-mcp` 更适合和前端工具链结合的场景。两者在性能上没有明显差异——瓶颈在网络和磁盘 I/O，不是语言本身。
+
+## 8. 下一步
+
+- 从上面的模板出发，为你的项目写一个 MCP 服务器——从最简单的 1 个工具开始
+- 把服务器配置提交到项目的 `.codex/config.toml`，让团队成员共享
+- 结合第 36 篇的审批策略，为敏感操作配置 `prompt` 模式
+- 阅读本系列下一篇：《Codex CLI Skills 技能开发》
+
+---
+
+**延伸阅读**
+
+- [MCP 协议规范](https://modelcontextprotocol.io) — 工具定义、资源暴露、传输方式的完整协议文档
+- [Python MCP SDK](https://github.com/anthropics/python-mcp-sdk) — `mcp` 库的源码和示例
+- [TypeScript MCP SDK](https://github.com/anthropics/sdk-mcp) — `@anthropic-ai/sdk-mcp` 的源码和示例
+- [官方 MCP 服务器集合](https://github.com/anthropics/mcp-servers) — 学习优秀 MCP 服务器的实现模式
+- [Codex 源码：MCP 集成](https://zread.ai/openai/codex/13-mcp-integration) — 工具命名空间、过滤、沙箱传播机制

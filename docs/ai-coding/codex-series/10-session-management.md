@@ -1,0 +1,771 @@
+<!--
+调研来源（不发布，仅记录）：
+1. GitHub 仓库 openai/codex: codex-rs/tui/src/slash_command.rs — 斜杠命令枚举定义
+2. GitHub 仓库 openai/codex: codex-rs/tui/src/cli.rs — TUI CLI 参数和内部字段
+3. GitHub 仓库 openai/codex: codex-rs/cli/src/main.rs — 顶层命令分发和 resume/fork 子命令
+4. Zread: openai/codex 终端用户界面 (TUI) 文档 — 斜杠命令表和多 agent 机制
+5. Zread: openai/codex CLI 命令文档 — resume/fork 三种选择模式
+6. Zread: openai/codex Agent 循环与线程管理 — Session/CodexThread 架构
+7. Zread: openai/codex 配置参考 — history.persistence / history.max_bytes
+8. Zread: openai/codex 非交互式执行模式 — exec resume 子命令
+9. Zread: openai/codex 应用服务器协议 — thread/start, thread/resume
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 会话管理：开始、继续、分叉、清空的完整指南
+
+> **TL;DR** — Codex 把每次对话包装成一个会话（session），用 ThreadStore 持久化到 `~/.codex/history.jsonl`。TUI 里用 `/new` 开新对话、`/clear` 清屏并重置历史、`/resume` 恢复旧会话、`/fork` 分叉走不同路线、`/side` 开临时旁路、`/quit` 退出并自动保存。命令行外还能用 `codex resume` 和 `codex fork` 直接操作。本文逐一拆解这六个命令的行为、配置和实际工作流。
+
+---
+
+## 1. 什么是"会话"
+
+在 Codex 的架构里，会话（session）是一个独立管理的实体，叫作线程（thread）。你每次在终端里敲 `codex` 回车，就创建了一个新线程。这个线程被 `CodexThread` 结构体持有，内部封装了一个 `Session` 实例，负责管理该对话的所有可变状态。
+
+一个会话里包含这些东西：
+
+- **对话历史**：你和模型一来一回的所有消息，包括模型调用工具的请求和返回结果
+- **文件变更记录**：模型在本次会话里读写过的文件 diff
+- **上下文配置**：当前使用的模型、推理力度、审批策略、沙箱模式
+- **权限状态**：本次会话里已经批准或拒绝过的操作
+- **MCP 连接**：当前活跃的 MCP 服务器连接
+
+会话的持久化由 `RolloutRecorder` 完成，它把对话历史写入 `~/.codex/history.jsonl`。同时，`LocalThreadStore` 通过 SQLite 数据库管理线程元数据（ID、创建时间、工作目录等），这个数据库由 `codex-state` 的迁移系统维护。
+
+### 线程和会话的关系
+
+源码里有两个相关但不同的概念：
+
+- **线程（Thread）**：一个持久化的对话实体，有唯一的 Thread ID（UUID），可以被保存、恢复、分叉。`ThreadManager` 在 `Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>` 中持有所有活跃线程
+- **会话（Session）**：每个 `CodexThread` 内部持有的状态容器，承载对话历史（`SessionState`）、配置、权限、提交通道（`InputQueue`）和事件通道
+
+简单说，线程是"哪个对话"，会话是"这个对话里有什么"。你操作的是线程，底层维护状态的是会话。日常使用中不需要区分这两个概念——你看到的"一次 Codex 对话"就是一个线程加上它内部的会话。
+
+### 会话的生命周期
+
+```
+创建（codex 启动或 /new）
+  → 使用（对话、执行工具、修改文件）
+    → 退出（/quit 或 Ctrl+C）
+      → 恢复（codex resume 或 /resume）
+```
+
+创建阶段，`ThreadManager` 调用 `thread/start`（通过应用服务器的 RPC 接口）分配一个新的 Thread ID，初始化 `SessionState`，并触发 `session-start` 钩子。使用阶段，你每一次输入都触发一个 Turn，Turn 内部经历"构建 prompt → 模型采样 → 工具执行 → 审批（如果需要）→ 结果回传"的循环。退出阶段，`RolloutRecorder` 把完整的对话 rollout 写入 `history.jsonl`，线程元数据更新到 SQLite。恢复阶段，通过 `thread/read` 读取历史，用 `thread/resume` 重新激活线程。
+
+默认配置下，每个会话都会自动保存。除非你把 `history.persistence` 设成 `"none"`，否则退出时不会丢失任何东西。
+
+---
+
+## 2. `/new` — 在当前窗口开始新对话
+
+`/new` 的作用很直接：在同一个 TUI 窗口内结束当前对话，开始一个新的。
+
+### 执行效果
+
+当你输入 `/new`：
+
+1. 当前线程被关闭并保存到 ThreadStore
+2. 创建一个全新的线程，分配新的 Thread ID
+3. TUI 的对话区域会切换到新线程，屏幕上之前的内容不会消失（这点和 `/clear` 不同）
+4. 新线程继承当前会话的模型选择、审批策略和沙箱配置
+
+对，你没看错——`/new` 不清屏。之前的对话记录还显示在终端上，但它们属于已经结束的旧线程。你可以向上滚动查看旧内容，但新输入的任何指令都作用于新线程。
+
+### 什么时候用
+
+典型场景：你刚用 Codex 完成了一个 bug 修复，对话历史已经很长了，接下来要做另一个不相关的任务。这时候 `/new` 既能清理上下文（新线程不会携带旧对话的 token 开销），又保留了窗口内的可见历史供你回看。
+
+### 和直接退出重开的区别
+
+`/new` vs 关掉终端重新 `codex`：
+
+| 对比项 | `/new` | 退出后重开 |
+|--------|--------|-----------|
+| 速度 | 即时，不用重新连接 | 需要重新初始化 TUI |
+| 窗口历史 | 保留 | 丢失 |
+| 模型/权限设置 | 继承 | 从配置重新加载 |
+| 沙箱状态 | 重建 | 重建 |
+| MCP 连接 | 重建 | 重建 |
+
+大多数情况下 `/new` 比退出重开快，因为省掉了 TUI 初始化的开销。
+
+### 上下文重置的隐性好处
+
+`/new` 之后，新线程的对话历史是空的。这意味着模型处理你下一个请求时，不用再"消化"之前几十轮的对话内容。上下文窗口里腾出来的空间，可以让模型更专注地处理新任务。
+
+这在以下场景下差异明显：
+
+- 上一个任务产生了大量工具调用输出（比如跑了很长的测试日志）
+- 之前的对话涉及了很多文件，上下文窗口已经被撑得很满
+- 新任务和旧任务的关联度很低，之前的上下文只会产生噪音
+
+当然，如果新旧任务有延续性（比如修完 bug 后马上要加相关的测试），直接在当前对话里继续可能更好，因为模型已经了解了代码结构。
+
+### 模型和权限设置的行为
+
+`/new` 后，新线程继承的设置包括：
+
+- **模型选择**：如果你在之前的对话里用 `/model` 切换到了 o4-mini，新线程继续用 o4-mini
+- **推理力度**：`reasoning_effort` 设置也会被继承
+- **审批策略**：之前设的 `suggest` / `auto-edit` / `full-auto` 保持不变
+- **沙箱模式**：`read-only` / `workspace-write` / `danger-full-access` 不受影响
+
+不会继承的是对话历史本身——新线程从空白状态开始。
+
+### 任务进行中能不能用
+
+根据 `slash_command.rs` 的定义，`/new` 的 `available_during_task` 返回 `false`。也就是说，模型正在执行任务（跑命令、修改文件）时，你不能用 `/new`。得等任务完成或被中断后才能触发。
+
+---
+
+## 3. `/clear` — 清屏并重置对话
+
+`/clear` 比 `/new` 更彻底：它不仅开始一个新对话，还会清空终端显示。
+
+### 执行效果
+
+1. 终端显示被清空，回到空白状态
+2. 当前对话历史被丢弃，创建一个全新的线程
+3. 新线程同样继承模型和权限设置
+
+### `/clear` vs `Ctrl+L`
+
+这两个操作经常被混淆，区别如下：
+
+| 操作 | 清屏 | 重置对话 | 任务中可用 |
+|------|------|---------|-----------|
+| `/clear` | 是 | 是 | 否 |
+| `Ctrl+L` | 是 | 否 | 是 |
+| `/new` | 否 | 是 | 否 |
+
+`Ctrl+L` 只是视觉上的清屏——把终端显示的旧内容滚出视野，对话历史、上下文、线程 ID 全部不变。模型依然能看到之前的所有消息。
+
+`/clear` 则是从头开始。之前的对话上下文全部丢弃，新线程获得一个干净的起点。
+
+### 什么时候用哪种
+
+- 对话上下文太长、模型开始"忘事"或重复之前的结论，但还没到需要 `/compact` 的程度 → `/new`
+- 想在视觉上清理屏幕，但继续当前对话 → `Ctrl+L`
+- 彻底重新开始、不想被旧上下文干扰 → `/clear`
+
+### `/clear` 后能恢复吗
+
+`/clear` 创建的是一个新线程，旧线程在清除之前已经被保存到了 ThreadStore。如果你清除了之后后悔了，可以通过 `/resume` 找回之前的会话。`/clear` 丢弃的是当前线程的上下文，不是历史记录里的持久化数据。
+
+但要注意：如果你在 `/clear` 之后又在同一个 TUI 窗口里做了新的对话，新对话也会被保存。历史里会出现两个会话：`/clear` 之前的和 `/clear` 之后的。`/resume` 列表里两个都能看到。
+
+### 误操作的补救
+
+如果你本意是 `Ctrl+L`（只清屏）但输入了 `/clear`，唯一的补救办法就是 `/resume` 恢复到刚才的线程。不过恢复后，之前的终端显示内容已经没了——恢复只能找回对话历史，不能找回屏幕上的渲染状态。
+
+### 任务进行中的限制
+
+和 `/new` 一样，`/clear` 在任务执行期间不可用。源码里 `available_during_task` 对 `/clear` 返回 `false`。如果模型正在跑命令或修改文件，你得先等它完成或手动中断。
+
+---
+
+## 4. `/resume` — 恢复历史会话
+
+`/resume` 让你回到一个之前保存的会话继续对话。这是 Codex 会话持久化的核心功能。
+
+### TUI 内的 `/resume`
+
+在 TUI 里输入 `/resume`，会弹出一个会话选择器，列出所有匹配的历史会话。列表默认按 `sourceKinds` 和 `cwd` 两个维度过滤：
+
+- **sourceKinds**：只显示当前来源类型（CLI 启动的会话只看到 CLI 会话，VSCode 里只看到 VSCode 会话）。`ThreadSourceKind` 枚举区分了交互式 CLI 会话、VSCode 会话、非交互式 exec 会话和应用服务器会话
+- **cwd**：只显示在当前工作目录下创建的会话
+
+这意味着你在 `~/project-a` 下 `/resume`，不会看到 `~/project-b` 的会话。
+
+### 命令行的 `codex resume`
+
+在 TUI 外面，`codex resume` 子命令提供三种选择模式：
+
+```bash
+# 打开会话选择器（交互式）
+codex resume
+
+# 直接恢复最近的会话
+codex resume --last
+
+# 通过 UUID 或线程名称恢复指定会话
+codex resume a3f8c2d1-4b5e-...
+
+# 通过名称模糊搜索
+codex resume my-session
+```
+
+查找策略是 UUID 优先、名称回退。`lookup_session_target_with_app_server` 函数先尝试把输入解析为 UUID，通过 `thread/read` 直接定位；如果不行，就当作名称通过 `thread/list` 的 `search_term` 做模糊搜索。
+
+### 扩展搜索范围
+
+两个有用的标志：
+
+```bash
+# 禁用 cwd 过滤，显示所有工作目录的会话
+codex resume --all
+
+# 在列表中包含非交互式（exec 模式）的会话
+codex resume --include-non-interactive
+```
+
+`--all` 会在选择器里额外显示 CWD 列，让你清楚每个会话属于哪个项目目录。这在以下情况有用：你有多个项目目录是符号链接，或者你在不同的 clone 里工作但代码库相同，想找到特定的工作上下文。
+
+`--include-non-interactive` 会把 `codex exec` 产生的会话也纳入选择器。这类会话通常用于 CI/CD 流水线或自动化脚本，平时不需要手动恢复，但在调试流水线结果时可能有用。
+
+### 恢复后的文件状态
+
+恢复会话时需要理解一个重要区分：**对话历史和文件系统状态是独立的**。
+
+对话历史（你和模型的文本交流、工具调用的参数和返回值）存在 ThreadStore 里，恢复时完整还原。但文件系统上的改动是实际发生的——Codex 在之前的会话里执行了 `write`、`apply_patch`、`shell` 等操作修改了磁盘上的文件，这些修改不会因为会话结束而回滚。
+
+所以恢复后你看到的情况是：
+
+- 模型记得之前所有的讨论内容
+- 文件系统保持在之前会话结束时的状态
+- 后台终端不会恢复（之前跑的 dev server 需要重新启动）
+- MCP 连接需要重新建立
+
+如果之前的会话改坏了文件，恢复后你需要在恢复的对话里让 Codex 修复，或者手动用 `git checkout` / `git stash` 处理。
+
+### exec 模式下的 resume
+
+非交互式模式也支持会话恢复，用于多步骤自动化：
+
+```bash
+# 第一步：启动分析
+thread_id=$(codex exec --json "分析代码库" | jq -r 'select(.type=="thread.started") | .thread_id')
+
+# 第二步：基于上一步的结果继续
+codex exec resume --last "为刚才识别出的模块生成单元测试"
+```
+
+这种模式通过捕获线程 ID 实现多步骤的串行处理。每一步都在同一线程的上下文里执行，模型能看到之前步骤的完整历史。
+
+### 恢复后的状态
+
+恢复一个会话后，你会得到：
+
+- 完整的对话历史（你和模型的所有消息）
+- 线程元数据（ID、创建时间、工作目录）
+- 当时的模型和配置信息
+
+但有一个关键限制：**文件变更不会回滚**。如果你在之前的会话里让 Codex 改了三个文件，然后退出了，恢复会话后这三个文件还是改过的状态。Codex 不会自动 revert。你需要手动用 `/diff` 查看，或者用 `git checkout` 恢复。
+
+### 什么时候需要恢复
+
+几个典型场景：
+
+- **中断的任务**：Codex 跑到一半你关了笔记本，今天打开继续
+- **昨天的进度**：昨天做到一半的功能开发，今天从断点继续
+- **多项目切换**：上午在项目 A 用 Codex，下午切到项目 B，晚上回到项目 A 的会话
+- **回溯思路**：想看看三天前那个会话里你和 Codex 讨论了什么
+
+---
+
+## 5. `/fork` — 分叉当前对话
+
+`/fork` 把当前会话克隆到一个新线程。原始对话保持不变，分叉出来的新线程可以独立发展。
+
+### 执行效果
+
+1. 当前对话的完整历史被复制到新线程
+2. 新线程获得独立的 Thread ID
+3. TUI 切换到新线程
+4. 原始线程被保留在 ThreadStore 里，不受影响
+
+之后你在新线程里做的任何操作——修改文件、执行命令、继续对话——都不会反映到原始线程。两条路径从这里开始分道扬镳。
+
+### TUI 内 `/fork` vs 命令行 `codex fork`
+
+两种方式都能分叉，但适用场景不同：
+
+```bash
+# 命令行：分叉一个已保存的历史会话
+codex fork                    # 打开选择器
+codex fork --last             # 分叉最近的会话
+codex fork <SESSION_ID>       # 分叉指定会话
+```
+
+- **TUI 内 `/fork`**：分叉当前正在进行的对话。你正在和 Codex 讨论一个方案，到某个节点想试试另一条路，就 `/fork` 出来
+- **命令行 `codex fork`**：分叉一个已经结束并保存的会话。比如昨天的一个会话，今天想从中间某个点开始走不同的方向
+
+`codex fork` 的标志体系和 `codex resume` 完全一致：`--last`、`--all`、`<SESSION_ID>`。
+
+### 使用场景
+
+分叉最常见的用法是**方案对比**：
+
+你在做一个功能，有两种实现思路。不确定哪种更好。这时候：
+
+1. 先沿着思路 A 走到一定深度，让 Codex 实现了一部分
+2. 在关键决策点 `/fork`
+3. 在分叉出来的新线程里改走思路 B
+4. 对比两条路径的代码质量和可行性
+5. 选择更好的那条
+
+这种方式比"先做完 A 再手动回滚做 B"高效得多，因为你不需要在两个方案之间手动切换文件状态。
+
+### 分叉后的文件系统状态
+
+分叉时，新线程继承了原始线程的对话历史，但文件系统是共享的。如果新线程里的 Codex 修改了文件，这些修改在物理磁盘上是真实的——回到原始线程后，文件也是修改后的状态。
+
+这意味着分叉适合"对比讨论和部分实现"，不适合"两种方案都完整实现后挑一个"。如果你需要完全隔离的文件状态，应该用 Git 分支配合 fork：
+
+```bash
+# 先创建一个 Git 分支
+git checkout -b approach-a
+
+# 在 Codex 里实现方案 A
+codex "按方案 A 实现"
+
+# 退出后切回主分支
+git checkout main
+git checkout -b approach-b
+
+# fork 上次会话走方案 B
+codex fork --last
+```
+
+这样两条路径的文件变更被 Git 分支隔离，互不影响。
+
+### 分叉和恢复的区别
+
+| 对比项 | `/fork` | `/resume` |
+|--------|---------|-----------|
+| 线程数量 | 创建新线程，旧线程保留 | 回到旧线程，不创建新的 |
+| 对话起点 | 从分叉点的历史开始 | 从上次中断的地方继续 |
+| 原始线程 | 保持不变，可回到 | 就是当前线程本身 |
+| 适用场景 | 方案对比、实验 | 任务延续 |
+
+### 架构层面的实现
+
+从源码看，`ThreadManager` 在一个 `Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>` 中持有所有活跃的 `CodexThread` 实例。`fork` 操作需要：
+1. 通过 `thread/read` 读取原始线程的完整历史
+2. 用 `thread/start` 创建新线程
+3. 把原始历史注入新线程
+4. 返回新线程的控制权给调用方
+
+整个过程原始线程的数据是只读的，不会被修改。
+
+---
+
+## 6. `/side` 和 `/btw` — 临时旁路对话
+
+`/side`（别名 `/btw`）从当前对话开一个临时分支，用来处理和主线任务不直接相关的事情。
+
+### 执行效果
+
+1. 从当前会话上下文分叉出一个临时线程
+2. TUI 底部状态区域会显示主任务的状态（比如"主线程运行中"）
+3. 你可以在临时线程里和 Codex 对话
+4. 临时线程是瞬态的——它不会被独立持久化到 ThreadStore
+
+`/side` 支持内联参数。你可以直接写：
+
+```
+/side 检查一下 src/auth.ts 有没有 SQL 注入风险
+```
+
+这样会在临时线程里直接执行这个指令，不需要先进入临时线程再输入。
+
+### `/btw` 是别名
+
+`/btw` 和 `/side` 完全等价。源码里它们映射到同一个枚举变体 `SlashCommand::Side | SlashCommand::Btw`，描述都是 "start a side conversation in an ephemeral fork"。`/btw` 这个名字更口语化，暗示"顺便问一下"。
+
+### 什么时候用
+
+- **快速查个东西**：正在做前端组件，突然想确认一下 API 返回的字段名 → `/side 看看 /api/users 返回什么字段`
+- **评估风险**：Codex 提议删除一段代码，你想确认这是否安全 → `/side 如果删掉这段代码会有什么影响`
+- **验证想法**：对当前方案有个疑问但不想打断主线 → `/side 如果改用 Redis 缓存方案，性能会差多少`
+- **检查依赖**：修改了一个配置文件，想确认下游会不会出问题 → `/side 检查哪些文件依赖 config.ts`
+
+### 限制
+
+`available_in_side_conversation` 方法定义了哪些命令可以在旁路对话中使用。只有以下命令可用：
+
+| 命令 | 说明 |
+|------|------|
+| `/copy` | 复制响应 |
+| `/raw` | 切换原始模式 |
+| `/diff` | 查看 diff |
+| `/mention` | 提及文件 |
+| `/status` | 查看状态 |
+| `/ide` | IDE 上下文 |
+
+也就是说，旁路对话里不能再用 `/side`（不能嵌套），不能用 `/review`，不能用 `/model` 切换模型。这些限制保证了旁路对话保持轻量，不会变成另一个主任务。
+
+### 临时线程 vs fork
+
+| 对比项 | `/side` | `/fork` |
+|--------|---------|---------|
+| 持久化 | 不持久化 | 持久化为新线程 |
+| 主任务 | 继续运行 | 主线程被保留但不运行 |
+| 嵌套 | 不支持 | 不适用 |
+| 命令集 | 受限 | 完整 |
+| 适用场景 | 快速问答 | 方案对比 |
+
+### 任务进行中的可用性
+
+根据源码，`/side` 和 `/btw` 的 `available_during_task` 返回 `true`。这意味着即使模型正在执行主任务，你也可以开一个旁路对话。这很合理——你在等 Codex 跑测试的时候，顺便开个 `/side` 查个文档。
+
+### 旁路对话里的文件访问
+
+旁路对话继承了当前会话的完整上下文，包括项目文件结构。所以你在 `/side` 里让 Codex 读文件、查代码、分析依赖都是可以的。但要注意，旁路对话里如果让 Codex 修改了文件，这些修改会反映到磁盘上——旁路对话在文件系统层面和主对话共享同一个工作区。
+
+### 多 Agent 导航
+
+当 TUI 里有多个线程（主线程加旁路线程）时，`AgentNavigationState` 跟踪当前聚焦的线程。默认的键盘快捷键 `[` 和 `]` 可以循环切换活跃的 agent。用 `/agent` 命令也能打开一个 agent 选择器，显示所有活跃线程及其状态指示器。状态指示器用彩色圆点表示：绿色表示空闲、黄色表示运行中、红色表示等待审批。
+
+---
+
+## 7. `/quit` 和 `/exit` — 退出 Codex
+
+`/quit` 和 `/exit` 是同一个命令的两个名字。源码里它们共享同一个 match 分支：
+
+```rust
+SlashCommand::Quit | SlashCommand::Exit => "exit Codex"
+```
+
+### 退出流程
+
+1. 当前会话被保存到 ThreadStore（前提是 `history.persistence` 不是 `"none"`）
+2. 对话历史写入 `~/.codex/history.jsonl`
+3. 所有活跃的后台终端被终止
+4. MCP 连接被关闭
+5. TUI 退出，终端回到正常 shell
+
+### 退出前的检查
+
+建议在 `/quit` 之前做两件事：
+
+1. **`/diff` 查看改动**：确认 Codex 在本次会话里改了哪些文件，避免遗漏意外的修改
+2. **`/ps` 检查后台进程**：确认没有 dev server 或 watch 进程还在后台跑着
+
+```
+你：/diff
+# 查看本次会话的所有文件改动
+
+你：/ps
+# 查看后台终端列表
+
+你：/quit
+# 确认没问题后退出
+```
+
+### 强制退出
+
+`Ctrl+C` 会触发强制退出。在 TUI 的实现中，`Ctrl+C` 发送一个中断信号。如果当前有任务在执行，第一次 `Ctrl+C` 会尝试中断任务；连续按两次才会真正退出。
+
+强制退出时，会话可能不会被完整保存。Codex 的保存机制是尽力而为的——如果在保存过程中被杀死，最后的几轮对话可能丢失。
+
+### 优雅退出的完整流程
+
+一个推荐的退出流程：
+
+```
+1. /diff         → 看看 Codex 改了什么
+2. /ps           → 确认没有后台进程在跑
+3. git status    → 检查工作区是否干净（如果需要的话）
+4. /quit         → 正式退出
+```
+
+如果你打算第二天继续，不需要 `git stash` 或 `git commit`——`/resume` 能恢复对话上下文。但如果你担心文件被其他工具覆盖，可以在退出前 commit 一下作为安全网。
+
+### 退出后的自动保存细节
+
+保存过程涉及几个步骤。`RolloutRecorder` 把内存中的 rollout 数据（对话的完整记录）序列化为 JSONL 格式追加到 `history.jsonl`。同时，线程元数据（Thread ID、名称、最后更新时间、工作目录、来源类型）被更新到 SQLite 数据库。后台终端在被终止前会收到 SIGTERM 信号，有短暂的优雅关闭窗口。
+
+如果 `history.persistence` 设成 `"none"`，整个保存过程被跳过。`/resume` 列表里也不会出现这个会话。
+
+### 任务进行中的可用性
+
+`/quit` 和 `/exit` 的 `available_during_task` 返回 `true`。你可以在任务执行期间退出，Codex 会先尝试保存当前状态。
+
+---
+
+## 8. 会话保存和历史管理
+
+Codex 的会话持久化涉及两个组件：`RolloutRecorder`（记录对话历史）和 `LocalThreadStore`（管理线程元数据）。
+
+### 配置项
+
+在 `~/.codex/config.toml` 里，历史相关的配置集中在 `[history]` 段：
+
+| 配置键 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `history.persistence` | `"save-all"` / `"none"` | `"save-all"` | 是否保存对话历史到 `history.jsonl` |
+| `history.max_bytes` | 整数 | 无限制 | 历史文件的最大字节数 |
+
+```toml
+[history]
+persistence = "save-all"    # 每次会话都保存
+# persistence = "none"      # 不保存任何历史（隐私优先）
+
+max_bytes = 104857600       # 100MB，超出后自动清理旧记录
+```
+
+### 文件位置
+
+- **对话历史**：`~/.codex/history.jsonl`，每行一个 JSON 对象，记录一条消息或工具调用
+- **线程元数据**：`~/.codex/sessions/` 目录下的 SQLite 数据库，由 `codex-state` 迁移系统管理
+- **会话索引**：SQLite 数据库里包含线程 ID、名称、创建时间、工作目录、来源类型等字段
+
+### history.jsonl 的结构
+
+每一行是一个 JSON 对象，大致长这样：
+
+```jsonl
+{"type":"message","role":"user","content":"帮我重构 auth.ts"}
+{"type":"tool_call","tool":"shell","command":"grep -n 'export' src/auth.ts"}
+{"type":"tool_result","tool":"shell","stdout":"3:export function login()..."}
+{"type":"message","role":"assistant","content":"我发现 auth.ts 有三个可以改进的地方..."}
+```
+
+实际的 JSONL 结构比这复杂得多——包含完整的 rollout 数据、工具调用参数、审批记录等。一个长时间的会话可能产生数百 MB 的历史记录。
+
+### 清理旧会话
+
+历史文件会持续增长。几个清理方法：
+
+**方法一：配置大小上限**
+
+```toml
+[history]
+max_bytes = 52428800  # 50MB
+```
+
+超出上限后，Codex 会自动清理最旧的记录。
+
+**方法二：关闭持久化**
+
+```toml
+[history]
+persistence = "none"
+```
+
+完全不写历史文件。缺点是无法 `/resume` 恢复会话。
+
+**方法三：手动清理**
+
+```bash
+# 查看历史文件大小
+du -sh ~/.codex/history.jsonl
+
+# 直接删除（不影响当前会话，但旧会话不可恢复）
+rm ~/.codex/history.jsonl
+
+# 清理 SQLite 中的旧线程数据
+# （目前没有官方命令，需要手动操作数据库）
+```
+
+### 已知问题
+
+会话历史里会内联 base64 编码的图片数据。如果会话中包含大量图片生成操作，`history.jsonl` 可能膨胀到数百 MB。这个问题在 GitHub issue #24676 中有详细记录——一个 182.8 MB 的历史文件，14 行超过 100 万字符。团队已经意识到这个问题并在优化。
+
+如果你遇到了历史文件过大的问题，可以在 `/side` 对话或 `/new` 新会话前，先用 `/compact` 压缩对话上下文，减少后续的写入量。
+
+### 会话命名和查找
+
+长年累月用下来，`/resume` 列表里会有大量会话。这时候会话命名就很重要。你可以用 `/rename` 给当前线程改名：
+
+```
+你：/rename auth-bugfix-0603
+```
+
+命名后在 `codex resume` 的选择器里就能看到有意义的名字，而不是一串 UUID。对于团队协作或长期项目，建议养成给会话命名的习惯。
+
+查找历史会话时，`codex resume <name>` 支持模糊搜索。比如你的会话叫 "auth-bugfix-0603"，输入 `codex resume auth` 就能匹配到。搜索走的是 `thread/list` 的 `search_term` 参数，底层由 SQLite 的 LIKE 查询实现。
+
+---
+
+## 9. 实战：多任务工作流
+
+### 场景一：上午修 bug、中午换任务、下午加功能
+
+```
+9:00  启动 Codex
+      你：auth 模块的登录接口返回 500，帮我排查
+
+9:30  bug 修好了，对话历史已经很长
+      你：/diff
+      # 确认改动没问题
+
+9:35  开始新任务
+      你：/new
+      你：给 dashboard 页面加一个筛选组件
+
+12:00 午饭前退出
+      你：/quit
+
+14:00 下午继续
+      $ codex resume --last
+      # 直接回到 dashboard 的会话
+
+17:00 又来了一个 bug 报告
+      你：/new
+      你：用户反馈搜索结果排序不对
+```
+
+一天之内，你用了 `/new` 三次、`/quit` 一次、`codex resume` 一次。每个任务都有独立的上下文，互不干扰。
+
+### 场景二：不确定方案时分叉对比
+
+```
+你：我要把项目从 REST API 迁移到 GraphQL，帮我评估一下
+
+Codex：[分析了现有 API 结构，提出了两种方案]
+       方案 A：逐个端点迁移，先共存再切
+       方案 B：一次性重写，用 schema stitching 过渡
+
+你：两种都有道理，让我分别试试
+
+你：/fork
+# 现在在新线程里
+
+你：按方案 A 来，先迁移 user 相关的三个端点
+
+[Codex 实现方案 A 的一部分...]
+
+# 按 [ 键切回主线程（或用 /agent 切换）
+
+你：按方案 B 来，先搭建 GraphQL gateway
+
+[Codex 实现方案 B 的一部分...]
+
+# 对比两条路径的结果后选择方案 A
+```
+
+分叉让你在不回滚的情况下同时推进两个方案。每条路径有独立的文件变更历史。
+
+### 场景三：任务跑一半需要查个东西
+
+```
+你：帮我写一个 Redis 缓存中间件
+
+[Codex 正在实现...]
+
+# Codex 问了一个关于过期策略的问题
+# 你不确定当前的 Redis 版本支持什么
+
+你：/side 我们的 Redis 是哪个版本，支持哪些淘汰策略
+# 临时线程：检查 package.json 和服务器配置
+
+Codex：Redis 7.2，支持 volatile-lru、allkeys-lru 等策略
+
+# 临时线程的信息帮你做了决策
+# 回到主线程继续
+
+你：用 volatile-lru，TTL 设 3600 秒
+```
+
+`/side` 没有打断主线任务的流程。你在等 Codex 的时候顺手查了需要的信息。
+
+### 场景四：昨天的任务没做完
+
+```
+# 昨天
+
+$ cd ~/work/my-project
+$ codex "实现用户权限管理模块"
+# ... 做了一半，下班了
+$ /quit
+
+# 今天
+
+$ cd ~/work/my-project
+$ codex resume
+# 弹出选择器，显示昨天的会话
+# 选中后恢复
+
+你：继续昨天的，上次做到角色分配那块
+
+Codex：[读取恢复的对话历史，知道之前的进度]
+       上次我们定义了 Role 和 Permission 两个模型，
+       已经实现了基础的 CRUD。接下来要做角色分配...
+```
+
+恢复后，Codex 看到的是完整的对话历史，包括你之前讨论的设计决策、已经创建的文件、已经跑过的命令。它能从断点继续而不是从零开始。
+
+### 场景五：用 fork 保留安全网
+
+```
+你：帮我重构整个 config 模块
+
+[Codex 提出了一个激进的重构方案...]
+
+你：这个改动范围太大了，我先分叉出来试试
+你：/fork
+
+# 在分叉里执行重构
+
+[Codex 完成了重构，跑了测试，全部通过]
+
+你：/diff
+# 看看改动量：47 个文件被修改
+
+# 你回到主线程看看原来的代码
+# 用 /agent 或 [ ] 键切换
+
+# 确认分叉里的重构没问题，回到分叉线程继续
+# 或者放弃分叉，在主线程里用更保守的方案
+```
+
+`/fork` 在这里充当了"安全网"——你可以放心地在一个分支里尝试大胆的改动，如果不行就切回主线，什么都没损失。
+
+### 场景六：高频切换多个项目
+
+```
+# 上午在 aihub 项目
+$ cd ~/workspace/aihub
+$ codex
+你：帮我加一个 API 端点
+# ... 完成后 /quit
+
+# 中午切到 quant-research 项目
+$ cd ~/workspace/quant-research
+$ codex "回测策略参数调优"
+# ... 完成后 /quit
+
+# 下午回到 aihub 继续
+$ cd ~/workspace/aihub
+$ codex resume
+# 选择器只显示 aihub 下的会话
+# 选到上午那个，继续
+
+你：上午的 API 端点加了，现在补一下集成测试
+```
+
+`cwd` 过滤让多项目切换变得干净——你不需要在满屏的历史记录里翻找，每个项目只看到自己的会话。
+
+---
+
+## 10. 命令速查表
+
+| 命令 | 清屏 | 重置对话 | 持久化新线程 | 任务中可用 | 命令行等价 |
+|------|------|---------|------------|-----------|-----------|
+| `/new` | 否 | 是 | 是 | 否 | 无 |
+| `/clear` | 是 | 是 | 是 | 否 | 无 |
+| `/resume` | 否 | 否 | 否 | 是 | `codex resume` |
+| `/fork` | 否 | 否 | 是 | 否 | `codex fork` |
+| `/side` `/btw` | 否 | 否 | 否（临时） | 是 | 无 |
+| `/quit` `/exit` | — | — | 保存当前 | 是 | `Ctrl+C` |
+| `Ctrl+L` | 是 | 否 | 否 | 是 | `clear` |
+
+---
+
+## 11. 下一步
+
+本文覆盖了 Codex 会话管理的完整工具链：`/new`、`/clear`、`/resume`、`/fork`、`/side`、`/quit` 六个命令的行为和搭配使用的工作流。
+
+这些命令解决的是"对话如何组织"的问题。但还有一个更基础的问题：**每次对话里，Codex 到底能看到什么信息？** 模型的上下文窗口有限，怎么把最相关的信息塞进去、怎么在不丢失关键信息的前提下压缩历史，这涉及 `/compact`、`AGENTS.md`、文件提及、技能系统等一整套上下文管理机制。
+
+**下一篇**我们会聊 **上下文管理**——Codex 如何组装发送给模型的 prompt、对话历史压缩、项目级指令文件、以及如何让模型在有限的 token 预算内最高效地理解你的项目。
+
+### 延伸阅读
+
+- [Codex CLI Slash Commands](https://developers.openai.com/codex/cli/slash-commands) — 所有 TUI 内置命令的官方参考
+- [Codex Configuration Reference](https://developers.openai.com/codex/config-reference) — `history.persistence`、`history.max_bytes` 等配置的完整说明
+- [Codex Thread Management Architecture](https://github.com/openai/codex) — 源码中 `codex-rs/core/src/thread_manager.rs` 的线程管理实现
+- [Codex Non-interactive Exec Mode](https://developers.openai.com/codex/exec-mode) — `codex exec resume` 的多步骤自动化工作流
+- [Codex App Server Protocol](https://developers.openai.com/codex/app-server) — `thread/list`、`thread/read`、`thread/resume` 等 RPC 方法的协议定义

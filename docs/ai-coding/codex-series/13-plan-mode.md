@@ -1,0 +1,516 @@
+# Codex CLI 规划模式 /plan：先想清楚再动手
+
+> TL;DR：`/plan` 是 Codex CLI 内置的斜杠命令，让 Codex 进入"只规划不执行"的状态——输出执行方案、影响范围和验证步骤，但不动文件。规划完成后切回执行模式按方案实施。配合 `plan_mode_reasoning_effort` 配置项，规划阶段还能使用比执行阶段更高的推理强度。本文覆盖 `/plan` 的用法、推理配置、完整工作流、与 `/goal` 的配合，以及两个实战案例。
+
+---
+
+## 1. 为什么需要规划模式
+
+用 Codex CLI 做过稍大改动的人大概都遇到过这种场景：你让 Codex "把认证模块从 JWT 迁移到 session"，它上来就改了十几个文件，跑到一半发现路由层和中间件的改动互相冲突，然后试图补救，越改越乱。最后你 `git checkout .` 回到起点，重新开始。
+
+问题出在"直接开干"这个动作本身。LLM 的代码修改是逐 token 生成的，它没有全局视角的暂停点。一旦第一刀切歪了，后续改动都在补偿前面的错误。改动涉及的文件越多，漂移（drift）越严重。
+
+规划模式解决的正是这个问题。它的核心思路是**过程分离**：
+
+- **规划阶段**：锁定目标、步骤、边界和验证条件，不写一行代码
+- **执行阶段**：严格按方案实施，如果中途需求变了，回到规划阶段追加变更理由，而不是就地转向
+
+这不是一个新概念——建筑师先画图纸再施工，外科医生先读 CT 再下刀。区别在于，LLM 生成代码的速度太快，人往往来不及思考"该不该让它动手"，它已经改完了。`/plan` 把这个决策点显式化了。
+
+还有一个常被忽略的收益：规划本身是一次低成本的试错。你花 30 秒读一个方案，发现方向不对，重新规划就行——没有任何文件被改动，没有 `git stash`，没有回滚。但如果直接执行，修复一个跑偏的改动可能要花 30 分钟。
+
+从社区反馈来看，规划模式也是 Codex 团队和用户共同推动出来的功能。2025 年 11 月，Codex 团队成员 Eric Traut 在 GitHub Discussion #7355 发起了一场关于"规划/规格模式"的公开讨论，收集了数十位开发者的真实需求。讨论的核心议题包括：是否需要硬性模式切换（modal vs non-modal）、方案应该持久化还是临时的（persisted vs ephemeral）、规划阶段该浅层还是深层（cursory vs thorough）。最终 Codex 在 v0.93.0 中落地了 `/plan` 命令，选择了模态切换的方案——通过 `Shift+Tab` 或斜杠命令进入，规划期间不修改文件。这个设计兼顾了安全性（不会意外改动代码）和低摩擦（一键切换）。
+
+## 2. /plan 命令详解
+
+### 基本用法
+
+在 Codex CLI 的 TUI 界面中，输入 `/plan` 加回车，Codex 会进入规划模式。你也可以在命令后跟上内联提示，一次性完成模式切换和首次规划请求：
+
+```
+> /plan Propose a migration plan for switching from REST to tRPC
+```
+
+Codex 收到这条命令后，会以只读方式分析你的代码库，输出一份执行方案。方案通常包含：目标、非目标、分步执行计划、涉及文件、风险评估、验证方式。
+
+### 带内联提示
+
+内联提示是 `/plan` 最实用的用法。你可以在斜杠命令后面直接描述任务：
+
+```
+> /plan 设计一个方案，把当前项目的 PostgreSQL 迁移到 PlanetScale，要求零停机
+```
+
+Codex 会把这个内联文本当作第一条规划请求来处理。你还可以在内联参数中使用 `/mention` 附加文件，或者粘贴图片作为参考。
+
+### 规划模式行为
+
+进入规划模式后，Codex 的行为有几个关键变化：
+
+1. **不执行文件修改**：规划模式下 Codex 不会创建、编辑或删除文件。这是一个 prompt 级别的约束——模型被指示只输出方案，不动代码
+2. **不运行命令**：Codex 不会执行 shell 命令，除非是为了读取信息（如 `git log`、`cat`）
+3. **方案流入专属 TUI 视图**：规划内容会以结构化的方式呈现在终端中，方便审阅
+
+需要注意的是，这个"不动文件"的约束是 prompt 级别的，不是运行时沙箱。在实际使用中，模型几乎总是遵守这条指令。但如果你的改动涉及生产环境或敏感数据，建议在进入规划模式前先切到一个临时分支，或者用 `git stash` 保存当前改动。
+
+### 配置前提
+
+`/plan` 在 v0.93.0 之后默认可用。如果你在旧版本上运行且看不到 `/plan`，需要在 `config.toml` 中启用协作模式特性门控：
+
+```toml
+[features]
+collaboration_modes = true
+```
+
+修改后重启 Codex CLI（`npm i -g @openai/codex` 确认安装完成），`/plan` 命令就会出现在斜杠命令列表中。当前版本（2026 年 6 月）已经不再需要这个配置项，`/plan` 默认启用。
+
+### 退出机制
+
+规划模式不是永久的。完成规划后，你有几种方式回到执行模式：
+
+- 按 `Shift+Tab` 在 TUI 中切换模式（Plan / Code）
+- 使用 `/model`、`/permissions` 等命令时，Codex 会自动回到正常模式
+- 输入一条新的非规划指令，Codex 会询问是否切回执行模式
+
+当 Codex 正在执行某个任务时，`/plan` 命令会暂时不可用。你需要等当前任务完成，或者用 `Escape` 中断它。
+
+## 3. 规划模式的推理行为
+
+### plan_mode_reasoning_effort
+
+从 0.105.0 版本开始，Codex 支持为规划模式单独配置推理强度。配置项是 `plan_mode_reasoning_effort`，写在 `~/.codex/config.toml` 中：
+
+```toml
+# config.toml
+plan_mode_reasoning_effort = "high"
+```
+
+可选值和 `model_reasoning_effort` 一致：`none`、`minimal`、`low`、`medium`、`high`、`xhigh`。
+
+### 默认 vs 规划推理
+
+当你不设置 `plan_mode_reasoning_effort` 时，规划模式使用 Codex 内置的预设默认值（通常是 `medium`）。而你在 `config.toml` 里设置的 `model_reasoning_effort` 只影响执行阶段。
+
+这意味着你可以让 Codex 在规划阶段用 `high` 甚至 `xhigh` 的推理强度做架构决策和风险评估，在执行阶段用 `medium` 做文件编辑和代码生成。规划阶段需要想得深，执行阶段需要跑得快。
+
+### 推荐设置
+
+```
+# config.toml — 规划用高推理，执行用中等
+model_reasoning_effort = "medium"
+plan_mode_reasoning_effort = "high"
+```
+
+也可以在 TUI 里动态设置。进入规划模式后执行 `/model`，选择推理强度时，Codex 会问你要应用到哪里：
+
+1. **仅规划模式**（Apply to Plan mode override）：只改规划阶段的推理强度
+2. **全局 + 规划模式**（Apply to global default and Plan mode override）：同时改两边的设置
+
+选第一个选项，就能实现规划阶段和执行阶段使用不同推理强度的效果。
+
+关于推理强度对 token 消耗的影响：`high` 和 `xhigh` 会消耗更多的 reasoning token，对应的响应时间也更长。对于简单的改动（修个 typo、调个样式），`medium` 足够；对于跨模块的架构调整、数据库迁移、API 版本升级，`high` 甚至 `xhigh` 才能产出足够细致的方案。
+
+### 不同推理等级对比
+
+根据社区实测反馈，不同推理强度在规划质量上的差异相当明显：
+
+| 推理强度 | 规划深度 | 适用场景 | 典型 token 消耗 |
+|---------|---------|---------|---------------|
+| `low` | 表面级，只列大概步骤 | 单文件改动、明确需求 | 低 |
+| `medium` | 中等，会扫描关键文件 | 常规功能开发、bug 修复 | 中 |
+| `high` | 深入，遍历依赖链 | 跨模块重构、schema 变更 | 高 |
+| `xhigh` | 极深，完整代码流分析 | 架构迁移、安全审计 | 很高 |
+
+在 GitHub Discussion #10628 中，多位开发者讨论了为规划和执行阶段使用不同模型的方案（类似"opus plan, sonnet execute"的思路）。`plan_mode_reasoning_effort` 正是这一需求的官方实现路径——你不需要切换模型，只需调高规划阶段的推理强度即可。
+
+## 4. plan -> execute 完整工作流
+
+### 五步流程
+
+一个完整的规划-执行周期分五步：
+
+**第一步：进入规划模式**
+
+```
+> /plan 为用户表增加软删除字段 deleted_at，要求兼容现有查询
+```
+
+**第二步：审阅方案**
+
+Codex 会输出一份结构化的规划。重点关注这几项：
+
+- **非目标（Non-goals）**：Codex 明确说不做什么。检查这里有没有漏掉的限制条件
+- **影响范围**：列出了哪些文件会被改动。对照你自己的心理预期
+- **验证步骤**：怎么确认改动是正确的。有没有覆盖你关心的边界情况
+- **回滚方案**：出了问题怎么回退
+
+**第三步：修改方案（可选）**
+
+如果你对方案有调整，直接在规划模式下追加指令：
+
+```
+> 不要改 src/lib/prisma.ts，那个文件由另一个团队维护
+```
+
+Codex 会更新方案。反复迭代直到方案可接受。
+
+**第四步：切换到执行模式**
+
+按 `Shift+Tab` 或直接告诉 Codex "按方案执行"。Codex 会按照规划中的步骤开始实施。
+
+**第五步：验证**
+
+执行完成后，运行方案中定义的验证步骤。可以用 `/diff` 查看实际改动，对照方案中的预期改动范围。
+
+### 完整对话示例
+
+下面是一个真实场景的对话流程，展示从规划到执行的完整过程。
+
+```
+> /plan 把 src/trpc/routers/user.ts 里的内联数据库查询全部提取到 src/server/user.ts，
+> 遵循项目已有的架构约束：routers 不直接访问 db
+
+Codex (Plan Mode):
+
+## 规划：提取用户路由中的数据库查询
+
+### 目标
+将 src/trpc/routers/user.ts 中的内联 Drizzle 查询迁移到 src/server/user.ts，
+保持 API 行为不变。
+
+### 非目标
+- 不改动 src/trpc/routers/ 下其他路由文件
+- 不修改 src/db/ 的 schema 定义
+- 不调整 API 返回结构
+
+### 影响范围
+- src/trpc/routers/user.ts（移除内联查询，改为调用 server 层）
+- src/server/user.ts（新增 5 个查询函数）
+
+### 步骤
+1. 读取 user.ts 中的所有内联查询，识别 5 个查询点
+2. 在 src/server/user.ts 中创建对应的函数：
+   - getUserById(id: string)
+   - getUserByEmail(email: string)
+   - listUsers(offset, limit)
+   - createUser(data)
+   - updateUser(id, data)
+3. 替换 user.ts 中的内联调用为 server 层函数
+4. 运行类型检查确认无类型错误
+5. 运行测试套件确认行为不变
+
+### 验证
+- bun run typecheck 通过
+- bun test 通过
+- /diff 显示只有两个文件被改动
+
+### 回滚
+git checkout src/trpc/routers/user.ts src/server/user.ts
+```
+
+审阅方案后，发现遗漏了一个查询点：
+
+```
+> 方案里漏了 deleteUser，user.ts 第 87 行有一个 db.delete 调用
+
+Codex (Plan Mode):
+已更新方案。新增步骤：
+- deleteUser(id: string) 加入 server 层
+- 步骤 3 的替换清单增加 deleteUser 调用点
+```
+
+满意后，切回执行模式：
+
+```
+> 按方案执行
+
+Codex (Code Mode):
+正在执行步骤 1/5：识别查询点...
+正在执行步骤 2/5：在 src/server/user.ts 创建查询函数...
+正在执行步骤 3/5：替换路由中的内联调用...
+正在执行步骤 4/5：运行类型检查...
+  ✓ 类型检查通过
+正在执行步骤 5/5：运行测试...
+  ✓ 23 个测试全部通过
+```
+
+最后确认改动范围：
+
+```
+> /diff
+
+只改动了两个文件：
+  src/trpc/routers/user.ts  (-42, +12)
+  src/server/user.ts         (+68)
+```
+
+整个过程中，你在执行前就已经知道会有几个文件被改动、改什么、怎么验证。这比让 Codex 直接改代码再检查 diff 的风险低得多。
+
+## 5. /plan 和 /goal 的配合
+
+### 先 goal 再 plan
+
+`/goal` 是 Codex CLI 的另一个斜杠命令，用于设置一个持久的任务目标。Codex 会在多个 turn 中持续追踪这个目标，直到达成停止条件。
+
+`/plan` 和 `/goal` 的关系可以这样理解：
+
+- `/goal` 设定"做什么"——定义终点和成功条件
+- `/plan` 设定"怎么做"——定义到达终点的路径
+
+对于复杂任务，推荐的工作顺序是先用 `/goal` 设定目标，再用 `/plan` 制定方案，最后按方案执行。
+
+### 目标驱动规划
+
+```
+> /goal 完成用户认证从 JWT 到 session 的迁移，所有测试保持通过
+> /plan 为上面的目标制定分步执行方案
+```
+
+这样做的好处是，规划阶段能感知到完整的目标上下文。Codex 不仅知道"迁移认证"这件事，还知道"测试必须全部通过"这个停止条件。方案中自然会包含"每一步都跑测试"的验证逻辑。
+
+### goal 的生命周期管理
+
+几个常用的 `/goal` 子命令：
+
+| 命令 | 作用 |
+|------|------|
+| `/goal <objective>` | 设置目标 |
+| `/goal` | 查看当前目标 |
+| `/goal pause` | 暂停目标追踪 |
+| `/goal resume` | 恢复目标追踪 |
+| `/goal clear` | 清除目标 |
+
+如果你的 `/goal` 命令没有出现在斜杠命令列表中，需要在 `config.toml` 中启用：
+
+```toml
+[features]
+goals = true
+```
+
+或者从 CLI 运行：
+
+```bash
+codex features enable goals
+```
+
+目标描述最长 4000 字符。如果你的目标包含详细的约束条件（比如迁移对照表、兼容性矩阵），把这些内容写进一个文件，让 `/goal` 指向这个文件：
+
+```
+> /goal 按照 MIGRATION_PLAN.md 中的方案完成数据库迁移
+```
+
+## 6. 规划模式 vs 直接执行
+
+### 什么时候用 /plan
+
+以下场景强烈建议使用规划模式：
+
+- **涉及 5 个以上文件的改动**：跨模块修改、重构、API 变更
+- **有破坏性风险的操作**：数据库 schema 变更、权限调整、认证流程修改
+- **需求本身不明确**：你只知道大概方向，需要 Codex 帮你梳理可行的实施路径
+- **多人协作的代码**：改动可能影响其他人正在开发的模块
+
+### 什么时候不用 /plan
+
+以下场景直接执行更高效：
+
+- **单文件小改动**：修 typo、调 CSS、加个 console.log
+- **明确的 bug 修复**：报错信息已经指向具体问题和修复方式
+- **探索性操作**：让 Codex 读代码、解释逻辑、回答问题
+- **时间敏感的修复**：生产环境挂了，需要尽快修
+
+### 对比参考
+
+| 维度 | /plan 模式 | 直接执行 |
+|------|-----------|---------|
+| 文件修改 | 不修改 | 立即修改 |
+| 推理强度 | 可独立配置（默认 high） | 跟随全局配置 |
+| token 消耗 | 方案生成消耗 reasoning token | 代码生成消耗 output token |
+| 适用规模 | 中大型改动 | 小型改动 |
+| 出错成本 | 零（没改任何东西） | 需要回滚 |
+| 迭代方式 | 反复修改方案直到满意 | 看结果再调整 |
+
+一个实用的判断标准：如果你能在 10 秒内说清楚改动是什么、改哪些文件、怎么验证，直接执行。如果你需要超过 10 秒来描述，或者描述过程中出现了"但是"、"不过"、"还得注意"这类转折词，先 `/plan`。
+
+### PLANS.md 模板方法
+
+除了 `/plan` 命令，Codex 官方还推荐了一种基于 `PLANS.md` 文件的规划方式，适合超大型任务（多小时的持续工作）。核心思路是在 `AGENTS.md` 中添加一段指令，告诉 Codex 什么时候使用执行计划（ExecPlan），然后在项目根目录放一个 `PLANS.md` 模板文件。
+
+`AGENTS.md` 中添加的内容大致如下：
+
+```markdown
+## ExecPlans
+
+When writing complex features or significant refactors, use an ExecPlan
+(as described in .agent/PLANS.md) from design to implementation.
+```
+
+当你在提示词中使用"ExecPlan"这个词时，Codex 就会按照 `PLANS.md` 中定义的模板来生成和跟踪执行计划。每个计划都是一个自包含的文档，包含目的、进度、里程碑、决策记录和验证步骤。
+
+这种方式和 `/plan` 不冲突——`/plan` 适合快速规划-执行循环，`PLANS.md` 适合需要跨多个会话持续跟踪的大型项目。OpenAI 官方 Cookbook 中有一个详细的 ExecPlan 示例，单次提示词驱动 Codex 连续工作超过 7 小时的案例，用的就是这个方法。
+
+## 7. 实战案例
+
+### 案例一：数据库 schema 迁移
+
+项目使用 Drizzle ORM + PostgreSQL，需要给 `users` 表增加 `email_verified_at` 字段，同时修改相关 API 返回值。
+
+```
+> /plan 为 users 表增加 email_verified_at 时间戳字段。
+> 现有 API 返回的 user 对象需要包含这个字段。
+> 已有用户的 email_verified_at 为 null。
+> 需要生成 Drizzle migration。
+
+Codex (Plan Mode):
+
+## 规划：users 表增加 email_verified_at
+
+### 目标
+- 新增 nullable timestamp 字段 email_verified_at
+- API 返回值包含新字段
+- 生成并应用 migration
+
+### 非目标
+- 不改动邮箱验证流程本身
+- 不修改前端组件
+- 不改动 auth 中间件
+
+### 影响范围
+- src/db/schema/users.ts（schema 定义）
+- src/db/migrations/（新生成的 migration 文件）
+- src/trpc/routers/user.ts（getUser 返回值）
+- src/server/user.ts（查询逻辑）
+
+### 步骤
+1. 在 src/db/schema/users.ts 的 users 表定义中增加：
+   emailVerifiedAt: timestamp("email_verified_at"),
+2. 运行 bunx drizzle-kit generate 生成 migration
+3. 确认生成的 SQL 为 ALTER TABLE ... ADD COLUMN ... NULL
+4. 更新 src/server/user.ts 的查询返回类型
+5. 运行 bun run typecheck
+6. 运行 bun test
+
+### 风险
+- 低风险：新增 nullable 字段不影响现有数据
+- Migration 是 additive，不需要数据迁移
+
+### 验证
+- drizzle-kit generate 成功生成 migration
+- typecheck 通过
+- 测试通过
+- 手动确认 API 返回值包含 email_verified_at: null
+```
+
+审阅方案后执行：
+
+```
+> 按方案执行
+
+# Codex 执行步骤 1-6，每步确认通过
+# 最后 /diff 确认改动范围
+
+> /diff
+
+改动文件：
+  src/db/schema/users.ts         (+2)
+  src/db/migrations/0042_*.sql    (new file, +8)
+  src/server/user.ts             (+4)
+  src/trpc/routers/user.ts       (+1)
+```
+
+整个迁移过程在执行前就已经有了清晰的边界。如果你不想 Codex 自动执行 migration（比如要在 staging 环境先验证），可以在方案中标注"步骤 2-3 由人工执行"。
+
+### 案例二：API 版本升级
+
+项目使用 tRPC v10，需要升级到 tRPC v11。这是一个跨模块的改动，涉及路由定义、中间件、客户端调用。
+
+```
+> /plan 将项目从 tRPC v10 升级到 v11，参考 tRPC 官方迁移指南。
+> 升级过程中保持所有现有测试通过。
+> 不改动 API 的对外行为。
+
+Codex (Plan Mode):
+
+## 规划：tRPC v10 -> v11 迁移
+
+### 目标
+完成 tRPC v10 到 v11 的升级，API 行为不变，测试全绿。
+
+### 非目标
+- 不重构 API 路由结构
+- 不改变错误处理逻辑
+- 不引入 v11 的新特性（如 streaming），仅做兼容迁移
+
+### 影响范围
+- package.json（依赖版本）
+- src/trpc/init.ts（初始化配置）
+- src/trpc/routers/*.ts（全部 14 个路由文件）
+- src/app/api/trpc/[trpc]/route.ts（API route handler）
+- src/components/ 下 6 个使用 tRPC hooks 的组件
+
+### 步骤
+1. 更新 package.json：@trpc/server 和 @trpc/client 升级到 ^11.0.0
+2. bun install 确认依赖树无冲突
+3. 更新 src/trpc/init.ts：
+   - router() -> createCallerFactory()
+   - 合并中间件链的写法调整
+4. 逐个更新路由文件：
+   - procedure 输入验证从 zod 直接传改为 .input(zodSchema)
+   - 输出类型标注方式调整
+5. 更新 API route handler：
+   - fetchRequestHandler 参数签名变更
+6. 更新客户端 hooks 调用方式
+7. bun run typecheck
+8. bun test
+
+### 回滚方案
+git checkout 所有改动文件
+降级 package.json 中的 tRPC 版本
+bun install
+
+### 验证
+- typecheck 通过
+- 23 个单元测试全部通过
+- 6 个 E2E 测试全部通过
+- 手动测试 3 个关键页面正常加载
+```
+
+这个案例中，方案列出了 14 个路由文件和 6 个组件会被影响。在执行前你已经知道工作量有多大，可以决定是让 Codex 一次性执行，还是分批做（先改核心模块，再改边缘模块）。这就是规划模式的核心价值——**在决策成本最低的时候做出最高质量的决策**。
+
+## 8. 常见问题
+
+**规划模式能完全防止 Codex 修改文件吗？**
+
+不能。规划模式是一个 prompt 级别的约束，不是运行时沙箱。模型被告知"不要修改文件"，但没有技术手段阻止它。实践中模型几乎总是遵守这个约束。对于高风险改动，建议搭配临时分支使用。
+
+**`/plan` 和 `/permissions` 的 Read-only 模式有什么区别？**
+
+`/plan` 是规划命令——让 Codex 先输出方案再执行。Read-only 是权限策略——从 `/permissions` 切换后，Codex 在获得你批准前不能执行任何写操作。两者可以叠加使用：`/plan` 负责规划，Read-only 负责审批把关。
+
+**规划模式的推理强度和全局设置是什么关系？**
+
+`model_reasoning_effort` 控制执行阶段的推理强度。`plan_mode_reasoning_effort` 控制规划阶段的推理强度。两者独立配置，互不影响。如果 `plan_mode_reasoning_effort` 未设置，规划模式使用内置预设默认值。
+
+**方案太长怎么办？**
+
+方案写到后来容易变成文档而不是行动计划。保持方案聚焦的方式：用模板约束（目标 + 非目标 + 步骤 + 验证 + 回滚），每项不超过几行。如果方案超过一屏，说明任务可能需要拆分。
+
+**任务正在执行时能用 `/plan` 吗？**
+
+不能。`/plan` 在有任务运行时暂时不可用。等任务完成或用 `Escape` 中断后才能切换。
+
+## 9. 下一步
+
+- 把本文的规划模板保存到项目的 `AGENTS.md` 或 `PLANS.md` 中，让 Codex 在规划时自动遵循
+- 尝试 `plan_mode_reasoning_effort = "xhigh"` 配合复杂架构决策，观察方案质量的差异
+- 探索 `/goal` 和 `/plan` 的组合用法，用目标驱动的模式管理长周期任务
+- 阅读本系列下一篇：《Codex CLI 目标模式 /goal：让 AI 自己跑完马拉松》
+
+---
+
+**延伸阅读**
+
+- [Codex CLI 斜杠命令官方文档](https://developers.openai.com/codex/cli/slash-commands) — `/plan`、`/goal`、`/model` 等全部命令的权威参考
+- [Codex 配置参考](https://developers.openai.com/codex/config-reference) — `plan_mode_reasoning_effort`、`model_reasoning_effort` 等所有配置项的完整说明
+- [Follow a goal 用例](https://developers.openai.com/codex/use-cases/follow-goals) — OpenAI 官方的 `/goal` 使用指南和场景示例
+- [GitHub Discussion #10628](https://github.com/openai/codex/discussions/10628) — Plan vs Execute 分离模型配置的社区讨论

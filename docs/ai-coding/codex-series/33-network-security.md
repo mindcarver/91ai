@@ -1,0 +1,483 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex 官方文档: Sandboxing and Security — macOS Seatbelt、Linux Landlock、Windows Job Objects
+2. Codex 官方文档: Configuration Reference — sandbox_mode、network_proxy、web_search
+3. Codex 开源仓库 openai/codex: codex-rs/sandbox/ — 沙箱实现源码
+4. Codex 开源仓库 openai/codex: codex-rs/config/src/config_toml.rs — 网络相关配置字段
+5. 本系列第 15 篇: 网络搜索 — web_search 三种模式
+6. 本系列第 26 篇: Shell 与沙箱配置 — sandbox_workspace_write.network_access
+7. 本系列第 32 篇: 权限 Profile 机制 — [permissions.<name>.network] 域名策略
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 网络安全与隔离：搜索通道、沙箱网络与 Cyber Safety
+
+> TL;DR：Codex 的网络访问走两条完全独立的路径——内置搜索工具（`web_search`）走 OpenAI 服务端通道，不经过本地沙箱；沙箱命令（`curl`、`npm install` 等）走本地操作系统级别的网络隔离。`web_search` 有三种模式（`disabled`/`cached`/`live`），沙箱网络由 `sandbox_workspace_write.network_access` 和 `features.network_proxy` 控制。权限 Profile 的 `[network]` 表提供域名级别的精细控制。Codex 还内置了 Cyber Safety 特性，拦截与恶意软件相关的网络行为。`--yolo` 标志会同时放开审批、沙箱和网络搜索。企业环境通过 `requirements.toml` 的 `[network]` 约束实现管理员级网络管控。本文从网络路径分离讲起，覆盖搜索安全、沙箱网络隔离、域名策略、代理配置、Cyber Safety，以及三个实战场景。
+
+---
+
+## 1. 为什么网络安全值得关注
+
+给 AI 编程代理网络访问权限，等于在你的机器上开了一个"AI 可以主动往外发包"的通道。这个通道的风险不是理论上的：
+
+- Codex 可能通过 `curl` 把你的代码或环境变量发送到外部服务器。这不是 Codex "故意作恶"——它可能只是在执行一个看起来合理的操作（比如"帮我上传这个文件到 CDN"），但你的意图和 Codex 的理解可能不同
+- `npm install` 安装了一个被投毒的包。Codex 不判断包的安全性，它只执行你让它做的事。如果某个恶意包被伪装成了你需要的依赖，Codex 会安装它
+- Codex 访问了一个钓鱼网站。比如你在让它调试一个网络请求问题时，Codex 可能访问你提供的 URL——如果这个 URL 是钓鱼链接，你的机器就暴露了
+
+这些风险在日常手动开发中也存在，区别在于：手动操作时你有直觉判断——看到一个可疑的 URL 你不会去点。Codex 没有这种直觉，它按指令执行。所以网络隔离的控制权在你手里。
+
+### Codex 的网络路径分离
+
+理解 Codex 网络安全的第一步，是认识到它有两条完全独立的网络路径：
+
+| 路径 | 入口 | 经过本地沙箱 | 控制方式 |
+|---|---|---|---|
+| 搜索工具 | `web_search` / `--search` | 不经过 | `web_search` 配置项 |
+| 沙箱命令 | `curl`、`npm install`、`git clone` 等 | 经过 | `sandbox_mode`、`network_proxy`、`[permissions.*.network]` |
+
+两条路径可以独立开启或关闭。你可以让搜索开着但沙箱断网（`web_search = "live"` + `network_access = false`），也可以反过来（`web_search = "disabled"` + `network_access = true`）。
+
+---
+
+## 2. 搜索工具的网络路径
+
+### 2.1 三种模式回顾
+
+搜索工具的网络路径（本系列第 15 篇已详细拆解）简要回顾：
+
+```toml
+web_search = "cached"   # 默认：走 OpenAI 缓存索引
+web_search = "live"     # 实时抓取网页
+web_search = "disabled" # 关闭搜索
+```
+
+关键点：搜索请求走的是 OpenAI 的服务端通道，**不经过你的本地沙箱**。`sandbox_mode` 和 `network_proxy` 对 `web_search` 没有效果。
+
+这意味着：
+- 即使沙箱完全禁止网络（`network_access = false`），`web_search = "live"` 仍然可以从互联网获取数据
+- 即使沙箱允许网络（`network_access = true`），`web_search = "disabled"` 时 Codex 也不会通过搜索访问网络
+
+### 2.2 搜索安全考量
+
+`cached` 模式是最安全的选择。搜索请求走 OpenAI 的缓存索引，相当于只从一个受控的"数据库"里查询。即使 Codex 的搜索关键词包含恶意内容，数据来源仍然是 OpenAI 的索引，不会直接访问你提供的外部 URL。
+
+`live` 模式风险更高。Codex 会从互联网实时抓取数据，可能访问到恶意网站。但风险仍然是可控的——Codex 抓取的是网页文本内容，不会执行页面上的 JavaScript 或下载可执行文件。
+
+如果你需要限制搜索范围，用 `[tools.web_search].allowed_domains`：
+
+```toml
+[tools.web_search]
+allowed_domains = ["docs.python.org", "fastapi.tiangolo.com", "github.com"]
+```
+
+### 2.3 --search CLI 标志
+
+```bash
+codex --search "帮我查一下 FastAPI 0.115 的新特性"
+```
+
+`--search` 标志临时启用实时搜索（等价于 `web_search = "live"`），只影响本次会话。会话结束后恢复到 `config.toml` 的默认值。
+
+---
+
+## 3. 沙箱网络隔离
+
+### 3.1 sandbox_workspace_write.network_access
+
+```toml
+[sandbox_workspace_write]
+network_access = true   # 默认 false
+```
+
+这个布尔值控制 `workspace-write` 沙箱模式下的网络访问权限。默认 `false`——Codex 跑的命令不能访问网络。
+
+设为 `true` 后，`curl`、`npm install`、`git clone` 等需要网络的命令才能正常工作。
+
+为什么默认关闭？因为 Codex 执行的命令是在你的机器上运行的。一个有网络访问权限的命令可以做任何事——上传文件、发送数据、连接外部服务。默认关闭网络是最安全的起点。
+
+### 3.2 操作系统级别的隔离
+
+Codex 的沙箱网络不是应用层的开关——它依赖操作系统的原生隔离机制：
+
+| 平台 | 沙箱实现 | 网络隔离方式 |
+|---|---|---|
+| macOS | Seatbelt（sandbox-exec） | 通过 `network*` 规则控制 |
+| Linux | Landlock + seccomp | 通过 seccomp 过滤系统调用 |
+| Windows | Job Objects + Restricted Tokens | 通过防火墙规则和 ACL |
+
+这些操作系统级别的隔离不是 Codex 自己实现的——它调用的是操作系统的安全能力。Seatbelt 是 macOS 内置的沙箱机制（苹果自己的 App Sandbox 也是基于它），Landlock 是 Linux 5.13+ 内核提供的沙箱功能。
+
+实际的隔离效果取决于操作系统版本：
+- macOS 10.15+ 的 Seatbelt 支持网络规则
+- Linux 5.13+ 的 Landlock 支持文件系统隔离，网络隔离需要额外的 seccomp 规则
+- Windows 的隔离能力最弱，主要依赖进程权限限制
+
+### 3.3 danger-full-access 模式下的网络
+
+`sandbox_mode = "danger-full-access"` 关闭了所有沙箱限制，包括网络。Codex 执行的命令跟你在终端里执行的效果完全一样——任何网络请求都不会被拦截。
+
+如果你需要放开文件系统但不放开网络，不要用 `danger-full-access`。用 `workspace-write` + 精细的 `network_proxy` 配置：
+
+```toml
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false    # 保持关闭
+
+# 如果需要特定域名的网络访问，用 network_proxy
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+}
+```
+
+### 3.4 --yolo 标志的连锁效应
+
+`--yolo`（即 `--dangerously-bypass-approvals-and-sandbox`）同时做三件事：
+
+1. 把 `approval_policy` 设为 `never`（不需要审批）
+2. 把 `sandbox_mode` 设为 `danger-full-access`（关闭沙箱）
+3. 把 `web_search` 设为 `live`（实时搜索）
+
+这是一个"全面放开"的标志——审批、沙箱、搜索全部放开。代价是安全防护全部失效。除非你在隔离的容器或虚拟机里运行 Codex，否则不要轻易使用 `--yolo`。
+
+如果你只想放开审批但保持沙箱保护：
+
+```bash
+# 不要用 --yolo，用精确配置
+codex --config approval_policy=never \
+      --config sandbox_mode=workspace-write \
+      --config web_search=cached \
+      "你的任务"
+```
+
+---
+
+## 4. 域名策略精细控制
+
+### 4.1 features.network_proxy 域名规则
+
+```toml
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "api.github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+`features.network_proxy.domains` 控制沙箱中命令的网络访问域名。它和权限 Profile 的 `[network].domains` 功能类似，但层级不同：
+
+- `features.network_proxy.domains`：config.toml 里的用户级配置
+- `[permissions.*.network].domains`：权限 Profile 里的域名规则
+- `requirements.toml` 里的 `[network].domains`：系统级管理员约束
+
+优先级从低到高：`features.network_proxy` < 权限 Profile < `requirements.toml`。
+
+### 4.2 常见的域名白名单
+
+只允许包管理器：
+
+```toml
+domains = {
+  "registry.npmjs.org" = "allow"
+  "registry.yarnpkg.com" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "crates.io" = "allow"
+  "static.crates.io" = "allow"
+  "api.github.com" = "allow"
+  "github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+包管理器 + 文档站：
+
+```toml
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "docs.python.org" = "allow"
+  "developer.mozilla.org" = "allow"
+  "doc.rust-lang.org" = "allow"
+  "docs.rs" = "allow"
+  "github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+### 4.3 域名匹配的边界
+
+域名匹配是精确匹配，不支持子域名通配符（除了 `*` 兜底）。
+
+`api.github.com = "allow"` 只匹配 `api.github.com`，不匹配 `cdn.github.com`、`raw.githubusercontent.com`、`gist.github.com`。如果你需要 allow GitHub 的多个子域名，逐个写：
+
+```toml
+domains = {
+  "github.com" = "allow"
+  "api.github.com" = "allow"
+  "raw.githubusercontent.com" = "allow"
+  "gist.github.com" = "allow"
+  "*" = "deny"
+}
+```
+
+---
+
+## 5. 代理配置
+
+### 5.1 HTTP 和 SOCKS5 代理
+
+```toml
+[features.network_proxy]
+enabled = true
+proxy_url = "http://proxy.example.com:8080"
+socks_url = "socks5://127.0.0.1:1080"
+```
+
+企业环境通常通过代理上网。Codex 支持两种代理协议：
+
+- `proxy_url`：标准 HTTP/HTTPS 代理
+- `socks_url`：SOCKS5 代理，适用于需要更底层网络控制的场景
+
+两者可以同时设置。Codex 根据具体的请求协议选择合适的代理。如果你本地跑着 Clash、V2Ray 之类的代理工具，通常本地会暴露一个 SOCKS5 端口（比如 1080），把 `socks_url` 指过去。
+
+### 5.2 代理安全注意事项
+
+代理配置引入了一个新的信任边界：你信任代理服务器。
+
+- 如果你用自己机器上的本地代理（`127.0.0.1`），风险可控——代理是你自己管理的
+- 如果你用公司的 HTTP 代理，风险取决于公司的网络安全策略——代理管理员可以看到你的流量
+- 如果你配置了非 loopback 地址的代理（`dangerously_allow_non_loopback_proxy`），等于把 Codex 的所有网络流量交给了一个你可能不信任的第三方
+
+```toml
+# 危险：允许通过非本地代理发请求
+dangerously_allow_non_loopback_proxy = true
+```
+
+`dangerously_allow_non_loopback_proxy` 让 Codex 可以使用公网或内网 IP 的代理。如果这个代理被劫持或恶意配置，你的所有网络请求（包括可能包含代码或密钥的数据）都会经过它。
+
+除非你明确知道自己在做什么，否则不要开启这个选项。
+
+### 5.3 allow_local_binding
+
+```toml
+allow_local_binding = true
+```
+
+这个选项允许 Codex 在本地绑定端口（启动一个 HTTP 服务器等）。默认关闭。
+
+开启后，Codex 可以在你的机器上监听端口——比如启动一个 dev server（`npm run dev` 通常会在 `localhost:3000` 上启动）。如果你不需要 Codex 启动服务，保持关闭。
+
+---
+
+## 6. Cyber Safety 特性
+
+### 6.1 什么是 Cyber Safety
+
+Codex 内置了一套 Cyber Safety 机制，专门针对与恶意软件相关的网络行为。这不是一个用户可配置的开关——它是 Codex 模型层面的安全特性，在推理过程中自动生效。
+
+Cyber Safety 关注的风险包括：
+
+- **命令注入**：Codex 不会执行被注入的恶意命令
+- **数据外泄**：Codex 会避免生成包含敏感信息外泄的代码
+- **恶意软件下载**：Codex 会避免从不可信来源下载可执行文件
+- **漏洞利用**：Codex 不会生成利用已知漏洞的代码
+
+### 6.2 Cyber Safety 的局限
+
+Cyber Safety 是模型层面的保护，不是操作系统级别的隔离。它的效果取决于模型的判断能力：
+
+- 可能漏掉某些精心构造的恶意操作（模型没识别出来）
+- 可能误拦正常的操作（模型过于保守）
+- 不是形式化验证，不能保证 100% 拦截
+
+Cyber Safety 和沙箱隔离是互补的，不是替代关系。沙箱负责操作系统级别的权限控制（Codex 能不能做某件事），Cyber Safety 负责模型层面的行为约束（Codex 会不会想做某件事）。
+
+---
+
+## 7. 两条网络路径的对比总结
+
+| 维度 | 搜索工具（web_search） | 沙箱命令（curl、npm 等） |
+|---|---|---|
+| 入口 | `web_search` 配置项 | `sandbox_mode`、`network_proxy` |
+| 网络通道 | OpenAI 服务端 | 本地操作系统 |
+| 经过本地沙箱 | 不经过 | 经过 |
+| 默认状态 | `cached`（有网络但走缓存） | `network_access = false`（断网） |
+| 域名控制 | `[tools.web_search].allowed_domains` | `[features.network_proxy].domains`、`[permissions.*.network].domains` |
+| 代理支持 | 无（走 OpenAI 的服务） | `proxy_url`、`socks_url` |
+| 风险等级 | 低（只读文本内容） | 高（可以执行任意网络操作） |
+
+实际配置中，两条路径要分别控制：
+
+```toml
+# 搜索：用缓存，足够安全
+web_search = "cached"
+
+# 沙箱网络：关闭，除非明确需要
+[sandbox_workspace_write]
+network_access = false
+
+# 如果需要特定域名的网络访问
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "*" = "deny"
+}
+```
+
+---
+
+## 8. 实战场景
+
+### 场景一：离线安全配置
+
+你处理的是敏感项目（金融数据、医疗数据），完全不能联网。
+
+```toml
+# ~/.codex/config.toml
+
+# 搜索关闭
+web_search = "disabled"
+
+# 沙箱：工作区可写，网络关闭
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+# 环境变量：排除敏感信息
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^AWS_", "^STRIPE_", "^DATABASE_URL$"]
+```
+
+效果：Codex 不能搜索外部资料，命令不能访问网络。适合在完全受控的环境中做代码修改和测试。
+
+### 场景二：受限网络配置
+
+你需要 Codex 安装依赖和查文档，但不希望它访问任意网址。
+
+```toml
+# 搜索：缓存模式够用
+web_search = "cached"
+
+# 沙箱网络：允许但限制域名
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+domains = {
+  "registry.npmjs.org" = "allow"
+  "registry.yarnpkg.com" = "allow"
+  "pypi.org" = "allow"
+  "files.pythonhosted.org" = "allow"
+  "crates.io" = "allow"
+  "github.com" = "allow"
+  "api.github.com" = "allow"
+  "raw.githubusercontent.com" = "allow"
+  "*" = "deny"
+}
+
+[tools.web_search]
+allowed_domains = ["docs.python.org", "developer.mozilla.org", "github.com"]
+```
+
+效果：Codex 可以从 npm/PyPI/crates.io 安装依赖，可以从 GitHub 拉代码，可以查缓存文档。但无法访问任意外部网址。
+
+### 场景三：企业内网 + 代理
+
+你在公司内网，需要通过代理才能访问外部网络。
+
+```toml
+# 搜索：缓存模式
+web_search = "cached"
+
+# 沙箱网络：通过代理
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features.network_proxy]
+enabled = true
+socks_url = "socks5://127.0.0.1:7890"
+domains = {
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+  "api.internal.company.com" = "allow"
+  "*" = "deny"
+}
+```
+
+管理员在 `requirements.toml` 中做的约束：
+
+```toml
+# /etc/codex/requirements.toml
+
+[network]
+mode = "allow"
+domains = {
+  "api.internal.company.com" = "allow"
+  "registry.npmjs.org" = "allow"
+  "pypi.org" = "allow"
+}
+
+allowed_web_search_modes = ["cached"]
+```
+
+管理层级：`requirements.toml` 限制了域名白名单和搜索模式。即使你的个人配置写了更宽松的域名规则，`requirements.toml` 的约束仍然生效。
+
+---
+
+## 9. 常见问题
+
+### 关了 network_access 但 npm install 还能用
+
+检查你的 `sandbox_mode` 是否真的在生效。如果 `sandbox_mode = "danger-full-access"`，`network_access` 字段无效——full access 模式关闭了所有沙箱限制。
+
+### 搜索能用但 curl 不行
+
+这是正常行为。搜索走 OpenAI 服务端通道，不经过本地沙箱。沙箱的网络隔离只影响命令层面的网络访问。
+
+### --yolo 后能不能恢复安全设置
+
+`--yolo` 只影响本次会话。会话结束后，下次启动 Codex 恢复到 `config.toml` 的默认值。如果你在会话中途想恢复安全设置，用 `/permissions` 切换到 Auto 或 Read Only。
+
+### 域名规则不生效
+
+检查优先级：`requirements.toml` > 权限 Profile > `features.network_proxy`。如果某个更高优先级的配置覆盖了你的域名规则，你的规则不会生效。同时检查 `sandbox_mode` 是否为 `danger-full-access`——full access 模式下域名规则不生效。
+
+---
+
+## 10. 下一步
+
+本篇覆盖了 Codex CLI 网络安全与隔离的完整体系。从搜索工具和沙箱命令两条独立网络路径的分离，到 `web_search` 三种模式的安全差异，再到沙箱的操作系统级隔离（Seatbelt/Landlock/Job Objects）、域名策略、代理配置、Cyber Safety 特性，以及 `--yolo` 的连锁效应。
+
+**下一篇（第 34 篇）**将讨论 `requirements.txt` 与依赖安全——Codex 安装 Python 包时的安全考量、依赖投毒防护、pip/uv 的安全选项、以及让 AI 管理依赖的风险边界。
+
+---
+
+**延伸阅读**
+
+- [Codex 官方文档 - Sandboxing and Security](https://developers.openai.com/codex/sandboxing-security) — macOS Seatbelt、Linux Landlock、Windows Job Objects 的实现说明
+- [Codex 官方文档 - Configuration Reference](https://developers.openai.com/codex/config-reference) — 网络相关配置项完整参考
+- [Codex 开源仓库 - sandbox 模块](https://github.com/openai/codex/tree/main/codex-rs/sandbox) — 沙箱实现的源码
+- 本系列第 15 篇 [网络搜索](./15-web-search.md) — web_search 三种模式详解
+- 本系列第 26 篇 [Shell 与沙箱配置](./26-shell-and-sandbox-config.md) — sandbox_workspace_write.network_access
+- 本系列第 32 篇 [权限 Profile 机制](./32-permission-profiles.md) — [permissions.*.network] 域名策略
+
+---
+
+*本文基于 Codex CLI 源码（`codex-rs/sandbox/` 模块）和 2026 年 6 月的官方文档撰写。Codex 版本更新频繁，部分配置项和默认行为可能在未来版本中变更。*

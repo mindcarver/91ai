@@ -1,0 +1,411 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 源码 openai/codex — codex-mcp/src/codex_apps.rs Codex Apps 连接器聚合
+2. OpenAI Codex 源码 openai/codex — config/src/apps_toml.rs Apps 连接器配置类型
+3. OpenAI Codex 源码 openai/codex — core-plugins/src/loader.rs 插件中的 Apps 连接器加载
+4. zread.ai/openai/codex/12-plugin-system — Apps 连接器清单结构与去重聚合
+5. zread.ai/openai/codex/22-configuration-reference — [apps] 配置表与审批模式
+6. zread.ai/openai/codex/13-mcp-integration — Codex Apps 虚拟 MCP 服务器与认证
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI Apps 连接器生态：让 Agent 连接外部服务
+
+> TL;DR：Apps（应用连接器）是 Codex 连接第三方服务的桥梁。通过 Apps，Codex 可以直接操作 GitHub 仓库、管理 Linear 任务、读写 Notion 页面、查询数据库。每个连接器在 `.app.json` 中声明，提供一组工具供 Agent 调用。配置在 `config.toml` 的 `[apps]` 表中控制启用状态和审批策略。在会话中用 `/apps` 浏览已配置的连接器，用 `$app-slug` 语法引用。连接器可以由插件贡献，也可以来自 ChatGPT 的托管连接器。本文覆盖连接器配置、审批模式、认证流程，以及 GitHub、Linear、Notion 等常见服务的接入案例。
+
+---
+
+## 1. Apps 在 Codex 扩展体系中的位置
+
+回顾 Codex 的四层扩展机制：
+
+| 机制 | 提供什么 | 类比 |
+|------|---------|------|
+| Skills | 知识——告诉 Agent 该怎么做 | 操作手册 |
+| MCP 服务器 | 能力——让 Agent 能调用外部工具 | 工具箱 |
+| Apps 连接器 | 连接——把第三方服务接入 Agent 工具链 | USB 接口 |
+| Plugins | 打包——把上述能力打包分发 | App Store |
+
+Apps 连接器的定位是"标准化第三方服务接入"。MCP 服务器可以是你自己写的任何工具（上一篇的文档索引器就是），Apps 连接器则是针对特定第三方服务的标准化封装——GitHub、Linear、Notion、Slack、Figma、Jira。
+
+Apps 和 MCP 服务器在底层用的是同一套传输协议（MCP）。区别在于来源和管理方式：
+
+- **MCP 服务器**：你在 config.toml 中手动配置 `command`、`args`，Codex spawn 子进程连接
+- **Apps 连接器**：由插件或 ChatGPT 托管环境提供，通过 `AppConnectorId` 定位，配置在 `[apps]` 表中控制行为
+
+从 Codex 的角度看，Apps 连接器最终会被转换为一个虚拟的 MCP 服务器（名为 `codex_apps`），其中的工具用两层命名空间：`codex_apps__<connector_name>__<tool_name>`。
+
+## 2. 连接器配置
+
+### 2.1 全局默认配置
+
+在 `config.toml` 的 `[apps]` 表中设置连接器的全局默认行为：
+
+```toml
+[apps]
+[apps._default]
+enabled = true                    # 全局开关
+destructive_enabled = true        # 允许破坏性操作
+open_world_enabled = true        # 允许对外部网络的访问
+```
+
+| 字段 | 默认值 | 说明 |
+|------|-------|------|
+| `enabled` | `true` | 全局开关。设为 `false` 则所有连接器默认禁用 |
+| `destructive_enabled` | `true` | 是否允许破坏性操作（删除、覆盖等） |
+| `open_world_enabled` | `true` | 是否允许连接器访问外部网络 |
+
+`destructive_enabled` 是一个重要的安全开关。设为 `false` 时，所有标记为"破坏性"的工具调用（比如删除 issue、覆盖文件）会被自动阻止，即使审批模式是 `auto`。这在生产环境或对数据安全要求高的场景中使用。
+
+### 2.2 单个连接器配置
+
+为每个连接器单独配置行为：
+
+```toml
+[apps.github_drive]
+enabled = true
+default_tools_approval_mode = "auto"
+
+[apps.github_drive.tools]
+"repos/list" = { approval_mode = "auto" }
+"repos/delete" = { approval_mode = "prompt" }
+"issues/create" = { approval_mode = "auto" }
+"issues/delete" = { approval_mode = "prompt" }
+"pulls/create" = { approval_mode = "auto" }
+"pulls/merge" = { approval_mode = "prompt" }
+```
+
+| 字段 | 说明 |
+|------|------|
+| `apps.<id>.enabled` | 单个连接器的启用/禁用 |
+| `apps.<id>.default_tools_approval_mode` | 连接器内所有工具的默认审批模式 |
+| `apps.<id>.tools.<name>.approval_mode` | 单个工具的审批覆盖 |
+
+审批模式有三个值：
+
+| 模式 | 效果 |
+|------|------|
+| `auto` | 自动通过，不需要人工确认 |
+| `prompt` | 每次调用都弹出确认提示 |
+| `approve` | 预批准，直接执行 |
+
+上面的配置给 GitHub 连接器设置了一个合理的默认策略：读取和创建操作自动通过，删除和合并操作需要手动确认。
+
+### 2.3 多连接器配置示例
+
+一个同时接入 GitHub、Linear、Notion 的配置：
+
+```toml
+[apps._default]
+enabled = true
+destructive_enabled = true
+
+# GitHub 连接器
+[apps.github_drive]
+enabled = true
+default_tools_approval_mode = "auto"
+[apps.github_drive.tools]
+"repos/delete" = { approval_mode = "prompt" }
+"issues/delete" = { approval_mode = "prompt" }
+
+# Linear 连接器
+[apps.linear_integration]
+enabled = true
+default_tools_approval_mode = "auto"
+[apps.linear_integration.tools]
+"issues/delete" = { approval_mode = "prompt" }
+
+# Notion 连接器
+[apps.notion_connector]
+enabled = true
+default_tools_approval_mode = "prompt"    # Notion 操作较敏感，默认手动确认
+```
+
+## 3. 会话中的交互
+
+### 3.1 /apps 命令
+
+在 TUI 中输入 `/apps`，会显示连接器管理界面。你可以：
+
+- 浏览所有已配置和已发现的连接器
+- 查看每个连接器的状态（已连接、需要认证、已禁用）
+- 查看每个连接器提供的工具列表
+
+状态显示规则：
+
+- 已认证且连接正常：显示工具数量
+- 需要认证：显示认证 URL，引导你在浏览器中完成授权
+- 已禁用：灰色显示，标注禁用原因
+
+### 3.2 $app-slug 引用
+
+在输入中使用 `$app-slug` 语法引用连接器：
+
+```
+$github_drive 帮我查看这个仓库最近的 PR 状态
+```
+
+Codex 的注入引擎会把连接器相关的提示词上下文注入到对话中，让 Agent 知道它可以调用这个连接器的工具。`$app-slug` 中的 slug 对应连接器的 `id`（如 `github_drive`、`linear_integration`）。
+
+### 3.3 工具调用流程
+
+当 Codex 调用一个 Apps 连接器的工具时，底层走的是和 MCP 服务器相同的执行管道：
+
+1. 模型输出 FunctionCall，工具名称为 `codex_apps__<connector>__<tool>`
+2. 工具路由器解析命名空间，定位到连接器和具体工具
+3. PreToolUse 钩子执行（如果配置了）
+4. 审批策略检查（根据连接器的 `default_tools_approval_mode`）
+5. 通过 Apps 连接器的虚拟 MCP 服务器发送调用
+6. 连接器转发请求到对应的第三方服务 API
+7. 结果返回给模型
+
+从模型的角度看，Apps 连接器的工具和 MCP 服务器的工具没有区别。区别在于配置和管理方式。
+
+## 4. 插件贡献的连接器
+
+连接器可以由插件打包提供。插件清单中的 `apps` 字段指向 `.app.json` 文件：
+
+```json
+{
+  "name": "github-integration",
+  "version": "1.2.0",
+  "description": "GitHub 集成插件",
+  "skills": "./skills/",
+  "mcp_servers": "./.mcp.json",
+  "apps": "./.app.json"
+}
+```
+
+`.app.json` 文件声明连接器的身份和工具集：
+
+```json
+{
+  "connectors": [
+    {
+      "id": "github_drive",
+      "display_name": "GitHub",
+      "description": "管理 GitHub 仓库、issue、PR",
+      "tools": [
+        {
+          "name": "repos/list",
+          "description": "列出仓库",
+          "destructive": false
+        },
+        {
+          "name": "issues/create",
+          "description": "创建 issue",
+          "destructive": false
+        },
+        {
+          "name": "repos/delete",
+          "description": "删除仓库",
+          "destructive": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+每个工具有一个 `destructive` 标记。当 `apps._default.destructive_enabled = false` 时，标记为 `destructive: true` 的工具会被自动阻止。
+
+插件安装后，其中的连接器会出现在 `/apps` 列表中。你仍然可以通过 `config.toml` 的 `[apps.<id>]` 配置来覆盖插件默认的审批策略。
+
+## 5. ChatGPT 托管连接器
+
+如果你的 Codex 实例通过 ChatGPT 认证（即绑定了 ChatGPT 账号），你可以使用 ChatGPT 托管的连接器——这些连接器在 ChatGPT 后端维护，不需要你手动配置 MCP 服务器。
+
+Codex 内部用一个名为 `codex_apps` 的虚拟 MCP 服务器来聚合所有 ChatGPT 托管的连接器。这个虚拟服务器的特殊之处：
+
+- **用户级缓存**：工具列表缓存在磁盘上，键为 `CodexAppsToolsCacheKey`（账号 ID + 用户 ID + 工作区标志）。后续会话启动时，Codex 从缓存加载工具列表，不用每次都从 ChatGPT 后端拉取。这让 Agent 可以在连接完成前就开始规划
+- **连接器过滤**：通过 `filter_disallowed_codex_apps_tools()` 强制执行工具白名单，只暴露被允许的连接器
+- **命名空间归一化**：连接器工具使用两层命名空间 `codex_apps__<connector_name>`，连接器名称前缀从工具名中去掉以节省 token
+- **元数据剥离**：连接器的内部元数据字段（`connector_id`、`connector_name` 等）在暴露给模型前被剥离，防止通过工具描述注入恶意提示
+
+ChatGPT 托管连接器的认证流程：
+
+1. Codex 检测到 ChatGPT 认证处于活动状态
+2. `codex_apps` 虚拟服务器使用运行时认证提供者获取 `McpAuthStatus::BearerToken`
+3. 连接器工具调用时，token 自动附加到请求中
+4. 如果认证失败（token 过期），Codex 解析错误中的 `_codex_apps.connector_auth_failure` 结构，生成 `CodexAppsAuthElicitationPlan`
+5. TUI 显示认证 URL，你在浏览器中重新授权
+
+## 6. 实战案例
+
+### 案例一：GitHub 连接器配置
+
+场景：让 Codex 能管理 GitHub issue、PR 和仓库。
+
+```toml
+# ~/.codex/config.toml
+[apps._default]
+enabled = true
+destructive_enabled = false   # 先关掉破坏性操作，安全优先
+
+[apps.github_drive]
+enabled = true
+default_tools_approval_mode = "auto"
+
+# 只读操作自动通过
+[apps.github_drive.tools]
+"repos/list" = { approval_mode = "auto" }
+"repos/get" = { approval_mode = "auto" }
+"issues/list" = { approval_mode = "auto" }
+"issues/get" = { approval_mode = "auto" }
+"pulls/list" = { approval_mode = "auto" }
+"pulls/get" = { approval_mode = "auto" }
+
+# 写操作需要确认
+"issues/create" = { approval_mode = "prompt" }
+"issues/update" = { approval_mode = "prompt" }
+"pulls/create" = { approval_mode = "prompt" }
+```
+
+使用：
+
+```
+$github_drive 列出我的仓库中最近一周有更新的 PR
+
+Codex 调用 codex_apps__github_drive__pulls/list...
+找到以下 PR：
+- PR #123: feat: add user search (3 days ago, open)
+- PR #124: fix: login redirect loop (1 day ago, merged)
+...
+
+> 创建一个 issue，标题"feat: 添加用户搜索功能"，描述参考 PR #123 的内容
+
+Codex:
+我需要调用 issues/create 工具来创建 issue：
+  标题: feat: 添加用户搜索功能
+  描述: [从 PR #123 提取]
+
+[批准] [拒绝]
+```
+
+### 案例二：Linear 连接器
+
+场景：让 Codex 从 Linear 获取需求信息，辅助开发。
+
+```toml
+[apps.linear_integration]
+enabled = true
+default_tools_approval_mode = "auto"
+[apps.linear_integration.tools]
+"issues/delete" = { approval_mode = "prompt" }
+"projects/update" = { approval_mode = "prompt" }
+```
+
+使用：
+
+```
+$linear_integration 获取 FEAT-123 这个需求的详细描述和验收标准
+
+Codex 调用 codex_apps__linear_integration__issues/get...
+
+需求详情：
+标题: 用户搜索功能
+描述: 允许用户通过姓名和邮箱搜索其他用户
+验收标准:
+  - 搜索结果支持按相关度排序
+  - 搜索延迟 < 200ms
+  - 支持模糊匹配
+
+> 根据这个需求设计 API 端点和数据模型
+```
+
+连接器获取的需求信息直接进入 Codex 的上下文，Agent 结合自己的推理能力设计方案。这比手动从 Linear 复制需求再贴给 Codex 高效得多。
+
+### 案例三：多连接器协作
+
+场景：一个完整的"需求到部署"工作流，涉及 Linear（需求）、GitHub（代码）、Slack（通知）三个连接器。
+
+```toml
+[apps.linear_integration]
+enabled = true
+default_tools_approval_mode = "auto"
+
+[apps.github_drive]
+enabled = true
+default_tools_approval_mode = "auto"
+[apps.github_drive.tools]
+"repos/delete" = { approval_mode = "prompt" }
+"issues/delete" = { approval_mode = "prompt" }
+"pulls/merge" = { approval_mode = "prompt" }
+
+[apps.slack_connector]
+enabled = true
+default_tools_approval_mode = "auto"
+[apps.slack_connector.tools]
+"channels/history" = { approval_mode = "auto" }
+"messages/send" = { approval_mode = "prompt" }
+```
+
+使用：
+
+```
+$linear_integration 从 FEAT-456 获取需求详情
+
+> $github_drive 根据需求创建功能分支，提交代码，创建 PR
+
+> PR 创建完成后，在 Slack #dev-updates 频道发送通知
+```
+
+三个连接器的工具在同一个对话中协作。Codex 负责编排调用顺序：先从 Linear 获取需求，再用 GitHub 操作代码，最后通过 Slack 通知团队。
+
+## 7. 连接器与 MCP 服务器的关系
+
+从架构角度看，Apps 连接器最终被 Codex 转化为一个虚拟的 MCP 服务器。理解这个关系有助于你在连接器和 MCP 服务器之间做出选择：
+
+| 维度 | Apps 连接器 | MCP 服务器 |
+|------|-----------|-----------|
+| 来源 | 插件或 ChatGPT 托管 | 手动配置 command/url |
+| 配置位置 | `[apps]` 表 | `[mcp_servers]` 表 |
+| 命名空间 | `codex_apps__<name>__<tool>` | `mcp__<name>__<tool>` |
+| 认证 | OAuth（ChatGPT 托管时自动） | env vars 或 OAuth |
+| 适用场景 | 标准化第三方服务 | 自定义工具/内部服务 |
+| 发现方式 | `/apps` 命令 | `/mcp` 命令 |
+
+选择原则：
+
+- 用标准 SaaS 服务（GitHub、Linear、Notion、Jira、Slack）→ 用 Apps 连接器
+- 用自建内部服务或自定义工具 → 用 MCP 服务器
+- 两者不冲突——可以同时配置，工具在同一个注册表中协作
+
+## 8. 常见问题
+
+**连接器需要单独安装吗？**
+
+取决于来源。如果是 ChatGPT 托管的连接器，只要你的 Codex 通过 ChatGPT 认证，就可以直接使用。如果是插件贡献的连接器，需要先安装对应的插件。`/apps` 命令会显示所有可用和已安装的连接器。
+
+**连接器工具调用失败怎么办？**
+
+常见原因和排查步骤：
+
+1. 认证过期 → `/apps` 中会显示"需要认证"，按提示重新授权
+2. 权限不足 → 检查连接器的 OAuth scope 是否包含所需权限
+3. API 限流 → 等待几秒后重试
+4. 连接器配置错误 → 检查 `config.toml` 中对应连接器的 `enabled` 字段
+
+**一个连接器的工具数量有限制吗？**
+
+没有硬性限制。但从 token 预算角度看，每个连接器的工具描述会占用模型上下文。如果连接器提供几十个工具，考虑用 `enabled_tools` 白名单只暴露你需要的。
+
+**能同时使用多个同类型连接器吗（比如两个 GitHub 连接器分别连不同账号）？**
+
+可以。每个连接器有唯一的 `id`，你可以安装多个连接器插件或配置多个 MCP 服务器来连接不同的 GitHub 账号。工具命名空间用连接器 `id` 区分，不会冲突。
+
+## 9. 下一步
+
+- 用 `/apps` 浏览当前可用的连接器，了解每个连接器提供的工具
+- 把常用的连接器审批策略配置好——读操作 auto，写操作 prompt
+- 尝试在同一个对话中组合使用多个连接器，体验多服务协作
+- 阅读本系列下一篇：《Codex CLI Plugins 插件开发》
+
+---
+
+**延伸阅读**
+
+- [Codex 插件系统](https://zread.ai/openai/codex/12-plugin-system) — 插件如何贡献 Apps 连接器，清单结构详解
+- [Codex MCP 集成](https://zread.ai/openai/codex/13-mcp-integration) — Apps 连接器的虚拟 MCP 服务器架构和认证机制
+- [Codex 配置参考](https://zread.ai/openai/codex/22-configuration-reference) — `[apps]` 表全部字段的权威说明
+- [Codex 工具系统](https://zread.ai/openai/codex/9-tool-system-and-execution) — 连接器工具在调度管道中的执行流程

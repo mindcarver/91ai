@@ -1,0 +1,444 @@
+# Codex 企业认证与 SSO：身份集成与安全管理
+
+> TL;DR：Codex 支持三种认证方式——ChatGPT 账号登录、API Key 认证、设备码认证。企业环境下的核心诉求是集中管理身份和凭证：通过 SSO 集成让员工用公司账号登录 Codex，通过 API Key 轮换防止凭证泄露，通过 managed authentication 统一管控认证策略。本文覆盖三种认证方式的机制、SSO 集成方案、凭证管理、Token 轮换、多租户架构，以及安全最佳实践。
+
+---
+
+## 1. 认证为什么重要
+
+Codex 不是普通的编辑器插件——它能读写文件、执行 shell 命令、访问网络。谁通过了 Codex 的认证，谁就获得了 Codex 所在机器上的这些能力。
+
+在个人使用场景下，你用自己的 ChatGPT 账号或 API Key 登录，风险自己承担。在企业场景下，认证变得关键：
+
+- **身份追溯**：当 Codex 执行了一个有问题的操作（比如误删了数据库），你需要知道是哪个员工的 session 做的
+- **权限联动**：员工离职后，他的 Codex 认证应该立即失效，不能继续操作
+- **合规要求**：金融、医疗等行业的监管要求所有系统访问必须通过统一的身份验证
+- **凭证安全**：API Key 不能写在共享配置文件里，不能通过 Slack 传递，不能提交到 git
+
+理解 Codex 的认证体系是搭建企业级 Codex 部署的基础。
+
+## 2. 三种认证方式
+
+### ChatGPT 账号登录
+
+这是最直接的认证方式。Codex 调用 ChatGPT 的 OAuth 流程，在浏览器中完成登录。
+
+```bash
+codex login
+```
+
+执行后，Codex 会在终端显示一个 URL。你在浏览器中打开这个 URL，用 ChatGPT 账号登录，Codex 会自动检测到登录完成。
+
+登录成功后，认证状态缓存在 `~/.codex/` 目录中。后续使用不需要重复登录，直到 session 过期。
+
+**特点**：
+- 使用 ChatGPT 订阅额度（Pro、Team、Enterprise）
+- 认证状态绑定到 ChatGPT 账号
+- 适合个人开发者或小团队
+- 不适合自动化场景（需要浏览器交互）
+
+**在企业环境中的局限**：ChatGPT 账号通常是个人注册的，不是公司统一管理的。员工离职后，ChatGPT 账号仍然有效，除非 IT 部门有 ChatGPT Enterprise 的管理员控制台来禁用。
+
+### API Key 认证
+
+用 OpenAI API Key 直接认证，绕过 ChatGPT 账号体系。
+
+```bash
+codex login --api-key sk-...
+```
+
+或者在 SDK 中：
+
+```python
+from openai_codex import Codex
+
+with Codex() as codex:
+    codex.login_api_key("sk-...")
+```
+
+**特点**：
+- 不依赖 ChatGPT 账号
+- 按用量计费（不是 ChatGPT 订阅额度）
+- 适合自动化场景（CI/CD、SDK、GitHub Actions）
+- 需要自行管理 Key 的生命周期
+
+**在企业环境中的优势**：API Key 可以由管理员统一分发和轮换。通过 OpenAI 的管理后台，可以创建 project-level 的 Key，限制 Key 的使用范围和额度。
+
+### 设备码认证
+
+不需要浏览器，在终端中显示一个验证码和 URL，你在任意设备上完成验证。
+
+```bash
+codex login --device-code
+```
+
+执行后显示：
+
+```
+Visit: https://chatgpt.com/activate
+Code: ABCD-1234
+```
+
+你在手机或其他设备上打开 URL，输入代码完成验证。
+
+**特点**：
+- 不需要浏览器（适合无头服务器、SSH 会话）
+- 认证仍然绑定到 ChatGPT 账号
+- 适合 SSH 远程开发场景
+
+在 SDK 中的用法：
+
+```python
+with Codex() as codex:
+    login = codex.login_chatgpt_device_code()
+    print("Visit:", login.verification_url)
+    print("Code:", login.user_code)
+    completed = login.wait()
+    print("Success:", completed.success)
+```
+
+### 认证方式对比
+
+| 维度 | ChatGPT 登录 | API Key | 设备码 |
+|------|-------------|---------|--------|
+| 交互要求 | 需要浏览器 | 无 | 需要另一台设备 |
+| 额度来源 | ChatGPT 订阅 | API 用量计费 | ChatGPT 订阅 |
+| 适用场景 | 个人日常使用 | 自动化、CI/CD | 无浏览器环境 |
+| 身份绑定 | ChatGPT 账号 | 无（Key 即身份） | ChatGPT 账号 |
+| 企业管理 | 通过 ChatGPT Enterprise | 通过 OpenAI API 管理 | 通过 ChatGPT Enterprise |
+| 过期处理 | session 过期后重新登录 | Key 可以设置过期 | session 过期后重新登录 |
+
+## 3. 认证状态管理
+
+### 登出
+
+```bash
+codex logout
+```
+
+清除本地缓存的认证状态。下次使用需要重新登录。
+
+在 SDK 中：
+
+```python
+with Codex() as codex:
+    codex.logout()
+```
+
+### 账号状态查询
+
+```bash
+codex account
+```
+
+显示当前认证状态、关联的账号信息、认证方式。
+
+在 SDK 中：
+
+```python
+with Codex() as codex:
+    account = codex.account(refresh_token=True)
+    print(account.account)
+```
+
+`refresh_token=True` 会刷新 token 后再返回账号信息，适合检查 token 是否仍然有效。
+
+### 登录流程的编程控制
+
+在 SDK 中，浏览器登录返回一个 handle，给你对登录过程的编程控制：
+
+```python
+from openai_codex import Codex
+
+with Codex() as codex:
+    login = codex.login_chatgpt()
+    print("URL:", login.auth_url)
+    print("Login ID:", login.login_id)
+
+    # 可以取消登录
+    # login.cancel()
+
+    # 等待登录完成
+    completed = login.wait()
+    print("Success:", completed.success)
+```
+
+`wait()` 是阻塞调用。在异步 SDK 中用 `await login.wait()`。
+
+## 4. SSO 集成方案
+
+Codex CLI 本身不内置 SAML/OIDC SSO 协议。它通过 ChatGPT 的认证系统间接受益于 ChatGPT Enterprise 的 SSO 支持。
+
+### 方案一：ChatGPT Enterprise SSO
+
+如果你的公司使用 ChatGPT Enterprise（Team 或 Enterprise 版），IT 部门可以在 ChatGPT 管理后台配置 SSO：
+
+1. 在 ChatGPT Admin Console 中启用 SAML SSO
+2. 配置 IdP（Identity Provider）——Okta、Azure AD、Google Workspace 等
+3. 员工用公司 SSO 账号登录 ChatGPT
+4. `codex login` 时，浏览器跳转到公司 SSO 登录页
+
+```bash
+codex login
+# 浏览器打开 → 公司 SSO 登录页 → 登录成功 → Codex 自动获取认证
+```
+
+这个方案下，员工的身份管理和权限回收都在公司 IdP 中完成。员工离职后，IdP 禁用账号，ChatGPT session 过期，Codex 也就无法使用了。
+
+**优势**：利用已有的 SSO 基础设施，不需要额外的身份管理系统
+**局限**：依赖 ChatGPT Enterprise 订阅；认证流程依赖浏览器
+
+### 方案二：API Key + 内部 Key 管理系统
+
+对于不使用 ChatGPT Enterprise 的团队，可以建立一个内部的 API Key 管理系统：
+
+```
+┌──────────┐     ┌───────────────┐     ┌──────────────┐
+│  员工     │ ──→ │ 内部 Key 管理  │ ──→ │ OpenAI API   │
+│  请求 Key │     │ 系统（Vault）  │     │ 获取 Key     │
+└──────────┘     └───────────────┘     └──────────────┘
+                       │
+                       ▼
+                 ┌───────────────┐
+                 │ 员工的机器     │
+                 │ codex login   │
+                 │ --api-key ... │
+                 └───────────────┘
+```
+
+实现要点：
+
+- 用 HashiCorp Vault 或类似的密钥管理系统存储 OpenAI API Key
+- 员工通过内部工具（CLI 或 Web UI）申请临时 Key
+- Key 设置过期时间（比如 30 天）
+- Key 权限按项目或团队分组
+- 员工离职时，撤销其所有 Key
+
+```bash
+# 员工从内部系统获取临时 Key
+vault read -field=key secret/codex/team-frontend/alice
+
+# 使用 Key 登录 Codex
+codex login --api-key "sk-...临时key..."
+```
+
+### 方案三：反向代理 + OIDC
+
+在企业内部部署一个认证代理，在 Codex 和 OpenAI API 之间做身份拦截：
+
+```
+┌──────────┐     ┌───────────────┐     ┌──────────────┐
+│  Codex   │ ──→ │ 内部认证代理   │ ──→ │ OpenAI API   │
+│  CLI     │     │ (OIDC/SAML)   │     │              │
+└──────────┘     └───────────────┘     └──────────────┘
+```
+
+代理负责：
+- 验证员工的 SSO token
+- 用预存的 OpenAI API Key 替换请求中的认证信息
+- 审计所有 API 调用
+
+这需要对 Codex CLI 的 API 请求路径进行配置。通过 `codex exec --responses-api-endpoint` 或配置文件指定内部代理地址。
+
+## 5. API Key 管理
+
+### Key 类型
+
+OpenAI 提供两种类型的 API Key：
+
+| 类型 | 特点 | 适用场景 |
+|------|------|---------|
+| Project Key | 绑定到 OpenAI Project，可以设置权限和用量限制 | 团队共享、权限分级 |
+| Legacy Key | 全局权限，无细粒度控制 | 个人使用（不推荐新创建） |
+
+企业场景中，建议全部使用 Project Key，按团队或项目创建不同的 Key。
+
+### Key 轮换
+
+定期轮换 API Key 是基本的安全实践。轮换流程：
+
+1. 在 OpenAI 管理后台创建新 Key
+2. 更新分发给团队的新 Key
+3. 监控旧 Key 的使用情况
+4. 确认旧 Key 无使用后，在后台删除
+
+对于 CI/CD 场景（GitHub Actions、SDK 自动化），Key 轮换流程：
+
+1. 更新 GitHub Secrets 或密钥管理系统中的 Key
+2. 下一次 CI 运行自动使用新 Key
+3. 旧 Key 过期后删除
+
+### Key 存储安全
+
+**不要做的**：
+- 不要把 Key 写在代码里
+- 不要把 Key 放在 `.env` 文件中提交到 git
+- 不要在 Slack/Teams 中分享 Key
+- 不要用明文 Key 作为命令行参数（会被 `ps` 暴露）
+
+**应该做的**：
+
+```bash
+# 推荐：通过管道传递，避免出现在进程参数列表中
+echo "sk-..." | codex login --api-key -
+
+# 推荐：通过环境变量（从密钥管理系统加载）
+export OPENAI_API_KEY=$(vault read -field=key secret/codex/team)
+codex login --api-key "$OPENAI_API_KEY"
+
+# SDK 中：从环境变量读取
+import os
+from openai_codex import Codex
+
+api_key = os.environ["OPENAI_API_KEY"]  # 从 Vault/CI 注入
+with Codex() as codex:
+    codex.login_api_key(api_key)
+```
+
+### GitHub Actions 中的 Key 安全
+
+```yaml
+# Key 存为 GitHub Secret
+- uses: openai/codex-action@v1
+  with:
+    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+```
+
+GitHub Secret 在日志中会被自动掩码（显示为 `***`）。Action 内部通过管道传递 Key 给 Responses API 代理，不经过环境变量，减少内存暴露。
+
+## 6. Agent Identity 认证
+
+Codex 的 exec-server 和 remote 模式支持 Agent Identity JWT 认证。这种认证方式适用于容器化部署场景，容器接收一个 Agent Identity JWT（通过 `CODEX_ACCESS_TOKEN` 环境变量），用它注册为 Agent 任务。
+
+```bash
+# 容器环境中使用 Agent Identity
+export CODEX_ACCESS_TOKEN="eyJ..."  # 由编排系统注入
+codex exec-server --use-agent-identity-auth
+```
+
+Agent Identity 认证的流程：
+1. 容器启动时接收 `CODEX_ACCESS_TOKEN`
+2. 使用 `--use-agent-identity-auth` 标志启用此认证路径
+3. Codex 注册一个 Agent 任务
+4. 后续请求携带 `AgentAssertion` header
+
+这种方式适合 Kubernetes 等容器编排环境，JWT 由编排系统的身份提供者签发。
+
+## 7. 多租户考量
+
+当一个 Codex app-server 或 exec-server 服务多个团队时，认证隔离变得重要。
+
+### 认证隔离层级
+
+| 层级 | 隔离方式 | 粒度 |
+|------|---------|------|
+| 网络 | 不同端口或不同 server 实例 | 粗 |
+| 认证 | 不同的 capability token 或 API Key | 中 |
+| 数据 | 不同的 `codex-home` 目录 | 细 |
+
+**推荐做法**：每个团队使用独立的 app-server 实例和独立的 `codex-home` 目录。认证通过不同的 capability token 隔离。
+
+```bash
+# 团队 A 的 server
+codex app-server \
+  --listen ws://127.0.0.1:4501 \
+  --ws-auth capability-token \
+  --ws-token-file /etc/codex/team-a-token \
+  --codex-home /home/team-a/.codex
+
+# 团队 B 的 server
+codex app-server \
+  --listen ws://127.0.0.1:4502 \
+  --ws-auth capability-token \
+  --ws-token-file /etc/codex/team-b-token \
+  --codex-home /home/team-b/.codex
+```
+
+### 审计追踪
+
+多租户环境下，审计日志必须包含租户标识。通过 `clientInfo.name` 字段区分不同团队的客户端：
+
+```json
+{
+  "method": "initialize",
+  "id": 0,
+  "params": {
+    "clientInfo": {
+      "name": "team-a-ide-plugin",
+      "title": "Team A IDE Plugin",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+## 8. 凭证安全清单
+
+| 检查项 | 说明 | 优先级 |
+|--------|------|--------|
+| API Key 不出现在 git 历史中 | `git log -p \| grep "sk-"` 应该无结果 | 高 |
+| API Key 定期轮换 | 每季度至少一次 | 高 |
+| CI/CD Key 和开发 Key 分离 | 不同的 Project Key | 高 |
+| Key 有用量限制 | 在 OpenAI 管理后台设置月度上限 | 中 |
+| 失效 Key 能快速撤销 | 保留 Key 列表，紧急时批量撤销 | 中 |
+| 审计 Key 使用情况 | 通过 OpenAI 管理后台或自建审计系统 | 中 |
+| 认证状态不过期太久 | Codex session 不会永久有效 | 低 |
+| Codex home 目录权限正确 | `chmod 700 ~/.codex` | 低 |
+
+## 9. 认证故障排查
+
+### 常见问题
+
+**`codex login` 后浏览器没反应**
+
+检查终端是否正确显示了 URL。如果 URL 显示但浏览器没打开，手动复制 URL 到浏览器。
+
+**认证后 Codex 报认证错误**
+
+检查网络是否能访问 OpenAI 的认证服务。企业网络可能有代理或防火墙拦截：
+
+```bash
+# 测试连通性
+curl -I https://chatgpt.com
+curl -I https://api.openai.com
+```
+
+**API Key 报 "invalid API key"**
+
+确认 Key 格式正确（以 `sk-` 开头），且在 OpenAI 管理后台仍然有效。检查 Key 是否属于正确的 Project。
+
+**`codex account` 显示 `requires_openai_auth: true`**
+
+表示当前认证状态需要 OpenAI 认证（可能是 ChatGPT 免费用户的限制）。升级到 ChatGPT 付费版或使用 API Key。
+
+### 诊断命令
+
+```bash
+# 全面诊断
+codex doctor
+
+# 检查认证状态
+codex account
+
+# 清除认证后重新登录
+codex logout
+codex login
+```
+
+## 10. 下一步
+
+- 在 OpenAI 管理后台创建 Project Key，按团队分配不同的 Key
+- 配置 ChatGPT Enterprise SSO（如果已有企业订阅），让员工用公司账号登录
+- 建立 API Key 轮换计划，记录在内部 Wiki 中
+- 检查团队的 git 历史，确认没有泄露的 API Key
+- 阅读本系列其他文章获取更多 Codex 企业部署知识
+
+---
+
+**延伸阅读**
+
+- [OpenAI API Key 管理文档](https://platform.openai.com/api-keys) — Key 创建、权限设置、用量限制
+- [ChatGPT Enterprise SSO 配置](https://help.openai.com/en/articles/8776231-chatgpt-enterprise-sso) — 企业 SAML SSO 配置指南
+- [Codex 认证相关 SDK 文档](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md) — login_api_key、login_chatgpt、login_chatgpt_device_code 详解
+- [Codex exec-server 认证](https://github.com/openai/codex/blob/main/codex-rs/exec-server/README.md) — Agent Identity JWT 和远程认证模式
+- [Codex CLI 登录命令](https://developers.openai.com/codex/cli/login) — codex login 的所有参数和选项

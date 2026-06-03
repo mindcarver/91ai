@@ -1,0 +1,507 @@
+<!--
+调研来源（不发布，仅记录）：
+1. GitHub 仓库 openai/codex: codex-rs/tui/src/slash_command.rs — 斜杠命令枚举定义、描述、可用性
+2. Zread: openai/codex 终端用户界面 (TUI) 文档 — /status /diff /compact /copy /raw 等命令行为
+3. Zread: openai/codex 配置参考 — config.toml 分层加载、tui.raw_output_mode、debug 配置
+4. Zread: openai/codex 执行策略与审批 — allowed_approval_policies、rules、策略引擎
+5. Zread: openai/codex Agent 循环与线程管理 — Auto-Compact 机制、token 预算检查
+6. 已完成系列文章: 10-session-management.md、11-context-management.md — /status /compact 的基础介绍
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI 信息查看命令：/status、/diff、/compact、/copy、/raw、/debug-config
+
+> **TL;DR** — 这六个命令不修改任何东西，只负责"让你看到当前到底发生了什么"。`/status` 查看会话状态和 token 消耗，`/diff` 查看文件改动，`/compact` 压缩对话释放 token，`/copy` 把模型输出复制到剪贴板，`/raw` 切换终端原始滚动模式方便复制，`/debug-config` 打印配置层的合并结果和诊断信息。单独看每个命令都很简单，但组合起来使用，构成了一个完整的"会话可观测性"工具链。
+
+---
+
+## 1. 信息透明度的重要性
+
+用 AI 编程工具做真实项目，最让人不安的地方不是"它写不出代码"，而是"你不知道它在干什么"。
+
+模型改了三个文件，你不知道改了什么。上下文快满了，你不知道还剩多少空间。明明配了只读模式，它却能执行写文件操作——你不知道哪层配置覆盖了哪层。这些"不知道"累积起来，就会变成不信任。不信任的后果就是不敢用，或者每次操作后手动跑一堆 git 命令确认。
+
+信息查看命令解决的正是这个问题。它们不做任何修改，只负责把当前状态摊开来给你看。六个命令各有分工：
+
+| 命令 | 看什么 | 什么时候用 |
+|------|--------|-----------|
+| `/status` | 会话配置、模型、token 用量 | 任务开始前、感觉回答变差时 |
+| `/diff` | 文件改动（已暂存、未暂存、未跟踪） | 准备退出前、不确定 Codex 改了什么 |
+| `/compact` | 对话历史压缩、释放 token | token 用量过半、切换子任务时 |
+| `/copy` | 把模型最新输出复制到剪贴板 | 需要把 Codex 的回答贴到别处 |
+| `/raw` | 切换原始滚动模式 | 想直接鼠标选中终端文本复制 |
+| `/debug-config` | 配置层合并结果、策略来源 | 配置不生效、权限不符合预期 |
+
+还有一个特点值得注意：这六个命令中，`/diff`、`/copy`、`/raw`、`/status`、`/debug-config` 这五个在任务执行期间都可以使用（`available_during_task` 返回 `true`）。只有 `/compact` 不行——它需要等任务完成或被中断。这意味着即使 Codex 正在跑命令或改文件，你随时可以查状态、看改动、复制内容。
+
+---
+
+## 2. /status 会话状态
+
+`/status` 是最常查的信息。在 Codex CLI 的 TUI 里输入：
+
+```
+/status
+```
+
+Codex 会输出当前会话的关键信息。
+
+### 显示内容
+
+输出通常包含以下几个字段：
+
+- **Model**：当前使用的模型名称（比如 `gpt-5.4`、`o4-mini`）
+- **Approval policy**：当前审批策略（`suggest`、`auto-edit`、`full-auto`）
+- **Writable roots**：可写的根目录列表（沙箱允许写入的路径）
+- **Token usage**：当前 token 消耗 / 上下文窗口上限（百分比）
+- **Session ID**：当前线程的唯一标识符
+
+如果你通过远程模式连接（比如 Codex App 连接到云端服务器），`/status` 还会额外显示远程地址和服务器版本。
+
+### Token usage 是核心数据
+
+`/status` 里最重要的那一行就是 token usage。它告诉你当前会话已经占用了多少上下文空间。
+
+```
+Token usage: 87,432 / 200,000 (43.7%)
+```
+
+这个数字的意义在于帮助你做两个决策：
+
+**要不要压缩**。如果百分比超过 50%，考虑 `/compact` 一次。超过 70%，必须压缩，否则模型回答质量已经开始下降——它会"忘记"早期的对话内容，开始忽略你之前提出的约束。
+
+**要不要开新对话**。如果压缩之后 token 使用率仍然很高（说明系统指令和 AGENTS.md 本身就占了很多空间），那压缩解决不了问题。应该用 `/new` 开一个干净的新对话。
+
+### 和 /statusline 的关系
+
+`/status` 是手动查看的命令。如果你想持续监控 token 用量，不需要每次手动输入，可以用 `/statusline` 在底部状态栏固定显示 token 计数器：
+
+```
+/statusline
+```
+
+在弹出的选择器里，把 "token counters" 和 "context stats" 添加到状态栏。之后底部一直能看到当前 token 百分比，不用每次 `/status`。
+
+### 在旁路对话里也能用
+
+`/status` 在旁路对话（`/side`）里也可以使用。当主线程在跑任务，你开一个旁路想确认一下当前的 token 消耗情况，`/status` 能正常工作。
+
+---
+
+## 3. /compact 压缩对话
+
+`/compact` 是六个信息查看命令里唯一会实际改变会话状态的。它不修改文件系统，但会修改对话历史的内部表示——把详细的对话压缩成摘要，释放 token 空间。
+
+### 使用方法
+
+```
+/compact
+```
+
+Codex 会调用模型的压缩能力，把当前可见的对话历史总结成一个 compaction item。这个过程需要一次 API 调用，通常需要几秒钟。
+
+### 压缩前后发生了什么
+
+压缩前，上下文窗口里存的是完整的对话记录——你每次提问的原文、模型每次回复的原文、每个工具调用的参数和返回值。这些加起来可能消耗几万甚至十几万 token。
+
+压缩后，这些完整记录被替换成一段摘要。摘要保留了关键信息：做了什么决策、修改了哪些文件、当前代码状态、未完成的任务。但丢弃了细节：具体的命令输出内容、中间讨论过程、文件读取的完整内容。
+
+一次典型的压缩可以把 30,000-50,000 token 的历史压缩到 200-500 token。
+
+### 压缩的不可逆性
+
+这是 `/compact` 最重要的特性：**压缩是不可逆的**。
+
+一旦压缩完成，原始对话的细节就再也找不回来了。你不能"展开"一个 compaction item 回去看原始内容。如果你后来发现需要之前某个工具调用的完整输出，只能重新执行那个命令。
+
+所以压缩前有一个建议操作：先用 `/diff` 看一眼当前改动，确认没有遗漏。
+
+### 压缩的触发时机
+
+几个经验值：
+
+- **token 使用超过 50%**：社区里广泛认同的安全线。在这个点压缩，给后续对话留足空间，同时对话历史还不算太长，压缩摘要的质量也较好
+- **切换子任务时**：在一个长会话里先做后端 API，再做前端组件。在切换之前 `/compact` 一次，让摘要记录"后端 API 已完成"，然后前端部分不需要关心后端的实现细节
+- **回答质量明显下降时**：查 `/status` 发现超过 70%，直接压缩
+
+### `compact_prompt` 自定义
+
+如果你有特定需求，比如希望在摘要中保留修改文件的完整路径列表，可以通过 `compact_prompt` 配置项自定义压缩提示：
+
+```toml
+compact_prompt = "请保留所有已修改文件的完整路径列表，以及每个修改的简要说明。重点保留代码风格约定和架构决策。"
+```
+
+也可以从文件加载：
+
+```toml
+experimental_compact_prompt_file = "~/.codex/compact-instructions.md"
+```
+
+大多数情况下不需要自定义。Codex 的默认压缩行为对常规开发任务已经足够。
+
+### 自动压缩
+
+除了手动 `/compact`，Codex 还有自动压缩机制。当 token 使用量达到 `model_auto_compact_token_limit` 配置的阈值时，自动触发压缩。
+
+```toml
+# 当 token 使用量接近这个值时自动压缩
+model_auto_compact_token_limit = 100000
+```
+
+自动压缩是安全网——即使你忘了手动压缩，也不会因为上下文溢出而丢信息。但它有一个代价：压缩触发在模型推理过程中，会带来额外的延迟。如果你对延迟敏感，可以把阈值设低一些，让压缩更早触发（此时上下文更短，压缩更快）。
+
+手动和自动不冲突。推荐做法是设一个偏低的自动压缩阈值作为兜底，同时在关键节点手动 `/compact`。
+
+### 任务中不可用
+
+`/compact` 是这六个命令里唯一一个在任务执行期间不可用的。源码里 `available_during_task` 对 `Compact` 返回 `false`。你需要等 Codex 完成当前操作（或手动中断）之后才能执行压缩。
+
+---
+
+## 4. /diff 查看改动
+
+`/diff` 显示当前工作目录的文件改动——和你在终端里手动执行 `git diff` 类似，但 Codex 把它包装成了一个随时可用的命令。
+
+### 使用方法
+
+```
+/diff
+```
+
+### 显示内容
+
+Codex 会显示三类变更：
+
+- **已暂存的变更**（`git diff --cached`）：你用 `git add` 添加到暂存区的改动
+- **未暂存的变更**（`git diff`）：已修改但未暂存的改动——Codex 在本次会话里改的文件通常出现在这里
+- **未跟踪的文件**（`git ls-files --others --exclude-standard`）：新创建但还没被 Git 跟踪的文件——Codex 新建的文件会出现在这里
+
+三类信息一次性展示，省去了你在终端里分别跑三条 git 命令的麻烦。
+
+### 什么时候用
+
+**准备退出前**：每次 `/quit` 之前，养成先 `/diff` 的习惯。确认 Codex 在本次会话里改了什么文件，有没有意外的修改。
+
+**压缩对话前**：`/compact` 会丢失对话细节。在压缩之前 `/diff` 看一眼当前改动，确认没有遗漏需要手动处理的文件。
+
+**任务进行中**：`/diff` 在任务执行期间也可以使用。Codex 正在跑长任务的时候，你可以随时 `/diff` 检查它到目前已经改了什么。
+
+**不确定 Codex 改了什么时**：有时候 Codex 说"我修改了三个文件"，但你想看具体改了什么。直接 `/diff` 比问它要解释快得多。
+
+### /diff 和 git status 的区别
+
+`git status` 只告诉你哪些文件变了，不告诉你具体改了什么内容。`/diff` 展示实际的 diff 内容——加了哪几行、删了哪几行。信息量比 `git status` 大得多。
+
+```
+# git status 的输出
+modified: src/auth/middleware.ts
+modified: src/lib/jwt.ts
+new file: src/lib/token-refresh.ts
+
+# /diff 的输出（展示具体 diff）
+src/auth/middleware.ts
+@@ -23,7 +23,7 @@
+- import { verifySession } from '../lib/session';
++ import { verifyToken } from '../lib/jwt';
+
+src/lib/jwt.ts
+@@ -1,5 +1,32 @@
++ import jwt from 'jsonwebtoken';
++
++ export function generateToken(payload: object, secret: string): string {
+...
+```
+
+### 在旁路对话里可用
+
+和 `/status` 一样，`/diff` 在旁路对话（`/side`）里也可以使用。这在主线程跑长任务的时候特别实用——你可以开一个旁路，`/diff` 检查当前改动，不干扰主任务。
+
+---
+
+## 5. /copy 快速复制
+
+`/copy` 把 Codex 最近一次完成的输出复制到系统剪贴板，格式为 Markdown。
+
+### 使用方法
+
+```
+/copy
+```
+
+或者用快捷键 `Ctrl+O`。
+
+### 复制的是什么
+
+`/copy` 复制的是"最近一次完成的 Codex 输出"。如果 Codex 刚刚完成了一段回答（不管是一个代码块还是一段解释），`/copy` 会把这段回答的 Markdown 文本复制到剪贴板。
+
+如果 Codex 正在运行中（比如正在执行一个长命令），还没有产生完成的输出，`/copy` 会使用最近一次已经完成的输出。
+
+### 什么时候不可用
+
+两个场景下 `/copy` 不可用：
+
+1. **Codex 还没有任何完成的输出**：刚启动会话，你还没和 Codex 对话，或者第一次对话还在进行中。此时没有任何"完成的输出"可以复制
+2. **执行了回滚操作之后**：如果你在会话中执行了回滚（undo），之前完成的输出被撤销了，`/copy` 就找不到可复制的内容
+
+### 典型使用场景
+
+- 把 Codex 生成的代码粘贴到 Slack、Notion 或邮件里
+- 把 Codex 的分析结论复制到文档中
+- 把 Codex 写的测试用例复制到测试文件里（虽然通常可以直接让它写入文件）
+
+### 和终端复制的区别
+
+终端自带的复制功能（鼠标选中 → 复制）有一个问题：Codex 的 TUI 使用了 Markdown 渲染，终端里显示的是带颜色、带格式的文本。选中复制时，你会拿到终端渲染后的纯文本，可能包含 ANSI 颜色码或者丢失了代码块的格式。
+
+`/copy` 复制的是原始的 Markdown 源文本，保留了代码围栏、标题层级、列表结构等格式。如果你要把内容粘贴到 Markdown 编辑器或支持 Markdown 的应用中，`/copy` 的输出比终端选中复制的结果干净得多。
+
+### 在旁路对话里可用
+
+`/copy` 也可以在旁路对话中使用。
+
+---
+
+## 6. /raw 原始模式
+
+`/raw` 切换终端的原始滚动模式（raw scrollback mode）。这个模式的目的是让终端文本的选择和复制更直接。
+
+### 使用方法
+
+```
+/raw
+```
+
+或者用快捷键 `Alt+R`。
+
+### 切换了什么
+
+默认情况下，Codex 的 TUI 使用 alternate screen——这是终端应用的标准做法，启动时接管整个终端窗口，退出时恢复到之前的终端状态。在 alternate screen 里，文本选择和复制通常不太方便，因为终端渲染使用了全屏布局、自定义颜色和各种 UI 元素。
+
+`/raw` 切换到原始滚动模式后，TUI 的输出方式变为类似普通终端命令的逐行输出——没有了全屏布局，文本按顺序向下滚动。这种模式下，鼠标选择文本更自然，复制出来的内容更干净。
+
+### 不影响 Codex 的行为
+
+`/raw` 只改变 TUI 的显示方式，不影响 Codex 的任何功能。模型不会因为你切了原始模式就改变回答方式，工具执行不受影响，对话历史不受影响。
+
+### 持久化配置
+
+如果你发现经常需要手动切到原始模式，可以在配置里让它默认开启：
+
+```toml
+[tui]
+raw_output_mode = true
+```
+
+这样每次启动 Codex 就自动进入原始滚动模式，不需要每次手动 `/raw`。
+
+### 什么时候用
+
+- 需要选中 Codex 输出中的一段文本复制到其他地方（虽然 `/copy` 更适合整段复制，但 `/raw` 适合选中部分文本）
+- 使用了不支持 alternate screen 的终端模拟器
+- 在 tmux 或 screen 里使用 Codex，alternate screen 的行为可能不正常
+- 需要截取终端输出作为日志或记录
+
+### /raw 支持内联参数
+
+`/raw` 是少数支持内联参数的命令之一。你可以直接写：
+
+```
+/raw on
+/raw off
+/raw toggle
+```
+
+指定开关状态，而不是每次都来回切换。
+
+---
+
+## 7. /debug-config 配置诊断
+
+`/debug-config` 是六个命令里信息密度最高的一个。它打印 Codex 配置系统的完整内部状态——所有配置层的加载结果、合并后的最终值、每个配置项的来源、以及执行策略的诊断信息。
+
+### 使用方法
+
+```
+/debug-config
+```
+
+### 配置层是什么
+
+Codex 的配置系统是分层合并的，多个配置来源按优先级从低到高叠加，上层的值覆盖下层的同名配置。`/debug-config` 会把每一层的加载状态都打印出来。
+
+配置层从低到高的顺序大致是：
+
+1. **内置默认值**：Codex 代码里写死的默认配置
+2. **管理员配置**：`/etc/codex/config.toml`（Linux）或 `%ProgramData%\OpenAI\Codex\config.toml`（Windows）
+3. **用户配置**：`~/.codex/config.toml`
+4. **Profile 配置**：`~/.codex/<name>.config.toml`（当设置了 `profile = "<name>"` 时）
+5. **项目配置**：当前工作目录的 `config.toml`，或父目录的 `.codex/config.toml`，或 Git 仓库根目录的 `.codex/config.toml`
+6. **运行时覆盖**：命令行参数和环境变量
+
+### /debug-config 的输出内容
+
+执行 `/debug-config` 后，你会看到：
+
+**配置层顺序**：从最低优先级到最高优先级，每一层的文件路径和加载状态。如果某一层的配置文件不存在或解析失败，也会标明。
+
+**开/关状态**：每个布尔型配置项的最终值（开或关），以及这个值来自哪一层。比如你看到 `experimental_network: true (source: user config)`，就知道网络功能是你自己在用户配置里开启的，不是默认值。
+
+**策略来源**：`allowed_approval_policies`、`allowed_sandbox_modes` 等策略配置项，显示当前允许的审批策略和沙箱模式列表，以及每条策略的定义来源（哪一层、哪个文件）。
+
+**MCP 服务器**：当前配置的 MCP 服务器列表，包括每个服务器的连接状态、提供的工具数量等。
+
+**Rules 配置**：`.rules` 文件和 `requirements.toml` 的加载结果，包括每条规则的模式、决策和来源。
+
+**其他关键字段**：`enforce_residency`、`experimental_network` 等实验性功能的开关状态。
+
+### 什么时候用
+
+`/debug-config` 不是日常命令——你不会每次启动 Codex 都跑一遍。它的使用场景集中在**排查配置问题**：
+
+**配置不生效**：你修改了 `config.toml` 里的某个值，但 Codex 的行为没有变化。用 `/debug-config` 看看最终生效的值到底来自哪一层——可能上层配置覆盖了你的修改，可能你改错了文件。
+
+**权限不符合预期**：你期望 Codex 只能读文件（read-only），但它却能执行写操作。`/debug-config` 能告诉你 `approval_policy` 和 `sandbox_mode` 的最终值来自哪里。
+
+**MCP 工具不出现**：你配置了一个 MCP 服务器，但 `/mcp` 列表里看不到它的工具。`/debug-config` 会显示 MCP 服务器的加载状态和错误信息。
+
+**团队成员配置不一致**：你把项目配置提交到了 Git，但团队成员的行为和你不一样。让他们各跑一次 `/debug-config`，对比输出就能定位差异。
+
+### 一个实际例子
+
+假设你在项目根目录的 `.codex/config.toml` 里设置了：
+
+```toml
+model = "o4-mini"
+```
+
+但启动 Codex 后，`/status` 显示使用的是 `gpt-5.4`。怎么回事？
+
+跑一次 `/debug-config`，你可能会看到：
+
+```
+Layer 1: Built-in defaults
+  model = (default)
+
+Layer 2: Admin config
+  (no admin config found)
+
+Layer 3: User config (~/.codex/config.toml)
+  model = "gpt-5.4"
+
+Layer 4: Project config (./.codex/config.toml)
+  model = "o4-mini"
+
+Final: model = "o4-mini" (source: project config)
+```
+
+如果最终值确实是 `o4-mini`，但 `/status` 显示 `gpt-5.4`，那说明可能是启动参数 `--model gpt-5.4` 覆盖了配置文件。或者你用了 `codex exec` 而不是交互式 TUI，exec 模式可能有不同的配置加载逻辑。
+
+反过来，如果 `/debug-config` 显示项目配置层根本没加载，那可能是目录结构不对——项目配置文件不在 Codex 能识别的位置。
+
+### 任务中可用
+
+`/debug-config` 在任务执行期间可以运行。你不需要等 Codex 闲下来才能查看配置。
+
+---
+
+## 8. 信息命令的协作使用
+
+单独看每个命令都很简单。但把它们组合起来，能覆盖日常使用中大部分"我想知道现在什么情况"的需求。下面三个场景说明几个命令怎么配合。
+
+### 场景一：排查配置不生效
+
+你在用户配置里加了 `sandbox_mode = "read-only"`，但发现 Codex 还是在修改文件。
+
+```
+你：/status
+# 看到 Approval policy: auto-edit, Writable roots: /Users/you/project
+# 说明当前不是 read-only 模式
+
+你：/debug-config
+# 看到项目配置层覆盖了用户配置
+# 项目 .codex/config.toml 里设置了 sandbox_mode = "workspace-write"
+# workspace-write 优先级高于 read-only，所以最终生效的是 workspace-write
+```
+
+你发现是项目配置覆盖了用户配置。要么修改项目配置（如果你有权限），要么在命令行启动时用 `--sandbox read-only` 强制指定。
+
+---
+
+### 场景二：长会话的上下文管理
+
+你正在用 Codex 做一个大型重构，已经工作了 40 分钟。
+
+```
+你：/status
+# Token usage: 134,000 / 200,000 (67.0%)
+# 快到 70% 了，需要压缩
+
+你：/diff
+# 先看看当前改动，确认没有遗漏
+# 修改了 12 个文件，新建了 3 个文件
+
+你：/compact
+# 压缩对话历史
+# 压缩后 token 降到了 38,000
+
+你：/status
+# Token usage: 38,200 / 200,000 (19.1%)
+# 腾出了大量空间
+
+# 继续工作...
+
+# 20 分钟后
+
+你：/status
+# Token usage: 112,000 / 200,000 (56.0%)
+# 又快过半了，再压缩一次
+
+你：/compact
+```
+
+整个流程：`/status` 检查用量 → `/diff` 确认改动 → `/compact` 压缩 → 继续工作。这就是上下文管理的基本节奏。
+
+---
+
+### 场景三：向团队分享会话状态
+
+你在 Codex 里调试了一个复杂问题，需要把结果分享给同事。
+
+```
+你：/status
+# 截图或记录当前 token 用量，让同事知道这个会话已经用了多少上下文
+
+你：/diff
+# 截图改动列表，让同事知道 Codex 做了什么修改
+
+你：/copy
+# 把 Codex 的最终分析结论复制到剪贴板
+
+# 然后你把 /copy 的内容粘贴到团队的 Slack 频道
+# 再附上 /status 和 /diff 的截图
+```
+
+三个命令覆盖了"做了什么"、"结果是什么"、"当前状态如何"三个维度。同事看了这些信息就能接手你的会话，不需要你额外解释。
+
+---
+
+### 命令速查表
+
+| 命令 | 作用 | 快捷键 | 任务中可用 | 旁路可用 | 内联参数 |
+|------|------|--------|-----------|---------|---------|
+| `/status` | 查看会话状态和 token 用量 | — | 是 | 是 | 否 |
+| `/compact` | 压缩对话历史释放 token | — | 否 | 否 | 否 |
+| `/diff` | 查看 Git diff（含未跟踪文件） | — | 是 | 是 | 否 |
+| `/copy` | 复制最新完成输出到剪贴板 | Ctrl+O | 是 | 是 | 否 |
+| `/raw` | 切换原始滚动模式 | Alt+R | 是 | 是 | 是（on/off/toggle） |
+| `/debug-config` | 打印配置层和诊断信息 | — | 是 | 否 | 否 |
+
+---
+
+## 延伸阅读
+
+- [Codex CLI Slash Commands 官方文档](https://developers.openai.com/codex/cli/slash-commands) — 所有 TUI 内置命令的完整参考
+- [Codex Configuration Reference 官方文档](https://developers.openai.com/codex/config-reference) — config.toml 分层加载机制、tui 配置、debug 配置
+- [Codex Compaction API 文档](https://developers.openai.com/api/docs/guides/compaction) — 压缩机制的服务端 API 细节
+- [Codex Best Practices 官方文档](https://developers.openai.com/codex/learn/best-practices) — 官方推荐的上下文管理和会话工作流

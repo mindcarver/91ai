@@ -1,0 +1,773 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex CLI 源码 config/loader/mod.rs — 配置加载层定义
+2. Codex CLI 源码 config/loader/README.md — 层叠模型文档
+3. Codex CLI 文档 docs/config.md — 官方配置参考
+4. zread.ai/openai/codex/22-configuration-reference — 完整配置参考页面
+5. Codex CLI 源码 config/config_toml.rs — ConfigToml 结构体定义
+6. Codex CLI 源码 config/config_requirements.rs — requirements.toml 约束定义
+7. Codex CLI 源码 config/profile_toml.rs — Profile 配置结构
+8. Codex App Server README — configRequirements/read API 文档
+版本基准: 2026 年 6 月，Codex CLI v0.75.0
+-->
+
+# Codex CLI 配置文件体系总览：四层加载优先级
+
+> **TL;DR**：Codex CLI 的配置不是一个文件的事——它从最多 8 个来源逐层加载，上层覆盖下层，最终合并成运行时的有效配置。对个人开发者来说，核心关注 4 层就够了：requirements.toml（管理员约束）、用户 config.toml（全局默认）、项目级 .codex/config.toml（项目定制）、Profile 覆盖（环境切换）。项目级配置不能碰安全敏感字段（比如 API 地址、provider），不受信任的项目整层配置直接跳过。
+
+---
+
+## 1. 为什么 Codex 的配置体系值得关注
+
+大多数 CLI 工具的配置很简单：一个 `.bashrc` 或者 `~/.config/tool/config.json`，完事。但 Codex 面临的场景更复杂。
+
+想想这些情况：
+
+- 你在家用 `o3` 模型写个人项目，在公司用 `gpt-5.4-mini` 做日常任务，两个环境怎么切换？
+- 你 clone 了一个陌生人的仓库让 Codex 帮你看代码，这个仓库的 `.codex/config.toml` 会不会偷偷把你的 API 请求转发到第三方服务器？
+- 公司 IT 部门要求所有 Codex 实例必须用公司代理，不能开启 full-auto 模式，怎么强制执行？
+- 你想把 Codex 集成到 CI/CD 里，需要一次性覆盖十几个配置项，难道手写 config.toml？
+
+这些需求的共同点是：**同一个 Codex 二进制，在不同上下文下应该有不同的行为**。这就需要一个有优先级的、分层的配置系统。
+
+类似的思路其实在其他工具里也有先例。Git 的配置有 system、global、local 三层；VS Code 的设置有默认设置、用户设置、工作区设置三级。但 Codex 的场景更棘手——因为它是一个会自动执行命令的 Agent，配置文件里的某些字段（比如 API 地址、沙箱策略）直接关系到安全和数据隐私。所以 Codex 的分层设计不仅要考虑"谁的优先级高"，还要考虑"谁能设什么"。
+
+Codex 的答案是分层 TOML 合并。从源码看，`codex-config` 这个 crate 专门干这件事——它加载所有层，递归合并 TOML 值，记录每个键来自哪一层，最终输出一个确定性的有效配置。
+
+这篇文章拆解这个体系的结构、优先级规则、安全限制，以及怎么在实际工作中用起来。先给出一个总的认知框架，然后逐层展开。
+
+---
+
+## 2. 配置文件的位置与层次
+
+### 2.1 八层全景
+
+先看完整的层叠结构。从底层（优先级最低）到顶层（优先级最高），共 8 层：
+
+理解这个表的关键在于"约束层"和"可配置层"的区别。约束层（红色）是管理员设定的硬限制，它不提供默认值——它只是说"不管其他层怎么配，这几个字段不能超出某个范围"。可配置层（绿色和蓝色）才是你日常编辑的配置文件，它们提供实际值，但必须通过约束层的检查。
+
+| 层 | 来源 | 谁管的 | 能被覆盖吗 |
+|---|---|---|---|
+| System Config | `/etc/codex/config.toml`（Unix）或 `%ProgramData%\OpenAI\Codex\config.toml`（Windows） | 管理员 | 是 |
+| System Requirements | `/etc/codex/requirements.toml`（Unix）或 `%ProgramData%\OpenAI\Codex\requirements.toml`（Windows） | 管理员 | 否——强制约束 |
+| MDM Managed Preferences | macOS 设备配置文件推送 | 管理员 | 否——强制约束 |
+| Cloud Requirements | 托管云服务推送 | 管理员 | 否——强制约束 |
+| User Config | `${CODEX_HOME}/config.toml` | 用户自己 | 是 |
+| Profile Config | `${CODEX_HOME}/<name>.config.toml`（通过 `profile = "<name>"` 激活） | 用户自己 | 是 |
+| CWD / Tree / Repo Config | 当前目录的 `config.toml`、父目录的 `.codex/config.toml`、Git 仓库根的 `.codex/config.toml` | 项目 | 是，但有安全限制 |
+| Runtime Overrides | `--config` CLI 标志、UI 模型选择器 | 当前会话 | 是 |
+
+这 8 层可以分成三类：
+
+- **红色——约束层**（不可覆盖）：Cloud Requirements、MDM Managed Preferences、System Requirements。管理员设置的硬限制，用户和项目都改不了。
+- **绿色——用户层**（可覆盖）：System Config、User Config、Profile Config。你自己控制的全局配置。
+- **蓝色——项目层**（有条件可覆盖）：CWD / Tree / Repo Config。项目级配置，但受信任决策和拒绝列表约束。
+- **紫色——运行时层**：Runtime Overrides。临时的、只在当前会话生效。
+
+对于大多数个人开发者和中小团队来说，8 层里的 System、MDM、Cloud 三层基本碰不到——那是企业 IT 的地盘。日常打交道的主要是 4 层：User Config、Profile Config、CWD Config、Runtime Overrides。
+
+### 2.2 用户级配置
+
+用户级配置的位置由 `CODEX_HOME` 环境变量决定。如果没设置，默认是 `~/.codex`。
+
+```bash
+# 默认位置
+~/.codex/config.toml
+
+# 自定义 CODEX_HOME 时
+$CODEX_HOME/config.toml
+```
+
+`CODEX_HOME` 目录下还住着其他文件：
+
+| 文件/目录 | 用途 |
+|---|---|
+| `config.toml` | 主配置文件 |
+| `<name>.config.toml` | Profile 配置文件 |
+| `auth.json` | CLI 认证凭据 |
+| `.credentials.json` | MCP OAuth 凭据 |
+| `history.jsonl` | 对话历史日志 |
+| `log/` | TUI 文本日志 |
+| `themes/` | 自定义语法高亮主题 |
+| `pets/<pet-id>/pet.json` | 终端宠物配置 |
+
+一个典型的用户级 config.toml 长这样：
+
+```toml
+# ~/.codex/config.toml
+model = "gpt-5.4-mini"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[tui]
+theme = "tokyo-night"
+vim_mode_default = true
+
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^SECRET_.*", "^AWS_.*"]
+```
+
+这是你的"全局默认"。不管在哪个项目里打开 Codex，这些设置都生效——除非被更高优先级的层覆盖。
+
+用户级配置是最适合放"个人偏好"的地方：你喜欢的主题、快捷键方案、环境变量过滤规则、默认模型。这些跟具体项目无关，是你在所有项目里都想保持一致的东西。
+
+有一点值得注意：用户 config.toml 里不适合放项目相关的配置（比如 MCP 服务器、特定的环境变量设置）。因为如果你同时打开两个终端，各自在不同项目里工作，它们共享同一个用户级配置——一个项目的 MCP 服务器配置会对另一个项目造成干扰。项目相关的东西放项目级 config.toml 更干净。
+
+### 2.3 项目级配置
+
+项目级配置有三个搜索位置（按优先级从高到低）：
+
+1. 当前工作目录下的 `config.toml`：`${PWD}/config.toml`
+2. 父目录中的 `.codex/config.toml`：向上搜索
+3. Git 仓库根目录的 `.codex/config.toml`：`$(git rev-parse --show-toplevel)/.codex/config.toml`
+
+这三个位置的关系是：找到就加载，多个位置都找到就逐层合并。实际项目中，最常见的方式是把配置放在 `.codex/config.toml` 里，然后把这个目录提交到 Git——团队成员 clone 下来就有了统一的项目配置。
+
+项目级配置的典型内容：
+
+```toml
+# .codex/config.toml（项目级）
+model = "o3"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env_vars = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+
+[shell_environment_policy]
+set = { NODE_ENV = "development" }
+```
+
+但项目级配置有一个关键前提：**项目必须被信任**。如果你 clone 了一个陌生仓库，Codex 会先问你"信任这个项目吗？"——如果你选不信任，项目级的 config.toml 整层会被跳过，不会加载。
+
+为什么？因为项目配置是仓库内容的一部分，可能被仓库的提交者恶意篡改。信任机制防止了这种攻击向量。这个机制后面详细展开。
+
+### 2.4 Profile 配置
+
+Profile 解决的问题是：同一个用户，在不同场景下需要不同的配置。
+
+比如你白天在公司用 `o3` 仔细写代码，晚上做 side project 时想用 `gpt-5.4-mini` 快速迭代。每次手动改 config.toml 太麻烦，Profile 让你一键切换。
+
+Profile 有两种定义方式，可以同时使用：
+
+**方式一：独立文件**
+
+在 `CODEX_HOME` 下创建 `<name>.config.toml`：
+
+```toml
+# ~/.codex/quick.config.toml
+model = "gpt-5.4-mini"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model_reasoning_effort = "low"
+```
+
+```toml
+# ~/.codex/careful.config.toml
+model = "o3"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "high"
+```
+
+**方式二：config.toml 内的 `[profiles]` 表**
+
+```toml
+# ~/.codex/config.toml
+profile = "work"   # 默认激活的 profile
+
+[profiles.work]
+model = "o3"
+approval_policy = "on-request"
+model_reasoning_effort = "high"
+
+[profiles.quick]
+model = "gpt-5.4-mini"
+approval_policy = "never"
+```
+
+两种方式的效果一样——设置 `profile = "quick"` 时，Codex 会加载 `~/.codex/quick.config.toml`，并且合并 config.toml 中 `[profiles.quick]` 里的字段。
+
+为什么会有两种定义方式？独立文件适合配置比较重的场景——比如你想把完整的一套配置（包括 MCP 服务器、hooks 等）放在一个文件里，跟主配置文件隔离开。`[profiles]` 表适合轻量切换——只改几个字段就够了，不想多管理一个文件。
+
+一个常见的组合用法是：主 config.toml 里用 `[profiles]` 定义 profile 字段，独立文件用来放 hooks、MCP 服务器等"重型"配置。两者合并后共同生效。
+
+Profile 支持的字段是 ConfigToml 的一个子集，不是全部。完整列表包括：model、service_tier、model_provider、approval_policy、approvals_reviewer、sandbox_mode、model_reasoning_effort、plan_mode_reasoning_effort、model_reasoning_summary、model_verbosity、model_catalog_json、personality、chatgpt_base_url、model_instructions_file、web_search、analytics、tui 的部分字段（如 session_picker_view）、features 等。注意不支持 MCP 服务器配置和 hooks——这些是"重型"配置，要通过独立文件或主 config.toml 来设定。具体完整列表在第 27 篇 Profile 配置里展开。
+
+切换 Profile 有三种方式：
+
+```bash
+# CLI 标志
+codex --profile quick
+
+# config.toml 里设置默认
+profile = "quick"
+
+# 会话中通过 /permissions 面板切换
+```
+
+### 2.5 requirements.toml 管理员配置
+
+requirements.toml 是整个配置体系里最特殊的一层。它的定位不是"配置"，而是"约束"——它规定的是**其他层不能做什么**。
+
+它出现在三个位置（优先级从低到高）：
+
+| 位置 | 说明 |
+|---|---|
+| `/etc/codex/requirements.toml`（Unix）或 `%ProgramData%\OpenAI\Codex\requirements.toml`（Windows） | 系统管理员放置 |
+| macOS MDM 设备配置文件推送 | 移动设备管理推送 |
+| Cloud Requirements | OpenAI 托管云服务推送 |
+
+requirements.toml 能约束的内容包括：
+
+| 约束项 | 效果 |
+|---|---|
+| `approval_policy` | 锁定最低审批严格度，用户不能设更宽松的 |
+| `approvals_reviewer` | 强制审批路由到特定审查者 |
+| `web_search_mode` | 限制或禁用网页搜索 |
+| `allow_managed_hooks_only` | 禁止用户/项目/会话自定义钩子 |
+| `mcp_servers` | 控制允许哪些 MCP 服务器 |
+| `plugins` | 控制允许哪些插件 |
+| `enforce_residency` | 强制数据驻留要求 |
+| `network` | 域名白名单/黑名单 |
+
+一个实际的企业 requirements.toml 示例：
+
+```toml
+# /etc/codex/requirements.toml
+approval_policy = "on-request"
+
+[network]
+managed_allowed_domains_only = true
+allowed_domains = ["api.openai.com", "api.internal.company.com"]
+
+[feature_requirements]
+smart_approvals = false
+```
+
+这段配置的含义是：所有用户的审批策略不能比 `on-request` 更宽松（即不能开 full-auto），网络只能访问指定的两个域名，Smart Approvals 功能被禁用。不管用户的 config.toml 写什么，这些约束都会被强制执行。
+
+关键点：**requirements.toml 是不可覆盖的**。如果用户 config.toml 试图设 `approval_policy = "never"`，Codex 会发现这违反了 requirements.toml 的约束，恢复为 `on-request`，并记录一条警告。
+
+---
+
+## 3. 四层加载优先级
+
+### 3.1 加载顺序
+
+把 8 层按日常使用场景简化成 4 层来看，加载和合并的流程是这样的：
+
+```
+第 1 步：加载 requirements.toml（管理员约束）
+         ↓
+第 2 步：加载 ~/.codex/config.toml（用户全局配置）
+         ↓
+第 3 步：加载项目级 .codex/config.toml（项目配置，需信任）
+         ↓
+第 4 步：加载 Profile 覆盖（如果激活了 profile）
+         ↓
+最终合并 → 有效配置
+```
+
+合并算法是递归的 TOML 值合并。简单来说：
+
+- **标量值**（字符串、数字、布尔）：高层直接替换低层
+- **表**（TOML 的 `[section]`）：递归合并子键，不是整体替换
+
+这意味着你可以在高层只覆盖一个嵌套字段，不需要把整个父表重新写一遍。
+
+举个例子。假设用户 config.toml 有：
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/home/user/projects"]
+network_access = false
+```
+
+项目 config.toml 只覆盖一个字段：
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+合并后，`writable_roots` 保持用户的值，`network_access` 被项目覆盖为 true。
+
+### 3.2 覆盖规则
+
+用一张更完整的图来看合并过程：
+
+```
+requirements.toml        ← 约束层，不可覆盖
+    │
+    ├── openai_base_url: "https://api.openai.com/v1"
+    ├── approval_policy: "on-request"      （最低审批要求）
+    │
+User config.toml          ← 用户层
+    │
+    ├── model: "gpt-5.4-mini"
+    ├── approval_policy: "on-request"      （符合约束）
+    ├── sandbox_mode: "workspace-write"
+    │
+Project .codex/config.toml  ← 项目层（需信任）
+    │
+    ├── model: "o3"              （覆盖用户层）
+    ├── [mcp_servers.github]     （新增，用户层没有）
+    │
+Profile quick.config.toml   ← Profile 层
+    │
+    ├── model: "gpt-5.4-mini"    （覆盖项目层）
+    │
+Runtime --config flag      ← 会话层
+    │
+    ├── model_reasoning_effort: "low"  （覆盖 Profile 层）
+    │
+═══════════════════════════════════════
+有效配置:
+    ├── openai_base_url: "https://api.openai.com/v1"  （来自 requirements）
+    ├── approval_policy: "on-request"                （来自 requirements）
+    ├── model: "gpt-5.4-mini"                         （来自 Profile）
+    ├── sandbox_mode: "workspace-write"                （来自 User）
+    ├── [mcp_servers.github]                           （来自 Project）
+    ├── model_reasoning_effort: "low"                  （来自 Runtime）
+```
+
+每个键最终来自哪一层，Codex 都有记录。源码里叫 `origins()`——它返回一个映射，告诉你每个配置键的值来自哪个层。这个信息在调试配置问题时非常有用（后面 `/debug-config` 部分会讲到）。
+
+### 3.3 项目配置的安全限制
+
+项目级配置虽然是仓库的一部分，但不是什么都能配。有一份**拒绝列表**，里面列出的键在项目层会被静默忽略：
+
+| 被拒绝的键 | 为什么 |
+|---|---|
+| `openai_base_url` | 防止凭据重定向——仓库作者可以让你的 API 请求发到恶意服务器 |
+| `chatgpt_base_url` | 同上 |
+| `apps_mcp_product_sku` | 防止 SKU 篡改 |
+| `model_provider` | 防止 provider 劫持——强制你用第三方模型 |
+| `model_providers` | 防止注入假的自定义 provider |
+| `notify` | 防止任意命令执行——notify 可以指定外部命令 |
+| `profile` | 防止偷偷切换你的 Profile |
+| `profiles` | 防止注入假的 Profile |
+| `experimental_realtime_ws_base_url` | 防止 WebSocket 重定向 |
+| `otel` | 防止可观测性数据劫持 |
+
+注意"静默忽略"这个词——如果你的项目 config.toml 写了 `openai_base_url = "https://evil.com"`，Codex 不会报错，只是这个键不生效。这样仓库作者不会知道他的恶意配置被拦截了，也不会尝试其他绕过方式。
+
+这些限制的逻辑是：**仓库代码可能被任何人 fork 和修改，但你的 API 凭据和运行环境是你的私有财产**。项目配置可以控制模型选择、审批策略、MCP 服务器等技术偏好，但不能改变你的数据流向和执行环境。
+
+---
+
+## 4. 项目信任机制
+
+### 4.1 trust_level 设置
+
+Codex 第一次进入一个项目目录时，会弹出一个信任提示。你的选择会被记录到用户 config.toml 的 `[projects]` 表中：
+
+```toml
+# ~/.codex/config.toml 中的项目信任记录
+[projects."/home/user/my-repo"]
+trust_level = "trusted"
+
+[projects."/tmp/cloned-repo"]
+trust_level = "untrusted"
+```
+
+路径是绝对路径，用方括号 TOML 表语法来组织。`trust_level` 只接受两个值：`"trusted"` 或 `"untrusted"`。
+
+信任的影响是直接的：
+
+- **受信任的项目**：加载项目级 config.toml，允许 `workspace-write` 沙箱模式
+- **不受信任的项目**：跳过项目级 config.toml，沙箱受限
+
+### 4.2 不受信任项目的行为
+
+当你 clone 一个陌生仓库，在目录里运行 `codex "帮我分析代码"` 时，如果这个目录还没被信任过，Codex 会：
+
+1. 弹出信任确认提示
+2. 等你选择"信任"或"不信任"
+3. 根据你的选择决定是否加载项目配置
+
+如果你选了不信任，或者你根本没在这个目录里运行过 Codex（所以没有信任记录），那么：
+
+- 项目级 config.toml 被跳过，不加载
+- 项目的 AGENTS.md 仍然会被读取（它是项目文档，不是配置）
+- 沙箱默认更严格
+
+这个设计的一个好处是：当你 `cd` 到一个新 clone 的仓库时，不用担心仓库的 `.codex/config.toml` 做了什么奇怪的事。你必须显式信任它，它的配置才会生效。
+
+在 CLI 中，你也可以通过 `-c` 标志或 `codex trust` 命令来手动管理信任状态（具体命令取决于版本）。在 App Server 的 `thread/start` API 里，如果你传入了 `cwd` 并且沙箱是 `workspace-write` 或 full-access，App Server 会自动把该项目标记为受信任。
+
+### 4.3 信任和安全的边界
+
+信任机制的核心假设是：**你信任自己的项目，但不信任别人的项目**。具体来说：
+
+- 你自己创建的仓库，或者你团队维护的仓库——通常值得信任。你信任仓库的维护者不会在配置文件里做恶意的事情。
+- 从 GitHub clone 的陌生仓库、从 Stack Overflow 复制的示例项目、临时下载的代码片段——不值得信任。
+
+但这里有一个微妙之处：信任是"全有或全无"的二值决策，而现实中有些项目处于灰色地带。比如你 fork 了一个开源项目并且做了修改——你信任自己的修改，但原项目的 `.codex/config.toml` 你可能没有仔细审查。这种情况下，最安全的做法是信任项目但审查其配置文件，或者干脆删除你不确认的配置项。
+
+还有一个容易忽略的点：信任记录绑定的是绝对路径。如果你从 `~/projects/my-app` 进入和从 `~/repos/my-app`（同一个仓库的 symlink）进入，Codex 会把它们当作两个不同的项目。这可能造成困惑——你在一个路径下信任了项目，换一个路径又被问一遍。
+
+对于 `codex exec`（非交互模式），信任逻辑稍有不同。如果你用 `--sandbox workspace-write` 或 `--sandbox danger-full-access` 启动 exec 模式，Codex 会自动信任当前目录。这是因为 exec 模式通常用于 CI/CD 或者已知的自动化流程，手动确认信任没有意义。
+
+---
+
+## 5. 配置验证
+
+### 5.1 JSON Schema
+
+Codex 的 config.toml 支持通过 JSON Schema 来获得编辑器自动补全和验证。
+
+在你的 config.toml 文件顶部加一行注释：
+
+```toml
+#:schema https://developers.openai.com/codex/config-schema.json
+
+model = "gpt-5.4-mini"
+approval_policy = "on-request"
+```
+
+这行注释本身不会被 TOML 解析器读取（`#` 开头的行是 TOML 注释），但支持 TOML Schema 注解的编辑器扩展会识别它。
+
+在 VS Code 或 Cursor 里，安装 **Even Better TOML** 扩展后，你在 config.toml 里输入 `[` 就会弹出可用的 section 名称，输入键名会有补全，鼠标悬停在键上会看到描述和默认值。写错键名会显示红色波浪线。
+
+这个 JSON Schema 是从 Codex 源码中的 Rust 类型自动生成的。Codex 仓库有一个 `just` 任务：
+
+```bash
+just write-config-schema
+```
+
+它从 `ConfigToml` 结构体的 `#[derive(JsonSchema)]` 注解生成 JSON Schema 文件。所以 Schema 和源码始终保持同步——不存在"文档过时"的问题。
+
+### 5.2 /debug-config 诊断
+
+在 Codex TUI 里输入 `/debug-config`（第 19 篇详细讲过），会展示当前会话的配置来源信息。
+
+它显示的内容包括：
+
+- 每个配置层的加载状态（是否找到文件、是否成功解析）
+- 每个键来自哪个层（origin 信息）
+- 合并后的有效配置值
+- 被拒绝列表拦截的项目层键
+
+当你发现某个配置"明明写了但不生效"时，`/debug-config` 是最快的排查工具。它直接告诉你这个键被哪个更高优先级的层覆盖了。
+
+### 5.3 配置锁文件
+
+对于更深入的调试，Codex 提供了配置锁文件机制。在 config.toml 中设置：
+
+```toml
+[debug.config_lockfile]
+export_dir = "/tmp/codex-debug"
+```
+
+每次启动会话时，Codex 会把完整的有效配置导出到指定目录，包括每个键的来源信息。这个锁文件记录了合并过程的完整快照，是排查复杂配置冲突的终极手段。
+
+反过来，你也可以用锁文件作为配置的权威来源：
+
+```toml
+[debug.config_lockfile]
+load_path = "/tmp/codex-debug/session-123-lock.toml"
+```
+
+这让 Codex 跳过正常的配置加载流程，直接用锁文件里的配置。主要用于复现某个会话的精确配置状态。
+
+---
+
+## 6. 其他配置入口
+
+### 6.1 环境变量
+
+除了 TOML 配置文件，Codex 还通过环境变量提供一些控制：
+
+| 环境变量 | 作用 |
+|---|---|
+| `CODEX_HOME` | 用户配置目录，默认 `~/.codex` |
+| `CODEX_SQLITE_HOME` | SQLite 状态数据库目录（回退用） |
+| `CODEX_REVOKE_TOKEN_URL_OVERRIDE` | 自定义令牌撤销端点 |
+| 各种 `*_env_var` | 模型 provider 的 API Key 等 |
+
+`CODEX_HOME` 是最重要的一个。设了它之后，所有用户级文件的路径都变了——config.toml、Profile 文件、认证文件、历史日志、主题，全部在新的 `CODEX_HOME` 下。这在以下场景有用：
+
+- 你想在公司电脑和个人电脑共享同一套 Codex 配置（比如通过 symlink）
+- 你想测试一套全新的配置而不影响现有配置
+- 你想给不同项目组分配完全独立的 Codex 环境
+
+### 6.2 developer_instructions
+
+`developer_instructions` 是 config.toml 里的一个字符串字段，它的内容会作为 `developer` 角色的消息注入到对话中。效果类似 AGENTS.md，但它写在配置文件里而不是项目文档里。
+
+```toml
+# ~/.codex/config.toml
+developer_instructions = """
+你是一个专注于 Rust 项目的编程助手。
+- 所有新代码必须通过 cargo clippy
+- 优先使用 Result 而不是 unwrap
+- 写任何函数前先写测试
+"""
+```
+
+这个字段在不同层的语义有区别：
+
+- 在**用户层**设置：对你所有项目的所有会话生效
+- 在**项目层**设置：只对该项目生效（前提是项目被信任）
+
+和 AGENTS.md 的区别在于注入方式和作用域。`developer_instructions` 是固定字符串，在 config.toml 里写死；AGENTS.md 是项目文档文件，Codex 读取它的内容作为上下文，且文件本身可以由 Codex 在会话中修改。
+
+还有一个相关的字段是 `instructions`。和 `developer_instructions` 的区别是角色不同：`developer_instructions` 以 `developer` 角色注入（模型认为这是开发者给出的指令），`instructions` 以 `system` 角色注入（直接作为系统提示的一部分）。对模型来说，两者的权重和语义稍有区别，但对大多数用户来说效果差不多。
+
+实际使用建议：如果你是个人开发者，想在所有项目中注入统一的编码风格偏好，用 `developer_instructions`。如果你是团队管理者，想给团队的所有 Codex 实例注入统一的项目规范，用项目级 AGENTS.md。两者可以同时存在，内容互补而非冲突。
+
+### 6.3 AGENTS.md 与 model_instructions_file
+
+和配置体系相关的还有几个控制项目文档读取行为的字段：
+
+**`project_doc_fallback_filenames`**：当项目根目录没有 `AGENTS.md` 时，Codex 会按这个列表查找备选文件：
+
+```toml
+# ~/.codex/config.toml
+project_doc_fallback_filenames = ["CLAUDE.md", "COPILOT.md", "INSTRUCTIONS.md"]
+```
+
+默认是空数组——没有备选。如果你之前用了 Claude Code 的 `CLAUDE.md` 或者 GitHub Copilot 的 `COPILOT.md`，设了这个字段后 Codex 也能读到它们，不需要复制成 `AGENTS.md`。
+
+**`project_doc_max_bytes`**：控制 Codex 从项目文档文件中读取的最大字节数：
+
+```toml
+project_doc_max_bytes = 65536  # 64KB，默认 32768（32KB）
+```
+
+默认 32KB 对大多数项目够用。如果你的 AGENTS.md 特别长（包含了大量示例代码或规则），可能需要调大这个值。超过限制的部分会被截断。
+
+**`project_root_markers`**：控制 Codex 如何搜索项目根目录：
+
+```toml
+project_root_markers = [".git", ".hg", "package.json", "Cargo.toml"]
+```
+
+默认只有 `[".git"]`。Codex 从当前目录向上搜索，找到第一个匹配的标记文件就认为到了项目根。如果你的项目不用 Git（或者你想让 Codex 把 monorepo 的子目录当作独立项目），可以修改这个列表。
+
+**`model_instructions_file`**：指定一个文件路径，用来替代 Codex 内置的系统指令：
+
+```toml
+model_instructions_file = "./my-custom-instructions.md"
+```
+
+这个字段的文档里标注了"强烈建议不要使用"。原因是 Codex 内置的指令经过了大量优化和测试，覆盖了工具调用协议、沙箱行为、审批流程等核心逻辑。替换成自定义指令，大概率会导致这些功能异常。
+
+---
+
+## 7. 配置体系实战
+
+### 7.1 场景一：个人开发者配置
+
+一个自由职业者，同时维护 3 个项目：一个 Rust 后端、一个 React 前端、一个 Python 脚本集合。希望在不同项目间快速切换，且每个项目有自己的模型偏好。
+
+**~/.codex/config.toml（全局默认）：**
+
+```toml
+#:schema https://developers.openai.com/codex/config-schema.json
+
+model = "gpt-5.4-mini"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[tui]
+theme = "tokyo-night"
+vim_mode_default = true
+
+[shell_environment_policy]
+inherit = "all"
+exclude = ["^SECRET_.*", "^AWS_SECRET.*"]
+```
+
+**Rust 项目的 .codex/config.toml：**
+
+```toml
+model = "o3"
+model_reasoning_effort = "high"
+
+[mcp_servers.cargo]
+command = "cargo"
+args = ["mcp"]
+```
+
+**React 项目的 .codex/config.toml：**
+
+```toml
+model = "gpt-5.4-mini"
+
+[mcp_servers.figma]
+command = "npx"
+args = ["-y", "figma-developer-mcp"]
+```
+
+这样打开 Rust 项目时自动用 o3 深度思考，打开 React 项目时用快速模型。全局的 TUI 主题、快捷键、环境变量策略保持一致。
+
+如果他还需要在不同场景下快速切换审批严格度，可以加一个 Profile：
+
+```toml
+# ~/.codex/config.toml 中追加
+profile = "normal"   # 默认 profile
+
+[profiles.hackathon]
+model = "gpt-5.4-mini"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[profiles.audit]
+model = "o3"
+approval_policy = "on-request"
+model_reasoning_effort = "high"
+```
+
+平时用 `normal` profile 正常开发。参加 hackathon 时 `codex --profile hackathon` 全自动快速迭代。审查别人代码时 `codex --profile audit` 深度分析。三个 profile 之间不需要改任何配置文件，一条命令切换。
+
+### 7.2 场景二：团队共享的项目配置
+
+一个 5 人团队，所有成员的 Codex 配置统一放在项目的 `.codex/` 目录里，提交到 Git。
+
+**.codex/config.toml：**
+
+```toml
+# 团队统一配置
+model = "o3"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+
+[mcp_servers.linear]
+command = "npx"
+args = ["-y", "@anthropic/mcp-linear"]
+env_vars = { LINEAR_API_KEY = "env:LINEAR_API_KEY" }
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env_vars = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+
+[shell_environment_policy]
+set = { NODE_ENV = "development" }
+
+# 项目根标记
+project_root_markers = [".git", "package.json"]
+```
+
+团队成员 clone 仓库后，Codex 首次进入目录时会弹出信任提示。信任后，MCP 服务器、shell 环境等配置自动生效。注意 API Key 用了 `env:` 前缀——这意味着值从环境变量读取，不会被写死在配置文件里。
+
+AGENTS.md（项目文档，不是配置，但和配置体系有关联）：
+
+```markdown
+# 项目规则
+
+- TypeScript 严格模式，不允许 any
+- 使用 pnpm，不要用 npm
+- PR 必须通过 CI 全部检查
+- 组件目录：src/components/
+- 测试命令：pnpm test
+```
+
+这个文件由团队在 code review 中维护，Codex 每次启动任务时自动读取。
+
+这个配置方案有个实际的管理问题：当团队成员的个人偏好不同时怎么办？比如有人习惯 Vim 模式，有人不用；有人想用暗色主题，有人想用亮色。
+
+答案是：**项目配置只管项目相关的东西，个人偏好放在用户级配置**。项目的 config.toml 管模型、MCP 服务器、环境变量；用户的 config.toml 管主题、快捷键、审批严格度。两者合并后互不干扰——TOML 的递归合并机制保证了这一点。
+
+如果有个别成员确实需要在某个项目里用不同的模型（比如新人还在学习，想用更便宜的模型），他可以在自己的用户级 config.toml 里覆盖项目的模型选择。因为用户级在合并顺序上低于项目级（项目层优先级更高），他需要用 Profile 或者 `--config` 标志来强制覆盖——这是有意为之的设计，防止个人偏好轻易覆盖团队共识。
+
+### 7.3 场景三：企业管理的 requirements.toml
+
+一个 200 人的工程团队，IT 部门需要在所有开发者的 Codex 实例上强制执行安全策略。
+
+**/etc/codex/requirements.toml（系统级）：**
+
+```toml
+# IT 部门强制策略
+approval_policy = "on-request"
+
+[network]
+managed_allowed_domains_only = true
+allowed_domains = [
+    "api.openai.com",
+    "api.internal.company.com",
+    "github.com",
+]
+
+[feature_requirements]
+smart_approvals = false
+
+allow_managed_hooks_only = true
+
+[hooks.SessionStart]
+[[hooks.SessionStart]]
+hooks = [
+  { type = "command", command = "/usr/local/bin/codex-audit-startup", timeout_sec = 5 }
+]
+```
+
+这个配置的效果：
+
+- 所有开发者不能用 full-auto 模式——审批策略至少是 `on-request`
+- Codex 只能访问指定的 4 个域名
+- Smart Approvals 实验功能被关闭
+- 用户和项目不能自定义钩子——只有 IT 部门设置的 `codex-audit-startup` 会在会话开始时运行
+- 如果有人在 config.toml 里写 `approval_policy = "never"`，会被自动恢复为 `on-request`
+
+对开发者来说，这些约束是透明的。他们的用户级 config.toml 照常工作，只是某些字段被锁死了。如果想知道自己的配置被哪些约束影响，可以运行 `/debug-config` 查看来源。
+
+企业场景里还有一个考虑：**如何分发 requirements.toml**。在小公司里，IT 手动 ssh 到每台机器上放文件就行。但在大公司里，通常有设备管理（MDM）系统。Codex 支持 macOS MDM 推送 requirements——IT 只需要在 MDM 控制台里配置一次，所有 Mac 设备自动生效。Windows 则通过 `%ProgramData%` 目录下的文件来部署，可以用组策略（GPO）或配置管理工具（如 Chef、Ansible）来分发。
+
+此外，如果公司使用了 OpenAI 的企业版托管服务，Cloud Requirements 层可以直接在云端配置——不需要在每台机器上放文件。这对于远程办公团队特别方便：新员工第一天只需要安装 Codex 和登录企业账号，所有配置约束自动从云端拉取，零手动配置。
+
+三种管理员约束方式（系统文件、MDM、云端）的优先级是：Cloud Requirements > MDM > System Requirements。这意味着如果 IT 同时在系统文件和云端都设了约束，云端的更严格，以云端为准。这给企业提供了一个渐进式的管理策略：先在云端设一个全局基线，再针对特殊部门通过 MDM 或系统文件做定制。
+
+---
+
+## 8. 常见配置问题排查
+
+配置系统复杂，出问题的时候排查路径不直观。这里总结几个最常见的坑。
+
+**问题一：改了 config.toml 但不生效**
+
+最常见的原因是项目级的 config.toml 覆盖了你的设置。你改的是 `~/.codex/config.toml`，但项目里的 `.codex/config.toml` 也设了同一个键——项目层优先级更高，你的修改被盖掉了。
+
+排查方法：运行 `/debug-config`，找到那个键，看它的 origin 是哪一层。如果是 `project`，说明被项目配置覆盖了。
+
+**问题二：项目配置里加了 MCP 服务器但不启动**
+
+检查信任状态。如果项目目录没有被标记为 trusted，整个项目配置层都被跳过——不只是 MCP，所有项目级配置都不生效。
+
+排查方法：检查 `~/.codex/config.toml` 的 `[projects]` 表，看对应路径的 `trust_level` 是不是 `"trusted"`。
+
+**问题三：Profile 切换后某些配置没变**
+
+Profile 支持的字段是 ConfigToml 的子集。如果你在 Profile 里写了 MCP 服务器配置或者 hooks，这些字段会被忽略——因为 Profile 只支持"轻量"配置切换。
+
+排查方法：对照第 27 篇的 Profile 支持字段列表，确认你试图覆盖的字段在支持列表里。不在列表里的字段需要通过独立 Profile 文件（`<name>.config.toml`）来设置。
+
+**问题四：requirements.toml 设了约束，但不确定有没有生效**
+
+如果你是企业用户，公司 IT 设了 requirements.toml，你可能不完全知道哪些字段被锁了。
+
+排查方法：`/debug-config` 会列出所有约束层的配置。被约束锁死的字段旁边会标注来源是 `requirements`。
+
+**问题五：多个项目目录指向同一个仓库**
+
+如果你通过 symlink 或者 multiple worktree 的方式让同一个 Git 仓库出现在多个路径下，每个路径的信任记录是独立的。你可能在一个路径下信任了项目，但在另一个路径下又被问一遍。
+
+解决方法：在每个路径下都做一次信任确认，或者在 config.toml 里手动添加所有路径的信任记录。
+
+---
+
+## 延伸阅读
+
+- **第 23 篇：基础配置项**——model、approval、sandbox 等核心字段的详细说明
+- **第 27 篇：Profile 配置**——多环境切换、Profile 字段完整列表
+- **第 28 篇：AGENTS.md 项目指令文件**——项目文档的编写最佳实践
+- **第 30 篇：审批策略详解**——approval_policy 各值的语义差异
+- **官方配置参考**：[Configuration Reference](https://developers.openai.com/codex/config)（如果 OpenAI 发布了文档站的话）
+- **JSON Schema**：https://developers.openai.com/codex/config-schema.json

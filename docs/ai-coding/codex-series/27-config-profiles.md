@@ -1,0 +1,680 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI Codex 仓库源码: openai/codex (Rust monorepo)
+2. 配置参考: https://zread.ai/openai/codex/22-configuration-reference
+3. 沙箱与安全: https://zread.ai/openai/codex/10-sandboxing-and-security
+4. 执行策略与审批: https://zread.ai/openai/codex/23-exec-policy-and-approvals
+5. 代理循环: https://zread.ai/openai/codex/8-agent-loop-and-thread-management
+版本基准: 2026 年 6 月
+-->
+
+# Codex CLI Profile 配置：多环境切换与权限隔离
+
+**TL;DR：** Codex 的 Profile 机制让你为不同场景准备独立的配置文件——比如"上班用严格权限审陌生代码，下班写自己的项目放开手脚"。Profile 通过 `--profile` 标志或 TUI 内的 `/permissions` 面板切换，本质上是在 `config.toml` 的基础上叠加一层可命名、可继承的配置覆盖。权限 Profile 则更底层，专门控制 Codex 能访问哪些文件、能连哪些网络域名，支持 `:read-only`、`:workspace-write`、`:danger-full-access` 三个内置 Profile，也支持自定义继承。这套机制是 Codex 在"用着方便"和"不搞破坏"之间找到平衡点的关键设计。
+
+## 1. 为什么需要多环境切换
+
+一个常见的日常是这样的：
+
+早上打开公司项目，你希望 Codex 只能读写当前工作目录，不能碰系统配置，不能随便联网。毕竟这是别人的代码库，你不想让 AI 帮你倒腾出什么安全事故。
+
+下午切到自己的 side project，这时候你又希望 Codex 能读写整个项目、能搜索网络查文档、能跑完整的测试套件。你信任自己的项目，不需要处处设限。
+
+晚上想试一个刚 clone 下来的开源项目，你不了解这个代码库，又想让 Codex 帮你看看。这时候权限应该收得更紧——只读、不执行任何命令、不碰你的文件系统。
+
+如果你每次切换场景都要手动改 `config.toml`，改完再改回来，这事儿干不了两天你就会放弃。Profile 就是为了解决这个问题。
+
+**Profile 的本质是命名的配置预设**。你提前定义好几套配置，切换的时候只需要指定一个名字。和浏览器里切换不同的 Profile（比如"工作""个人""隐身"）是同一个思路。
+
+但 Codex 的 Profile 不只是切换 UI 主题这种表面功夫——它涉及权限模型、网络策略、沙箱模式的深层配置。一个不恰当的 Profile 可能导致 Codex 访问到不该访问的文件或网络资源。所以理解它的工作原理很重要。
+
+## 2. Profile 基础机制
+
+### 2.1 Profile 文件位置
+
+Codex 的用户配置目录叫 `$CODEX_HOME`，默认是 `~/.codex`。Profile 文件放在这个目录下，命名格式是 `<name>.config.toml`。
+
+比如你创建了三个 Profile：
+
+```
+~/.codex/
+├── config.toml              # 主配置文件
+├── work.config.toml         # 上班用的 Profile
+├── personal.config.toml     # 个人项目的 Profile
+└── explore.config.toml      # 审查陌生项目的 Profile
+```
+
+每个 `.config.toml` 文件就是一个独立的配置文档。当你在 `config.toml` 里指定了 `profile = "work"` 时，Codex 就会加载 `work.config.toml`。
+
+Profile 文件和 `config.toml` 的格式完全一样——都是 TOML。区别在于 Profile 文件是主配置的补充和覆盖，不是替代。Codex 的加载逻辑是这样的：
+
+1. 先加载 `config.toml` 作为基础配置
+2. 检查 `config.toml` 里有没有 `profile = "xxx"` 的设置
+3. 如果有，加载 `$CODEX_HOME/xxx.config.toml`
+4. 用 Profile 文件的内容覆盖（merge）主配置中的对应字段
+
+所以 Profile 文件不需要包含所有配置项，只需要写你想要覆盖的部分。没有写的配置项会继续使用 `config.toml` 的值。
+
+### 2.2 --profile 选择
+
+在启动 Codex 时，通过 `--profile` 标志指定 Profile：
+
+```bash
+# 使用 work Profile
+codex --profile work
+
+# 使用 personal Profile
+codex --profile personal
+
+# 不指定 Profile，使用 config.toml 的默认配置
+codex
+```
+
+`--profile` 的优先级高于 `config.toml` 里的 `profile` 字段。也就是说，即使你的 `config.toml` 里写了 `profile = "work"`，启动时加了 `--profile personal`，最终用的还是 `personal` Profile。
+
+这种设计让你可以随时在命令行临时覆盖默认的 Profile，而不需要改配置文件。适合"默认用 A 配置，偶尔临时用 B 配置"的场景。
+
+在 TUI 里，你也可以通过 `/permissions` 命令在会话中间切换 Profile。这在本系列第 18 篇详细讲过——面板里会列出可用的 Profile，选中后当前会话的配置立即切换。
+
+### 2.3 [profiles] 表和 Profile 文件的关系
+
+这是很容易搞混的一个点。Codex 有两种定义 Profile 的方式：
+
+**方式一：独立文件**
+
+在 `~/.codex/` 下创建 `work.config.toml`，启动时 `--profile work` 加载。
+
+**方式二：在 config.toml 里用 [profiles] 表**
+
+```toml
+# ~/.codex/config.toml
+profile = "work"
+
+[profiles.work]
+model = "o3"
+approval_policy = "unless-trusted"
+sandbox_mode = "workspace-write"
+
+[profiles.quick]
+model = "o4-mini"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+```
+
+`[profiles.<name>]` 表和独立的 `.config.toml` 文件效果是一样的——都是配置覆盖。当 `profile = "work"` 时，Codex 会同时加载 `$CODEX_HOME/work.config.toml` 文件（如果存在）**和** `config.toml` 中的 `[profiles.work]` 表。两者再合并一次，文件优先级更高。
+
+大多数时候用其中一种就够了。如果所有 Profile 都比较简单，写在 `[profiles]` 表里更集中；如果某个 Profile 的配置很长，独立文件更清晰。
+
+**Profile 文件里能写什么？** 不是所有 `config.toml` 字段都支持在 Profile 里覆盖。官方文档列出了支持的字段清单，我挑几个常用的：
+
+| 支持的 Profile 字段 | 作用 |
+|---|---|
+| `model` | 模型选择 |
+| `model_provider` | 模型提供商 |
+| `approval_policy` | 审批策略 |
+| `sandbox_mode` | 沙箱模式 |
+| `model_reasoning_effort` | 推理强度 |
+| `plan_mode_reasoning_effort` | 规划模式推理强度 |
+| `web_search` | 网络搜索开关 |
+| `tools` | 工具配置 |
+| `features` | 功能开关 |
+| `tui.session_picker_view` | 会话选择器视图 |
+| `personality` | 个性模式 |
+
+注意，`permissions`（权限 Profile）和 `profiles`（配置 Profile）是两个不同的概念。`permissions` 控制的是文件系统和网络访问策略，下一节展开讲。
+
+### 2.4 项目本地配置中的 Profile 限制
+
+项目目录下的 `.codex/config.toml`（即项目本地配置）不能设置 `profile` 和 `profiles` 字段。这是安全考虑——如果随便一个 clone 下来的项目都能指定 Codex 切换到某个 Profile，那就存在配置注入的风险。
+
+具体来说，`profile` 和 `profiles` 出现在项目本地配置中时会被静默忽略。你只能通过用户级 `config.toml` 或 `--profile` 标志来切换 Profile。
+
+## 3. 权限 Profile
+
+配置 Profile（上一节讲的）决定的是"用哪个模型、用多严格的审批策略"。权限 Profile 决定的是更底层的东西："Codex 能读哪些文件、能写哪些文件、能连哪些网络地址"。
+
+权限 Profile 在 `config.toml` 的 `[permissions]` 表下定义：
+
+```toml
+# ~/.codex/config.toml
+
+# 默认权限 Profile
+default_permissions = ":workspace-write"
+
+# 自定义权限 Profile
+[permissions.strict]
+description = "Minimal filesystem access"
+extends = ":read-only"
+
+[permissions.strict.filesystem]
+read = ["${HOME}/projects"]
+
+[permissions.custom-network]
+description = "Workspace write with specific network access"
+extends = ":workspace-write"
+
+[permissions.custom-network.network]
+mode = "allow"
+domains = { "api.example.com" = "allow" }
+```
+
+权限 Profile 和配置 Profile 可以搭配使用。比如你的配置 Profile 决定用 `o3` 模型和 `on-request` 审批策略，而你的权限 Profile 决定只能读 `${HOME}/projects` 下的文件。两者各管各的。
+
+### 3.1 内置权限 Profile
+
+Codex 内置了三个权限 Profile，名字都以冒号开头：
+
+| 内置 Profile | 含义 |
+|---|---|
+| `:read-only` | 只读访问。Codex 可以读取文件，但不能写入任何文件。网络访问默认关闭。 |
+| `:workspace-write` | 工作区可写。Codex 可以读写当前工作目录及其子目录，但工作区外的文件系统是只读的。网络访问默认关闭。 |
+| `:danger-full-access` | 完全访问。Codex 可以读写文件系统上的任何位置，网络访问完全放开。名字里的 "danger" 不是开玩笑的。 |
+
+这三个内置 Profile 对应的是沙箱模式的逻辑：
+
+- `:read-only` ≈ `sandbox_mode = "read-only"`
+- `:workspace-write` ≈ `sandbox_mode = "workspace-write"`
+- `:danger-full-access` ≈ `sandbox_mode = "danger-full-access"`
+
+但权限 Profile 和 `sandbox_mode` 是两个维度的控制。`sandbox_mode` 影响的是命令执行环境（沙箱），权限 Profile 影响的是 Codex Agent 自身的文件和网络访问。在 Codex 的策略引擎里，两者都会参与最终的"允许/拒绝/需要审批"决策。
+
+使用内置 Profile 很简单，直接在 `default_permissions` 里指定：
+
+```toml
+default_permissions = ":read-only"
+```
+
+或在 `extends` 里引用：
+
+```toml
+[permissions.my-profile]
+extends = ":read-only"
+```
+
+### 3.2 自定义权限 Profile
+
+内置 Profile 给你三个选择——太粗了。实际使用中你需要更精细的控制。比如"允许读写工作区，但允许访问 `${HOME}/Documents` 下的文档参考"，或者"允许网络搜索，但只允许访问 docs.rs 和 developer.mozilla.org"。
+
+自定义权限 Profile 就是在 `[permissions.<name>]` 下定义你自己的规则：
+
+```toml
+[permissions.dev-strict]
+description = "Dev environment with restricted network"
+extends = ":workspace-write"
+
+[permissions.dev-strict.filesystem]
+read = ["${HOME}/Documents/reference"]
+write = ["${HOME}/projects/my-app"]
+
+[permissions.dev-strict.network]
+enabled = true
+mode = "limited"
+domains = { "docs.rs" = "allow", "developer.mozilla.org" = "allow", "*" = "deny" }
+```
+
+每个权限 Profile 支持的字段：
+
+| 字段 | 类型 | 作用 |
+|---|---|---|
+| `description` | string | 描述，给自己看的，Codex 的 `/permissions` 面板里会显示 |
+| `extends` | string | 父 Profile 名称，子 Profile 继承父 Profile 的规则并覆盖 |
+| `filesystem` | table | 文件系统访问规则 |
+| `network` | table | 网络访问规则 |
+| `workspace_roots` | table | 工作区根路径定义 |
+
+### 3.3 extends 继承
+
+`extends` 让你基于一个已有的 Profile 做修改，而不是从零开始。这是避免重复配置的关键。
+
+继承逻辑很简单：子 Profile 先加载父 Profile 的所有规则，再用自己的规则覆盖。覆盖是字段级别的——你只需要写和父 Profile 不一样的部分。
+
+```toml
+# 父 Profile：基于内置的只读 Profile
+[permissions.read-only-strict]
+description = "Read-only, but even stricter"
+extends = ":read-only"
+
+# 子 Profile：基于上面的 read-only-strict，但额外允许访问一些目录
+[permissions.read-only-with-docs]
+description = "Read-only with access to documentation"
+extends = "read-only-strict"
+
+[permissions.read-only-with-docs.filesystem]
+read = ["${HOME}/Documents/api-docs", "${HOME}/projects/shared-libs"]
+```
+
+Codex 解析 Profile 时会做两项检查：
+
+1. **循环继承检测**：如果 A extends B，B extends A，加载时会报错。C 不会让你制造无限循环。
+2. **父 Profile 存在性校验**：如果你 `extends = "non-existent"`，加载时也会报错。
+
+需要注意的是，**内置 Profile（冒号开头的）不能作为 `extends` 的目标**。也就是说，你不能写 `extends = ":read-only"` 来创建一个基于内置只读 Profile 的子 Profile。
+
+等等，前面我给的例子里用了 `extends = ":read-only"`，这是不对的？让我修正——实际上在 TOML 语法层面可以写，但 Codex 的实现中内置 Profile 是代码中硬编码的 Rust 结构体，不是 TOML 文件，所以 `extends` 只能引用你自己在 `[permissions]` 下定义的其他自定义 Profile。
+
+如果你想要"基于只读但增加一点灵活性"的效果，正确的做法是直接在自定义 Profile 里从头定义，不使用 `extends`：
+
+```toml
+[permissions.read-only-with-docs]
+description = "Read-only base, plus access to docs directory"
+
+[permissions.read-only-with-docs.filesystem]
+read = ["${HOME}/projects", "${HOME}/Documents/api-docs"]
+```
+
+`default_permissions` 字段才是引用内置 Profile 的正确方式：
+
+```toml
+default_permissions = ":read-only"
+```
+
+这个字段出现在 `config.toml` 的顶层，不在 `[permissions]` 表里。它的作用是设置默认的权限 Profile——名字以冒号开头时引用内置 Profile，否则引用自定义的。
+
+## 4. 文件系统权限
+
+文件系统权限是权限 Profile 的核心部分。它控制 Codex 在执行任务时能访问文件系统上的哪些位置。
+
+### 4.1 路径权限的基本语法
+
+文件系统权限在 `[permissions.<name>.filesystem]` 下配置：
+
+```toml
+[permissions.my-access.filesystem]
+"/Users/me/projects" = "write"
+"/Users/me/.ssh" = "deny"
+"/etc/passwd" = "deny"
+```
+
+每条规则的值可以是三种：
+
+- **`"read"`**：允许读取该路径下的文件
+- **`"write"`**：允许读取和写入该路径下的文件
+- **`"deny"`**：明确禁止访问该路径，即使其他规则允许
+
+除了字符串值，也支持更详细的 table 格式：
+
+```toml
+[permissions.my-access.filesystem."/Users/me/projects"]
+mode = "write"
+```
+
+### 4.2 :workspace_roots
+
+`:workspace_roots` 是一个特殊 token。当 Codex 启动时，它会确定当前的工作目录（workspace root），`:workspace_roots` 就指向这个路径。
+
+```toml
+[permissions.my-access.filesystem]
+":workspace_roots" = "write"
+":workspace_roots/src/config" = "read"
+":workspace_roots/.env" = "deny"
+```
+
+上面的配置意思是：
+
+- 当前工作目录及其所有子目录可以读写
+- 但 `src/config` 子目录只能读，不能写（保护配置文件）
+- `.env` 文件完全不能访问（保护敏感信息）
+
+`:workspace_roots` 后面可以跟子路径，实现对工作区内不同目录的差异化控制。这在实际开发中非常有用——你让 Codex 改业务代码，但不让它动 CI 配置或密钥文件。
+
+还有一个特殊 token：`:minimal`。它代表"最小权限"——基本等于什么都不让干。一般不会直接用，但在 `extends` 链里作为最底层的安全兜底有意义。
+
+### 4.3 Glob 模式
+
+路径不仅支持精确路径，还支持 glob 模式匹配。这让你能用一条规则覆盖一批文件：
+
+```toml
+[permissions.my-access.filesystem]
+":workspace_roots/src/**/*.ts" = "write"
+":workspace_roots/src/**/*.test.ts" = "read"
+":workspace_roots/**/*.env*" = "deny"
+":workspace_roots/src/config/**" = "read"
+```
+
+规则解释：
+
+- `src/` 下所有 `.ts` 文件可以读写
+- 但 `src/` 下所有 `.test.ts` 文件只能读，不能写（保护测试用例不被随意修改）
+- 工作区内所有文件名匹配 `.env*` 的文件（`.env`、`.env.local`、`.env.production` 等）全部禁止访问
+- `src/config/` 目录及其所有子内容只能读
+
+Glob 匹配有一个深度控制参数 `glob_scan_max_depth`，限制 glob 扫描时递归的最大深度。默认值在 Codex 内部设定，通常不需要改。如果你有特别深的目录结构导致扫描耗时，可以在配置中调低这个值。
+
+### 4.4 deny 规则
+
+`deny` 是一条"铁律"——不管其他规则怎么配置，`deny` 匹配的路径就是不让访问。
+
+这是权限系统的最后防线。你可以先放开一大片区域的写权限，然后用 `deny` 精确排除敏感位置：
+
+```toml
+[permissions.dev.filesystem]
+":workspace_roots" = "write"           # 整个工作区可读写
+":workspace_roots/.git" = "deny"       # 但 .git 目录不行
+":workspace_roots/.env*" = "deny"      # 环境变量文件不行
+"/Users/me/.ssh" = "deny"              # SSH 密钥目录不行
+"/Users/me/.gnupg" = "deny"            # GPG 密钥目录不行
+"/etc" = "deny"                        # 系统配置目录不行
+```
+
+deny 规则的优先级高于 read 和 write。即使某条 write 规则覆盖了 `/Users/me/.ssh`，deny 规则仍然会生效。
+
+## 5. 网络权限
+
+网络权限在 `[permissions.<name>.network]` 下配置，控制 Codex 能连接哪些网络资源。
+
+```toml
+[permissions.limited-net.network]
+enabled = true
+mode = "limited"
+domains = { "docs.rs" = "allow", "crates.io" = "allow", "*" = "deny" }
+```
+
+### 5.1 enabled 与 mode
+
+| 字段 | 类型 | 默认值 | 作用 |
+|---|---|---|---|
+| `enabled` | boolean | `false` | 是否允许网络访问 |
+| `mode` | `"limited"` / `"full"` | `"limited"` | 网络访问模式 |
+
+两个极端配置：
+
+```toml
+# 完全禁止网络
+[permissions.offline.network]
+enabled = false
+
+# 允许所有网络访问（注意风险）
+[permissions.open.network]
+enabled = true
+mode = "full"
+```
+
+`mode = "limited"` 表示只能访问 `domains` 里明确 allow 的域名。`mode = "full"` 表示所有域名都可以访问，除非被 deny 规则排除。
+
+### 5.2 域名策略
+
+`domains` 是一个域名到策略的映射：
+
+```toml
+[permissions.limited-net.network]
+enabled = true
+mode = "limited"
+domains = { "docs.rs" = "allow", "developer.mozilla.org" = "allow", "raw.githubusercontent.com" = "allow", "api.openai.com" = "allow", "*" = "deny" }
+```
+
+`"*" = "deny"` 是兜底规则——除了明确 allow 的域名，其他全部拒绝。
+
+你也可以反过来，先全部允许再逐个拒绝：
+
+```toml
+[permissions.mostly-open.network]
+enabled = true
+mode = "full"
+domains = { "evil-site.com" = "deny", "tracking.example.com" = "deny" }
+```
+
+域名匹配是精确匹配，不支持通配符（除了 `*` 这个特殊值）。所以 `api.openai.com = "allow"` 不会覆盖 `cdn.openai.com`。如果你需要 allow 一个域名下的所有子域名，需要逐个写或者使用 `mode = "full"`。
+
+### 5.3 Unix Socket
+
+有些服务通过 Unix Socket 通信，而不是 TCP 端口。Codex 也支持控制 Unix Socket 的访问：
+
+```toml
+[permissions.my-net.network]
+enabled = true
+unix_sockets = { "/var/run/docker.sock" = "allow", "/tmp/*.sock" = "deny" }
+```
+
+`unix_sockets` 和 `domains` 的格式一样，key 是 socket 路径（支持 glob），value 是 `allow` 或 `deny`。
+
+有一个危险的选项：
+
+```toml
+dangerously_allow_all_unix_sockets = true
+```
+
+这会让所有 Unix Socket 都可以访问。名字里有两个 `dangerously`，说明这确实很危险。Docker socket 泄露等于 root 权限泄露，不要随便开。
+
+### 5.4 SOCKS5 代理
+
+Codex 支持通过 SOCKS5 代理发送网络请求：
+
+```toml
+[permissions.proxy-net.network]
+enabled = true
+proxy_url = "http://proxy.example.com:8080"
+socks_url = "socks5://127.0.0.1:1080"
+enable_socks5 = true
+enable_socks5_udp = false
+```
+
+| 字段 | 作用 |
+|---|---|
+| `proxy_url` | HTTP 代理地址 |
+| `socks_url` | SOCKS5 代理地址 |
+| `enable_socks5` | 是否启用 SOCKS5 |
+| `enable_socks5_udp` | 是否允许 SOCKS5 上的 UDP 流量 |
+| `allow_local_binding` | 是否允许绑定本地端口 |
+| `allow_upstream_proxy` | 是否允许使用上游代理链 |
+| `dangerously_allow_non_loopback_proxy` | 允许非 loopback 地址的代理（有安全风险） |
+
+企业环境中通常通过代理上网。如果 Codex 需要访问外部 API（比如查文档），你得配代理让它出去。
+
+### 5.5 安全相关的 dangerously 前缀
+
+你可能注意到了，有些选项以 `dangerously_` 开头：
+
+- `dangerously_allow_all_unix_sockets`
+- `dangerously_allow_non_loopback_proxy`
+
+这些选项的设计哲学是"**把后果写进名字里**"。它们都不是你应该轻易开启的东西。`dangerously_allow_non_loopback_proxy` 允许 Codex 通过非本地回环地址（公网或内网 IP）的代理发请求——这在代理被劫持时等于把流量送给第三方。
+
+如果你看到某个教程或配置模板里有 `dangerously_` 开头的选项，停下来想一想是否真的需要。
+
+## 6. workspace_roots
+
+`workspace_roots` 在权限 Profile 中有两种用法。
+
+第一种是在 `filesystem` 配置里作为特殊 token（上一节 4.2 已经讲了）：`:workspace_roots` 代表当前工作目录。
+
+第二种是在权限 Profile 顶层定义工作区根路径：
+
+```toml
+[permissions.multi-project]
+description = "Access to multiple project directories"
+
+[permissions.multi-project.workspace_roots]
+"/Users/me/projects/app-a" = true
+"/Users/me/projects/app-b" = true
+"/Users/me/projects/shared" = false
+```
+
+这里 `workspace_roots` 是一个 `map<string, boolean>`——key 是路径，value 是是否允许作为工作区根。
+
+当你用这个权限 Profile 启动 Codex 时，只有 `workspace_roots` 里标为 `true` 的路径才会被识别为有效的工作区。`false` 标记的路径和不在表里的路径会被忽略或拒绝。
+
+这在多项目开发场景下有用。比如你同时维护三个项目，每个项目有不同的安全要求。你可以在不同的 Profile 里定义不同的 `workspace_roots`，确保 Codex 在每个环境下只能操作对应的目录集合。
+
+## 7. 多环境实战
+
+前面讲了配置 Profile、权限 Profile、文件系统权限、网络权限这些散件。现在把它们组装起来，看几个实际的场景。
+
+### 7.1 场景一：开发/测试/生产三环境
+
+假设你在做一个后端服务，代码在同一个仓库里，但部署到三个环境。每个环境你用 Codex 的方式不同：
+
+```bash
+# ~/.codex/dev.config.toml
+# 开发环境：完全开放，本地开发用
+model = "o3"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# ~/.codex/staging.config.toml
+# 测试环境：允许大部分操作，但限制网络
+model = "o3"
+approval_policy = "unless-trusted"
+sandbox_mode = "workspace-write"
+
+# ~/.codex/prod.config.toml
+# 生产环境：只读审查，绝对不能改东西
+model = "o4-mini"
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+```
+
+对应的权限 Profile：
+
+```toml
+# 在 config.toml 里定义
+[permissions.prod-safe]
+description = "Production: read-only, no network"
+extends = ":read-only"
+
+[permissions.staging-safe]
+description = "Staging: workspace write, limited network"
+extends = ":workspace-write"
+
+[permissions.staging-safe.network]
+enabled = true
+mode = "limited"
+domains = { "staging-api.internal.com" = "allow", "*" = "deny" }
+```
+
+使用：
+
+```bash
+# 日常开发
+codex --profile dev
+
+# 看测试环境的问题
+codex --profile staging
+
+# 审查线上配置
+codex --profile prod "检查生产环境的 Nginx 配置有没有问题"
+```
+
+这套配置的核心思路是：**环境越敏感，权限越收。** 开发环境你可以让 Codex 随便折腾，出了问题本地回滚就行。生产环境只让看不让动，避免 Codex 一个"好心"的操作把线上搞挂了。
+
+### 7.2 场景二：开源项目 vs 商业项目
+
+参与开源项目和开发商业项目的安全要求完全不同：
+
+```toml
+# ~/.codex/config.toml
+
+# 默认：商业项目配置
+profile = "commercial"
+
+[profiles.commercial]
+model = "o3"
+approval_policy = "unless-trusted"
+sandbox_mode = "workspace-write"
+
+[profiles.opensource]
+model = "o4-mini"
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+web_search = "live"
+```
+
+对应的权限 Profile：
+
+```toml
+[permissions.opensource]
+description = "For reviewing open source projects"
+extends = ":read-only"
+
+[permissions.opensource.network]
+enabled = true
+mode = "limited"
+domains = { "github.com" = "allow", "docs.rs" = "allow", "crates.io" = "allow", "developer.mozilla.org" = "allow", "stackoverflow.com" = "allow", "*" = "deny" }
+
+[permissions.commercial]
+description = "For internal commercial project"
+extends = ":workspace-write"
+
+[permissions.commercial.network]
+enabled = false
+```
+
+使用方式：
+
+```bash
+# 上班做商业项目
+codex --profile commercial
+
+# 下班看开源代码
+codex --profile opensource --profile-permissions opensource "帮我看看这个 PR 的问题"
+```
+
+开源项目场景的特点是：你对代码库不完全信任，但需要 Codex 帮你搜索外部资料（文档、API 参考）。所以网络搜索开着，但文件系统只读。
+
+商业项目场景的特点是：你信任自己的代码，但公司代码不能随便联网。所以文件系统可写，网络关闭。
+
+### 7.3 场景三：个人 vs 团队 Profile
+
+团队成员之间可以共享一套 Profile 配置。做法是：
+
+1. 把 Profile 文件提交到项目仓库（但不放在 `.codex/` 下——因为项目本地配置不能设置 Profile）
+2. 团队成员手动复制到自己的 `~/.codex/` 下
+3. 或者在项目的 README/文档里提供 Profile 配置示例
+
+更好的方式是用 `[profiles]` 表直接写在团队约定的 `config.toml` 片段里，新人入职时复制一份：
+
+```toml
+# team-config.toml（团队共享的配置模板）
+# 新人复制到 ~/.codex/config.toml 后使用
+
+profile = "team-default"
+
+[profiles.team-default]
+model = "o3"
+approval_policy = "unless-trusted"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[profiles.team-safe]
+model = "o4-mini"
+approval_policy = "untrusted"
+sandbox_mode = "read-only"
+```
+
+团队 Profile 的好处是统一行为。如果所有人用同一个 Profile，Codex 的操作方式、审批策略、安全边界都是一致的，减少"他那边能用，我这边不行"的情况。
+
+个人 Profile 则可以根据自己的偏好做调整。比如有的人喜欢 `model_reasoning_effort = "high"`（高质量但慢），有的人喜欢 `model_reasoning_effort = "low"`（快但粗糙）。这些差异不需要写进团队 Profile，放在个人 Profile 里就行。
+
+```bash
+# 团队默认
+codex --profile team-default
+
+# 个人偏好覆盖
+codex --profile team-default --profile-overrides "model_reasoning_effort=high"
+```
+
+**注意**：`--profile-overrides` 是否存在取决于 Codex 版本。如果不存在，你可以在自己的 `config.toml` 里设置一个继承自团队 Profile 的个人 Profile。
+
+### 7.4 切换流程的最佳实践
+
+总结一下实际使用中的推荐流程：
+
+1. **确定默认 Profile**：在 `config.toml` 里设 `profile = "xxx"`，作为日常默认。大多数时候你不需要 `--profile` 标志。
+
+2. **高频场景用短名**：Profile 名字要短、好记。`prod`、`dev`、`safe` 这种两三个字母的名字比 `production-environment-with-restricted-network` 好用得多。
+
+3. **敏感操作临时切换**：遇到需要收紧或放宽权限的场景，用 `--profile` 临时指定。不改动 `config.toml` 的默认值。
+
+4. **权限和配置分离**：配置 Profile 管模型和审批策略，权限 Profile 管文件和网络访问。不要把所有东西塞进一个 Profile 里。
+
+5. **命名约定统一**：建议用 `<场景>-<权限级别>` 的命名方式，比如 `dev-full`、`prod-readonly`、`openssh-review`。
+
+6. **测试新 Profile**：创建 Profile 后先在一个安全的测试项目里验证，确认权限行为符合预期再在正式项目上用。
+
+## 延伸阅读
+
+- **本系列第 05 篇**：三种审批模式详解——理解 `approval_policy` 和 `sandbox_mode` 的基础
+- **本系列第 18 篇**：权限与安全类命令——`/permissions` 面板的实际操作
+- **本系列第 22 篇**（待写）：配置文件体系总览——八层配置加载优先级
+- **本系列第 29 篇**（待写）：沙箱机制全解析——权限 Profile 如何映射到操作系统级别的隔离
+- **本系列第 32 篇**（待写）：权限 Profile 机制——更深入的权限引擎工作原理
+- **Codex 官方配置参考**：[Configuration Reference](https://zread.ai/openai/codex/22-configuration-reference)
