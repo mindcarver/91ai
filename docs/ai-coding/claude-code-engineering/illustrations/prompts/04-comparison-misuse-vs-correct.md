@@ -1,0 +1,42 @@
+---
+illustration_id: 04
+type: comparison
+style: blueprint
+palette: null
+---
+
+Claude Code 三种误用模式 - Comparison View
+
+Layout: three-row horizontal comparison, each row has "误用" left and "正确" right
+
+ROW 1 - "当聊天界面用":
+- LEFT "❌ 误用": Icon of person copying text back and forth between windows
+  - Keywords: "复制需求 → 等代码 → 粘贴回编辑器 → 手动跑测试"
+  - Cost: "工具层/记忆层/治理层全部闲置"
+- RIGHT "✅ 正确": Icon of terminal with agent working autonomously
+  - Keywords: "在仓库目录启动, 直接描述任务目标, 自动读写跑测"
+  - Metric: "人工中转 0 次"
+
+ROW 2 - "跳过项目配置":
+- LEFT "❌ 误用": Icon of question marks and confusion
+  - Keywords: "找不到测试命令, 编辑错误文件, 反复问同样问题"
+  - Cost: "每次会话从零推断项目结构"
+- RIGHT "✅ 正确": Icon of CLAUDE.md file with checkmarks
+  - Keywords: "CLAUDE.md 写明 Commands/Architecture/Rules"
+  - Metric: "重复提问 0 次"
+
+ROW 3 - "无治理的完全自治":
+- LEFT "❌ 误用": Icon of danger/warning, broken files
+  - Keywords: "bypassPermissions, 意外文件修改, git push --force"
+  - Cost: "回滚率 >10%"
+- RIGHT "✅ 正确": Icon of shield with permissions and hooks
+  - Keywords: "permissions allowlist + denylist, PreToolUse hooks"
+  - Metric: "确定性安全边界"
+
+DIVIDER: Each row has a bold arrow from left to right labeled "修正"
+STYLE: Blueprint technical diagram. Clean grid layout. Three equal rows with clear separation. Left side uses muted red/gray (#E53E3E light, #FC8181 borders). Right side uses blueprint blue/green (#2B6CB0, #38A169). Row numbers on left margin. Icons are simplified geometric shapes. Labels in sans-serif.
+ASPECT: 16:9
+
+Clean composition with generous white space. Simple or no background. Main elements centered or positioned by content needs.
+Text should be large and prominent with handwritten-style fonts. Keep minimal, focus on keywords.
+Human figures: simplified stylized silhouettes or symbolic representations, not photorealistic.

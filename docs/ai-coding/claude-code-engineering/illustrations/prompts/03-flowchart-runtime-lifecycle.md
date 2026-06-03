@@ -1,0 +1,43 @@
+---
+illustration_id: 03
+type: flowchart
+style: blueprint
+palette: null
+---
+
+Claude Code 运行时生命周期 - Process Flow
+
+Layout: top-down flowchart with 6 stages
+
+STEPS:
+1. "会话启动" - icon: power button
+   - Sub-items: "加载 CLAUDE.md", "加载 rules/", "加载 memory/", "注册 MCP 工具"
+   - Config note: "配置位置: CLAUDE.md, settings.json"
+
+2. "用户输入 → 模型规划" - icon: brain
+   - Sub-items: "解析意图", "检索记忆规则", "规划工具调用", "决定子代理"
+   - Config note: "配置位置: CLAUDE.md, rules/"
+
+3. "工具执行" - icon: wrench (highlighted with governance frame)
+   - Sub-items: "PreToolUse Hook → 放行/阻断", "执行工具调用", "PostToolUse Hook → 记录/验证"
+   - Governance badge: "经治理层"
+   - Config note: "配置位置: permissions, hooks"
+
+4. "上下文管理" - icon: layers
+   - Sub-items: "监控 Token 使用", "接近上限触发压缩", "保留 CLAUDE.md + 最近摘要"
+   - Warning: "压缩不可控"
+
+5. "子代理调度" - icon: network (with dotted border = optional)
+   - Sub-items: "创建隔离上下文", "执行指定任务", "结果汇总回主会话"
+   - Label: "可选阶段"
+
+6. "会话结束" - icon: flag
+   - Sub-items: "Auto memory 更新", "Stop Hook 触发", "上下文销毁"
+   - Config note: "配置位置: Stop hooks, auto memory"
+
+CONNECTIONS: Solid downward arrows between stages 1→2→3→4→5→6. Loop-back arrow from stage 4 to stage 2 labeled "压缩后继续". Dotted border around stage 5 labeled "可选". Horizontal bracket under stage 3 labeled "治理层介入点".
+STYLE: Blueprint technical diagram. Clean thin lines. Rounded rectangle nodes. Grid background. Stage numbers in circles on the left. Blueprint blue (#2B6CB0) primary. Governance elements in amber (#DD6B20). Optional elements dotted. Config notes in smaller gray text on the right side.
+ASPECT: 9:16
+
+Clean composition with generous white space. Simple or no background. Main elements centered or positioned by content needs.
+Text should be large and prominent with handwritten-style fonts. Keep minimal, focus on keywords.

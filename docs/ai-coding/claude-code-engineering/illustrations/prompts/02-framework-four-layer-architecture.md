@@ -1,0 +1,42 @@
+---
+illustration_id: 02
+type: framework
+style: blueprint
+palette: null
+---
+
+Claude Code 四层运行时架构 - Framework Diagram
+
+STRUCTURE: concentric nested layers (onion/ring diagram)
+
+NODES:
+- Layer 1 (innermost, center): "模型层 — 推理引擎"
+  - Sub-labels: "理解任务", "规划步骤", "选择工具", "解释结果"
+  - Token note: "200K 上下文窗口"
+
+- Layer 2: "工具层 — 执行能力"
+  - Tool icons around: "Read", "Edit", "Write", "Bash", "Grep", "MCP"
+  - Token note: "每次调用消耗上下文"
+
+- Layer 3: "记忆层 — 持久上下文"
+  - Three memory sources: "CLAUDE.md" "rules/*.md" "auto memory"
+  - Token note: "固定开销 ~8-12K tokens"
+
+- Layer 4 (outermost): "治理层 — 确定性控制"
+  - Two mechanisms: "Permissions" and "Hooks"
+  - Key property: "唯一确定性层，不依赖模型推理"
+
+RELATIONSHIPS:
+- Inner layers are probabilistic (dashed borders)
+- Outer layer is deterministic (solid thick border)
+- Arrows from model layer to tool layer: "调用"
+- Arrows from memory layer to model layer: "注入上下文"
+- Arrows from governance layer to tool layer: "拦截/放行"
+
+LABELS: 模型层 推理引擎, 200K 上下文窗口, 理解任务, 规划步骤, 选择工具, 解释结果, 工具层 执行能力, Read Edit Write Bash Grep MCP, 每次调用消耗上下文, 记忆层 持久上下文, CLAUDE.md rules auto memory, 固定开销 8-12K tokens, 治理层 确定性控制, Permissions Hooks, 唯一确定性层, 概率性 虚线边框, 确定性 实线边框
+COLORS: Blueprint blue palette. Center #4299E1, layer 2 #63B3ED, layer 3 #90CDF4, layer 4 #2B6CB0 (dark solid). Background #F7FAFC. Dashed lines #A0AEC0. Arrows #2D3748.
+STYLE: Blueprint technical diagram. Concentric rounded rectangles. Clean thin lines. Grid background. Precise geometry. Layered depth through opacity variation. Labels in sans-serif. Token cost annotations in smaller italic text.
+ASPECT: 16:9
+
+Clean composition with generous white space. Simple or no background. Main elements centered or positioned by content needs.
+Text should be large and prominent with handwritten-style fonts. Keep minimal, focus on keywords.

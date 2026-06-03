@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/项目-481+-blue?style=flat-square" alt="项目" />
   <img src="https://img.shields.io/badge/ML_文章-42-9cf?style=flat-square" alt="ML 文章" />
-  <img src="https://img.shields.io/badge/Coding_工具-10-green?style=flat-square" alt="Coding 工具" />
+  <img src="https://img.shields.io/badge/Coding_工具-11-green?style=flat-square" alt="Coding 工具" />
   <img src="https://img.shields.io/badge/角色路线-6-orange?style=flat-square" alt="角色路线" />
 </p>
 

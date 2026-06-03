@@ -1,0 +1,33 @@
+---
+type: infographic
+density: per-section
+style: blueprint
+palette: null
+image_count: 4
+article: 00-claude-code-as-agent-runtime.md
+preset: tech-explainer
+---
+
+## Illustration 1
+**Position**: "## 定位：为什么'更强的 ChatGPT'是个错误框架" 之后
+**Purpose**: 可视化 Claude Code 作为代理运行时 vs 聊天补全的根本区别
+**Visual Content**: 左右对比图：左侧"聊天模式"（用户→模型→文本→手动粘贴），右侧"代理运行时"（用户→模型→工具层→文件系统/终端/MCP，含记忆层和治理层包裹）
+**Filename**: 01-infographic-agent-runtime-vs-chat.png
+
+## Illustration 2
+**Position**: "## 四层架构深度解析" 之后
+**Purpose**: 展示四层架构的堆叠关系和各自职责
+**Visual Content**: 四层堆叠架构图：治理层（最外，确定性控制）→ 记忆层（CLAUDE.md/rules/memory）→ 工具层（Read/Edit/Bash/MCP）→ 模型层（推理引擎，最内）。标注各层 Token 成本特征和交互方式
+**Filename**: 02-framework-four-layer-architecture.png
+
+## Illustration 3
+**Position**: "## 运行时生命周期" 之后
+**Purpose**: 可视化任务从启动到结束的六阶段流程
+**Visual Content**: 六阶段流程图：会话启动 → 用户输入/模型规划 → 工具执行（经治理层）→ 上下文管理 → 子代理调度 → 会话结束。标注每阶段的可配置项和配置位置
+**Filename**: 03-flowchart-runtime-lifecycle.png
+
+## Illustration 4
+**Position**: "## 常见误用模式与工程成本" 之后
+**Purpose**: 对比三种误用模式的症状和正确做法
+**Visual Content**: 三行对比表：误用一（聊天界面用）→ 正确（代理运行时用），误用二（跳过配置）→ 正确（CLAUDE.md 配置），误用三（无治理自治）→ 正确（permissions + hooks）。每行用图标和关键词标注
+**Filename**: 04-comparison-misuse-vs-correct.png

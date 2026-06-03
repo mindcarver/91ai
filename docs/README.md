@@ -47,6 +47,7 @@ AI Coding 是当前优先建设方向。
 | Cline | VS Code Agent 插件 | 中 | 按 API 用量 | 前端/VS Code/MCP 用户 | [查看](./ai-coding/cline.md) |
 | Continue | 开源 AI Coding 助手 | 高 | 免费 | 团队/开源偏好/CI | [查看](./ai-coding/continue.md) |
 | Gemini CLI | 终端 AI Coding Agent | 中 | 免费额度 | 全栈/Google 生态 | [查看](./ai-coding/gemini-cli.md) |
+| Skill 实战评测协议 | 先实战再结论的可复用评测流程 | 低 | 免费 | 工具评测/内容创作者 | [查看](./ai-coding/skill-realworld-evaluation-protocol.md) |
 
 ## Learning Paths
 

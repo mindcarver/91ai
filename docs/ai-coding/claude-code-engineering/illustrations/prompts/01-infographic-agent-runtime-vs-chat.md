@@ -1,0 +1,39 @@
+---
+illustration_id: 01
+type: infographic
+style: blueprint
+palette: null
+---
+
+Agent Runtime vs Chat Mode - Comparison Infographic
+
+Layout: split horizontal comparison
+
+ZONES:
+- Left Zone "聊天模式 (Chat Mode)":
+  - Top label: "用户复制需求" with user icon
+  - Arrow pointing down to: "模型生成文本" with brain icon
+  - Arrow pointing down to: "手动粘贴回编辑器" with paste icon
+  - Arrow pointing down to: "手动跑测试" with terminal icon
+  - Bottom badge: "❌ 只用了模型层" in red
+  - Small note: "人工中转 3+ 次"
+
+- Right Zone "代理运行时 (Agent Runtime)":
+  - Top label: "用户描述任务目标" with user icon
+  - Arrow pointing to central "模型推理引擎" node
+  - From model node, 4 arrows fan out to: "Read 文件" "Edit 代码" "Bash 命令" "MCP 工具"
+  - Outer ring labeled "记忆层 (CLAUDE.md)"
+  - Outermost ring labeled "治理层 (Hooks + Permissions)"
+  - Bottom badge: "✅ 四层能力全部激活" in green
+  - Small note: "人工中转 0 次"
+
+- Divider: vertical dashed line between zones with "VS" badge
+
+LABELS: 复制需求, 模型生成文本, 手动粘贴, 手动跑测试, 只用了模型层, 人工中转 3+ 次, 描述任务目标, 模型推理引擎, Read 文件, Edit 代码, Bash 命令, MCP 工具, 记忆层 CLAUDE.md, 治理层 Hooks Permissions, 四层能力全部激活, 人工中转 0 次
+COLORS: Left zone uses muted gray-red tones (#BFBFBF background, #E07A5F accent). Right zone uses blueprint blue tones (#E8F4FD background, #2B6CB0 primary, #38A169 green for badges). White divider with gray text.
+STYLE: Blueprint technical diagram. Clean thin lines, precise geometry, minimal decoration. Grid-aligned layout. Sans-serif labels. Blueprint blue (#2B6CB0) as primary. Light grid background on right zone only.
+ASPECT: 16:9
+
+Clean composition with generous white space. Simple or no background. Main elements centered or positioned by content needs.
+Text should be large and prominent with handwritten-style fonts. Keep minimal, focus on keywords.
+Human figures: simplified stylized silhouettes or symbolic representations, not photorealistic.

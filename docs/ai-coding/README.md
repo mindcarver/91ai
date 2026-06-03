@@ -19,6 +19,10 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 
 两个独立的深度系列，分别针对 Claude Code 和 OpenAI Codex 的工程化实践。不是教程，而是真实项目中的机制解析和配置指南。
 
+此外新增一份可复用的 skill 实战评测协议（先实战再结论）：
+
+- [Skill 实战评测协议](./skill-realworld-evaluation-protocol.md)
+
 ### Claude Code 系列
 
 | 系列 | 适合谁 | 内容 |
