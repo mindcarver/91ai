@@ -2,7 +2,7 @@
 
 > 每篇 ≥ 5000 字，去 AI 味检测通过，持续更新
 
-## 当前进度：50/72 篇完成，共 1,106,070 字符
+## 当前进度：72/72 篇完成，共 1,717,358 字节
 
 ---
 
@@ -95,43 +95,43 @@
 | 48 | exec 非交互模式 | `48-exec-mode.md` | 20,140 | ✅ 完成 |
 | 49 | review 自动审查 | `49-auto-review.md` | 18,670 | ✅ 完成 |
 | 50 | 脚本化 Codex（CI/CD 集成） | `50-scripting.md` | 22,606 | ✅ 完成 |
-| 51 | GitHub Actions 集成 | `51-github-actions.md` | — | ⏳ 待写 |
-| 52 | Codex SDK 编程接入 | `52-sdk.md` | — | ⏳ 待写 |
-| 53 | App Server 模式 | `53-app-server.md` | — | ⏳ 待写 |
+| 51 | GitHub Actions 集成 | `51-github-actions.md` | 20,411 | ✅ 完成 |
+| 52 | Codex SDK 编程接入 | `52-sdk.md` | 19,112 | ✅ 完成 |
+| 53 | App Server 模式 | `53-app-server.md` | 15,815 | ✅ 完成 |
 
 ## 第九季：企业篇
 
 | # | 标题 | 文件 | 字符数 | 状态 |
 |---|------|------|--------|------|
-| 54 | 管理员配置指南 | `54-admin.md` | — | ⏳ 待写 |
-| 55 | 企业认证与 SSO | `55-enterprise-auth.md` | — | ⏳ 待写 |
-| 56 | Windows 部署专题 | `56-windows.md` | — | ⏳ 待写 |
-| 57 | OpenTelemetry 可观测性 | `57-otel.md` | — | ⏳ 待写 |
-| 58 | 安全插件与合规 | `58-compliance.md` | — | ⏳ 待写 |
+| 54 | 管理员配置指南 | `54-admin.md` | 16,222 | ✅ 完成 |
+| 55 | 企业认证与 SSO | `55-enterprise-auth.md` | 15,310 | ✅ 完成 |
+| 56 | Windows 部署专题 | `56-windows.md` | 11,903 | ✅ 完成 |
+| 57 | OpenTelemetry 可观测性 | `57-otel.md` | 9,329 | ✅ 完成 |
+| 58 | 安全插件与合规 | `58-compliance.md` | 10,375 | ✅ 完成 |
 
 ## 第十季：实战篇
 
 | # | 标题 | 文件 | 字符数 | 状态 |
 |---|------|------|--------|------|
-| 59 | 提示工程：让 Codex 听懂你 | `59-prompt-engineering.md` | — | ⏳ 待写 |
-| 60 | 真实工作流：修 Bug 全流程 | `60-workflow-bugfix.md` | — | ⏳ 待写 |
-| 61 | 真实工作流：重构大型项目 | `61-workflow-refactor.md` | — | ⏳ 待写 |
-| 62 | 真实工作流：写测试全覆盖 | `62-workflow-testing.md` | — | ⏳ 待写 |
-| 63 | 真实工作流：调试复杂问题 | `63-workflow-debugging.md` | — | ⏳ 待写 |
-| 64 | 多 Agent 并行实战 | `64-parallel-agents.md` | — | ⏳ 待写 |
-| 65 | 大规模迁移实战 | `65-migration.md` | — | ⏳ 待写 |
+| 59 | 提示工程：让 Codex 听懂你 | `59-prompt-engineering.md` | 10,355 | ✅ 完成 |
+| 60 | 真实工作流：修 Bug 全流程 | `60-workflow-bugfix.md` | 10,971 | ✅ 完成 |
+| 61 | 真实工作流：重构大型项目 | `61-workflow-refactor.md` | 23,923 | ✅ 完成 |
+| 62 | 真实工作流：写测试全覆盖 | `62-workflow-testing.md` | 30,522 | ✅ 完成 |
+| 63 | 真实工作流：调试复杂问题 | `63-workflow-debugging.md` | 33,763 | ✅ 完成 |
+| 64 | 多 Agent 并行实战 | `64-parallel-agents.md` | 26,860 | ✅ 完成 |
+| 65 | 大规模迁移实战 | `65-migration.md` | 35,887 | ✅ 完成 |
 
 ## 第十一季：附录篇
 
 | # | 标题 | 文件 | 字符数 | 状态 |
 |---|------|------|--------|------|
-| 66 | config.toml 完整参考 | `66-config-reference.md` | — | ⏳ 待写 |
-| 67 | 命令速查表 | `67-command-cheatsheet.md` | — | ⏳ 待写 |
-| 68 | 快捷键大全 | `68-keybindings.md` | — | ⏳ 待写 |
-| 69 | 环境变量参考 | `69-env-vars.md` | — | ⏳ 待写 |
-| 70 | 常见问题 FAQ | `70-faq.md` | — | ⏳ 待写 |
-| 71 | Codex vs Claude Code vs Cursor 全面对比 | `71-comparison.md` | — | ⏳ 待写 |
-| 72 | 进阶学习路线与资源推荐 | `72-learning-path.md` | — | ⏳ 待写 |
+| 66 | config.toml 完整参考 | `66-config-reference.md` | 36,907 | ✅ 完成 |
+| 67 | 命令速查表 | `67-command-cheatsheet.md` | 32,404 | ✅ 完成 |
+| 68 | 快捷键大全 | `68-keybindings.md` | 29,620 | ✅ 完成 |
+| 69 | 环境变量参考 | `69-env-vars.md` | 32,488 | ✅ 完成 |
+| 70 | 常见问题 FAQ | `70-faq.md` | 37,694 | ✅ 完成 |
+| 71 | Codex vs Claude Code vs Cursor 全面对比 | `71-comparison.md` | 27,365 | ✅ 完成 |
+| 72 | 进阶学习路线与资源推荐 | `72-learning-path.md` | 28,235 | ✅ 完成 |
 
 ---
 

@@ -1,0 +1,705 @@
+# 真实工作流：用 Codex 重构大型项目
+
+> TL;DR：重构大型项目和修 Bug 不同——范围大、风险高、需要分阶段推进。核心策略是用 `/plan` 做全局规划、用 `/goal` 拆分阶段目标、用 `/fork` 隔离探索性改动、用 `/review` 每阶段审查。本文以一个 Express → Fastify 框架迁移和 monorepo 结构调整为实例，展示从评估到完成的完整流程。
+
+---
+
+## 1. 重构和修 Bug 的区别
+
+修 Bug 是定向手术——你知道哪里坏了，目标是修好它，范围通常可控。重构是全身体检加手术——你不确定改完会牵连多少东西，每一步都可能踩到雷。
+
+具体区别：
+
+| 维度 | 修 Bug | 重构 |
+|------|--------|------|
+| 范围 | 通常 1-3 个文件 | 可能涉及几十个文件 |
+| 阶段 | 单次修复 | 多阶段，每个阶段要验证 |
+| 回滚 | `git checkout .` 就够 | 需要分阶段回滚策略 |
+| 测试 | 补回归测试 | 每阶段都要保证测试通过 |
+| 风险 | 影响面可控 | 改动可能引发连锁反应 |
+
+用 Codex 做重构最大的陷阱是让它一次性改太多东西。Codex 改代码很快，但快不等于好。一次改 30 个文件，中间某个文件改错了，后面所有的改动都建立在这个错误之上，越改越偏。
+
+正确做法是分阶段推进。每个阶段有明确的边界、验证条件和回滚点。Codex 在这个过程中的角色是帮你做每个阶段内的具体工作——读文件、分析依赖、执行修改、跑测试——而不是让它自己决定怎么重构。
+
+## 2. Step 1：评估重构范围
+
+在动手之前，先让 Codex 帮你摸清整个项目的结构和依赖关系。这个阶段的目标是生成一份"影响范围报告"，让你在规划时有数据支撑。
+
+### 让 Codex 读整个项目结构
+
+```
+读一下这个项目的整体结构。我需要了解：
+1. 入口文件和主要模块
+2. 每个模块的职责
+3. 模块之间的依赖关系
+4. 哪些模块是独立的，哪些有交叉引用
+
+重点关注 src/ 目录下的文件组织方式。
+```
+
+Codex 会遍历目录结构、读 package.json 和 import 语句，给你一份结构化的项目分析。
+
+### 分析依赖关系
+
+对于框架迁移类的重构，依赖分析特别重要：
+
+```
+分析这个项目中所有 Express 相关的代码：
+1. 找到所有使用 express 的文件
+2. 列出每个文件用到了 Express 的哪些功能（路由、中间件、错误处理等）
+3. 标注哪些是直接依赖，哪些是间接依赖（通过自定义中间件包装）
+
+/mention src/
+/mention package.json
+```
+
+Codex 会帮你找到所有 `require('express')` 或 `import express` 的地方，分析每个文件用到了框架的哪些能力。
+
+### 生成影响范围报告
+
+让 Codex 把分析结果整理成一份报告：
+
+```
+基于上面的分析，生成一份重构影响范围报告：
+1. 需要改动的文件清单（按模块分组）
+2. 每个文件的改动类型（重写/调整/可能影响）
+3. 模块间的依赖链（A 改了会影响 B 和 C）
+4. 风险评估（高/中/低）
+
+输出格式用 Markdown 表格。
+```
+
+这份报告是后续规划的输入。你根据它来决定分几个阶段、每个阶段改哪些文件、测试策略怎么设计。
+
+## 3. Step 2：用 /plan 做全局规划
+
+有了影响范围报告，下一步是用 `/plan` 做全局规划。
+
+### 规划的核心要素
+
+一个合格的重构计划应该包含：
+
+1. **分几个阶段**，每个阶段的目标是什么
+2. **每个阶段涉及的文件**
+3. **阶段之间的依赖关系**（阶段 B 必须等阶段 A 完成后才能开始）
+4. **每个阶段的验证条件**（怎么判断这个阶段完成了且没有破坏东西）
+5. **回滚策略**（某个阶段失败了怎么办）
+
+```
+/plan 基于影响范围报告，制定 Express → Fastify 的迁移计划。
+
+约束条件：
+1. 每个阶段改完后必须所有现有测试通过
+2. 不能一次性改完全部文件，每个阶段控制在 5-8 个文件
+3. 必须保留 API 接口不变（请求和响应格式不变）
+4. 先改底层（工具函数、中间件），再改上层（路由、入口）
+
+输出格式：
+- 阶段编号、目标、涉及文件、验证条件
+- 阶段间的依赖关系图
+```
+
+Codex 会在 plan 模式下输出一份详细的分阶段方案。你看完确认方向没问题，再开始执行。
+
+### 一个实际的规划输出示例
+
+```
+阶段 1：迁移中间件层
+- 目标：把 Express 中间件改写为 Fastify 插件/hooks
+- 文件：src/middleware/auth.js, src/middleware/logger.js, src/middleware/errorHandler.js
+- 验证：中间件单元测试全部通过
+
+阶段 2：迁移路由层
+- 目标：把 Express Router 迁移为 Fastify 路由
+- 文件：src/routes/users.js, src/routes/orders.js, src/routes/products.js
+- 验证：路由集成测试通过，API 响应格式不变
+
+阶段 3：迁移入口和应用配置
+- 目标：替换 app.js 中的 Express 实例为 Fastify 实例
+- 文件：src/app.js, src/server.js
+- 验证：全量 E2E 测试通过
+
+阶段 4：清理和优化
+- 目标：移除 Express 依赖，更新 package.json
+- 文件：package.json, package-lock.json
+- 验证：npm test 通过，无 Express 相关引用残留
+```
+
+### 为什么要先规划
+
+- 避免方向错误。Codex 直接改代码，可能选了一条后来发现走不通的路。规划阶段是低成本的试错。
+- 确认改动范围。你看完方案觉得"阶段 2 涉及的文件比预想的多"，可以提前调整。
+- 建立检查点。每个阶段结束都是一个可以回滚的安全点。
+
+## 4. Step 3：分阶段执行
+
+规划确认后，按阶段执行。每个阶段用同样的流程：设定目标 → 执行 → 测试 → 审查。
+
+### 每个阶段的执行模式
+
+```
+/goal 阶段 1：迁移中间件层。
+把 Express 中间件改写为 Fastify 插件/hooks。
+约束：不改动路由层和入口文件。
+完成后运行 pnpm test 确认通过。
+```
+
+`/goal` 确保 Codex 在整个阶段中保持聚焦。没有 `/goal`，Codex 可能在改中间件的过程中发现路由层的问题，顺手也改了——这就破坏了分阶段的安全边界。
+
+### 执行中的检查点
+
+每改完一个文件，让 Codex 跑对应的测试：
+
+```
+改完 src/middleware/auth.js 后，
+跑 src/middleware/ 目录下的测试，确认通过再继续。
+```
+
+不要等全部改完再跑测试。一个阶段改 5 个文件，如果最后才跑测试发现有 3 个失败，你不知道是哪个文件引入的问题。每改一个文件验证一次，问题定位的代价从"排查 5 个文件"变成"排查 1 个文件"。
+
+### 阶段结束时的 /review
+
+```
+/review
+```
+
+每个阶段完成后都跑一次 `/review`。关注两个东西：
+
+1. Codex 是不是改了阶段范围之外的文件
+2. 改动是否引入了安全隐患或逻辑错误
+
+然后看具体的 diff：
+
+```
+/diff
+```
+
+逐行确认改动。如果你发现不预期的修改，用 `git checkout` 回滚单个文件：
+
+```bash
+git checkout src/routes/users.js  # 这个文件不该在阶段 1 被改
+```
+
+## 5. Step 4：处理跨文件依赖
+
+重构中最头疼的问题不是单个文件的改动，而是文件之间的依赖。改了 A 文件的接口签名，B 和 C 文件调用 A 的地方也得改，B 和 C 的改动可能又影响 D。
+
+### 让 Codex 追踪调用链
+
+```
+我准备改 src/services/userService.js 的 getUserById 函数签名。
+先分析一下这个函数被哪些文件调用，
+每个调用方传了什么参数，
+改成新的签名后每个调用方需要怎么调整。
+```
+
+Codex 会读 userService.js 找到函数定义，然后搜索整个项目中对这个函数的调用，分析每个调用点的参数用法，输出一份"影响分析"。
+
+### 确保修改的完整性
+
+改完一个函数后，让 Codex 检查是否所有调用方都已更新：
+
+```
+我改完了 userService.js 的 getUserById 签名。
+检查一下项目中还有没有地方在用旧的签名。
+如果有，列出来，我来决定怎么处理。
+```
+
+这比手动 grep 可靠。Codex 不仅搜函数名，还会分析调用参数的个数和类型，找到那些"调对了但传参方式变了"的地方。
+
+### 处理循环依赖
+
+如果项目中存在循环依赖（A 引 B，B 引 A），重构时特别容易出问题：
+
+```
+分析 src/services/ 目录下是否存在循环依赖。
+如果有，列出循环链，
+说明重构时应该先打破哪一环。
+```
+
+Codex 分析完会告诉你哪些文件形成了循环引用，建议从哪里断开。通常的做法是把共享的部分抽到一个独立文件中，让 A 和 B 都依赖这个新文件，而不是互相依赖。
+
+## 6. Step 5：跑测试验证
+
+测试在重构中的角色比修 Bug 更重要。修 Bug 的测试是"确认修好了"，重构的测试是"确认没改坏"。
+
+### 每阶段跑测试
+
+```
+运行完整的测试套件，报告结果。
+如果有失败，分析失败原因：
+- 是这个阶段的改动引起的？
+- 还是之前就存在的？
+```
+
+如果测试失败是当前阶段引起的，先分析原因再决定是修还是回滚。如果是之前就存在的，记录下来但不要在这个阶段修——不要在重构的同时修无关的 bug。
+
+### 修复被破坏的测试
+
+重构过程中测试失败是正常的。关键是区分两种失败：
+
+1. **预期内的失败**：你改了接口签名，调用方的测试自然会失败。这类失败说明测试在发挥作用，按新的接口修测试就行。
+2. **预期外的失败**：你改了中间件，但某个完全不相关的模块测试挂了。这类失败可能暗示你的改动影响了比预期更大的范围。
+
+```
+跑测试失败了。分析每个失败的测试：
+1. 是否和当前阶段改动相关
+2. 如果相关，提供修复方案
+3. 如果不相关，标记出来等我决定
+```
+
+### 新增集成测试
+
+对于跨模块的重构，单文件测试可能不够。需要在每个阶段补一些集成测试：
+
+```
+为阶段 2（路由迁移）补两个集成测试：
+1. 测试 Fastify 路由的请求参数解析是否和 Express 一致
+2. 测试错误处理的返回格式是否和迁移前相同
+
+参考 tests/integration/ 下现有的集成测试风格。
+```
+
+## 7. Step 6：最终审查和提交
+
+所有阶段完成后，做一次全量检查。
+
+### /review 全量检查
+
+```
+/review
+
+重点检查：
+1. 是否还有 Express 相关的 import 或 require 残留
+2. 所有 API 端点的请求/响应格式是否保持不变
+3. 中间件的执行顺序是否和迁移前一致
+4. 错误处理是否完整
+```
+
+### /diff 确认改动范围
+
+```
+/diff
+```
+
+确认两件事：
+
+1. 改动的文件是否都在预期范围内
+2. 没有遗漏的文件（比如某个工具文件引用了旧框架但没被改）
+
+可以用 Codex 做一次残留检查：
+
+```
+搜索整个 src/ 目录，找所有还包含 "express" 关键词的文件。
+忽略注释和字符串中的引用，只关注代码逻辑中的引用。
+```
+
+### 分阶段 commit
+
+不要把整个重构合成一个巨大的 commit。按阶段提交：
+
+```bash
+# 阶段 1
+git add src/middleware/
+git commit -m "refactor(middleware): migrate Express middleware to Fastify plugins
+
+- auth middleware → onRequest hook
+- logger middleware → onResponse hook
+- error handler → setErrorHandler
+
+All middleware tests passing."
+
+# 阶段 2
+git add src/routes/
+git commit -m "refactor(routes): migrate Express Router to Fastify routes
+
+- Convert router.get/post/put/delete to fastify.get/post/put/delete
+- Preserve all route handlers logic unchanged
+- Update path parameter syntax from :param to {param}
+
+All route integration tests passing."
+
+# 阶段 3
+git add src/app.js src/server.js
+git commit -m "refactor: replace Express with Fastify in app entry
+
+- Swap express() for fastify()
+- Register migrated plugins and routes
+- Update server startup configuration
+
+Full E2E test suite passing."
+
+# 阶段 4
+git add package.json package-lock.json
+git commit -m "chore: remove Express dependency, Fastify migration complete
+
+- Remove express and related Express middleware packages
+- Add fastify and required Fastify plugins
+- Update scripts if needed"
+```
+
+每个 commit 对应一个阶段，commit message 说明了改了什么、为什么改、测试状态。将来排查问题或者回滚时，你可以精确到阶段粒度。
+
+## 8. 实战案例：Express → Fastify 迁移
+
+把前面的流程串起来，看一个完整的迁移案例。
+
+### 项目背景
+
+```
+项目：一个中型电商 API
+技术栈：Express 4 + MongoDB + JWT 认证
+规模：28 个路由文件、12 个中间件、6 个 service 模块
+测试：单元测试覆盖率 65%，无集成测试
+```
+
+### 评估阶段
+
+```
+分析这个 Express 项目的完整依赖图。
+我计划迁移到 Fastify。
+
+重点分析：
+1. 使用了哪些 Express 特有功能（Router、中间件链、错误处理）
+2. 有没有第三方 Express 插件（morgan、cors、helmet 等）
+3. 这些插件在 Fastify 中有没有等价替代
+4. 路由层的改动量估算
+
+/mention package.json
+/mention src/
+```
+
+Codex 输出了一份依赖分析，发现：
+
+- 12 个自定义中间件，全部需要改写为 Fastify hooks 或插件
+- 3 个第三方 Express 中间件（morgan、cors、helmet），Fastify 都有对应方案
+- 28 个路由文件使用了 Express Router，需要改为 Fastify 路由注册
+- 路径参数语法不同：Express 用 `:id`，Fastify 用 `{id}`
+
+### 规划阶段
+
+```
+/plan 制定 Express → Fastify 迁移计划。
+
+分阶段策略：
+1. 先迁移中间件（不涉及路由）
+2. 再迁移路由（引用已迁移的中间件）
+3. 最后改入口文件（组装全部）
+4. 清理旧依赖
+
+每个阶段不超过 8 个文件。
+每个阶段完成后跑 npm test。
+如果某阶段测试失败超过 3 个，停止并报告。
+```
+
+### 执行阶段 1：中间件迁移
+
+以认证中间件为例：
+
+```
+/goal 阶段 1：迁移中间件。当前处理 src/middleware/auth.js。
+
+把 Express 中间件改为 Fastify onRequest hook。
+保持认证逻辑不变（JWT 验证、用户信息注入）。
+改完后跑中间件相关的测试。
+```
+
+Express 版本的认证中间件：
+
+```javascript
+// 改动前：Express 中间件
+const jwt = require('jsonwebtoken');
+
+function authMiddleware(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+module.exports = authMiddleware;
+```
+
+Codex 改写为 Fastify 版本：
+
+```javascript
+// 改动后：Fastify 插件
+const fp = require('fastify-plugin');
+const jwt = require('jsonwebtoken');
+
+async function authPlugin(fastify) {
+  fastify.addHook('onRequest', async (request, reply) => {
+    const token = request.headers.authorization?.split(' ')[1];
+    if (!token) {
+      reply.code(401);
+      throw { error: 'No token provided' };
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      request.user = decoded;
+    } catch (err) {
+      reply.code(401);
+      throw { error: 'Invalid token' };
+    }
+  });
+}
+
+module.exports = fp(authPlugin);
+```
+
+改动完成后检查：
+
+```
+/diff
+```
+
+确认改动只涉及中间件文件，没有碰到路由。
+
+```
+跑 src/middleware/ 下的所有测试。
+```
+
+全部通过后提交阶段 1。
+
+### 执行阶段 2：路由迁移
+
+```
+/goal 阶段 2：迁移路由层。当前处理 src/routes/ 目录。
+
+把 Express Router 改为 Fastify 路由注册。
+注意路径参数语法从 :param 改为 {param}。
+保持路由处理函数的业务逻辑不变。
+改完后跑路由相关的测试。
+```
+
+Express 路由改为 Fastify 路由的关键差异：
+
+```javascript
+// 改动前：Express Router
+const router = express.Router();
+
+router.get('/users/:id', async (req, res) => {
+  const user = await userService.getUserById(req.params.id);
+  res.json(user);
+});
+
+router.post('/users', async (req, res) => {
+  const user = await userService.createUser(req.body);
+  res.status(201).json(user);
+});
+
+module.exports = router;
+
+// 改动后：Fastify 路由
+module.exports = async function (fastify) {
+  fastify.get('/users/:id', async (request, reply) => {
+    const user = await userService.getUserById(request.params.id);
+    return user;
+  });
+
+  fastify.post('/users', async (request, reply) => {
+    const user = await userService.createUser(request.body);
+    reply.code(201);
+    return user;
+  });
+};
+```
+
+注意路由处理函数的逻辑没有变，只是参数名从 `req/res` 改为 `request/reply`，响应方式从 `res.json()` 改为直接 return 或 `reply.send()`。
+
+### 执行阶段 3 和 4
+
+入口文件和依赖清理的改动比较直接。关键是跑全量测试确保一切正常。
+
+### 全量验证
+
+```
+运行完整的测试套件，包括：
+1. 所有单元测试
+2. 所有集成测试（如果有的话）
+3. lint 检查
+4. 类型检查（如果有 TypeScript）
+
+如果有失败，分析是迁移引入的还是之前就有的问题。
+```
+
+## 9. 实战案例：monorepo 结构调整
+
+第二个案例是 monorepo 结构调整。这类重构不是换框架，而是重新组织代码结构。
+
+### 场景
+
+一个 Node.js monorepo，原本是按技术层分目录（controllers、services、models），现在要改为按业务域分目录（users、orders、products）。
+
+### 评估和规划
+
+```
+/plan 分析从"技术层"结构迁移到"业务域"结构的方案。
+
+当前结构：
+src/controllers/ — 所有控制器
+src/services/ — 所有服务
+src/models/ — 所有模型
+
+目标结构：
+src/domains/users/ — 用户相关（controller + service + model）
+src/domains/orders/ — 订单相关
+src/domains/products/ — 产品相关
+src/shared/ — 共享代码
+
+约束：
+1. 每迁移一个域，必须所有测试通过
+2. 共享代码单独放在 shared/ 目录
+3. 不能同时迁移两个域
+```
+
+### 拆分和迁移
+
+按域逐个迁移。以 users 域为例：
+
+```
+/goal 迁移 users 域代码。
+
+1. 创建 src/domains/users/ 目录
+2. 移动 userController.js、userService.js、User.js 到新目录
+3. 更新所有 import 路径
+4. 跑测试确认通过
+
+/mention src/controllers/userController.js
+/mention src/services/userService.js
+/mention src/models/User.js
+```
+
+Codex 会做文件移动和 import 路径更新。关键是更新所有引用了这些文件的地方。
+
+### 检查 import 路径
+
+```
+搜索整个 src/ 目录，找到所有引用了
+src/controllers/userController、src/services/userService、src/models/User
+的文件。列出来，逐个更新 import 路径。
+```
+
+### 构建配置更新
+
+monorepo 结构调整可能影响构建配置：
+
+```
+检查 tsconfig.json、jest.config.js、.eslintrc.js 中
+是否有硬编码的路径引用需要更新。
+比如 tsconfig.json 的 paths 字段、
+jest.config.js 的 moduleNameMapper。
+```
+
+这类配置文件的改动容易被遗漏，但会导致构建或测试失败。
+
+## 10. 常见陷阱
+
+### 10.1 一次改太多
+
+让 Codex 一次改 20 个文件，中间某个文件改错了，后面的改动全错。而且 diff 太大，你 review 不过来。
+
+**对策**：分阶段，每阶段 5-8 个文件。用 `/goal` 锁定当前阶段的范围。
+
+### 10.2 不跑测试
+
+重构过程中跳过测试。改完 5 个阶段后跑测试发现全挂了，但不知道是哪个阶段引入的问题。
+
+**对策**：每阶段必跑测试。每改完一个文件也建议跑对应的测试。
+
+### 10.3 没有回滚点
+
+整个重构过程中没有 commit。改到一半发现方向错了，但已经改了 20 个文件，不知道怎么回。
+
+**对策**：每个阶段完成后立即 commit。回滚粒度是阶段，不是整个重构。
+
+```bash
+# 阶段 1 完成后
+git add -A && git commit -m "refactor: phase 1 - middleware migration"
+
+# 如果阶段 2 出问题了
+git revert HEAD  # 回滚到阶段 1 的状态
+```
+
+### 10.4 忽略性能影响
+
+框架迁移后性能可能变化。Express 和 Fastify 的请求处理模型不同，中间件执行顺序可能变，内存占用模式也不一样。
+
+**对策**：重构完成后做一次性能对比。
+
+```
+对比迁移前后的性能：
+1. 用 ab 或 wrk 做简单的压测
+2. 比较响应时间和吞吐量
+3. 检查内存占用是否有异常增长
+4. 关注启动时间的变化
+```
+
+### 10.5 忘了更新文档和配置
+
+代码改完了，但 README、docker-compose.yml、CI 配置文件还写着旧的框架名。
+
+**对策**：最后阶段让 Codex 做一次全面扫描。
+
+```
+搜索项目中所有提到 Express 的地方（包括文档、配置文件、Dockerfile、
+CI 配置、README），列出需要更新的项。
+```
+
+### 10.6 Codex 在阶段之间"发散"
+
+上一个阶段改了中间件，Codex 在下一个阶段里又回头改了中间件的实现。
+
+**对策**：每个阶段开始前，在 `/goal` 里明确写出"不修改已完成阶段的文件"。如果 Codex 试图改已完成阶段的文件，用 `/diff` 检查后回滚不该改的文件。
+
+## 11. 效率对比
+
+| 阶段 | 手动操作 | Codex 辅助 | 效率提升 |
+|------|---------|-----------|---------|
+| 评估范围 | grep + 手动读文件 | Codex 遍历分析，自动生成报告 | 3-5 倍 |
+| 制定计划 | 人工梳理依赖图 | `/plan` 自动生成分阶段方案 | 2-3 倍 |
+| 执行修改 | 手动逐文件改 | Codex 批量执行，你审查 | 4-8 倍 |
+| 跑测试 | 手动执行 | Codex 自动跑并分析结果 | 1.5-2 倍 |
+| 代码审查 | 人工看 diff | `/review` + `/diff` | 2-3 倍 |
+| 搜索残留引用 | grep + 人工判断 | Codex 语义分析 | 3-5 倍 |
+
+Codex 最大的价值在"评估"和"执行"两个阶段。评估时它可以快速遍历整个项目分析依赖关系，执行时它可以按规划批量修改文件。但"规划"和"审查"仍然需要人——Codex 可以给出方案，但方案的可行性需要你判断；Codex 可以执行修改，但修改的正确性需要你验证。
+
+一个实际的 Express → Fastify 迁移案例的时间对比（28 个路由文件、12 个中间件的中型项目）：
+
+- 全手动：约 2-3 天（含测试和调试）
+- Codex 辅助：约 4-6 小时（分 4 个阶段，每阶段约 1-1.5 小时）
+
+## 12. 总结
+
+用 Codex 重构大型项目的核心原则是四个字：**分而治之**。
+
+不要让 Codex 一次性改完所有东西。把重构拆成阶段，每个阶段有明确的目标、范围和验证条件。Codex 做每个阶段内的具体工作，你做阶段间的决策和审查。
+
+具体到操作层面，记住这个流程：
+
+1. **评估**：让 Codex 生成影响范围报告
+2. **规划**：用 `/plan` 生成分阶段方案
+3. **执行**：每阶段用 `/goal` 聚焦，逐步执行
+4. **验证**：每阶段跑测试、用 `/review` 审查
+5. **提交**：按阶段 commit，保持清晰的提交历史
+
+这个流程比"让 Codex 直接开干"慢一点，但安全得多。重构一次就做对，比快速做完再花时间修 bug 要高效。
+
+## 延伸阅读
+
+- [规划模式详解（第 13 篇）](./13-plan-mode.md) — `/plan` 命令的完整用法和推理配置
+- [目标追踪详解（第 14 篇）](./14-goal-tracking.md) — `/goal` 命令防止长任务偏航的机制
+- [代码审查（第 12 篇）](./12-code-review.md) — `/review` 和 `/diff` 的完整用法
+- [让 Codex 改你的代码（第 8 篇）](./08-edit-code.md) — 编辑流程、diff 查看和回滚机制
+- [AGENTS.md 配置（第 28 篇）](./28-agents-md.md) — 在项目指令文件中定义重构规范
+- [用 Codex 修 Bug（第 60 篇）](./60-workflow-bugfix.md) — 修 Bug 工作流（重构的"小范围"版本）
+- [提示工程（第 59 篇）](./59-prompt-engineering.md) — 给 Codex 写高效提示的技巧

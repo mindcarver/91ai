@@ -1,0 +1,864 @@
+# 真实工作流：用 Codex 写测试全覆盖
+
+> TL;DR：Codex 写测试的能力被严重低估。它可以读代码生成单元测试、分析接口生成分层测试、跑覆盖率报告并根据 gap 补测试。关键策略是：先让 Codex 读源码理解逻辑、然后按模块分批生成测试、最后用覆盖率报告驱动补全。本文覆盖单元测试、集成测试、E2E 测试三种场景的 Codex 辅助流程，以及测试模板和 AGENTS.md 的测试规范配置。
+
+---
+
+## 1. 为什么让 Codex 写测试
+
+测试代码有几个特点，使它特别适合 AI 生成：
+
+**结构化。** 测试代码有固定的模式：setup（准备数据）→ execute（调用被测函数）→ assert（验证结果）。不管测什么模块，这个模式不变。Codex 对结构化任务的完成度远高于开放性任务。
+
+**规则明确。** 什么样的测试是好的？覆盖正常路径和异常路径、边界值、mock 外部依赖、断言要具体。这些规则可以清晰地写在 AGENTS.md 里，Codex 就能遵循。
+
+**可验证。** 测试代码的正确性可以直接验证——跑一遍就知道了。不需要人工判断"这个测试写得好不好"。通过就通过，失败就失败。这和业务代码不同，业务代码可能逻辑正确但有隐含的 bug，测试代码的正确性是二元的。
+
+**开发者的痛点。** 大多数开发者不喜欢写测试。不是因为测试不重要，而是因为写测试是重复劳动：构造测试数据、写 mock、写断言，每个测试的结构都差不多。这种重复劳动恰恰是 Codex 最擅长的。
+
+但这不意味着你可以让 Codex "给整个项目写测试"然后去喝咖啡。Codex 写测试有几个需要注意的地方：
+
+- 它可能生成过于理想化的测试数据，没有覆盖真实的边界情况
+- 它可能过度 mock，测试变成了测 mock 而不是测逻辑
+- 它可能生成脆弱的测试，实现细节一变测试就挂
+
+所以正确的用法是：Codex 生成初版测试 → 你 review 和调整 → Codex 根据你的反馈迭代。
+
+## 2. 准备工作：在 AGENTS.md 里定义测试规范
+
+在让 Codex 写测试之前，先把测试规范写进 AGENTS.md。没有规范的 Codex 会按照它的"默认理解"写测试——可能用 Jest 而你用 Vitest，可能用 describe/it 而你用 test.each，可能把测试放在 `__tests__/` 而你放在同目录。
+
+### 测试规范示例
+
+在 AGENTS.md 的 Commands 和 Working Rules 中加入测试相关内容：
+
+```markdown
+## Commands
+- Test (all): pnpm test
+- Test (single file): pnpm test -- src/services/__tests__/user.test.ts
+- Test (watch): pnpm test -- --watch
+- Test (coverage): pnpm test -- --coverage
+- Test (specific test): pnpm test -- -t "should create user"
+
+## Working Rules — Testing
+- 测试框架：Vitest + React Testing Library
+- 测试文件位置：和源文件同目录，命名为 *.test.ts
+- 测试结构：describe 分组，每个测试用 test()
+- Mock 策略：用 vi.mock() mock 模块，用 vi.spyOn() mock 单个方法
+- 不 mock 被测模块本身，只 mock 外部依赖
+- 每个测试必须独立，不依赖其他测试的执行顺序
+- 测试描述用 "should + 行为描述" 格式
+- 覆盖率要求：语句覆盖率 ≥ 80%
+```
+
+### 为什么要写测试规范
+
+| 不写规范的后果 | 规范后的效果 |
+|-------------|-----------|
+| Codex 用 Jest 语法写，你用 Vitest | Codex 按规范用 Vitest |
+| 测试文件放在随机位置 | 统一放在指定位置 |
+| 每次都要告诉 Codex 怎么 mock | Codex 按 mock 策略执行 |
+| 测试之间有隐含的顺序依赖 | 每个测试独立运行 |
+| 断言写得不具体（`expect(result).toBeTruthy()`） | 按"should + 行为"描述写具体断言 |
+
+规范写好后，Codex 每次生成测试都会遵循这些规则，不需要你重复交代。
+
+## 3. 单元测试流程
+
+单元测试是 Codex 最擅长的测试类型。流程是：读源码 → 分析函数 → 生成测试 → 跑测试 → 修失败用例。
+
+### Step 1：让 Codex 读源码
+
+不要直接说"给这个文件写测试"。先让 Codex 读源码，理解每个函数的职责和边界：
+
+```
+读 src/services/userService.ts，分析：
+1. 有哪些导出函数
+2. 每个函数的职责
+3. 每个函数的外部依赖（需要 mock 的部分）
+4. 每个函数的正常路径和异常路径
+5. 边界条件（空输入、非法参数、极端值）
+
+/mention src/services/userService.ts
+```
+
+Codex 读完后会输出一份函数分析。你看完确认理解无误，再让它生成测试。
+
+### Step 2：生成测试
+
+```
+基于上面的分析，为 userService.ts 生成单元测试。
+
+要求：
+1. 每个导出函数至少 3 个测试（正常路径、异常路径、边界条件）
+2. 用 vi.mock() mock 数据库调用和外部 API 调用
+3. 测试描述用 "should + 行为" 格式
+4. 测试文件放在 src/services/userService.test.ts
+5. 参考 AGENTS.md 中的测试规范
+```
+
+### Step 3：跑测试
+
+```bash
+pnpm test -- src/services/userService.test.ts
+```
+
+如果全部通过，进入 review 阶段。如果有失败：
+
+```
+测试失败了。读取失败的测试用例和对应的源码，
+分析失败原因：
+1. 是测试写错了（断言不对、mock 不对）
+2. 还是测试发现了源码的 bug
+
+如果是测试写错了，修复测试。
+如果是发现了 bug，告诉我具体情况。
+```
+
+### Step 4：Review 测试质量
+
+测试通过了不代表测试写得好。检查几个关键点：
+
+```
+检查刚才生成的测试质量：
+1. 断言是否具体（不是 toBeTruthy 这种模糊断言）
+2. 是否覆盖了边界条件（空字符串、null、undefined、0）
+3. mock 是否合理（没有过度 mock 也没有 mock 不足）
+4. 测试之间是否独立（没有共享状态）
+5. 测试数据是否真实（不是 "test123" 这种无意义数据）
+```
+
+一个 Codex 生成的单元测试示例：
+
+```javascript
+// src/services/userService.test.ts
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { createUser, getUserByEmail } from './userService';
+import * as db from '../db/users';
+
+vi.mock('../db/users');
+
+describe('userService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('createUser', () => {
+    test('should create user with valid data and return user with id', async () => {
+      const input = { name: 'Alice', email: 'alice@example.com' };
+      vi.mocked(db.insertUser).mockResolvedValue({ id: 1, ...input });
+
+      const result = await createUser(input);
+
+      expect(result).toEqual({ id: 1, name: 'Alice', email: 'alice@example.com' });
+      expect(db.insertUser).toHaveBeenCalledWith(input);
+    });
+
+    test('should throw ValidationError when email is empty string', async () => {
+      const input = { name: 'Alice', email: '' };
+
+      await expect(createUser(input)).rejects.toThrow('Email is required');
+      expect(db.insertUser).not.toHaveBeenCalled();
+    });
+
+    test('should throw ConflictError when email already exists', async () => {
+      const input = { name: 'Alice', email: 'alice@example.com' };
+      vi.mocked(db.insertUser).mockRejectedValue(
+        new Error('UNIQUE constraint failed: users.email')
+      );
+
+      await expect(createUser(input)).rejects.toThrow('Email already registered');
+    });
+  });
+
+  describe('getUserByEmail', () => {
+    test('should return user when email exists', async () => {
+      vi.mocked(db.findUserByEmail).mockResolvedValue({
+        id: 1, name: 'Alice', email: 'alice@example.com'
+      });
+
+      const result = await getUserByEmail('alice@example.com');
+
+      expect(result).toEqual({
+        id: 1, name: 'Alice', email: 'alice@example.com'
+      });
+    });
+
+    test('should return null when email does not exist', async () => {
+      vi.mocked(db.findUserByEmail).mockResolvedValue(null);
+
+      const result = await getUserByEmail('nonexistent@example.com');
+
+      expect(result).toBeNull();
+    });
+  });
+});
+```
+
+### 按模块分批生成
+
+不要一次让 Codex 给整个项目写测试。按模块分批：
+
+```
+依次为以下模块生成单元测试（每个模块生成后跑测试确认通过再继续）：
+1. src/services/userService.ts
+2. src/services/orderService.ts
+3. src/services/productService.ts
+4. src/utils/validators.ts
+5. src/utils/formatters.ts
+```
+
+分批的好处是每个模块的测试质量更高，出问题也容易定位。
+
+## 4. 集成测试流程
+
+单元测试验证单个函数的行为。集成测试验证多个模块协作时的行为。Codex 写集成测试需要理解模块之间的接口契约。
+
+### 分析模块接口
+
+```
+分析 src/routes/ 和 src/services/ 之间的接口：
+1. 每个路由 handler 调用了哪些 service 方法
+2. service 方法的输入和输出格式
+3. 错误处理的传播方式
+
+/mention src/routes/users.js
+/mention src/services/userService.js
+```
+
+### 生成集成测试
+
+```
+为用户模块生成集成测试：
+1. 测试 POST /api/users → 从请求到数据库插入的完整链路
+2. 测试 GET /api/users/:id → 从请求到数据库查询的完整链路
+3. 测试错误场景（数据库连接失败、参数校验失败）
+4. 用测试数据库或内存数据库，不 mock service 层
+5. 每个测试跑完后清理测试数据
+
+测试文件放在 tests/integration/users.test.ts
+```
+
+集成测试和单元测试的关键区别是 mock 策略。单元测试 mock 所有外部依赖，集成测试只 mock 最外层（数据库、外部 API），让内部模块真实协作。这样做的好处是：如果 service 层的逻辑有问题，单元测试可能因为 mock 过度而漏掉，但集成测试会让真实的 service 调用真实的路由，问题就能暴露出来。
+
+```javascript
+// tests/integration/users.test.ts
+import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { buildApp } from '../../src/app';
+import { testDb } from '../helpers/test-db';
+
+describe('User API Integration', () => {
+  let app;
+
+  beforeAll(async () => {
+    app = await buildApp({ db: testDb });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await testDb.dropDatabase();
+  });
+
+  beforeEach(async () => {
+    await testDb.collection('users').deleteMany({});
+  });
+
+  test('POST /api/users should create user and return 201', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      payload: { name: 'Alice', email: 'alice@test.com' }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      id: expect.any(String),
+      name: 'Alice',
+      email: 'alice@test.com'
+    });
+
+    // 验证数据库中确实写入了
+    const dbUser = await testDb.collection('users').findOne({ email: 'alice@test.com' });
+    expect(dbUser).toBeTruthy();
+  });
+
+  test('GET /api/users/:id should return 404 for non-existent user', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/users/000000000000000000000000'
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: 'User not found' });
+  });
+});
+```
+
+### 处理外部依赖
+
+集成测试中有些依赖不能真正调用（第三方 API、消息队列）。对于这些，用轻量级 mock：
+
+```
+集成测试中需要 mock 的外部依赖：
+1. 邮件发送服务 → 用 vi.mock() mock，不真正发邮件
+2. 支付网关 → 用 vi.mock() mock，返回固定成功响应
+3. 数据库 → 用内存数据库（SQLite in-memory 或 MongoDB Memory Server）
+
+不要 mock 的部分：
+1. service 层的业务逻辑
+2. 路由层的请求解析
+3. 中间件的认证检查
+```
+
+## 5. E2E 测试流程
+
+E2E（端到端）测试模拟真实用户的操作流程。Codex 可以帮你用 Playwright 或 Cypress 生成 E2E 测试。和单元测试、集成测试不同，E2E 测试关注的是"用户在浏览器中点来点去，系统能不能正常工作"，而不是某个函数或模块的行为。
+
+### 分析用户流程
+
+```
+分析这个电商应用的核心用户流程：
+1. 用户注册 → 登录 → 浏览商品 → 加入购物车 → 下单
+2. 管理员登录 → 添加商品 → 查看订单
+
+为每个流程列出涉及的页面和操作步骤。
+```
+
+### 生成 E2E 测试
+
+```
+为"用户注册到下单"流程生成 Playwright E2E 测试。
+
+流程：
+1. 访问 /register，填写注册表单
+2. 提交后跳转到 /login，填写登录表单
+3. 登录后跳转到 /products，浏览商品列表
+4. 点击第一个商品，进入详情页
+5. 点击"加入购物车"
+6. 访问 /cart，确认商品在购物车内
+7. 点击"结算"
+8. 填写地址，点击"提交订单"
+9. 验证跳转到订单确认页
+
+测试文件放在 e2e/shopping-flow.spec.ts
+参考 AGENTS.md 中的测试规范。
+```
+
+Codex 生成的 E2E 测试：
+
+```javascript
+// e2e/shopping-flow.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('Shopping Flow', () => {
+  test('should complete full purchase flow', async ({ page }) => {
+    // 注册
+    await page.goto('/register');
+    await page.fill('[data-testid="name-input"]', 'Test User');
+    await page.fill('[data-testid="email-input"]', 'test@example.com');
+    await page.fill('[data-testid="password-input"]', 'securePassword123');
+    await page.click('[data-testid="submit-button"]');
+    await expect(page).toHaveURL('/login');
+
+    // 登录
+    await page.fill('[data-testid="email-input"]', 'test@example.com');
+    await page.fill('[data-testid="password-input"]', 'securePassword123');
+    await page.click('[data-testid="submit-button"]');
+    await expect(page).toHaveURL('/products');
+
+    // 浏览商品
+    const firstProduct = page.locator('[data-testid="product-card"]').first();
+    await expect(firstProduct).toBeVisible();
+    await firstProduct.click();
+
+    // 加入购物车
+    await page.click('[data-testid="add-to-cart-button"]');
+    await expect(page.locator('[data-testid="cart-badge"]')).toHaveText('1');
+
+    // 查看购物车
+    await page.click('[data-testid="cart-link"]');
+    await expect(page).toHaveURL('/cart');
+    await expect(page.locator('[data-testid="cart-item"]')).toHaveCount(1);
+
+    // 结算
+    await page.click('[data-testid="checkout-button"]');
+    await page.fill('[data-testid="address-input"]', '123 Test Street');
+    await page.click('[data-testid="place-order-button"]');
+
+    // 验证订单确认页
+    await expect(page).toHaveURL(/\/orders\/.*\/confirmation/);
+    await expect(page.locator('[data-testid="order-number"]')).toBeVisible();
+  });
+});
+```
+
+### E2E 测试的注意事项
+
+E2E 测试比单元测试和集成测试更脆弱。几个建议：
+
+1. **用 data-testid 选择器**，不要用 CSS 类名或文本内容。UI 改版不应该让测试挂掉。
+2. **每个测试都从干净状态开始**。用 `beforeEach` 清理数据库、清除 cookie。
+3. **不要测试所有可能的路径**。E2E 测试覆盖核心流程就行，边界条件用单元测试覆盖。
+4. **设置合理的超时**。E2E 测试在 CI 环境中可能比本地慢 2-5 倍。
+
+## 6. 覆盖率驱动补全
+
+测试写完后，用覆盖率报告找 gap，让 Codex 针对性地补测试。
+
+### 跑覆盖率报告
+
+```bash
+pnpm test -- --coverage
+```
+
+或者让 Codex 跑并分析：
+
+```
+跑覆盖率报告，分析哪些文件覆盖率低于 80%。
+列出每个低覆盖率文件的未覆盖行。
+```
+
+### 让 Codex 读 gap 补测试
+
+```
+覆盖率报告显示 src/utils/validators.ts 只有 52% 覆盖率。
+
+读这个文件和覆盖率报告，找到未覆盖的行，
+为这些行补测试。
+
+重点关注：
+1. 未覆盖的分支（if/else 的某个分支）
+2. 未覆盖的异常处理（catch 块）
+3. 未覆盖的边界条件
+
+/mention src/utils/validators.ts
+```
+
+Codex 会读取覆盖率报告中的 gap 信息，然后针对性生成测试。这比"给整个文件补测试"高效得多——只补需要补的地方。
+
+### 覆盖率目标策略
+
+不要追求 100% 覆盖率。制定合理的目标：
+
+| 模块类型 | 建议覆盖率 | 理由 |
+|---------|-----------|------|
+| 核心业务逻辑 | 90%+ | 出 bug 影响最大 |
+| API 路由层 | 80%+ | 请求解析和响应格式容易出错 |
+| 工具函数 | 85%+ | 纯函数，测试成本低 |
+| 数据模型 | 70%+ | 变动频繁，测试维护成本高 |
+| 配置文件 | 不需要测 | 没有逻辑 |
+
+在 AGENTS.md 里写明这些目标：
+
+```markdown
+## Working Rules — Testing
+- 核心业务逻辑（src/services/）覆盖率目标：90%
+- API 路由层（src/routes/）覆盖率目标：80%
+- 工具函数（src/utils/）覆盖率目标：85%
+- 整体覆盖率底线：80%
+```
+
+## 7. TDD 模式：先写测试再写代码
+
+Codex 也可以辅助 TDD（测试驱动开发）流程。虽然 Codex 生成测试和代码都很快，但 TDD 模式的价值在于：先写测试等于先写规格说明。
+
+### TDD 流程
+
+```
+/goal 为 src/services/paymentService.ts 的 processPayment 函数做 TDD 开发。
+
+第一步：先写测试。
+根据以下规格写测试（不写实现）：
+- 输入：{ orderId, amount, paymentMethod }
+- 正常路径：返回 { transactionId, status: 'success' }
+- 金额为 0：抛出 InvalidAmountError
+- 支付方式不支持：抛出 UnsupportedMethodError
+- 支付网关超时：抛出 PaymentTimeoutError，支持重试
+- 金额超过单笔限额：抛出 AmountExceededError
+```
+
+Codex 生成测试：
+
+```javascript
+describe('processPayment', () => {
+  test('should return transaction with success status for valid payment', async () => {
+    const result = await processPayment({
+      orderId: 'ord_123',
+      amount: 9999,
+      paymentMethod: 'credit_card'
+    });
+    expect(result).toEqual({
+      transactionId: expect.any(String),
+      status: 'success'
+    });
+  });
+
+  test('should throw InvalidAmountError when amount is 0', async () => {
+    await expect(processPayment({
+      orderId: 'ord_123',
+      amount: 0,
+      paymentMethod: 'credit_card'
+    })).rejects.toThrow('Invalid amount');
+  });
+
+  test('should throw UnsupportedMethodError for unknown payment method', async () => {
+    await expect(processPayment({
+      orderId: 'ord_123',
+      amount: 100,
+      paymentMethod: 'crypto'
+    })).rejects.toThrow('Unsupported payment method');
+  });
+
+  test('should retry once on PaymentTimeoutError', async () => {
+    vi.mocked(gateway.charge).mockRejectedValueOnce(new Error('timeout'));
+    vi.mocked(gateway.charge).mockResolvedValueOnce({ txnId: 'txn_456' });
+
+    const result = await processPayment({
+      orderId: 'ord_123',
+      amount: 100,
+      paymentMethod: 'credit_card'
+    });
+
+    expect(gateway.charge).toHaveBeenCalledTimes(2);
+    expect(result.transactionId).toBe('txn_456');
+  });
+
+  test('should throw AmountExceededError when amount exceeds limit', async () => {
+    await expect(processPayment({
+      orderId: 'ord_123',
+      amount: 1000001,
+      paymentMethod: 'credit_card'
+    })).rejects.toThrow('Amount exceeds single transaction limit');
+  });
+});
+```
+
+测试写完后确认测试能跑（应该全部失败，因为还没实现）：
+
+```bash
+pnpm test -- src/services/paymentService.test.ts
+# 5 failed, 0 passed — 符合预期
+```
+
+然后让 Codex 实现功能：
+
+```
+测试已经写好了。现在实现 processPayment 函数，
+让所有测试通过。
+
+/mention src/services/paymentService.ts
+/mention src/services/paymentService.test.ts
+```
+
+### TDD 的好处
+
+- **测试就是规格**。测试描述了函数应该做什么，实现只是让测试通过的过程。
+- **实现不会过度**。只实现测试覆盖的行为，不会多写用不到的逻辑。
+- **重构有安全网**。测试通过 = 行为正确。改实现时只要测试还通过，就说明没改坏。
+
+## 8. 实战案例：给 Express API 项目补全测试
+
+把前面的流程串起来，看一个完整的案例。
+
+### 项目背景
+
+```
+项目：一个 Express REST API
+技术栈：Express 4 + Prisma + PostgreSQL
+规模：15 个路由文件、8 个 service 文件、5 个中间件
+测试现状：只有 4 个测试文件，覆盖率 20%
+目标：覆盖率提升到 85%
+```
+
+### Step 1：评估现状
+
+```
+分析当前测试覆盖率现状：
+1. 跑 pnpm test -- --coverage，看哪些模块完全没有测试
+2. 哪些模块有部分测试但覆盖率低
+3. 哪些模块覆盖率可以接受
+
+同时读一下现有的测试文件，了解当前测试风格。
+```
+
+Codex 分析后发现：
+
+- 4 个测试文件覆盖了 3 个 service 和 1 个工具模块
+- 路由层、中间件层完全没有测试
+- 5 个 service 没有测试
+- 现有测试风格一致，用的是 Jest + Supertest
+
+### Step 2：配置 AGENTS.md
+
+在 AGENTS.md 中加入测试规范（如果还没有的话）：
+
+```markdown
+## Commands — Testing
+- Test (all): pnpm test
+- Test (single): pnpm test -- path/to/file.test.js
+- Coverage: pnpm test -- --coverage --coverageReporters=text
+
+## Working Rules — Testing
+- 框架：Jest + Supertest（API 测试）
+- 测试文件位置：tests/ 目录，按类型分 tests/unit/、tests/integration/
+- Mock 策略：用 jest.mock() mock Prisma Client
+- 测试描述："should + 行为" 格式
+- 覆盖率目标：整体 ≥ 85%
+```
+
+### Step 3：按优先级补测试
+
+优先补核心业务逻辑（service 层），然后补路由层，最后补中间件。
+
+```
+/goal 为 src/services/ 目录下没有测试的 5 个 service 生成单元测试。
+
+按以下顺序逐个生成（每个生成后跑测试确认通过再继续）：
+1. src/services/orderService.js
+2. src/services/paymentService.js
+3. src/services/cartService.js
+4. src/services/notificationService.js
+5. src/services/analyticsService.js
+
+每个 service 至少覆盖：
+- 正常路径
+- 输入验证失败
+- 数据库操作失败
+- 外部依赖失败
+
+参考 tests/unit/userService.test.js 的测试风格。
+```
+
+### Step 4：补路由层集成测试
+
+```
+为路由层生成集成测试。用 Supertest 测试 API 端点。
+
+重点覆盖：
+1. 请求参数验证（缺少必填字段、非法值）
+2. 认证和授权（未登录、权限不足）
+3. 正常的 CRUD 操作
+4. 错误响应格式一致性
+
+每个路由文件生成 5-8 个测试用例。
+参考 tests/integration/auth.test.js 的风格。
+```
+
+Codex 生成的路由集成测试：
+
+```javascript
+// tests/integration/orders.test.js
+const request = require('supertest');
+const app = require('../../src/app');
+const { prisma } = require('../helpers/prisma-mock');
+
+describe('Orders API', () => {
+  describe('POST /api/orders', () => {
+    test('should create order with valid data', async () => {
+      const orderData = {
+        items: [{ productId: 'prod_1', quantity: 2 }],
+        shippingAddress: '123 Test St'
+      };
+      prisma.order.create.mockResolvedValue({
+        id: 'ord_1', ...orderData, status: 'pending'
+      });
+
+      const response = await request(app)
+        .post('/api/orders')
+        .set('Authorization', 'Bearer valid-token')
+        .send(orderData);
+
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.status).toBe('pending');
+    });
+
+    test('should return 400 when items array is empty', async () => {
+      const response = await request(app)
+        .post('/api/orders')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ items: [], shippingAddress: '123 Test St' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/items.*required/i);
+    });
+
+    test('should return 401 without auth token', async () => {
+      const response = await request(app)
+        .post('/api/orders')
+        .send({ items: [{ productId: 'p1', quantity: 1 }] });
+
+      expect(response.status).toBe(401);
+    });
+  });
+});
+```
+
+### Step 5：跑覆盖率确认达标
+
+```bash
+pnpm test -- --coverage
+```
+
+如果没有达到 85%，让 Codex 分析 gap：
+
+```
+当前覆盖率是 78%。读覆盖率报告，
+找出覆盖率低于 80% 的文件。
+为这些文件补测试，重点覆盖未测试的分支和异常处理。
+```
+
+### 最终结果
+
+| 模块 | 补测试前 | 补测试后 |
+|------|---------|---------|
+| services/ | 35% | 92% |
+| routes/ | 0% | 86% |
+| middleware/ | 0% | 78% |
+| utils/ | 65% | 95% |
+| 整体 | 20% | 85% |
+
+总共新增 18 个测试文件，约 160 个测试用例。手动写这些测试大约需要 2-3 天，Codex 辅助大约 3-4 小时（含 review 和调整）。
+
+## 9. 测试模板和复用
+
+Codex 生成的好的测试模式可以沉淀成 AGENTS.md 的模板，让后续的测试生成更一致。
+
+### 在 AGENTS.md 中加入测试模板
+
+```markdown
+## Testing Templates
+
+### Service 单元测试模板
+测试文件结构：
+  describe('serviceName', () => {
+    beforeEach(() => { /* 清理 mock */ });
+    describe('functionName', () => {
+      test('should ...', async () => {
+        // arrange: 准备 mock 返回值
+        // act: 调用被测函数
+        // assert: 验证返回值和 mock 调用
+      });
+    });
+  });
+
+### API 集成测试模板
+测试文件结构：
+  describe('Resource API', () => {
+    describe('METHOD /path', () => {
+      test('should return status code for condition', async () => {
+        const response = await request(app).method('/path').send(data);
+        expect(response.status).toBe(expectedCode);
+        expect(response.body).toMatchObject(expectedShape);
+      });
+    });
+  });
+```
+
+### 复用模式
+
+如果你发现 Codex 生成的某个模块的测试写得特别好（覆盖全面、断言具体、mock 合理），可以把那个测试文件作为"参考文件"告诉 Codex：
+
+```
+为 src/services/inventoryService.js 生成单元测试。
+参考 src/services/orderService.test.js 的测试风格和 mock 模式。
+```
+
+这样 Codex 会模仿已有测试的结构和风格，生成的测试更一致。
+
+## 10. 常见陷阱
+
+### 10.1 测试太脆弱
+
+测试和实现细节耦合太紧。比如测试断言了函数内部调用的具体顺序，一旦实现优化了调用顺序，测试就挂了。
+
+**对策**：测试行为，不测实现。断言函数的返回值和副作用（数据库写入了什么），而不是断言函数内部调用了哪些方法、以什么顺序调用。
+
+```
+Review 刚才生成的测试。检查是否有以下脆弱模式：
+1. 断言了 mock 的调用顺序（toHaveBeenCalledWith 在特定位置）
+2. 断言了内部变量名或函数名
+3. 依赖了 mock 的默认返回值而不是显式设置
+
+如果有，改成只断言输入输出和可观察的副作用。
+```
+
+### 10.2 Mock 过度
+
+所有依赖都被 mock 了，测试变成了"验证 mock 按预期工作"，而不是"验证业务逻辑正确"。
+
+**对策**：只 mock 跨边界的东西（数据库、外部 API、文件系统）。项目内部的模块协作不应该 mock。
+
+判断标准：如果一个 mock 是为了避免"调用真的数据库"，这是合理的。如果一个 mock 是为了"不调用同项目的另一个函数"，这通常是过度 mock。
+
+```
+检查 src/services/userService.test.ts 的 mock 策略：
+1. 列出所有被 mock 的模块
+2. 标注哪些是外部依赖（应该 mock）
+3. 标注哪些是项目内部模块（考虑是否真的需要 mock）
+4. 对于项目内部模块，评估用真实调用是否可行
+```
+
+### 10.3 忽略边界情况
+
+Codex 生成的测试倾向于覆盖"正常路径"和"明显的异常路径"，容易忽略边界条件。
+
+**对策**：显式要求 Codex 补边界测试：
+
+```
+为 src/utils/validators.ts 补边界测试：
+1. 空字符串、null、undefined 作为输入
+2. 超长字符串（10000+ 字符）
+3. 特殊字符（SQL 注入尝试、XSS payload）
+4. 数字 0、负数、Infinity、NaN
+5. 空数组、超大数组
+```
+
+### 10.4 测试代码不 review
+
+业务代码你会 review，测试代码直接让 Codex 生成就不管了。但测试代码也有 bug——断言写错了（永远通过或者永远失败）、mock 返回值不合理、测试覆盖的是错误的行为。
+
+**对策**：用 `/review` 审查测试文件：
+
+```
+/review src/services/orderService.test.js
+
+重点检查：
+1. 断言是否有可能永远为真（比如 toBeTruthy 对 null 也会通过）
+2. mock 返回值是否和真实返回值的结构一致
+3. 测试是否真的在测试有意义的行为
+4. 有没有遗漏的重要场景
+```
+
+### 10.5 追求 100% 覆盖率
+
+把 80% 提升到 90% 是有价值的。把 95% 提升到 100% 通常不值得——最后 5% 往往是错误处理的 catch 块、不可能到达的分支、或者简单的 getter/setter。
+
+**对策**：在 AGENTS.md 中设定合理的覆盖率目标（整体 80-85%），超过目标就不强求。把精力放在核心业务逻辑的高覆盖率上。
+
+## 11. 总结
+
+Codex 写测试的核心策略是三步：**读源码理解逻辑 → 按模块分批生成 → 覆盖率驱动补全**。
+
+不要跳过第一步。直接让 Codex 写测试，它可能误解函数的行为，生成"看起来对但实际没测到关键点"的测试。先让它分析，你确认分析无误，再生成。
+
+分批生成比一次性生成质量高。每个模块的测试生成后跑一遍、review 一遍，问题在小范围内暴露和修复。
+
+覆盖率报告是最终的验收标准。生成完测试后跑覆盖率，用数据判断哪些地方还需要补。
+
+三个原则：
+
+1. **测试行为，不测实现。** 断言函数做了什么（输出和副作用），不是怎么做（内部调用链）。
+2. **只 mock 跨边界的东西。** 数据库、外部 API、文件系统可以 mock。项目内部的模块协作用真实调用。
+3. **Review 测试代码。** 测试也有 bug。用 `/review` 检查断言的合理性和 mock 的准确性。
+
+## 延伸阅读
+
+- [让 Codex 改你的代码（第 8 篇）](./08-edit-code.md) — 编辑流程和 diff 查看，修改代码后验证测试
+- [代码审查（第 12 篇）](./12-code-review.md) — `/review` 审查测试代码的质量
+- [规划模式（第 13 篇）](./13-plan-mode.md) — 用 `/plan` 规划测试策略
+- [目标追踪（第 14 篇）](./14-goal-tracking.md) — 用 `/goal` 保持测试任务的聚焦
+- [AGENTS.md 配置（第 28 篇）](./28-agents-md.md) — 在项目指令中定义测试规范和模板
+- [用 Codex 修 Bug（第 60 篇）](./60-workflow-bugfix.md) — 修 Bug 后补回归测试的流程
+- [提示工程（第 59 篇）](./59-prompt-engineering.md) — 给 Codex 写高效提示的技巧

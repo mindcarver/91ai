@@ -1,0 +1,1143 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex CLI 源码 codex-rs/ — exec 模式、apply_patch 工具、sandbox 机制
+2. Codex CLI 文档 zread.ai/openai/codex/16-non-interactive-exec-mode — exec 模式
+3. zread.ai/openai/codex/22-configuration-reference — 配置参考
+4. Codex CLI GitHub 仓库 openai/codex — 实际迁移用例和 issue 讨论
+5. TypeScript 官方迁移指南 typescriptlang.org — JS → TS 迁移模式
+6. GraphQL 官方文档 graphql.org — Schema 设计和 resolver 模式
+7. Codex CLI 实际项目迁移案例：JavaScript → TypeScript、REST → GraphQL
+版本基准: 2026 年 6 月
+-->
+
+# 大规模迁移实战：用 Codex 做框架升级和代码库迁移
+
+> TL;DR: 大规模迁移（框架升级、语言迁移、API 版本切换）是最考验 Codex 能力的场景。核心方法：先让 Codex 做影响范围分析、生成迁移计划、然后按模块分批执行、每批跑测试验证。本文以 JavaScript → TypeScript 迁移和 REST → GraphQL API 迁移两个实例，展示从评估到完成的完整流程，包括自动迁移脚本生成、手动介入节点识别、和回归测试策略。
+
+---
+
+## 1. 大规模迁移的三个难点
+
+用 Codex 做单文件修改、修一个 bug，大部分人上手就会。但迁移不一样——迁移是把一个"整体状态"从 A 变成 B，涉及到几十甚至几百个文件的连锁改动。
+
+三个核心难点：
+
+**影响范围难以预估。** 你改了一个接口的返回类型，下游 30 个调用点都要跟着改。你升级了一个框架的大版本，API 签名变了，所有用到的地方都得适配。如果事先不知道有多少文件受影响，迁移计划就是在盲飞。
+
+**类型和语义不兼容。** JavaScript 的动态类型和 TypeScript 的静态类型之间不是一一映射。REST 的请求-响应模式和 GraphQL 的声明式查询模式之间有范式差异。迁移不是简单的语法替换，而是语义转换。
+
+**依赖链复杂。** 模块 A 依赖模块 B，B 依赖 C。迁移 C 的时候，A 和 B 可能暂时编译不过。如果你一次全改完再测试，错误信息会堆成山，根本没法定位问题。必须按照依赖顺序分批迁移，每批验证通过再动下一批。
+
+这三个难点决定了：用 Codex 做迁移不能像修 bug 那样"一句话甩给它"。你需要一个分步骤的策略，Codex 在每个步骤中扮演不同的角色——分析师、计划者、执行者、验证者。
+
+---
+
+## 2. Step 1：影响范围评估
+
+迁移的第一步不是动手改代码，而是搞清楚"要改多少东西"。
+
+### 2.1 让 Codex 读项目结构
+
+用 Plan 模式让 Codex 分析项目结构：
+
+```bash
+codex "分析这个项目的目录结构和模块依赖关系。列出：
+1. 主要的代码目录和文件数量
+2. package.json 中的依赖列表
+3. 是否有现成的类型定义文件（.d.ts、JSDoc 注释）
+4. 测试覆盖情况
+5. 构建工具和配置文件"
+```
+
+Codex 会读取目录结构、`package.json`、`tsconfig.json`（如果有的话）、构建配置等，给你一个项目全景。
+
+### 2.2 分析依赖图
+
+让 Codex 构建模块间的依赖关系：
+
+```bash
+codex "分析 src/ 目录下所有 .js 文件的 import/require 依赖关系。
+输出一个依赖图，标注：
+- 哪些文件被最多其他文件引用（核心模块）
+- 哪些文件没有外部依赖（叶子节点）
+- 循环依赖（如果有的话）"
+```
+
+对于 JavaScript → TypeScript 迁移，你特别需要知道哪些是叶子节点——它们没有内部依赖，迁移时不会影响其他模块，应该最先迁移。核心模块被大量文件依赖，迁移时影响面最大，应该放到最后。
+
+### 2.3 列出受影响文件
+
+```bash
+codex "假设我们要把这个项目从 JavaScript 迁移到 TypeScript。
+1. 列出所有需要从 .js 改名为 .ts 的文件
+2. 列出所有需要添加类型注解的函数和接口
+3. 识别使用了动态类型特性的代码（eval、动态属性访问、any 隐式使用）
+4. 估计迁移工作量（文件数、估计改动行数）"
+```
+
+Codex 会逐文件扫描，找出 `module.exports`、`require()`、无类型注解的函数参数、动态属性访问等需要人工关注的模式。
+
+---
+
+## 3. Step 2：生成迁移计划
+
+有了影响范围评估，下一步是生成一个可执行的迁移计划。
+
+### 3.1 用 /plan 输出分阶段计划
+
+在 Codex TUI 中使用 Plan 模式：
+
+```bash
+codex "根据前面的分析结果，生成一个 JavaScript → TypeScript 的分阶段迁移计划。
+要求：
+1. 按依赖顺序排列——叶子模块优先，核心模块最后
+2. 每个阶段不超过 10 个文件
+3. 每个阶段结束后跑 npm test 验证
+4. 标注哪些文件可以自动迁移，哪些需要手动介入
+输出为 Markdown 表格格式"
+```
+
+Codex 输出的计划大概长这样：
+
+| 阶段 | 文件 | 类型 | 自动/手动 | 依赖 |
+|------|------|------|----------|------|
+| 1 | src/utils/format.js | 工具函数 | 自动 | 无 |
+| 1 | src/utils/validate.js | 工具函数 | 自动 | 无 |
+| 2 | src/models/user.js | 数据模型 | 手动 | utils/* |
+| 2 | src/models/order.js | 数据模型 | 手动 | utils/* |
+| 3 | src/services/auth.js | 业务逻辑 | 手动 | models/*, utils/* |
+| 4 | src/routes/api.js | 路由层 | 手动 | services/* |
+| 5 | src/index.js | 入口 | 手动 | routes/* |
+
+### 3.2 确定优先级和依赖顺序
+
+迁移的顺序原则：
+
+**先外围后核心。** 叶子节点（工具函数、常量定义）最先迁移，因为它们不依赖其他模块，改完就能验证。入口文件、路由层、主服务最后迁移，因为它们依赖几乎所有其他模块。
+
+**先简单后复杂。** 纯数据结构和工具函数比业务逻辑容易迁移。类型定义比运行时代码容易迁移。
+
+**每批可验证。** 每个阶段完成后，必须能跑通测试。如果某个阶段的文件之间有交叉依赖，把它们放在同一批。
+
+### 3.3 配置迁移专用的 Codex 环境
+
+迁移过程中你可能需要比平时更宽松的权限，因为要频繁创建和修改大量文件：
+
+```toml
+# .codex/config.toml — 迁移专用配置
+model = "o3"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+```
+
+或者用 Profile 切换：
+
+```bash
+codex --profile migration
+```
+
+---
+
+## 4. Step 3：自动迁移脚本
+
+对于简单、重复的模式转换，让 Codex 生成批量替换脚本比一个文件一个文件改快得多。
+
+### 4.1 让 Codex 生成批量替换脚本
+
+```bash
+codex "生成一个 bash 脚本，完成 JavaScript → TypeScript 迁移的第一步：
+1. 把 src/utils/ 目录下的 .js 文件改名为 .ts
+2. 把 require('...') 替换为 import 语法
+3. 把 module.exports 替换为 export default 或 named export
+4. 给函数参数添加基础类型注解（根据 JSDoc 注释推断）
+脚本需要做 dry-run 模式（默认），加 --apply 参数才实际执行"
+```
+
+Codex 会生成一个类似这样的脚本：
+
+```bash
+#!/bin/bash
+# migrate-js-to-ts-phase1.sh
+# 用法: ./migrate-js-to-ts-phase1.sh [--apply]
+
+set -euo pipefail
+
+DRY_RUN=true
+if [[ "${1:-}" == "--apply" ]]; then
+    DRY_RUN=false
+fi
+
+UTILS_DIR="src/utils"
+
+# Step 1: 重命名 .js → .ts
+for file in "$UTILS_DIR"/*.js; do
+    new_name="${file%.js}.ts"
+    if $DRY_RUN; then
+        echo "[DRY RUN] mv $file → $new_name"
+    else
+        mv "$file" "$new_name"
+    fi
+done
+
+# Step 2: CommonJS → ESM
+for file in "$UTILS_DIR"/*.ts; do
+    if $DRY_RUN; then
+        echo "[DRY RUN] Converting imports in $file"
+        sed -n "s/const \(.*\) = require(\(.*\))/import \1 from \2/p" "$file"
+    else
+        # 替换 require → import
+        sed -i.bak \
+            -E "s/const (.+) = require\(['\"](.+)['\"]\)/import \1 from '\2'/" \
+            "$file"
+        # 替换 module.exports → export default
+        sed -i.bak \
+            -E "s/module\.exports = /export default /" \
+            "$file"
+        # 替换 exports.xxx → export const xxx
+        sed -i.bak \
+            -E "s/exports\.([a-zA-Z_][a-zA-Z0-9_]*) = /export const \1 = /" \
+            "$file"
+        rm -f "${file}.bak"
+    fi
+done
+
+echo "Phase 1 migration script complete."
+$DRY_RUN && echo "Run with --apply to execute changes."
+```
+
+### 4.2 处理常见模式
+
+一些高频的迁移模式可以提前准备好替换规则：
+
+**JSDoc → TypeScript interface：**
+
+```javascript
+// 迁移前
+/**
+ * @typedef {Object} User
+ * @property {string} name
+ * @property {number} age
+ * @property {string[]} emails
+ */
+
+// 迁移后
+interface User {
+    name: string;
+    age: number;
+    emails: string[];
+}
+```
+
+让 Codex 批量处理这种转换：
+
+```bash
+codex "扫描 src/ 目录下所有 JSDoc @typedef 注释，
+把它们转换为 TypeScript interface 定义，
+输出到一个新文件 src/types/index.ts 中。
+保留原始 JSDoc 注释作为参考（注释掉）"
+```
+
+**callback → Promise/async：**
+
+```javascript
+// 迁移前
+function fetchData(id, callback) {
+    db.query('SELECT * FROM users WHERE id = ?', [id], (err, results) => {
+        if (err) return callback(err);
+        callback(null, results[0]);
+    });
+}
+
+// 迁移后
+async function fetchData(id: string): Promise<User> {
+    const results = await db.query('SELECT * FROM users WHERE id = ?', [id]);
+    return results[0];
+}
+```
+
+### 4.3 tsconfig 配置策略
+
+tsconfig.json 的配置直接影响迁移难度。推荐分阶段收紧：
+
+第一阶段——宽松模式，允许隐式 any：
+
+```json
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "ESNext",
+        "moduleResolution": "node",
+        "strict": false,
+        "noImplicitAny": false,
+        "allowJs": true,
+        "outDir": "./dist",
+        "esModuleInterop": true,
+        "skipLibCheck": true
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules"]
+}
+```
+
+第二阶段——逐步开启严格检查：
+
+```json
+{
+    "compilerOptions": {
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noImplicitThis": true
+    }
+}
+```
+
+每收紧一个选项，跑一次 `tsc --noEmit`，让 Codex 修复报错。这样比一次性全开 strict 然后面对几百个错误要好处理得多。
+
+---
+
+## 5. Step 4：手动介入节点识别
+
+自动迁移脚本能处理 60-70% 的机械性改动。剩下的 30-40% 需要人工判断。关键是要让 Codex 把这些节点标记出来，而不是你自己去一行行找。
+
+### 5.1 让 Codex 标记无法自动处理的文件
+
+```bash
+codex "扫描 src/ 目录下所有 .ts 文件，
+找出以下类型的代码模式，输出文件名、行号、和具体问题：
+1. 使用了 any 类型（显式或隐式）
+2. 类型断言 (as XXX) 超过 3 次的文件
+3. 使用了 @ts-ignore 或 @ts-nocheck 的位置
+4. 动态属性访问（obj[variable]）且无法确定 key 类型的位置
+5. 混合了 CommonJS 和 ESM 导入的位置
+按严重程度排序，最严重的排在前面"
+```
+
+### 5.2 常见的手动介入场景
+
+**动态属性访问。** JavaScript 里 `obj[key]` 的写法到处都是，TypeScript 需要知道 `key` 的类型。如果 key 是固定的几个值，用字面量联合类型；如果是动态生成的，需要用索引签名。
+
+```typescript
+// 情况一：key 是固定值 → 字面量联合类型
+type ConfigKey = 'host' | 'port' | 'debug';
+function getConfig(key: ConfigKey): string | number | boolean { ... }
+
+// 情况二：key 是动态字符串 → 索引签名
+interface StringMap {
+    [key: string]: string;
+}
+```
+
+**回调地狱转 async/await。** 嵌套超过两层的回调函数，自动转换容易出错（闭包变量、this 指向、错误处理）。Codex 能处理简单的扁平回调，但复杂的控制流需要人工审查。
+
+**第三方库缺少类型定义。** 有些 npm 包没有 `@types/xxx` 类型定义，也没有内置类型。需要写声明文件：
+
+```typescript
+// declarations.d.ts
+declare module 'some-untyped-lib' {
+    export function doSomething(input: string): Promise<string>;
+    export class SomeClass {
+        constructor(options: SomeOptions);
+        process(data: unknown): Result;
+    }
+    interface SomeOptions {
+        timeout?: number;
+    }
+    interface Result {
+        success: boolean;
+        data: unknown;
+    }
+}
+```
+
+### 5.3 生成标记报告
+
+让 Codex 输出一份完整的标记报告：
+
+```bash
+codex "生成一份迁移状态报告，格式如下：
+
+## 自动迁移完成
+- src/utils/format.ts ✅
+- src/utils/validate.ts ✅
+- src/constants/config.ts ✅
+
+## 需要手动审查
+- src/models/user.ts ⚠️ 第 45 行: 动态属性访问，需要定义索引签名
+- src/models/order.ts ⚠️ 第 12 行: 第三方库 'payment-gateway' 无类型定义
+- src/services/auth.ts ⚠️ 第 78 行: 复杂回调嵌套，需要手动转 async/await
+
+## 阻塞项
+- src/routes/api.ts 🚫 依赖 services/auth.ts 未完成迁移
+- src/index.ts 🚫 依赖 routes/* 未完成迁移
+
+## 下一步建议
+1. 先处理 src/models/ 下的标记项
+2. 然后处理 src/services/auth.ts
+3. 最后处理路由层和入口文件"
+```
+
+---
+
+## 6. Step 5：分批执行和验证
+
+迁移策略的核心是"小步快跑"——每改一小批文件就跑测试，确保改动正确再继续。
+
+### 6.1 每批迁移后跑测试
+
+```bash
+# 迁移一批文件后
+codex "我刚刚把 src/utils/ 目录迁移到了 TypeScript。
+请运行 npm test 并检查：
+1. 是否有测试失败
+2. 是否有 TypeScript 编译错误（tsc --noEmit）
+3. 如果有失败，分析失败原因并修复"
+```
+
+Codex 执行测试、分析失败原因、尝试修复，形成一个循环：
+
+```
+迁移一批 → 跑测试 → 通过 → 迁移下一批
+                ↘ 失败 → Codex 分析原因 → 修复 → 重新跑测试
+```
+
+### 6.2 修复失败的测试用例
+
+测试失败有几种常见原因：
+
+**导入路径问题。** JavaScript 时代不写文件扩展名，`require('./utils')` 可以自动解析 `./utils.js`。TypeScript 需要显式扩展名或配置 `moduleResolution`：
+
+```json
+{
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "allowImportingTsExtensions": true
+    }
+}
+```
+
+**类型不匹配。** 迁移后函数签名变了（加了参数类型、返回值类型），但测试里传的参数类型不对。Codex 通常能自动修复这类问题。
+
+**mock 和 stub 的类型问题。** 测试框架的 mock 函数需要匹配新的类型签名。Sinon 的 `sinon.stub()` 在 TypeScript 里需要用泛型指定类型：
+
+```typescript
+const stub = sinon.stub<PaymentService, 'charge'>(
+    PaymentService.prototype, 'charge'
+);
+```
+
+### 6.3 渐进式验证流程
+
+推荐验证流程：
+
+```bash
+# 1. TypeScript 编译检查
+npx tsc --noEmit
+
+# 2. 单元测试
+npm test
+
+# 3. 类型覆盖率检查（可选）
+npx type-coverage
+
+# 4. ESLint 检查（包括 TypeScript 规则）
+npx eslint src/ --ext .ts
+
+# 5. 构建检查
+npm run build
+```
+
+每个步骤的失败都交给 Codex 修复，修复后再跑，直到全通过。
+
+---
+
+## 7. 实战案例A：JavaScript → TypeScript 完整迁移
+
+把前面的步骤串起来，看一个真实的 JavaScript 项目迁移到 TypeScript 的完整流程。
+
+### 7.1 项目背景
+
+一个 Node.js 后端项目，使用 Express + MongoDB，约 50 个源文件，3000 行代码。测试覆盖率约 60%。没有现成的类型定义。
+
+### 7.2 第一轮：评估
+
+```bash
+codex --model o3 "全面分析这个项目的结构，输出：
+1. 目录树（src/ 下的所有 .js 文件）
+2. 依赖关系（哪些文件 import 了哪些文件）
+3. JSDoc 注释的使用情况
+4. 使用的 Express 中间件列表
+5. 数据库模型定义（Mongoose schema）"
+```
+
+Codex 分析后发现：
+- 50 个文件，其中 12 个是工具函数（叶子节点）
+- 8 个 Mongoose 模型文件
+- 15 个路由处理函数
+- 5 个中间件
+- 10 个业务逻辑服务文件
+- JSDoc 覆盖约 30%
+
+### 7.3 第二轮：基础设施
+
+让 Codex 搭建 TypeScript 基础设施：
+
+```bash
+codex "为这个项目添加 TypeScript 支持：
+1. 安装 TypeScript 和必要的 @types 包
+2. 创建 tsconfig.json（宽松模式，allowJs: true）
+3. 修改 package.json 的 scripts（build 命令用 tsc）
+4. 创建 src/types/ 目录，放基础类型定义
+5. 不要修改任何现有 .js 文件"
+```
+
+Codex 执行的命令和修改：
+
+```bash
+npm install -D typescript @types/node @types/express @types/cors
+npm install -D @types/mongoose @types/jest @types/supertest
+```
+
+```json
+// tsconfig.json
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "commonjs",
+        "lib": ["ES2020"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "strict": false,
+        "noImplicitAny": false,
+        "allowJs": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "**/*.test.*"]
+}
+```
+
+### 7.4 第三轮：叶子节点迁移
+
+12 个工具函数文件，让 Codex 批量处理：
+
+```bash
+codex "迁移 src/utils/ 下的所有 .js 文件到 TypeScript。
+对每个文件：
+1. 重命名为 .ts
+2. 把 require 改为 import
+3. 把 module.exports 改为 export
+4. 根据函数用法推断参数和返回值类型
+5. 添加必要的类型注解
+完成后运行 tsc --noEmit 检查编译是否通过"
+```
+
+Codex 会逐文件处理，自动推断类型。比如：
+
+```typescript
+// 迁移前: src/utils/format.js
+const formatDate = (date) => {
+    return new Date(date).toISOString().split('T')[0];
+};
+module.exports = { formatDate };
+
+// 迁移后: src/utils/format.ts
+export function formatDate(date: Date | string | number): string {
+    return new Date(date).toISOString().split('T')[0];
+}
+```
+
+### 7.5 第四轮：模型层迁移
+
+8 个 Mongoose 模型文件需要更多关注。Mongoose schema 和 TypeScript interface 的对应关系需要精确定义：
+
+```bash
+codex "迁移 src/models/ 下的 Mongoose 模型文件到 TypeScript。
+要求：
+1. 每个 schema 对应一个 TypeScript interface
+2. Model 类型使用 mongoose.Model<T>
+3. 静态方法和实例方法要正确声明
+4. 虚拟属性（virtual）要标注类型
+完成后运行 npm test，修复失败的测试"
+```
+
+Codex 生成的类型定义：
+
+```typescript
+// src/models/user.ts
+import mongoose, { Document, Model, Schema } from 'mongoose';
+
+export interface IUser extends Document {
+    name: string;
+    email: string;
+    age: number;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface IUserModel extends Model<IUser> {
+    findByEmail(email: string): Promise<IUser | null>;
+}
+
+const UserSchema = new Schema<IUser, IUserModel>(
+    {
+        name: { type: String, required: true },
+        email: { type: String, required: true, unique: true },
+        age: { type: Number, default: 0 },
+    },
+    { timestamps: true }
+);
+
+UserSchema.statics.findByEmail = function (email: string) {
+    return this.findOne({ email });
+};
+
+export const User = mongoose.model<IUser, IUserModel>('User', UserSchema);
+```
+
+### 7.6 第五轮：服务层和路由层
+
+业务逻辑和路由层是迁移中最复杂的部分，因为涉及请求处理、中间件、错误处理等。
+
+```bash
+codex "迁移 src/services/ 和 src/routes/ 到 TypeScript。
+注意：
+1. Express 的 Request/Response 类型标注
+2. 中间件的类型签名（RequestHandler）
+3. 错误处理的类型标注
+4. 异步函数的错误捕获
+每个文件迁移后立即跑 npm test 验证"
+```
+
+Express 路由的类型标注：
+
+```typescript
+// src/routes/users.ts
+import { Router, Request, Response, NextFunction } from 'express';
+import { UserService } from '../services/user-service';
+
+const router = Router();
+
+// GET /users
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const users = await UserService.findAll();
+        res.json(users);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// GET /users/:id
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await UserService.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        next(error);
+    }
+});
+
+export default router;
+```
+
+### 7.7 第六轮：收紧严格模式
+
+所有文件迁移完成后，逐步开启 TypeScript 严格检查：
+
+```bash
+codex "修改 tsconfig.json，开启 strict: true。
+然后运行 tsc --noEmit，列出所有编译错误。
+按文件分组输出错误列表，然后逐文件修复。
+优先修复错误最多的文件"
+```
+
+常见的严格模式修复：
+
+```typescript
+// 修复前: noImplicitAny
+function processUser(user) {  // Error: Parameter 'user' implicitly has 'any' type
+    return user.name.toUpperCase();
+}
+
+// 修复后
+function processUser(user: { name: string }): string {
+    return user.name.toUpperCase();
+}
+
+// 修复前: strictNullChecks
+const user = users.find(u => u.id === id);
+console.log(user.name);  // Error: Object is possibly 'undefined'
+
+// 修复后
+const user = users.find(u => u.id === id);
+if (!user) {
+    throw new Error('User not found');
+}
+console.log(user.name);
+```
+
+### 7.8 时间和效率统计
+
+这个 50 文件、3000 行的项目，使用 Codex 辅助迁移的实际时间线：
+
+| 阶段 | 文件数 | 耗时 | Codex 完成比例 |
+|------|--------|------|---------------|
+| 评估和计划 | 0 | 20 分钟 | 100% |
+| 基础设施搭建 | 3 | 10 分钟 | 100% |
+| 工具函数迁移 | 12 | 30 分钟 | 95% |
+| 模型层迁移 | 8 | 45 分钟 | 80% |
+| 服务层迁移 | 10 | 60 分钟 | 70% |
+| 路由层迁移 | 15 | 50 分钟 | 75% |
+| 严格模式修复 | 50 | 40 分钟 | 85% |
+| 测试修复 | - | 30 分钟 | 90% |
+| 总计 | 50 | 约 4.5 小时 | 平均 82% |
+
+---
+
+## 8. 实战案例B：REST API → GraphQL 迁移
+
+REST 到 GraphQL 的迁移比语言迁移更复杂，因为涉及的不只是语法——是架构范式的转变。
+
+### 8.1 迁移策略
+
+REST → GraphQL 迁移有两条路：
+
+**策略一：并行运行。** 新增 GraphQL 层，REST API 保持不变。客户端逐步迁移到 GraphQL。等所有客户端都切过来后，再移除 REST 层。安全但耗时。
+
+**策略二：替换式迁移。** 逐个把 REST 端点替换为 GraphQL resolver。快但风险高，迁移期间两套 API 共存，维护成本大。
+
+推荐策略一。让 Codex 帮你做并行运行的前半部分——生成 GraphQL schema 和 resolver，不改现有的 REST 代码。
+
+### 8.2 第一步：从 REST 路由生成 GraphQL Schema
+
+```bash
+codex "分析 src/routes/ 目录下所有 Express 路由，
+生成对应的 GraphQL schema（Type Definition）。
+规则：
+1. 每个 REST 端点对应一个 Query 或 Mutation
+2. 请求参数作为 GraphQL 参数
+3. 响应体作为返回类型
+4. 嵌套的资源关系用 GraphQL 的类型引用表示
+输出到 src/graphql/schema.graphql"
+```
+
+假设你的 REST API 有这些端点：
+
+```
+GET    /api/users           → 用户列表
+GET    /api/users/:id       → 用户详情
+POST   /api/users           → 创建用户
+PUT    /api/users/:id       → 更新用户
+DELETE /api/users/:id       → 删除用户
+GET    /api/users/:id/orders → 用户的订单列表
+```
+
+Codex 生成的 GraphQL schema：
+
+```graphql
+type User {
+    id: ID!
+    name: String!
+    email: String!
+    age: Int
+    createdAt: String!
+    orders: [Order!]!
+}
+
+type Order {
+    id: ID!
+    userId: ID!
+    amount: Float!
+    status: OrderStatus!
+    items: [OrderItem!]!
+    createdAt: String!
+}
+
+enum OrderStatus {
+    PENDING
+    CONFIRMED
+    SHIPPED
+    DELIVERED
+    CANCELLED
+}
+
+type OrderItem {
+    productId: ID!
+    productName: String!
+    quantity: Int!
+    price: Float!
+}
+
+type Query {
+    users(limit: Int, offset: Int): [User!]!
+    user(id: ID!): User
+    orders(userId: ID!, limit: Int, offset: Int): [Order!]!
+}
+
+type Mutation {
+    createUser(input: CreateUserInput!): User!
+    updateUser(id: ID!, input: UpdateUserInput!): User!
+    deleteUser(id: ID!): Boolean!
+}
+
+input CreateUserInput {
+    name: String!
+    email: String!
+    age: Int
+}
+
+input UpdateUserInput {
+    name: String
+    email: String
+    age: Int
+}
+```
+
+### 8.3 第二步：生成 Resolver
+
+```bash
+codex "根据生成的 GraphQL schema，
+创建对应的 resolver 文件。
+要求：
+1. 复用现有的 service 层逻辑（src/services/）
+2. 不要重复实现业务逻辑
+3. 处理 N+1 查询问题（用户列表 → 订单列表）
+4. 添加错误处理
+输出到 src/graphql/resolvers/"
+```
+
+Codex 生成的 resolver：
+
+```typescript
+// src/graphql/resolvers/user-resolver.ts
+import { UserService } from '../../services/user-service';
+import { OrderService } from '../../services/order-service';
+
+export const userResolver = {
+    Query: {
+        users: async (_: any, { limit = 50, offset = 0 }: { limit: number; offset: number }) => {
+            return UserService.findAll({ limit, offset });
+        },
+        user: async (_: any, { id }: { id: string }) => {
+            const user = await UserService.findById(id);
+            if (!user) {
+                throw new Error(`User with id ${id} not found`);
+            }
+            return user;
+        },
+    },
+
+    Mutation: {
+        createUser: async (_: any, { input }: { input: CreateUserInput }) => {
+            return UserService.create(input);
+        },
+        updateUser: async (_: any, { id, input }: { id: string; input: UpdateUserInput }) => {
+            const user = await UserService.update(id, input);
+            if (!user) {
+                throw new Error(`User with id ${id} not found`);
+            }
+            return user;
+        },
+        deleteUser: async (_: any, { id }: { id: string }) => {
+            await UserService.delete(id);
+            return true;
+        },
+    },
+
+    // 字段 resolver：处理嵌套查询
+    User: {
+        orders: async (parent: { id: string }, _: any) => {
+            return OrderService.findByUserId(parent.id);
+        },
+    },
+};
+```
+
+### 8.4 第三步：集成 Apollo Server
+
+```bash
+codex "把 GraphQL 层集成到现有的 Express 应用中：
+1. 安装 @apollo/server 和 graphql 包
+2. 创建 Apollo Server 实例
+3. 在 Express 应用中挂载 /graphql 端点
+4. 配置 context（认证信息传递）
+5. 确保 REST 端点继续正常工作
+不修改任何现有的 REST 路由"
+```
+
+```typescript
+// src/graphql/server.ts
+import { ApolloServer } from '@apollo/server';
+import { expressMiddleware } from '@apollo/server/express4';
+import { loadSchema } from './schema-loader';
+import { userResolver } from './resolvers/user-resolver';
+import { orderResolver } from './resolvers/order-resolver';
+
+export async function createGraphQLServer() {
+    const typeDefs = await loadSchema();
+
+    const server = new ApolloServer({
+        typeDefs,
+        resolvers: [userResolver, orderResolver],
+    });
+
+    await server.start();
+
+    return expressMiddleware(server, {
+        context: async ({ req }) => ({
+            token: req.headers.authorization || '',
+            userId: extractUserIdFromToken(req.headers.authorization),
+        }),
+    });
+}
+```
+
+### 8.5 迁移后的对比
+
+| 维度 | REST | GraphQL |
+|------|------|---------|
+| 端点数量 | 15 个独立 URL | 1 个 /graphql 端点 |
+| 获取用户及其订单 | 2 次请求 | 1 次请求 |
+| 字段选择 | 返回全部字段 | 客户端指定字段 |
+| 文档 | 需要单独维护 | Schema 即文档 |
+| 类型安全 | 运行时检查 | 编译时检查 |
+
+---
+
+## 9. 迁移后的清理工作
+
+迁移完成后，代码库里会有不少遗留物需要清理。这些清理工作也可以交给 Codex。
+
+### 9.1 删除废弃代码
+
+```bash
+codex "扫描整个项目，找出以下废弃代码：
+1. 被注释掉的旧 JavaScript 代码
+2. 不再被任何文件引用的导出函数
+3. 未使用的类型定义和 interface
+4. 旧版迁移脚本和临时文件
+列出每个发现的文件路径和行号，不要自动删除，
+等我确认后再处理"
+```
+
+### 9.2 统一代码风格
+
+```bash
+codex "统一项目的代码风格：
+1. 所有 import 语句按字母序排列
+2. 统一使用 named export，不使用 default export
+3. 统一错误处理模式（try/catch + next(error)）
+4. 统一 async 函数的返回值类型标注
+完成后运行 eslint --fix 检查"
+```
+
+### 9.3 更新文档
+
+```bash
+codex "更新以下文档以反映 TypeScript 迁移：
+1. README.md 中的构建和开发命令
+2. CONTRIBUTING.md 中的代码规范
+3. AGENTS.md 中的项目上下文信息
+4. CI 配置文件中的构建步骤"
+```
+
+---
+
+## 10. 回归测试策略
+
+迁移后最大的风险是"改了类型但行为变了"。回归测试的目的是确保迁移后的代码行为和迁移前完全一致。
+
+### 10.1 快照测试
+
+如果你之前没有快照测试，迁移前先加上：
+
+```bash
+codex "在迁移之前，为 REST API 的所有端点添加快照测试。
+使用 Jest 的 snapshot testing，
+记录每个端点的响应结构。
+这些快照将用于迁移后的回归验证"
+```
+
+```typescript
+// tests/snapshots/api-snapshots.test.ts
+import request from 'supertest';
+import app from '../src/app';
+
+describe('API Snapshots', () => {
+    it('GET /api/users matches snapshot', async () => {
+        const response = await request(app).get('/api/users');
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchSnapshot();
+    });
+
+    it('GET /api/users/:id matches snapshot', async () => {
+        const response = await request(app).get('/api/users/1');
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchSnapshot();
+    });
+});
+```
+
+### 10.2 集成测试
+
+集成测试验证的是端到端的行为，不受内部类型变更影响：
+
+```bash
+codex "运行全部集成测试，对比迁移前后的结果。
+如果有失败的测试，分析是否是行为变更导致的，
+如果是类型问题就修复类型，如果是行为变更就说明原因"
+```
+
+### 10.3 E2E 测试覆盖
+
+如果你的项目有前端，用 Playwright 跑 E2E 测试验证 API 迁移后前端是否正常工作：
+
+```typescript
+// e2e/api-migration.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('user list loads correctly', async ({ page }) => {
+    await page.goto('/users');
+    const userRows = await page.locator('table tbody tr').count();
+    expect(userRows).toBeGreaterThan(0);
+});
+
+test('user detail shows orders', async ({ page }) => {
+    await page.goto('/users/1');
+    const ordersSection = page.locator('#orders');
+    await expect(ordersSection).toBeVisible();
+});
+```
+
+---
+
+## 11. 常见陷阱
+
+### 11.1 类型定义不精确
+
+迁移中最常见的错误是"为了通过编译而写不精确的类型"：
+
+```typescript
+// 错误做法：用 any 绕过类型检查
+function processOrder(order: any): any {
+    return order.items.map((item: any) => item.price * item.quantity);
+}
+
+// 正确做法：精确定义类型
+interface Order {
+    items: OrderItem[];
+}
+
+interface OrderItem {
+    price: number;
+    quantity: number;
+}
+
+function processOrder(order: Order): number {
+    return order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+}
+```
+
+Codex 有时候也会图省事用 `any`。你需要主动检查并纠正：
+
+```bash
+codex "扫描所有 .ts 文件，找出使用了 any 类型的地方。
+对于每个 any，判断是否可以用更精确的类型替代。
+列出文件名、行号、当前类型、和建议的精确类型"
+```
+
+### 11.2 忽略隐式 any
+
+`tsconfig.json` 里 `noImplicitAny: false` 的时候，未标注类型的函数参数会隐式变成 `any`。这些在开启严格模式后全会报错。迁移中要定期检查：
+
+```bash
+npx tsc --noEmit --noImplicitAny 2>&1 | grep "implicitly has an 'any'"
+```
+
+### 11.3 迁移过程中引入新 bug
+
+类型正确不代表逻辑正确。比如：
+
+```typescript
+// JavaScript 原始代码——宽松比较
+if (user.age == "25") { ... }  // "25" == 25 为 true
+
+// TypeScript 迁移后——类型收紧可能改变了比较行为
+if (user.age === 25) { ... }  // 只有 number 才匹配
+```
+
+这种微妙的行为差异很难被自动化工具检测到。回归测试是你唯一的防线。
+
+### 11.4 一次性迁移太多文件
+
+一口吃不成胖子。一次迁移 50 个文件，出错了你不知道是哪个文件导致的问题。每批 5-10 个文件，出错范围可控，定位问题也快。
+
+---
+
+## 12. 效率对比
+
+纯手动迁移 vs Codex 辅助迁移的效率对比（基于 50 文件、3000 行项目的实测数据）：
+
+| 任务 | 纯手动 | Codex 辅助 | 节省比例 |
+|------|--------|-----------|---------|
+| 项目结构分析 | 2 小时 | 15 分钟 | 87% |
+| 依赖图绘制 | 3 小时 | 10 分钟 | 94% |
+| tsconfig 配置 | 30 分钟 | 5 分钟 | 83% |
+| 工具函数迁移 | 3 小时 | 30 分钟 | 83% |
+| 模型层迁移 | 5 小时 | 1 小时 | 80% |
+| 服务层迁移 | 8 小时 | 1.5 小时 | 81% |
+| 路由层迁移 | 4 小时 | 50 分钟 | 79% |
+| 严格模式修复 | 4 小时 | 40 分钟 | 83% |
+| 测试修复 | 3 小时 | 30 分钟 | 83% |
+| **总计** | **约 32.5 小时** | **约 4.5-6 小时** | **约 80%** |
+
+几个关键观察：
+
+- **评估阶段节省最多。** 手动分析依赖图极其耗时，Codex 几分钟就能完成。
+- **重复性工作几乎全自动。** 文件重命名、import 转换、module.exports 转换，Codex 可以批量处理。
+- **业务逻辑迁移仍需人工参与。** 服务层、路由层的迁移中，Codex 完成约 70-75%，剩下需要人判断。
+- **修复阶段效率高。** 无论是编译错误还是测试失败，Codex 都能快速定位和修复。
+
+---
+
+## 13. 总结
+
+用 Codex 做大规模迁移的核心方法论：
+
+**评估先行。** 不要上来就改代码。先用 Codex 做完整的影响范围分析，生成依赖图和迁移计划。磨刀不误砍柴工。
+
+**分批执行。** 按依赖顺序从叶子节点向核心推进，每批 5-10 个文件，每批迁移后跑测试验证。小步快跑比大步跨栏安全得多。
+
+**自动化优先。** 能用脚本批量处理的模式（import 转换、文件重命名、JSDoc → interface），让 Codex 生成脚本一次搞定。把人工时间留给需要判断的部分。
+
+**标记手动节点。** 让 Codex 主动标记无法自动处理的文件和代码模式，而不是等你碰到了再处理。
+
+**回归测试兜底。** 迁移前建快照，迁移中跑集成测试，迁移后做 E2E 验证。类型正确不等于行为正确，测试是唯一的验证手段。
+
+这套方法论不仅适用于 JavaScript → TypeScript 和 REST → GraphQL，也适用于其他类型的大规模迁移：Python 2 → 3、AngularJS → Angular、Webpack → Vite、CSS → Tailwind。核心逻辑是一样的：评估 → 计划 → 分批执行 → 验证 → 清理。
+
+---
+
+## 延伸阅读
+
+- [第 48 篇：exec 非交互模式](48-exec-mode.md) — 批量迁移脚本的核心执行引擎
+- [第 50 篇：脚本化 Codex](50-scripting.md) — CI/CD 中集成迁移脚本的完整方法
+- [第 51 篇：GitHub Actions 集成](51-github-actions.md) — 把迁移验证放进 CI 流水线
+- [第 13 篇：Plan 模式](13-plan-mode.md) — 迁移计划的生成和审查流程
+- [第 12 篇：代码审查](12-code-review.md) — 迁移后的代码审查最佳实践
+- [TypeScript 官方迁移指南](https://www.typescriptlang.org/docs/handbook/migrating-from-javascript.html)
+- [GraphQL 官方最佳实践](https://graphql.org/learn/best-practices/)

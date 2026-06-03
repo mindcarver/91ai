@@ -1,0 +1,1048 @@
+# 常见问题 FAQ：Codex 使用中的 40 个问题解答
+
+> TL;DR: 汇总 Codex CLI 使用中最常遇到的 40 个问题，按安装认证、日常使用、配置、安全、性能、企业部署六大类组织。每个问题给出直接答案和指向详细文章的链接。遇到问题先来这查，90% 的常见问题都能找到答案。
+
+---
+
+## 1. 安装与认证（8 题）
+
+### Q1: 安装 Codex 时报 `npm ERR! code EACCES` 权限错误怎么办？
+
+这个错误说明 npm 全局目录没有写权限。两种解法：
+
+**方案 A**：用 npm 的官方脚本修复全局目录权限（推荐）：
+
+```bash
+mkdir ~/.npm-global
+npm config set prefix '~/.npm-global'
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+npm install -g @openai/codex
+```
+
+**方案 B**：不用 npm，直接下载二进制文件：
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/openai/codex/releases/latest/download/codex-darwin-arm64 -o ~/.local/bin/codex
+chmod +x ~/.local/bin/codex
+
+# Linux (x64)
+curl -L https://github.com/openai/codex/releases/latest/download/codex-linux-x64 -o ~/.local/bin/codex
+chmod +x ~/.local/bin/codex
+```
+
+不要用 `sudo npm install -g`，这会把 npm 的文件权限搞乱，后续可能出更多问题。
+
+→ 详见：第 02 篇（安装指南）
+
+---
+
+### Q2: 首次运行 `codex` 后浏览器没弹出登录页面？
+
+可能的原因和排查步骤：
+
+1. **检查是否有浏览器**：SSH 远程连接或 CI 环境没有浏览器，Codex 打不开授权页面。解决方法是用 API Key 认证：
+
+   ```bash
+   export CODEX_API_KEY="sk-proj-xxx"
+   codex "hello"
+   ```
+
+2. **检查 localhost 回调是否被占用**：Codex 的 OAuth 流程需要一个 localhost 回调端口。如果端口被防火墙或代理拦截，浏览器弹出来但回调失败。试试关闭本地代理。
+
+3. **手动复制 URL**：终端里会打印一个 URL。如果浏览器没自动弹出，手动复制这个 URL 到浏览器里打开。
+
+4. **远程服务器场景**：在远程服务器上没有浏览器。用 `codex login --device-code`，它会给你一个 URL 和一个设备码，在任何有浏览器的设备上完成登录。
+
+→ 详见：第 03 篇（认证配置）、第 55 篇（企业认证）
+
+---
+
+### Q3: `CODEX_API_KEY` 设了但 Codex 还是提示未登录？
+
+按以下步骤排查：
+
+1. **确认环境变量生效**：`echo $CODEX_API_KEY` 看看值是否存在。常见问题是在一个终端设了变量，在另一个终端跑 Codex。
+
+2. **确认 key 格式**：OpenAI API Key 以 `sk-` 或 `sk-proj-` 开头。如果你填的是 ChatGPT 的 session token 而不是 API Key，不会生效。
+
+3. **确认 key 有效**：用 curl 测试：
+
+   ```bash
+   curl https://api.openai.com/v1/models \
+     -H "Authorization: Bearer $CODEX_API_KEY"
+   ```
+
+   返回模型列表说明 key 有效，返回 401 说明 key 无效或过期。
+
+4. **确认没有拼写错误**：变量名是 `CODEX_API_KEY`，不是 `CODEX_APIKEY`、`CODE_API_KEY`、`OPENAI_CODEX_KEY`。
+
+5. **检查是否有旧缓存**：`~/.codex/auth.json` 里可能有旧的无效凭据。删除后重试：`rm ~/.codex/auth.json`。
+
+→ 详见：第 03 篇（认证配置）、第 69 篇（环境变量参考）
+
+---
+
+### Q4: 使用的模型返回 "model not found" 或 "model not available" 怎么办？
+
+这个错误意味着你选的模型在你的 API 套餐下不可用。排查方法：
+
+1. **确认模型名拼写**：`gpt-5.4` 不是 `gpt5.4`，`o4-mini` 不是 `o4-mini`（注意不是 `o3-mini`）。
+
+2. **确认 API 套餐支持**：有些模型只在特定套餐下可用。Free tier 用户只能用基础模型；Pro/Team 用户可以用更多模型。去 [platform.openai.com](https://platform.openai.com) 查看你的账户可用模型列表。
+
+3. **确认 region 可用性**：某些模型在特定地区不可用。如果你在日本用 Azure 部署，模型名可能和 OpenAI 直连的不同。
+
+4. **切换到可用模型**：
+
+   ```bash
+   codex -m gpt-5.4-mini "hello"  # 试试轻量模型
+   ```
+
+→ 详见：第 06 篇（模型选择）、第 24 篇（模型与 Provider）
+
+---
+
+### Q5: 怎么在无浏览器环境（Docker、SSH、CI）下认证 Codex？
+
+三种方法：
+
+1. **API Key 环境变量**（最常用）：
+
+   ```bash
+   export CODEX_API_KEY="sk-proj-xxx"
+   ```
+
+2. **设备码登录**：`codex login --device-code`，在任何有浏览器的设备上完成授权。
+
+3. **预置 auth.json**：在有浏览器的机器上完成登录，把 `~/.codex/auth.json` 复制到目标机器。
+
+Docker 中推荐方案 1：
+
+```bash
+docker run -e CODEX_API_KEY="${CODEX_API_KEY}" codex-image "hello"
+```
+
+→ 详见：第 03 篇（认证配置）、第 50 篇（CI/CD 集成）、第 69 篇（环境变量参考）
+
+---
+
+### Q6: `codex login` 成功了但运行时仍然报 401？
+
+可能的原因：
+
+1. **认证缓存损坏**：删除 `~/.codex/auth.json` 重新登录。
+
+2. **时区或系统时间不对**：OAuth token 有时间校验。系统时间差太大（比如虚拟机里时间没同步），token 会被服务端拒绝。执行 `date` 检查时间是否正确。
+
+3. **多个 keyring 实例冲突**：Linux 上如果你有多个桌面环境（GNOME + KDE），keyring 可能冲突。改用文件存储：
+
+   ```bash
+   export CODEX_AUTH_CREDENTIALS_STORE=file
+   ```
+
+4. **API 余额耗尽**：token 有效但账户没钱了。检查 OpenAI 后台的用量和余额。
+
+→ 详见：第 03 篇（认证配置）、第 55 篇（企业认证）
+
+---
+
+### Q7: 怎么检查当前 Codex 版本和更新到最新版？
+
+查看版本：
+
+```bash
+codex --version
+```
+
+更新（npm 安装的）：
+
+```bash
+npm update -g @openai/codex
+```
+
+更新（二进制安装的）：
+
+```bash
+# 重新下载最新二进制
+curl -L https://github.com/openai/codex/releases/latest/download/codex-darwin-arm64 -o ~/.local/bin/codex
+chmod +x ~/.local/bin/codex
+```
+
+Codex 更新比较频繁，建议保持最新版。有些问题的原因是旧版本的 bug，更新后直接解决。
+
+→ 详见：第 02 篇（安装指南）
+
+---
+
+### Q8: 安装时报 Node.js 版本过低怎么办？
+
+Codex CLI 要求 Node.js >= 18。检查当前版本：
+
+```bash
+node --version
+```
+
+如果低于 v18，升级 Node.js：
+
+```bash
+# 用 nvm（推荐）
+nvm install 18
+nvm use 18
+
+# 或者直接下载二进制
+# https://nodejs.org/
+```
+
+或者绕过 Node.js，用二进制安装方式（见 Q1）。
+
+→ 详见：第 02 篇（安装指南）
+
+---
+
+## 2. 日常使用（10 题）
+
+### Q9: Codex 对话到一半突然中断或卡住了怎么办？
+
+可能的原因：
+
+1. **网络超时**：API 请求超时，Codex 卡在等待响应。按 `Ctrl+C` 中断当前请求，Codex 会回到输入状态，你可以重新发送或换个问法。
+
+2. **上下文过长**：对话太长，token 超过了模型上下文窗口。Codex 会尝试自动压缩，但有时压缩失败。用 `/compact` 手动压缩上下文，或者用 `/clear` 开始新对话。
+
+3. **Agent 循环**：Codex 在工具调用间循环（比如反复读文件、反复执行同一个命令）。这通常是指令不够明确导致的。用 `Ctrl+C` 中断，然后给出更具体的指令。
+
+4. **内存不足**：处理大文件时 Codex 进程可能被 OOM killer 杀掉。检查系统内存：`free -h`（Linux）或 `top`（macOS）。
+
+→ 详见：第 10 篇（会话管理）、第 11 篇（上下文管理）
+
+---
+
+### Q10: Codex 给出的代码质量很差，改了还不如不改，怎么办？
+
+提升输出质量的几个方法：
+
+1. **给更多上下文**：不要只说"修复这个 bug"，说"这个函数在输入为空字符串时返回 IndexError，期望返回 None"。
+
+2. **指定风格**：在 AGENTS.md 里写清楚编码规范（命名风格、注释风格、测试要求）。Codex 会读取项目根目录的 AGENTS.md。
+
+3. **用更强的模型**：`codex -m gpt-5.5` 或拉高推理强度：
+
+   ```bash
+   export CODEX_MODEL_REASONING_EFFORT=high
+   ```
+
+4. **分步执行**：不要一次让 Codex 做"重构整个模块 + 写测试 + 更新文档"，拆成三步，每步检查结果。
+
+5. **用 `/plan` 先规划**：让 Codex 先制定计划，你确认后再执行。避免它走错方向浪费 token。
+
+6. **用 `/diff` 检查**：Codex 改完代码后，用 `/diff` 看它到底改了什么，确认无误再保存。
+
+→ 详见：第 59 篇（提示工程）、第 28 篇（AGENTS.md）、第 12 篇（代码审查）
+
+---
+
+### Q11: Codex 改了不该改的文件，怎么回滚？
+
+Codex 的文件修改是通过你的 git 仓库进行的（如果项目在 git 仓库中），所以回滚就是标准的 git 操作：
+
+```bash
+# 查看改了什么
+git diff
+
+# 回滚所有修改
+git checkout .
+
+# 回滚特定文件
+git checkout -- src/main.py
+
+# 如果已经 commit 了
+git revert HEAD
+```
+
+如果项目不在 git 仓库中，Codex 没有内置的回滚机制。所以**强烈建议在使用 Codex 之前确保项目在 git 管理下**。
+
+另外，如果你开启了自动审查（第 49 篇），Codex 会在执行前自动评估修改的安全性。
+
+→ 详见：第 08 篇（编辑代码）、第 12 篇（代码审查）
+
+---
+
+### Q12: Codex 执行命令时一直问我要不要批准，太烦了怎么解决？
+
+这是审批策略（approval policy）的设置问题。三种级别：
+
+- `suggest`：所有操作都要审批（最安全也最烦）
+- `auto-edit`：文件编辑自动通过，命令执行需要审批
+- `full-auto`：全部自动（最方便但有风险）
+
+切换方法：
+
+```bash
+# 在 config.toml 里改
+approval_policy = "auto-edit"
+
+# 或者临时切换
+codex --approval-mode auto-edit "重构这个函数"
+```
+
+建议日常用 `auto-edit`——文件修改自动通过（反正有 git 兜底），命令执行需要你确认（防止误操作）。
+
+→ 详见：第 05 篇（审批模式）、第 30 篇（审批策略详解）
+
+---
+
+### Q13: 怎么让 Codex 处理大型代码库？它说上下文不够了。
+
+大项目的上下文管理策略：
+
+1. **缩小范围**：不要让 Codex 处理整个项目，指定具体的目录或文件。`codex "解释 src/auth/ 下的认证逻辑"` 比 `codex "解释项目的认证逻辑"` 好。
+
+2. **用 AGENTS.md 提供全局视图**：在项目根目录的 AGENTS.md 里写清楚项目结构、核心模块的职责、技术栈。Codex 不用花 token 自己探索项目结构。
+
+3. **定期 `/compact`**：对话太长时手动压缩上下文，保留关键信息，丢弃中间过程。
+
+4. **分而治之**：把大任务拆成小任务。不要"重构整个后端"，而是"重构 auth 模块" → "重构 user 模块" → "重构 order 模块"。
+
+5. **用 plan 模式**：`/plan` 让 Codex 先分析整体情况，制定计划，然后你按计划一步步执行。比直接让它动手改效率高。
+
+→ 详见：第 11 篇（上下文管理）、第 13 篇（规划模式）、第 28 篇（AGENTS.md）
+
+---
+
+### Q14: Codex 不认识我项目里用的某个库或框架，怎么办？
+
+Codex 的知识有截止日期，可能不知道最新的库版本。解决方法：
+
+1. **在 AGENTS.md 里说明**：写清楚项目用的技术栈、版本号、关键配置。比如：
+
+   ```markdown
+   # AGENTS.md
+   ## 技术栈
+   - Next.js 15 (App Router)
+   - Prisma 6.0
+   - Tailwind CSS 4.0
+   ```
+
+2. **在指令中提供信息**：直接告诉 Codex 关键信息。`codex "这个项目用 Next.js 15 App Router，请帮我在 app/api/users/ 下创建一个 route handler"`
+
+3. **开网络搜索**：`web_search = "live"`（在 config.toml 里），让 Codex 自己上网查文档。
+
+4. **用 MCP 服务器补充知识**：接入 Context7 等 MCP 服务器，让 Codex 能查询最新的官方文档。
+
+→ 详见：第 28 篇（AGENTS.md）、第 15 篇（网络搜索）、第 36 篇（MCP 服务器接入）
+
+---
+
+### Q15: 怎么让 Codex 自动跑测试并在测试失败时修复代码？
+
+在 exec 模式下可以串起来：
+
+```bash
+# 先跑测试
+npm test
+# 如果失败，让 Codex 修
+if [ $? -ne 0 ]; then
+  codex exec --full-auto "npm test 失败了，请修复所有失败的测试" 
+fi
+```
+
+在 TUI 模式下，直接告诉 Codex：
+
+```
+请跑 npm test，如果有失败的测试就修复它们，然后重新跑测试确认全部通过
+```
+
+关键是要让 Codex 看到 `npm test` 的输出——它会读取命令输出来定位问题。如果测试输出太长，可以先 `npm test 2>&1 | tail -50` 只看最后 50 行。
+
+→ 详见：第 09 篇（运行命令）、第 48 篇（exec 模式）、第 60 篇（修 Bug 工作流）
+
+---
+
+### Q16: Codex 的对话内容怎么导出或保存？
+
+几种方法：
+
+1. **会话自动保存**：Codex 自动把会话保存在 `${CODEX_HOME}/sessions/` 目录下。用 `/resume` 可以恢复历史会话。
+
+2. **复制输出**：用 `/copy` 命令把 Codex 最后一次回复复制到剪贴板。
+
+3. **导出到文件**：告诉 Codex "把分析结果写到 analysis.md 文件里"。
+
+4. **exec 模式重定向**：
+
+   ```bash
+   codex exec "分析代码质量" > analysis.txt 2>codex.log
+   ```
+
+5. **JSON 输出**：`codex exec --json` 输出 JSONL 格式的事件流，方便程序化处理。
+
+→ 详见：第 10 篇（会话管理）、第 48 篇（exec 模式）
+
+---
+
+### Q17: Codex 能处理图片或截图吗？
+
+截至 2026 年 6 月，Codex CLI 主要处理文本——代码文件、配置文件、命令输出。不直接支持粘贴图片或截图到终端。
+
+替代方案：
+
+1. **把图片内容转成文字描述**：告诉 Codex "这个页面有一个登录表单，包含用户名、密码输入框和登录按钮"。
+
+2. **用 MCP 服务器扩展**：接入支持视觉的 MCP 工具。
+
+3. **把图片路径传给 Codex**：如果你用的是支持视觉的模型（gpt-5.4、gpt-5.5），Codex 可能通过 MCP 工具读取图片文件。但这是非标准用法。
+
+→ 详见：第 04 篇（第一次对话）、第 36 篇（MCP 服务器接入）
+
+---
+
+### Q18: 怎么让 Codex 只分析代码不给修改建议？
+
+用 `read-only` 沙箱模式：
+
+```bash
+codex --sandbox read-only "分析这个模块的代码质量"
+```
+
+或者用审批策略配合：
+
+```bash
+codex --approval-mode suggest "审查这个 PR 的代码"
+```
+
+`read-only` 更彻底——Codex 物理上不能改文件，只能读和输出分析。`suggest` 模式下 Codex 可能想改文件但需要你批准。
+
+也可以用 `/review` 命令：
+
+```
+/review src/auth/
+```
+
+这个命令是专门做代码审查的，默认不改文件，只输出分析报告。
+
+→ 详见：第 07 篇（读代码）、第 12 篇（代码审查）、第 29 篇（沙箱机制）
+
+---
+
+## 3. 配置相关（8 题）
+
+### Q19: config.toml 放在哪里？找不到配置文件。
+
+配置文件的位置取决于 `CODEX_HOME` 环境变量：
+
+```bash
+# 默认位置
+~/.codex/config.toml
+
+# 自定义 CODEX_HOME
+${CODEX_HOME}/config.toml
+
+# 项目级配置
+.codex/config.toml  # 在项目根目录下
+```
+
+如果文件不存在，手动创建就行：
+
+```bash
+mkdir -p ~/.codex
+touch ~/.codex/config.toml
+```
+
+Codex 不要求配置文件必须存在——所有配置项都有默认值。空的 `config.toml` 等于全用默认值。
+
+用 `/debug-config` 命令可以查看当前生效的完整配置。
+
+→ 详见：第 22 篇（配置体系总览）、第 23 篇（基础配置项）
+
+---
+
+### Q20: 改了 config.toml 但配置没生效，怎么回事？
+
+按以下步骤排查：
+
+1. **改对文件了吗？** 用户级配置在 `~/.codex/config.toml`，项目级在 `.codex/config.toml`。两个文件里都有同一个配置项时，项目级的优先级更高（但有安全限制）。确认你改的是正确的文件。
+
+2. **重启 Codex 了吗？** config.toml 在 Codex 启动时读取。改了文件后需要重启 Codex（退出再进入）才能生效。运行中的 `/model` 等命令改的是会话级配置，不影响文件。
+
+3. **被环境变量覆盖了吗？** 环境变量的优先级高于 config.toml。比如你设了 `CODEX_MODEL=gpt-5.4-mini`，config.toml 里的 `model = "gpt-5.4"` 就不生效了。检查：`env | grep CODEX`。
+
+4. **被 requirements.toml 限制了吗？** 企业环境中，系统管理员可能通过 requirements.toml 限制了某些配置项。用 `/debug-config` 查看每个配置项的实际来源。
+
+5. **语法对吗？** TOML 语法比较严格。常见错误：
+   - 字符串值没加引号：`model = gpt-5.4` 应该是 `model = "gpt-5.4"`
+   - 表头写错：`[features]` 不是 `[Features]`
+   - 布尔值写错：`true` 不是 `"true"`
+
+→ 详见：第 22 篇（配置体系总览）、第 66 篇（config.toml 完整参考）
+
+---
+
+### Q21: 怎么在不同项目间切换不同的 Codex 配置？
+
+三种方法：
+
+1. **项目级 config.toml**（推荐）：在每个项目根目录下放 `.codex/config.toml`，只放项目特有的配置。
+
+   ```bash
+   # 项目 A 的 .codex/config.toml
+   model = "gpt-5.4"
+   approval_policy = "auto-edit"
+
+   # 项目 B 的 .codex/config.toml
+   model = "gpt-5.5"
+   approval_policy = "full-auto"
+   ```
+
+2. **Profile 配置**：在 `~/.codex/` 下创建多个 Profile 文件。
+
+   ```bash
+   # ~/.codex/work.config.toml
+   model = "gpt-5.4-mini"
+   sandbox_mode = "workspace-write"
+
+   # ~/.codex/personal.config.toml
+   model = "gpt-5.5"
+   sandbox_mode = "danger-full-access"
+   ```
+
+   切换：`codex --profile work` 或在 config.toml 里设 `profile = "work"`。
+
+3. **环境变量**：在 shell 里按项目设不同的环境变量。
+
+   ```bash
+   cd ~/work/project-a && export CODEX_MODEL=gpt-5.4-mini
+   cd ~/personal/project-b && export CODEX_MODEL=gpt-5.5
+   ```
+
+→ 详见：第 27 篇（Profile 配置）、第 22 篇（配置体系总览）
+
+---
+
+### Q22: 怎么让 Codex 默认用 API Key 而不是 ChatGPT 登录？
+
+两种方法：
+
+1. **设环境变量**：
+
+   ```bash
+   export CODEX_API_KEY="sk-proj-xxx"
+   ```
+
+   写到 `.bashrc` 或 `.zshrc` 里持久化。
+
+2. **强制登录方式**（config.toml）：
+
+   ```toml
+   forced_login_method = "api-key"
+   ```
+
+   这样 Codex 不会尝试 ChatGPT OAuth 流程，只接受 API Key。
+
+→ 详见：第 03 篇（认证配置）、第 23 篇（基础配置项）、第 69 篇（环境变量参考）
+
+---
+
+### Q23: 怎么自定义 Codex 的 Shell 环境（让它用我配好的 PATH、nvm 等）？
+
+在 config.toml 的 `shell_environment_policy` 中配置：
+
+```toml
+# 方案 A：继承所有宿主环境变量（最方便）
+[shell_environment_policy]
+inherit = "all"
+exclude = ["AWS_SECRET_ACCESS_KEY", "DATABASE_URL"]  # 排除敏感变量
+
+# 方案 B：只继承 shell profile 加载的变量
+[shell_environment_policy]
+inherit = "profile"
+
+# 方案 C：白纸一张，手动注入
+[shell_environment_policy]
+inherit = "none"
+set = { PATH = "/usr/local/bin:/usr/bin:/bin", HOME = "/home/user" }
+```
+
+方案 A 是默认值，大部分情况下够用。如果 `nvm`、`pyenv` 这些工具在你的 shell profile 里加载，方案 A 和 B 都能自动继承。
+
+→ 详见：第 26 篇（Shell 与沙箱配置）
+
+---
+
+### Q24: Codex 启动时很慢，要等好几秒，怎么加快？
+
+启动慢的常见原因：
+
+1. **MCP 服务器连接**：Codex 启动时要连接所有配置的 MCP 服务器。如果某个服务器响应慢，会拖慢启动。禁用不必要的 MCP 服务器，或者设超时：
+
+   ```toml
+   # 禁用 MCP
+   export CODEX_MCP_DISABLED=true
+   ```
+
+2. **keyring 查询慢**：Linux 上如果 keyring 服务（gnome-keyring）没有运行，Codex 会等待 keyring 响应超时。改用文件存储：
+
+   ```bash
+   export CODEX_AUTH_CREDENTIALS_STORE=file
+   ```
+
+3. **网络问题**：首次启动时 Codex 可能检查更新或验证 API 连通性。网络慢会拖慢这个过程。
+
+4. **大会话恢复**：如果你用 `/resume` 恢复了一个很长的历史会话，加载会慢。用 `--ephemeral` 跳过会话加载：
+
+   ```bash
+   codex --ephemeral "quick question"
+   ```
+
+→ 详见：第 21 篇（UI 命令）、第 36 篇（MCP 服务器接入）
+
+---
+
+### Q25: 怎么查看 Codex 当前使用的完整配置？
+
+在 Codex TUI 中输入：
+
+```
+/debug-config
+```
+
+这会显示当前生效的所有配置项、它们的值，以及每个值来自哪一层（config.toml / 环境变量 / 默认值 / CLI 参数）。
+
+命令行查看：
+
+```bash
+codex info  # 显示基本信息
+codex --debug-config  # 显示完整配置（如果支持）
+```
+
+→ 详见：第 19 篇（信息查看类命令）
+
+---
+
+### Q26: `.codex/` 目录应该加到 `.gitignore` 里吗？
+
+分情况：
+
+- **`.codex/config.toml`（项目级配置）**：**建议提交到 git**。这是项目的 Codex 配置，团队成员应该共享。类似 `.vscode/settings.json` 的定位。
+- **`.codex/sessions/`（会话历史）**：**加入 .gitignore**。会话历史是个人数据，不应该提交。
+- **`.codex/memories/`（记忆文件）**：看情况。如果是项目级别的共享记忆（比如 "这个项目使用 monorepo 结构"），可以提交。如果是个人偏好，不提交。
+
+推荐的 `.gitignore` 配置：
+
+```gitignore
+# Codex 会话历史（个人数据）
+.codex/sessions/
+.codex/auth.json
+```
+
+→ 详见：第 22 篇（配置体系总览）、第 42 篇（记忆系统）
+
+---
+
+## 4. 安全相关（6 题）
+
+### Q27: Codex 的沙箱真的安全吗？能完全信任吗？
+
+**不能完全信任。** 沙箱是"防御的最后一道墙"，不是唯一的防线。
+
+沙箱能做的：
+
+- 限制文件系统读写范围
+- 阻止未授权的网络访问
+- 防止 Codex 进程超出工作区操作
+
+沙箱防不了的：
+
+- **Prompt 注入**：恶意代码注释或文件名可能诱导 Codex 执行危险操作。沙箱不区分"AI 想做的"和"被诱导想做的"
+- **提权攻击**：Codex 在你的用户权限下运行。如果你是 root，沙箱提供的是软限制，不是硬隔离
+- **供应链攻击**：Codex 调用的工具（npm、pip）可能包含恶意代码，沙箱管不到这些工具的网络行为（除非设了网络拒绝）
+- **信息泄漏**：即使沙箱阻止了写入，Codex 读取的敏感信息可能出现在对话输出中
+
+最佳实践是多层防御：沙箱 + 审批策略 + git 版本控制 + 敏感信息过滤。
+
+→ 详见：第 29 篇（沙箱全解析）、第 35 篇（安全最佳实践）
+
+---
+
+### Q28: Codex 能不能看到我的 AWS 凭证、数据库密码这些敏感信息？
+
+能，如果你不注意防护的话。Codex 的 Shell 环境默认继承你的所有环境变量（`inherit = "all"`），包括 `AWS_SECRET_ACCESS_KEY`、`DATABASE_URL` 等。
+
+防护方法：
+
+1. **排除敏感变量**：
+
+   ```toml
+   [shell_environment_policy]
+   inherit = "all"
+   exclude = [
+     "AWS_SECRET_ACCESS_KEY",
+     "AWS_ACCESS_KEY_ID",
+     "DATABASE_URL",
+     "SECRET_*",    # 支持通配符
+   ]
+   ```
+
+2. **用 `inherit = "none"` 白纸模式**：只注入必要的变量。
+
+3. **用 `.env` 文件代替环境变量**：把敏感信息放在 `.env` 文件里，通过 `direnv` 或 `dotenv` 在需要时加载。Codex 的 `inherit = "all"` 会继承这些变量，所以还是需要配合排除规则。
+
+4. **沙箱阻止网络访问**：`CODEX_SANDBOX_NETWORK_ACCESS=deny` 可以防止 Codex 把敏感信息通过 HTTP 请求发出去。但这也意味着它不能帮你做需要网络的任务。
+
+→ 详见：第 26 篇（Shell 与沙箱配置）、第 33 篇（网络安全）、第 35 篇（安全最佳实践）
+
+---
+
+### Q29: 不小心把 API Key 提交到了 git 仓库，怎么办？
+
+立即执行以下步骤：
+
+1. **吊销泄露的 Key**：去 [platform.openai.com/api-keys](https://platform.openai.com/api-keys) 删除或重新生成 Key。这是最重要的一步——只要 Key 被吊销了，泄露出去也没用。
+
+2. **从 git 历史中移除**：
+
+   ```bash
+   # 用 git-filter-branch（简单但慢）
+   git filter-branch --force --index-filter \
+     'git rm --cached --ignore-unmatch .env' \
+     --prune-empty -- --all
+
+   # 或者用 BFG Repo Cleaner（快）
+   bfg --delete-files .env
+   git reflog expire --expire=now --all
+   git gc --prune=now --aggressive
+   ```
+
+3. **通知团队成员**：如果仓库有协作者，通知他们 fetch 新历史、重新 clone。
+
+4. **预防措施**：
+
+   ```bash
+   # 确保 .gitignore 包含敏感文件
+   echo ".env" >> .gitignore
+   echo "*.secret" >> .gitignore
+   ```
+
+5. **用 pre-commit hook 自动检测**：可以用 `detect-secrets` 或 `gitleaks` 在提交前扫描。
+
+→ 详见：第 35 篇（安全最佳实践）、第 69 篇（环境变量参考）
+
+---
+
+### Q30: workspace-write 沙箱模式下 Codex 会不会误删重要文件？
+
+有可能。`workspace-write` 允许写入工作区内的所有文件，包括删除操作。如果 Codex 判断错误，可能删掉不该删的文件。
+
+防护措施：
+
+1. **用 git 管理**：git 管理的文件即使被删了也能恢复：`git checkout -- <file>`。
+
+2. **限制可写范围**：不用 `workspace-write`，改用 `read-only` + `writable_roots` 精确控制哪些目录可写。
+
+3. **审批策略配合**：`auto-edit` 模式下文件修改会自动通过，但你可以用自定义审批规则对删除操作设更高的审批级别。
+
+4. **自动审查**：开启 Codex 的自动审查功能，它会在执行前评估操作的安全性。
+
+→ 详见：第 29 篇（沙箱全解析）、第 30 篇（审批策略详解）、第 49 篇（自动审查）
+
+---
+
+### Q31: Codex 的数据会不会被 OpenAI 用来训练模型？
+
+取决于你的认证方式和配置：
+
+- **ChatGPT 账号登录**：数据按照你的 ChatGPT 数据使用政策处理。ChatGPT Business 和 Enterprise 用户的数据默认不用于训练。
+- **API Key 认证**：OpenAI API 的默认政策是不使用 API 数据训练模型。你可以在 platform.openai.com 的组织设置中确认数据保留策略。
+- **本地模型（Ollama/LM Studio）**：数据完全不离开你的机器，OpenAI 接触不到。
+
+如果对数据隐私有严格要求：
+
+1. 使用 API Key 认证（而非 ChatGPT 登录）
+2. 在 OpenAI 后台确认数据保留设置
+3. 对于特别敏感的代码，使用本地模型（`--oss` 标志）
+4. 配合企业 SSO 使用，享受企业级数据协议
+
+→ 详见：第 03 篇（认证配置）、第 55 篇（企业认证）、第 24 篇（模型与 Provider）
+
+---
+
+### Q32: 有没有 Codex 的权限最小化配置推荐？
+
+有。以下配置提供最小权限，适合安全敏感环境：
+
+```toml
+# config.toml 最小权限配置
+model = "gpt-5.4-mini"
+approval_policy = "suggest"          # 所有操作都要审批
+sandbox_mode = "read-only"           # 不允许写文件
+web_search = "never"                 # 不联网
+
+[shell_environment_policy]
+inherit = "none"                     # 不继承任何环境变量
+set = { PATH = "/usr/bin:/bin" }     # 只给最基础的 PATH
+
+[features]
+shell_tool = false                   # 禁止执行 Shell 命令
+memories = false                     # 不保存记忆
+```
+
+这个配置下 Codex 只能读文件和输出文字，不能写文件、不能跑命令、不能联网。适合做纯代码审查。
+
+→ 详见：第 29 篇（沙箱全解析）、第 30 篇（审批策略详解）、第 35 篇（安全最佳实践）
+
+---
+
+## 5. 性能相关（5 题）
+
+### Q33: Codex 响应很慢，每次都要等很久，怎么优化？
+
+响应慢的原因和对策：
+
+| 原因 | 症状 | 对策 |
+|------|------|------|
+| 模型太强 | 每次回复等 10-30 秒 | 换 `gpt-5.4-mini` 或降低推理强度 |
+| 网络延迟 | 偶尔快偶尔慢 | 检查网络，设代理 `HTTPS_PROXY` |
+| 上下文太长 | 越聊越慢 | `/compact` 压缩或 `/clear` 清空 |
+| 工具调用多 | 看到大量读文件操作 | 给更精确的指令，缩小搜索范围 |
+| API 限流 | 报 429 错误 | 减少并发、等待后重试 |
+
+最快的日常配置：
+
+```bash
+export CODEX_MODEL=gpt-5.4-mini
+export CODEX_MODEL_REASONING_EFFORT=low
+codex "快速检查这个函数"
+```
+
+→ 详见：第 06 篇（模型选择）、第 11 篇（上下文管理）、第 23 篇（基础配置项）
+
+---
+
+### Q34: Codex 的 token 消耗太快，怎么控制成本？
+
+控制 token 消耗的几个方法：
+
+1. **用更便宜的模型**：`gpt-5.4-mini` 的价格是 `gpt-5.5` 的约 1/10。日常简单任务用 mini 就够了。
+
+2. **降低推理强度**：`model_reasoning_effort = "low"` 减少推理 token。
+
+3. **控制上下文长度**：长对话的每一轮都会把之前的所有内容发给模型。定期 `/compact` 压缩。
+
+4. **限制 exec 轮数**：`CODEX_EXEC_MAX_TURNS=10` 防止 Codex 在 exec 模式下无限循环。
+
+5. **精确指令**：不要给模糊的指令让 Codex 反复探索。"修复 src/auth/login.py 第 45 行的 TypeError"比"修复 bug"省 80% 的 token。
+
+6. **用 plan 模式预判成本**：`/plan` 让 Codex 先规划再执行。如果规划阶段的方案看起来要消耗太多 token，可以调整或取消。
+
+→ 详见：第 06 篇（模型选择）、第 11 篇（上下文管理）、第 59 篇（提示工程）
+
+---
+
+### Q35: 上下文窗口快满了怎么办？Codex 报 "context too long" 错误。
+
+上下文满了意味着对话历史 + 文件内容超过了模型的最大上下文长度。处理方法：
+
+1. **`/compact`**（首选）：Codex 会压缩之前的对话，保留关键信息，丢弃中间过程。压缩后上下文变小，对话继续。
+
+2. **`/clear`**：清空当前对话，从头开始。简单粗暴，但之前讨论的上下文全丢了。
+
+3. **缩小文件范围**：如果 Codex 读了很多文件，告诉它只关注特定文件。`"只看 src/auth/login.py，其他文件不需要"`
+
+4. **开新会话**：`/new` 开始一个新的会话，旧会话用 `/resume` 随时可以回来。
+
+5. **换更大上下文的模型**：`gpt-5.5` 的上下文窗口比 `gpt-5.4-mini` 大。如果任务确实需要大量上下文，用更强的模型。
+
+→ 详见：第 11 篇（上下文管理）、第 16 篇（会话控制类命令）
+
+---
+
+### Q36: 怎么监控 Codex 的 token 使用量？
+
+几种方法：
+
+1. **OpenAI 后台**：去 [platform.openai.com/usage](https://platform.openai.com/usage) 查看详细的 API 用量，包括每次请求的 token 数。
+
+2. **Codex 状态栏**：在 TUI 界面底部的状态栏可以看到当前会话的 token 使用情况。如果看不到，检查 `statusline` 配置是否开启。
+
+3. **`/status` 命令**：在对话中输入 `/status`，查看当前会话的统计信息。
+
+4. **OpenTelemetry**：企业环境可以配置 OTel 导出，把每次 API 调用的 token 消耗导出到监控平台。详见第 57 篇。
+
+5. **`/debug-config`**：查看当前配置是否合理。
+
+→ 详见：第 19 篇（信息查看类命令）、第 57 篇（OpenTelemetry 可观测性）
+
+---
+
+### Q37: 多个 Codex 实例同时运行会不会冲突？
+
+取决于你怎么配置：
+
+1. **同一个 `CODEX_HOME`**：会共享 `config.toml`、`auth.json`、会话历史。多个实例可以同时运行，但写同一个会话文件可能冲突。建议每个实例用不同的会话（`/new` 开新会话）。
+
+2. **不同的 `CODEX_HOME`**：完全隔离，不会冲突。适合 CI 场景：
+
+   ```bash
+   export CODEX_HOME=/tmp/codex-instance-1
+   codex exec "task 1" &
+
+   export CODEX_HOME=/tmp/codex-instance-2
+   codex exec "task 2" &
+   ```
+
+3. **API 限流**：多个实例共享同一个 API Key 时，要注意 OpenAI 的 RPM/TPM 限流。超过限制会返回 429 错误。如果需要高并发，联系 OpenAI 提高限流额度。
+
+→ 详见：第 10 篇（会话管理）、第 69 篇（环境变量参考）
+
+---
+
+## 6. 企业部署（5 题）
+
+### Q38: 怎么在公司内统一管理 Codex 的配置和安全策略？
+
+用 requirements.toml 层。这是管理员专用的约束层，用户和项目都改不了。
+
+```toml
+# /etc/codex/requirements.toml（Linux）
+# %ProgramData%\OpenAI\Codex\requirements.toml（Windows）
+
+approval_policy = { allowed = ["suggest", "auto-edit"] }  # 禁止 full-auto
+sandbox_mode = { allowed = ["read-only", "workspace-write"] }  # 禁止 danger
+model = { allowed = ["gpt-5.4-mini", "gpt-5.4"] }  # 限制可用模型
+web_search = { value = "live" }  # 强制开启网络搜索（或者禁止）
+```
+
+用户可以改自己的 config.toml，但值必须在 requirements.toml 允许的范围内。如果用户设了 `approval_policy = "full-auto"`，但 requirements 只允许 `suggest` 和 `auto-edit`，Codex 会拒绝启动并报错。
+
+对于 macOS 设备，还可以用 MDM（Mobile Device Management）推送配置，实现零接触部署。
+
+→ 详见：第 54 篇（管理员配置指南）、第 22 篇（配置体系总览）、第 58 篇（合规）
+
+---
+
+### Q39: Codex 怎么集成公司的 SSO（单点登录）？
+
+Codex 支持三种认证方式，其中两种适合 SSO 集成：
+
+1. **ChatGPT Enterprise SSO**：如果公司有 ChatGPT Enterprise 订阅，员工用公司 SSO 登录 ChatGPT，Codex 自动走同一套身份认证。管理员在 ChatGPT Enterprise 控制台管理用户和权限。
+
+2. **API Key + 代理服务**：搭建一个内部的 API 代理（比如 OpenAI API Gateway 或自建网关），员工通过 SSO 拿到短期 token，用 token 访问代理，代理转发到 OpenAI API。API Key 只存在代理服务器上，员工不需要知道。
+
+3. **Managed App Server**：Codex 的 App Server 模式（第 53 篇）可以作为集中式的认证入口，管理员统一管控。
+
+配置示例（方案 2）：
+
+```toml
+# config.toml
+openai_base_url = "https://ai-gateway.corp.example.com/v1"
+forced_login_method = "api-key"
+
+# 员工通过 SSO 获取短期 token
+# export CODEX_API_KEY=$(sso-cli get-token --service codex)
+```
+
+→ 详见：第 55 篇（企业认证与 SSO）、第 53 篇（App Server 模式）、第 54 篇（管理员配置指南）
+
+---
+
+### Q40: 怎么给 Codex 开启审计日志？
+
+两种方案：
+
+1. **OpenTelemetry 集成**（推荐）：
+
+   ```toml
+   [otel]
+   environment = "production"
+
+   [otel.trace_exporter]
+   type = "otlp-http"
+   endpoint = "https://otel-collector.corp.example.com/v1/traces"
+   ```
+
+   这样每次 Codex 的 API 调用、文件操作、命令执行都会导出 trace 数据到你的 OTel 收集器，配合 Jaeger、Grafana 等平台查看审计日志。
+
+2. **exec 模式 JSON 输出**：CI 场景下，`codex exec --json` 输出 JSONL 格式的事件流，可以直接存到日志系统。
+
+   ```bash
+   codex exec --json "修复 lint 错误" | tee -a /var/log/codex/audit.jsonl
+   ```
+
+企业环境下推荐方案 1——它能捕获 Codex 的所有操作，包括交互式使用和非交互式使用。
+
+→ 详见：第 57 篇（OpenTelemetry 可观测性）、第 48 篇（exec 模式）、第 54 篇（管理员配置指南）
+
+---
+
+### Q41: 公司网络需要代理才能访问外网，Codex 怎么配置代理？
+
+设环境变量：
+
+```bash
+export HTTPS_PROXY="http://proxy.corp.example.com:8080"
+export NO_PROXY="localhost,127.0.0.1,internal.corp.example.com"
+```
+
+或者在 config.toml 里（如果用 features.network_proxy）：
+
+```toml
+[features]
+network_proxy = true
+```
+
+如果代理需要认证：
+
+```bash
+export HTTPS_PROXY="http://user:password@proxy.corp.example.com:8080"
+```
+
+注意：代理认证信息会出现在环境变量里。在多用户机器上，考虑用不需要认证的代理或者用 netrc 文件存储认证信息。
+
+如果 Codex 需要通过代理访问 OpenAI API，但沙箱内的命令不应该走代理（比如内网的 npm registry），用 `NO_PROXY` 排除内网地址。
+
+→ 详见：第 26 篇（Shell 与沙箱配置）、第 33 篇（网络安全）、第 69 篇（环境变量参考）
+
+---
+
+### Q42: 怎么限制 Codex 只能用公司批准的模型？
+
+在 requirements.toml 中限制 `model` 字段的允许值：
+
+```toml
+# /etc/codex/requirements.toml
+model = { allowed = ["gpt-5.4-mini", "gpt-5.4"] }
+```
+
+这样用户不管是在 config.toml 里还是通过环境变量，都只能用这两个模型。设了其他模型名会报错。
+
+如果公司有自建的模型代理，还要限制 `openai_base_url`：
+
+```toml
+openai_base_url = { value = "https://ai-gateway.corp.example.com/v1" }
+```
+
+这样 API 请求只会发到公司网关，不会直连 OpenAI。配合网关的模型过滤，实现双重保障。
+
+→ 详见：第 54 篇（管理员配置指南）、第 22 篇（配置体系总览）
+
+---
+
+## 延伸阅读
+
+- **第 02 篇（安装指南）**：安装问题的完整排查指南
+- **第 03 篇（认证配置）**：认证方式详解和常见报错
+- **第 05 篇（审批模式）**：三种审批模式的选择和使用
+- **第 06 篇（模型选择）**：模型切换和性能权衡
+- **第 11 篇（上下文管理）**：上下文压缩和长度控制
+- **第 22 篇（配置体系总览）**：配置优先级和分层加载
+- **第 26 篇（Shell 与沙箱配置）**：环境变量继承和安全过滤
+- **第 29 篇（沙箱全解析）**：三种沙箱模式的详细对比
+- **第 35 篇（安全最佳实践）**：安全配置清单
+- **第 48 篇（exec 模式）**：非交互执行和自动化
+- **第 50 篇（CI/CD 集成）**：GitHub Actions 中的 Codex 配置
+- **第 54 篇（管理员配置指南）**：企业级 requirements.toml 配置
+- **第 55 篇（企业认证）**：SSO 集成和凭证管理
+- **第 57 篇（OpenTelemetry）**：审计日志和监控
+- **第 66 篇（config.toml 完整参考）**：所有配置项对照表
+- **第 69 篇（环境变量参考）**：所有 CODEX_ 变量详解

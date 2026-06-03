@@ -1,0 +1,1571 @@
+<!--
+调研来源（不发布，仅记录）：
+1. Codex CLI 源码 codex-rs/config/src/config_toml.rs — ConfigToml 主结构体定义
+2. Codex CLI 源码 codex-rs/config/src/types.rs — 各配置项类型定义
+3. Codex CLI 源码 codex-rs/config/src/mcp_types.rs — MCP 配置类型
+4. Codex CLI 源码 codex-rs/config/src/hooks_toml.rs — Hooks 配置类型
+5. Codex CLI 源码 codex-rs/config/src/profile_toml.rs — Profile 配置类型
+6. Codex CLI 源码 codex-rs/features/src/lib.rs — Features 定义
+7. Codex CLI 源码 codex-rs/protocol/src/config_types.rs — 枚举类型定义
+8. zread.ai/openai/codex/22-configuration-reference — 完整配置参考页面
+版本基准: 2026 年 6 月，Codex CLI v0.75.0
+-->
+
+# config.toml 完整参考：每个配置项详解
+
+> TL;DR: config.toml 是 Codex 的核心配置文件，控制模型选择、审批策略、沙箱模式、TUI 外观、Provider 配置等所有行为。本文列出所有配置项的名称、类型、默认值、说明和示例，作为日常查阅的参考手册。配置分 11 个区：model、approval、sandbox、tui、provider、profile、hooks、permissions、otel、exec、mcp。
+
+---
+
+## 1. 配置文件位置和加载优先级
+
+Codex 的配置从多个来源加载，上层覆盖下层：
+
+| 优先级 | 来源 | 路径 | 说明 |
+|--------|------|------|------|
+| 1（最高） | CLI 参数 | `codex -m xxx --sandbox xxx` | 当前会话临时覆盖 |
+| 2 | 运行时覆盖 | `--config key=value` | 当前会话临时覆盖 |
+| 3 | Profile 配置 | `~/.codex/<name>.config.toml` | 激活 Profile 后叠加 |
+| 4 | 项目级配置 | `.codex/config.toml` | 需项目被信任才加载 |
+| 5 | 用户级配置 | `~/.codex/config.toml` | 个人全局配置 |
+| 6 | 系统级配置 | `/etc/codex/config.toml` | 管理员配置 |
+| 7（约束层） | requirements.toml | `/etc/codex/requirements.toml` | 不可覆盖的硬约束 |
+
+合并算法：标量值（字符串、数字、布尔）直接替换，表（TOML 的 `[section]`）递归合并子键。
+
+安全敏感字段（`openai_base_url`、`chatgpt_base_url`、`model_provider`、`model_providers`、`notify`、`profile`、`profiles`、`otel` 等）在项目级配置中被静默忽略，防止仓库劫持。
+
+```bash
+# 查看当前会话的完整配置（包括合并来源）
+codex debug-config
+
+# 在 TUI 中查看
+/debug-config
+```
+
+---
+
+## 2. 顶层配置项
+
+以下配置项直接写在 `config.toml` 的顶层，不在任何 `[section]` 下。
+
+### 2.1 model
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 由 Provider 决定（OpenAI 默认 `gpt-5.4`） |
+| 环境变量 | 无（用 `-m` CLI 参数覆盖） |
+| Profile 支持 | 是 |
+
+默认使用的模型。CLI 启动时用 `-m` 覆盖，运行中用 `/model` 切换。
+
+```toml
+model = "gpt-5.4"
+```
+
+常用模型 slug：`gpt-5.5`（旗舰）、`gpt-5.4`（日常）、`gpt-5.4-mini`（轻量）、`gpt-5.3-codex`（编码专用）、`o4-mini`（推理模型）。
+
+### 2.2 model_provider
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `"openai"` |
+| 环境变量 | 无 |
+| Profile 支持 | 是 |
+| 项目级安全限制 | 在项目级配置中被忽略 |
+
+当前使用的 Provider 名称。对应 `model_providers` 中的一个 key 或内置 Provider ID（`openai`、`ollama`、`lmstudio`、`amazon-bedrock`）。
+
+```toml
+model_provider = "openai"
+```
+
+### 2.3 approval_policy
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"untrusted"` |
+| 可选值 | `"untrusted"` / `"on-request"` / `"on-failure"` / `"never"` / `"granular"` |
+| Profile 支持 | 是 |
+
+控制命令执行的审批行为。
+
+| 值 | 行为 |
+|----|------|
+| `untrusted` | 只信任白名单命令，其他都问 |
+| `on-request` | 模型主动请求审批时才问 |
+| `on-failure` | 命令执行失败时才问 |
+| `never` | 永不审批，直接执行 |
+| `granular` | 按沙箱规则做细粒度判断 |
+
+```toml
+approval_policy = "on-request"
+```
+
+### 2.4 sandbox_mode
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"workspace-write"` |
+| 可选值 | `"read-only"` / `"workspace-write"` / `"danger-full-access"` |
+| Profile 支持 | 是 |
+
+沙箱模式，控制子进程的文件系统和网络权限。
+
+| 值 | 文件权限 | 网络权限 |
+|----|---------|---------|
+| `read-only` | 只读 | 阻止 |
+| `workspace-write` | 工作区内可写 | 默认阻止 |
+| `danger-full-access` | 无限制 | 无限制 |
+
+```toml
+sandbox_mode = "workspace-write"
+```
+
+### 2.5 web_search
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | 取决于套餐，多数为 `"live"` |
+| 可选值 | `"disabled"` / `"cached"` / `"live"` |
+| Profile 支持 | 是 |
+
+网络搜索模式。`disabled` 完全禁用，`cached` 只用缓存结果，`live` 实时搜索。
+
+```toml
+web_search = "live"
+```
+
+### 2.6 model_reasoning_effort
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"medium"` |
+| 可选值 | `"minimal"` / `"low"` / `"medium"` / `"high"` / `"xhigh"` |
+| Profile 支持 | 是 |
+
+模型推理强度。映射到 OpenAI Responses API 的 `reasoning.effort` 参数。`minimal` 最快最便宜，`xhigh` 最强最贵。
+
+```toml
+model_reasoning_effort = "medium"
+```
+
+### 2.7 plan_mode_reasoning_effort
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | 继承 `model_reasoning_effort` |
+| Profile 支持 | 是 |
+
+Plan 模式专用的推理强度。不设则用 `model_reasoning_effort` 的值。
+
+```toml
+plan_mode_reasoning_effort = "high"
+```
+
+### 2.8 review_model
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 继承 `model` |
+| Profile 支持 | 是 |
+
+`/review` 功能使用的专用模型。适合日常用 GPT-5.4 但代码审查用推理模型的场景。
+
+```toml
+review_model = "o4-mini"
+```
+
+### 2.9 service_tier
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"default"` |
+| 可选值 | `"default"` / `"priority"` / `"flex"` |
+
+OpenAI API 服务层级。`flex` 走弹性队列便宜但延迟高，`priority` 优先处理但价格高。
+
+```toml
+service_tier = "flex"
+```
+
+### 2.10 model_auto_compact_token_limit
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | 由模型决定 |
+| 单位 | token |
+
+对话历史超过此阈值时自动触发压缩。一般不需要改。
+
+```toml
+model_auto_compact_token_limit = 80000
+```
+
+### 2.11 model_context_window
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | 从模型 catalog 自动获取 |
+| 单位 | token |
+
+显式指定上下文窗口大小。只有用自定义 Provider（如本地 Ollama）时才需要手动设置。
+
+```toml
+model_context_window = 200000
+```
+
+### 2.12 model_reasoning_summary
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `"concise"` |
+
+推理摘要风格。控制模型思考过程的展示方式，不影响推理质量。
+
+```toml
+model_reasoning_summary = "concise"
+```
+
+### 2.13 openai_base_url
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `"https://api.openai.com/v1"` |
+| 项目级安全限制 | 在项目级配置中被忽略 |
+
+覆盖 OpenAI Provider 的 API 地址。用于企业代理、Azure OpenAI 等场景。
+
+```toml
+openai_base_url = "https://my-proxy.example.com/v1"
+```
+
+### 2.14 chatgpt_base_url
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `"https://chatgpt.com"` |
+| 项目级安全限制 | 在项目级配置中被忽略 |
+
+ChatGPT 登录流程的 base URL。用于企业内部署 ChatGPT 代理的场景。
+
+```toml
+chatgpt_base_url = "https://chatgpt.internal.example.com"
+```
+
+### 2.15 instructions
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+以 `system` 角色注入的系统指令。适合简短的全局行为偏好。
+
+```toml
+instructions = "回复使用中文。代码注释用英文。"
+```
+
+### 2.16 developer_instructions
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+以 `developer` 角色注入的指令。比 `instructions` 语义更强，模型认为这是开发者给出的指令。支持多行字符串。
+
+```toml
+developer_instructions = """
+你是一个专注于 TypeScript 后端开发的助手。
+- 使用严格类型
+- 优先使用函数式风格
+- 错误处理用 Result 模式
+"""
+```
+
+### 2.17 model_instructions_file
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+| 官方建议 | 强烈不建议使用 |
+
+替换 Codex 内置系统指令的自定义文件路径。会导致核心功能异常。
+
+```toml
+# 不推荐使用
+model_instructions_file = "./my-custom-instructions.md"
+```
+
+### 2.18 profile
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+| 项目级安全限制 | 在项目级配置中被忽略 |
+
+默认激活的 Profile 名称。通过 `--profile` CLI 参数或 `/permissions` TUI 命令切换。
+
+```toml
+profile = "work"
+```
+
+### 2.19 file_opener
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | 无（不生成超链接） |
+| 可选值 | `"vscode"` / `"vscode-insiders"` / `"cursor"` / `"windsurf"` / `"none"` |
+
+文件路径的点击打开方式。
+
+```toml
+file_opener = "vscode"
+```
+
+### 2.20 notify
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | 无（使用内置终端通知） |
+| 项目级安全限制 | 在项目级配置中被忽略 |
+
+外部通知命令。数组第一个元素是命令，后续是参数。
+
+```toml
+notify = ["terminal-notifier", "-title", "Codex CLI", "-sound", "default"]
+```
+
+### 2.21 default_permissions
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+默认权限 Profile 名称。以 `:` 开头引用内置 Profile，否则引用自定义 Profile。
+
+```toml
+default_permissions = ":workspace-write"
+```
+
+### 2.22 oss_provider
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `"ollama"` |
+
+`--oss` 模式使用的本地 Provider。
+
+```toml
+oss_provider = "ollama"
+```
+
+### 2.23 model_catalog_json
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+自定义模型目录的 JSON 文件路径。用于接入不提供 `/v1/models` 端点的 Provider。
+
+```toml
+model_catalog_json = "~/.codex/custom-models.json"
+```
+
+### 2.24 project_doc_fallback_filenames
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | `[]` |
+
+AGENTS.md 不存在时的备选文件名列表。找到第一个就停。
+
+```toml
+project_doc_fallback_filenames = ["CLAUDE.md", "COPILOT.md"]
+```
+
+### 2.25 project_doc_max_bytes
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | `32768`（32 KiB） |
+
+项目文档文件（AGENTS.md 等）的最大读取字节数。超过被静默截断。
+
+```toml
+project_doc_max_bytes = 65536
+```
+
+### 2.26 project_root_markers
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | `[".git"]` |
+
+项目根目录的标记文件/目录。Codex 从 CWD 向上搜索第一个匹配。
+
+```toml
+project_root_markers = [".git", "package.json", "Cargo.toml"]
+```
+
+### 2.27 forced_login_method
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | 无 |
+| 可选值 | `"chatgpt"` / `"api"` |
+| 管理员配置 | 通常由 requirements.toml 设置 |
+
+强制使用的登录方式。企业管理员用来控制认证途径。
+
+```toml
+forced_login_method = "chatgpt"
+```
+
+### 2.28 cli_auth_credentials_store
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"auto"` |
+| 可选值 | `"auto"` / `"file"` / `"keyring"` |
+
+认证凭据存储位置。`auto` 优先 keyring 不可用时回退 file。
+
+```toml
+cli_auth_credentials_store = "auto"
+```
+
+### 2.29 allow_login_shell
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `true` |
+
+是否允许模型请求以登录 Shell 方式执行命令。
+
+```toml
+allow_login_shell = true
+```
+
+### 2.30 personality
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+模型个性模式。可用的值取决于模型和版本。
+
+```toml
+personality = "concise"
+```
+
+### 2.31 mcp_oauth_callback_port
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | 动态分配 |
+
+MCP OAuth 回调的固定端口。
+
+```toml
+mcp_oauth_callback_port = 8765
+```
+
+### 2.32 mcp_oauth_callback_url
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | `http://localhost:<port>/auth/callback` |
+
+MCP OAuth 的 redirect URI。
+
+```toml
+mcp_oauth_callback_url = "https://my-app.example.com/callback"
+```
+
+### 2.33 mcp_oauth_credentials_store
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"auto"` |
+| 可选值 | `"auto"` / `"file"` / `"keyring"` |
+
+MCP OAuth 凭据存储位置。
+
+```toml
+mcp_oauth_credentials_store = "auto"
+```
+
+---
+
+## 3. [model_providers.*] 区
+
+自定义模型 Provider 定义。每个 Provider 是 `[model_providers]` 下的一个子表。
+
+### 3.1 name
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 必需 | 是 |
+
+Provider 显示名称。
+
+```toml
+[model_providers.my-provider]
+name = "My Custom Provider"
+```
+
+### 3.2 base_url
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 必需 | 是 |
+
+API 基础 URL。
+
+```toml
+[model_providers.my-provider]
+base_url = "https://api.example.com/v1"
+```
+
+### 3.3 env_key
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+API Key 所在的环境变量名。Codex 运行时从环境变量中读取。
+
+```toml
+[model_providers.my-provider]
+env_key = "MY_API_KEY"
+```
+
+### 3.4 env_key_instructions
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+
+`env_key` 对应的环境变量不存在时显示的引导文字。
+
+```toml
+[model_providers.my-provider]
+env_key_instructions = "从 https://api.example.com/keys 获取 API Key"
+```
+
+### 3.5 requires_openai_auth
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+是否复用 OpenAI 认证凭据。用于 OpenAI 代理场景。
+
+```toml
+[model_providers.my-provider]
+requires_openai_auth = true
+```
+
+### 3.6 wire_api
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"responses"` |
+| 可选值 | `"responses"` |
+
+通信协议。目前只支持 `responses`（OpenAI Responses API）。
+
+```toml
+wire_api = "responses"
+```
+
+### 3.7 supports_websockets
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+是否支持 WebSocket 传输。
+
+```toml
+supports_websockets = true
+```
+
+### 3.8 request_max_retries
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | `4` |
+| 上限 | `100` |
+
+普通请求失败后的最大重试次数。
+
+```toml
+request_max_retries = 6
+```
+
+### 3.9 stream_max_retries
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | `5` |
+| 上限 | `100` |
+
+流式响应断开后的最大重连次数。
+
+```toml
+stream_max_retries = 8
+```
+
+### 3.10 stream_idle_timeout_ms
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | `300000`（5 分钟） |
+| 单位 | 毫秒 |
+
+流式响应空闲超时。超过此时间没数据就判定断连。
+
+```toml
+stream_idle_timeout_ms = 600000
+```
+
+### 3.11 query_params
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table`（`map<string, string>`） |
+| 默认值 | 无 |
+
+追加到每个请求 URL 的查询参数。
+
+```toml
+[model_providers.azure]
+query_params = { "api-version" = "2024-12-01-preview" }
+```
+
+### 3.12 http_headers
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table`（`map<string, string>`） |
+| 默认值 | 无 |
+
+每个请求携带的静态 HTTP 头。
+
+```toml
+[model_providers.my-provider.http_headers]
+"X-Custom-Header" = "static-value"
+"X-Team-ID" = "team-42"
+```
+
+### 3.13 env_http_headers
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table`（`map<string, string>`） |
+| 默认值 | 无 |
+
+从环境变量读取值的 HTTP 头。key 是 HTTP 头名，value 是环境变量名。
+
+```toml
+[model_providers.my-provider.env_http_headers]
+"X-Request-ID" = "TRACE_ID"
+```
+
+### 3.14 experimental_bearer_token
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 无 |
+| 安全风险 | 明文写在配置文件里，不推荐 |
+
+直接写死的 bearer token。仅用于本地测试。
+
+```toml
+experimental_bearer_token = "my-hardcoded-token"
+```
+
+### 3.15 auth（命令认证）
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table` |
+| 默认值 | 无 |
+
+动态 token 认证。执行指定命令获取 bearer token。
+
+```toml
+[model_providers.my-provider.auth]
+command = "aws"
+args = ["sso", "get-token", "--profile", "dev"]
+cwd = "/home/user"
+timeout_ms = 5000
+refresh_interval_ms = 300000
+```
+
+| 子字段 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `command` | `string` | 无（必需） | 要执行的命令 |
+| `args` | `array[string]` | `[]` | 命令参数 |
+| `cwd` | `string` | CWD | 执行目录 |
+| `timeout_ms` | `int` | `5000` | 超时时间 |
+| `refresh_interval_ms` | `int` | `300000` | 刷新间隔 |
+
+### 3.16 aws（Bedrock 认证）
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table` |
+| 默认值 | 无 |
+
+AWS Bedrock 专用认证配置。仅 `amazon-bedrock` 内置 Provider 可用。
+
+```toml
+[model_providers.amazon-bedrock]
+aws.profile = "dev"
+aws.region = "us-west-2"
+```
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `aws.profile` | `string` | AWS CLI profile 名称 |
+| `aws.region` | `string` | AWS 区域 |
+
+---
+
+## 4. [profiles.*] 区
+
+配置 Profile 定义。每个 Profile 是 `[profiles]` 下的一个子表，用于在不同环境间快速切换。
+
+```toml
+[profiles.work]
+model = "o3"
+approval_policy = "on-request"
+model_reasoning_effort = "high"
+
+[profiles.quick]
+model = "gpt-5.4-mini"
+approval_policy = "never"
+```
+
+Profile 中可覆盖的字段子集：
+
+| 字段 | 支持 | 字段 | 支持 |
+|------|------|------|------|
+| `model` | 是 | `approval_policy` | 是 |
+| `model_provider` | 是 | `sandbox_mode` | 是 |
+| `model_reasoning_effort` | 是 | `plan_mode_reasoning_effort` | 是 |
+| `web_search` | 是 | `features` | 是 |
+| `service_tier` | 是 | `personality` | 是 |
+| `tools` | 是 | `tui.session_picker_view` | 是 |
+
+注意：Profile 不支持 `mcp_servers`、`hooks`、`permissions` 等"重型"配置。这些需要通过独立 Profile 文件（`<name>.config.toml`）设置。
+
+---
+
+## 5. [sandbox_workspace_write] 区
+
+当 `sandbox_mode = "workspace-write"` 时的细化配置。
+
+### 5.1 network_access
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+是否允许在 workspace-write 模式下联网。开启后 `npm install`、`pip install` 等需要联网的操作才能执行。
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+### 5.2 writable_roots
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | `[]` |
+
+工作区之外的额外可写目录。支持绝对路径和 `~` 展开。
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/tmp/build-cache", "~/shared-libs"]
+```
+
+### 5.3 exclude_slash_tmp
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+从可写目录中排除 `/tmp`。
+
+```toml
+exclude_slash_tmp = true
+```
+
+### 5.4 exclude_tmpdir_env_var
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+从可写目录中排除 `$TMPDIR` 指向的目录。
+
+```toml
+exclude_tmpdir_env_var = true
+```
+
+---
+
+## 6. [tui] 区
+
+TUI（终端用户界面）相关的配置。
+
+### 6.1 theme
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+| 默认值 | 自动检测终端配色 |
+
+语法高亮主题名称。TUI 中用 `/theme` 实时预览。支持 `catppuccin-mocha`、`dracula`、`nord`、`gruvbox-dark` 等内置主题，也支持 `~/.codex/themes/` 下的自定义 `.tmTheme` 文件。
+
+```toml
+[tui]
+theme = "catppuccin-mocha"
+```
+
+### 6.2 vim_mode_default
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+默认启用 Vim 模式。开启后输入框默认处于 Vim 普通模式。
+
+```toml
+[tui]
+vim_mode_default = true
+```
+
+### 6.3 status_line
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | `["model-with-reasoning", "context-remaining", "current-dir"]` |
+
+底部状态栏显示的信息项。按数组顺序从左到右排列。设为空数组 `[]` 隐藏状态栏。
+
+可用的信息项（23 种）：
+
+| 标识符 | 含义 |
+|--------|------|
+| `model` | 模型名称 |
+| `model-with-reasoning` | 模型名称 + 推理等级 |
+| `current-dir` | 当前工作目录 |
+| `project` | 项目名称 |
+| `git-branch` | Git 分支 |
+| `pull-request-number` | PR 编号 |
+| `branch-changes` | 相对默认分支的提交变更 |
+| `status` | 运行状态 |
+| `permissions` | 当前权限配置 |
+| `approval` | 审批模式 |
+| `context-remaining` | 上下文剩余百分比 |
+| `context-used` | 上下文使用百分比 |
+| `context-window-size` | 上下文窗口大小 |
+| `five-hour-limit` | 5 小时用量限制剩余 |
+| `weekly-limit` | 周用量限制剩余 |
+| `codex-version` | Codex 版本号 |
+| `used-tokens` | 已用 token 总数 |
+| `total-input-tokens` | 输入 token 总数 |
+| `total-output-tokens` | 输出 token 总数 |
+| `session-id` | 会话标识符 |
+| `fast-mode` | Fast 模式状态 |
+| `raw-output` | 原始输出模式状态 |
+| `thread-title` | 线程标题 |
+| `task-progress` | 任务进度 |
+
+```toml
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "git-branch"]
+```
+
+### 6.4 terminal_title
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]` |
+| 默认值 | `["spinner", "project"]` |
+
+终端标签页标题内容。设为空数组 `[]` 不修改终端标题。
+
+可用的标题项：`app-name`、`project`、`spinner`、`status`、`thread`、`git-branch`、`model`、`task-progress`。
+
+```toml
+[tui]
+terminal_title = ["spinner", "project", "git-branch", "model"]
+```
+
+### 6.5 notifications
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` 或 `array[string]` |
+| 默认值 | `true` |
+
+桌面通知开关。设为 `true` 开启全部，`false` 关闭全部，数组只接收指定类型的通知。可用类型：`agent-turn-complete`、`approval-requested`。
+
+```toml
+[tui]
+notifications = ["agent-turn-complete", "approval-requested"]
+```
+
+### 6.6 notification_method
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"auto"` |
+| 可选值 | `"auto"` / `"osc9"` / `"bel"` |
+
+通知方式。`auto` 自动检测终端支持，`osc9` 用终端转义序列，`bel` 用终端响铃。
+
+```toml
+[tui]
+notification_method = "auto"
+```
+
+### 6.7 notification_condition
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"unfocused"` |
+| 可选值 | `"unfocused"` / `"always"` |
+
+通知触发条件。`unfocused` 只在终端不在前台时通知。
+
+```toml
+[tui]
+notification_condition = "unfocused"
+```
+
+### 6.8 animations
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `true` |
+
+视觉动画开关。关闭后 spinner 变为静态文字。
+
+```toml
+[tui]
+animations = false
+```
+
+### 6.9 show_tooltips
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `true` |
+
+欢迎屏幕提示开关。
+
+```toml
+[tui]
+show_tooltips = false
+```
+
+### 6.10 raw_output_mode
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+原始输出模式。关闭渲染，直接显示纯文本，方便复制。
+
+```toml
+[tui]
+raw_output_mode = true
+```
+
+### 6.11 alternate_screen
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"auto"` |
+| 可选值 | `"auto"` / `"always"` / `"never"` |
+
+备用屏幕缓冲区使用策略。`auto` 在 Zellij 里不用，其他终端用。
+
+```toml
+[tui]
+alternate_screen = "auto"
+```
+
+---
+
+## 7. [tui.keymap.*] 区
+
+快捷键绑定配置。按上下文分组，支持 10 个上下文。
+
+### 上下文列表
+
+| 上下文 | 用途 |
+|--------|------|
+| `global` | 全局快捷键，所有上下文的回退 |
+| `chat` | 聊天区域 |
+| `composer` | 输入框 |
+| `editor` | 多行编辑器 |
+| `vim_normal` | Vim 普通模式 |
+| `vim_operator` | Vim 操作符模式 |
+| `vim_text_object` | Vim 文本对象 |
+| `pager` | 分页器 |
+| `list` | 列表选择 |
+| `approval` | 审批提示 |
+
+### 配置语法
+
+```toml
+[tui.keymap.global]
+open_transcript = "ctrl-t"
+open_external_editor = []   # 空数组 = 解除绑定
+
+[tui.keymap.composer]
+submit = ["enter", "ctrl-m"]  # 可绑定多个键
+new_line = "shift-enter"
+
+[tui.keymap.chat]
+interrupt_turn = "f12"
+
+[tui.keymap.vim_normal]
+enter_insert = "s"
+```
+
+按键名称规范：修饰键组合用 `ctrl-`、`alt-`、`shift-` 前缀，功能键 `f1` 到 `f12`，特殊键 `enter`、`escape`、`tab`、`backspace`、`delete`，方向键 `up`/`down`/`left`/`right`。
+
+---
+
+## 8. [hooks.*] 区
+
+生命周期钩子配置。每个事件是一个数组表，包含匹配器和处理器。
+
+### 支持的钩子事件
+
+| 事件 | 触发时机 |
+|------|---------|
+| `SessionStart` | 会话开始 |
+| `UserPromptSubmit` | 用户提交提示词 |
+| `PreToolUse` | 工具执行前（可拦截） |
+| `PostToolUse` | 工具执行后 |
+| `PermissionRequest` | 权限请求时 |
+| `PreCompact` | 历史压缩前 |
+| `PostCompact` | 压缩后 |
+| `SubagentStart` | 子 Agent 生成 |
+| `SubagentStop` | 子 Agent 完成 |
+| `Stop` | 会话停止 |
+
+### 配置语法
+
+```toml
+[hooks.PreToolUse]
+[[hooks.PreToolUse]]
+matcher = "shell"
+hooks = [
+  { type = "command", command = "/usr/local/bin/audit.sh", timeout_sec = 5 }
+]
+
+[[hooks.PreToolUse]]
+matcher = "file_write"
+hooks = [
+  { type = "command", command = "/usr/local/bin/check.sh" }
+]
+
+[hooks.SessionStart]
+[[hooks.SessionStart]]
+hooks = [
+  { type = "command", command = "/usr/local/bin/init.sh" }
+]
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `matcher` | `string` | 匹配的工具名称（支持前缀匹配） |
+| `hooks[].type` | `string` | 处理器类型，目前只有 `"command"` |
+| `hooks[].command` | `string` | 要执行的命令 |
+| `hooks[].timeout_sec` | `int` | 超时时间（秒） |
+
+钩子退出码决定行为：`0` 放行，非 `0` 拦截。
+
+---
+
+## 9. [permissions.*] 区
+
+自定义权限 Profile 定义。每个 Profile 是 `[permissions]` 下的一个子表。
+
+### 9.1 基本结构
+
+```toml
+[permissions.dev-strict]
+description = "Dev environment with restricted network"
+extends = ":workspace-write"
+
+[permissions.dev-strict.filesystem]
+read = ["${HOME}/projects"]
+write = ["${HOME}/projects/my-app"]
+
+[permissions.dev-strict.network]
+enabled = true
+mode = "limited"
+domains = { "api.example.com" = "allow", "*" = "deny" }
+```
+
+### 9.2 description
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+
+Profile 描述文字。在 `/permissions` 面板中显示。
+
+### 9.3 extends
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string` |
+
+继承的父 Profile 名称。子 Profile 继承父规则后覆盖。
+
+### 9.4 filesystem
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table` |
+
+文件系统访问规则。key 是路径（支持 glob），value 是 `"read"` / `"write"` / `"deny"`。
+
+```toml
+[permissions.my-profile.filesystem]
+":workspace_roots" = "write"
+":workspace_roots/.env*" = "deny"
+"${HOME}/.ssh" = "deny"
+```
+
+### 9.5 network
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table` |
+
+网络访问规则。
+
+```toml
+[permissions.my-profile.network]
+enabled = true
+mode = "limited"
+domains = { "api.example.com" = "allow", "*" = "deny" }
+```
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `enabled` | `bool` | 是否允许网络访问 |
+| `mode` | `string` | `"limited"` 或 `"full"` |
+| `domains` | `map<string, string>` | 域名 → `allow`/`deny` 映射 |
+| `unix_sockets` | `map<string, string>` | Socket 路径 → `allow`/`deny` |
+| `proxy_url` | `string` | HTTP 代理地址 |
+| `socks_url` | `string` | SOCKS5 代理地址 |
+| `enable_socks5` | `bool` | 是否启用 SOCKS5 |
+| `dangerously_allow_all_unix_sockets` | `bool` | 允许所有 Unix Socket |
+
+---
+
+## 10. [shell_environment_policy] 区
+
+子进程环境变量策略。
+
+### 10.1 inherit
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"all"` |
+| 可选值 | `"all"` / `"none"` / `"profile"` |
+
+环境变量继承基线。`all` 继承全部，`none` 从零开始，`profile` 从 shell profile 加载。
+
+### 10.2 set
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `table`（`map<string, string>`） |
+| 默认值 | 无 |
+
+强制注入的环境变量。优先级最高，会覆盖继承的同名变量。
+
+```toml
+[shell_environment_policy.set]
+NODE_ENV = "development"
+RUST_BACKTRACE = "1"
+```
+
+### 10.3 include_only
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]`（正则数组） |
+| 默认值 | 无 |
+
+白名单。只保留匹配这些正则的变量。
+
+```toml
+include_only = ["^PATH$", "^HOME$", "^LANG$"]
+```
+
+### 10.4 exclude
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `array[string]`（正则数组） |
+| 默认值 | 无 |
+
+黑名单。移除匹配这些正则的变量。
+
+```toml
+exclude = ["^AWS_", "^SECRET_", "^TOKEN$"]
+```
+
+### 10.5 ignore_default_excludes
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `bool` |
+| 默认值 | `false` |
+
+是否忽略 Codex 内置的自动排除列表（过滤含 KEY/SECRET/TOKEN/PASSWORD 的变量）。
+
+---
+
+## 11. [history] 区
+
+对话历史配置。
+
+### 11.1 persistence
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `string`（枚举） |
+| 默认值 | `"save-all"` |
+| 可选值 | `"save-all"` / `"none"` |
+
+历史记录持久化策略。
+
+### 11.2 max_bytes
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | `int` |
+| 默认值 | 无上限 |
+
+历史文件最大字节数。超过自动丢弃最旧的条目。
+
+```toml
+[history]
+persistence = "save-all"
+max_bytes = 5242880
+```
+
+---
+
+## 12. [features] 区
+
+实验性功能开关。每个特性是 `true` 或 `false`。
+
+### 默认开启的特性
+
+```toml
+[features]
+shell_tool = true          # Shell 命令执行
+unified_exec = true        # 统一 PTY 执行（Linux/macOS）
+shell_snapshot = true      # Shell 环境快照
+hooks = true               # 生命周期钩子
+multi_agent = true         # 多 Agent 协作
+personality = true         # 模型个性
+fast_mode = true           # 快速模式
+apps = true                # Codex Apps
+plugins = true             # 插件系统
+tool_suggest = true        # 工具建议
+guardian_approval = true   # 自动审批
+goals = true               # 目标追踪
+image_generation = true    # 图片生成
+```
+
+### 需要手动开启的特性
+
+```toml
+[features]
+memories = false           # 记忆系统
+network_proxy = false      # 网络代理限制
+```
+
+### 已废弃的特性
+
+`undo`、`codex_git_commit`、`js_repl`（已移除），`web_search_request`、`web_search_cached`、`use_legacy_landlock`（已废弃）。
+
+---
+
+## 13. [memories] 区
+
+记忆系统详细配置。需要 `[features] memories = true` 开启。
+
+```toml
+[memories]
+generate_memories = true           # 从新会话生成记忆
+use_memories = true                # 在对话中注入记忆
+dedicated_tools = false            # 暴露记忆管理工具
+max_rollouts_per_startup = 2       # 启动时最多处理的待提取会话数
+min_rollout_idle_hours = 6         # 会话空闲多久后才提取
+max_rollout_age_days = 10          # 最多提取多少天前的会话
+max_unused_days = 30               # 超过多少天没使用的记忆自动过期
+```
+
+---
+
+## 14. [agents] 区
+
+多 Agent 配置。
+
+### 14.1 全局参数
+
+```toml
+[agents]
+max_threads = 6                    # 最大并发 agent 线程数
+max_depth = 1                      # agent 嵌套深度限制
+job_max_runtime_seconds = 300      # worker 默认超时（秒）
+```
+
+### 14.2 自定义角色
+
+```toml
+[agents.researcher]
+description = "Codebase investigation role"
+config_file = "./agents/researcher.toml"
+nickname_candidates = ["Herodotus", "Ibn Battuta"]
+
+[agents.reviewer]
+description = "Code review specialist"
+config_file = "./agents/reviewer.toml"
+nickname_candidates = ["Sherlock", "Poirot"]
+```
+
+| 子字段 | 类型 | 说明 |
+|--------|------|------|
+| `description` | `string` | 角色描述，在选择器中显示 |
+| `config_file` | `string` | 角色专用配置文件路径 |
+| `nickname_candidates` | `array[string]` | 候选昵称池 |
+
+---
+
+## 15. [otel] 区
+
+OpenTelemetry 可观测性配置。
+
+### 15.1 顶层参数
+
+```toml
+[otel]
+log_user_prompt = false    # 是否记录用户输入（默认关）
+environment = "dev"         # 环境标签
+```
+
+### 15.2 trace_exporter
+
+```toml
+[otel.trace_exporter]
+type = "otlp-http"          # "otlp-http" / "otlp-grpc" / "none"
+endpoint = "https://otel-collector.example.com/v1/traces"
+protocol = "json"
+headers = { Authorization = "Bearer token" }
+```
+
+### 15.3 metrics_exporter
+
+```toml
+[otel.metrics_exporter]
+type = "otlp-http"
+endpoint = "https://otel-collector.example.com/v1/metrics"
+protocol = "json"
+```
+
+### 15.4 exporter（日志）
+
+```toml
+[otel.exporter]
+type = "otlp-http"
+endpoint = "https://otel-collector.example.com/v1/logs"
+protocol = "json"
+```
+
+### 15.5 TLS 配置
+
+```toml
+[otel.trace_exporter.tls]
+ca_certificate = "/path/to/ca.crt"
+client_certificate = "/path/to/client.crt"
+client_key = "/path/to/client.key"
+```
+
+---
+
+## 16. [exec] 区
+
+非交互执行模式配置。主要用于 `codex exec` 命令。
+
+```toml
+[exec]
+# exec 模式下通常通过 CLI 参数控制
+# -q / --quiet    静默模式
+# --json          JSONL 输出
+# --ephemeral     不保存会话
+# -o file         输出到文件
+# --sandbox mode  沙箱模式
+```
+
+exec 模式的核心参数不在 config.toml 中配置，而是通过 CLI 参数传入。详细用法参见第 48 篇 exec 模式。
+
+---
+
+## 17. [mcp_servers.*] 区
+
+MCP 服务器配置。每个服务器是 `[mcp_servers]` 下的一个子表。
+
+### 17.1 stdio 传输（本地进程）
+
+```toml
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@anthropic/mcp-github"]
+env = { GITHUB_TOKEN = "env:GITHUB_TOKEN" }
+cwd = "/home/user/project"
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `command` | `string` | 启动命令 |
+| `args` | `array[string]` | 命令参数 |
+| `env` | `map<string, string>` | 环境变量（`env:XXX` 从 shell 读取） |
+| `cwd` | `string` | 工作目录 |
+
+### 17.2 StreamableHttp 传输（远程服务）
+
+```toml
+[mcp_servers.remote-api]
+url = "https://mcp-api.example.com/mcp"
+bearer_token_env_var = "MCP_API_TOKEN"
+http_headers = { "X-Custom" = "value" }
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `url` | `string` | MCP 服务器 URL |
+| `bearer_token_env_var` | `string` | Bearer token 环境变量名 |
+| `http_headers` | `map<string, string>` | 额外 HTTP 头 |
+
+---
+
+## 18. 环境变量覆盖
+
+部分配置项可以通过环境变量设置：
+
+| 环境变量 | 对应配置项 | 说明 |
+|---------|-----------|------|
+| `CODEX_HOME` | 配置文件目录 | 默认 `~/.codex` |
+| `CODEX_SQLITE_HOME` | SQLite 目录 | 状态数据库备用目录 |
+| `CODEX_API_KEY` | OpenAI API Key | 直接设置 API Key |
+| `CODEX_OSS_PORT` | Ollama/LM Studio 端口 | 覆盖默认端口 |
+| `CODEX_OSS_BASE_URL` | 本地模型 URL | 覆盖完整 URL |
+| `CODEX_REVOKE_TOKEN_URL_OVERRIDE` | 令牌撤销端点 | 自定义撤销 URL |
+| `OPENAI_ORGANIZATION` | HTTP 头 | `OpenAI-Organization` 请求头 |
+| `OPENAI_PROJECT` | HTTP 头 | `OpenAI-Project` 请求头 |
+
+自定义 Provider 的 `env_key` 字段指定的环境变量也是配置的一部分——Codex 从该环境变量读取 API Key。
+
+```bash
+# 示例：覆盖多个配置
+export CODEX_HOME=~/.codex-alt
+export CODEX_OSS_PORT=8080
+export MY_API_KEY=sk-xxx
+codex --model gpt-5.4-mini
+```
+
+---
+
+## 延伸阅读
+
+- [第 22 篇：配置文件体系总览](22-config-overview.md) — 四层加载优先级和合并算法详解
+- [第 23 篇：基础配置项](23-config-basic.md) — model、sandbox、features 等核心字段的深入讲解
+- [第 24 篇：Provider 配置](24-config-provider.md) — 自定义模型源的完整配置方法
+- [第 25 篇：TUI 界面配置](25-config-tui.md) — 主题、快捷键、状态栏的定制指南
+- [第 26 篇：Shell 与沙箱配置](26-shell-and-sandbox-config.md) — 环境变量策略和沙箱隔离
+- [第 27 篇：Profile 配置](27-config-profiles.md) — 多环境切换和权限 Profile
+- [第 28 篇：AGENTS.md](28-agents-md.md) — 项目指令文件的分层机制
+- [第 68 篇：快捷键绑定](68-keybindings.md) — keymap 配置的完整参考
+- [第 69 篇：环境变量](69-env-vars.md) — 环境变量覆盖的完整列表
+- [Codex 官方配置参考](https://developers.openai.com/codex/config-reference)
+- [Codex 配置 JSON Schema](https://developers.openai.com/codex/config-schema.json)

@@ -1,0 +1,1027 @@
+<!--
+调研来源（不发布，仅记录）：
+1. OpenAI 官方文档 developers.openai.com/codex/concepts/subagents — 子代理并行分析能力
+2. OpenAI 官方文档 developers.openai.com/codex/cli/slash-commands — /fork、/side、/agent 命令
+3. OpenAI 官方文档 developers.openai.com/codex/config-reference — agents.* 配置项
+4. Node.js 官方文档 nodejs.org — v8 profiling、heap snapshot、performance hooks
+5. Python 官方文档 docs.python.org — cProfile、tracemalloc、asyncio 调试
+6. Brendan Gregg 性能分析方法论 — USE 方法、火焰图
+版本基准: 2026 年 6 月
+-->
+
+# 真实工作流：用 Codex 调试复杂问题
+
+> TL;DR：调试复杂问题（性能瓶颈、内存泄漏、竞态条件、跨服务 Bug）时 Codex 的角色不是直接修 Bug，而是加速定位过程。核心策略：让 Codex 读日志分析模式、读源码追踪调用链、生成诊断脚本、对比正常和异常路径。本文覆盖四种复杂问题的调试流程、诊断脚本模板、和日志分析的 Codex 提示技巧。
+
+---
+
+## 1. 调试复杂问题的难点
+
+简单的 bug——变量拼错了、逻辑分支漏了、返回值没处理——让 Codex 读一下代码就能定位。但有些问题的定位过程完全不同。
+
+复杂问题有几个共同特征：
+
+**信息分散**。性能瓶颈可能和数据库查询、网络延迟、算法复杂度都有关，线索分布在日志、监控面板、源码三个地方。你需要先收集信息，再拼出全貌。
+
+**原因不明确**。内存泄漏不会在报错信息里告诉你"第 47 行的那个闭包没释放"。竞态条件更是难以复现——本地跑 100 次都正常，上线后在特定负载下才出现。
+
+**需要系统化排查**。不像简单 bug 可以直奔问题代码，复杂问题往往需要排除法：先确定问题出在哪一层（网络、应用、数据库），再确定是哪个模块，最后才是哪一行。
+
+这类问题中，Codex 的价值不在于"帮我改代码"，而在于**加速信息收集和模式识别**——它能快速读完几十个日志文件、在源码里追踪多层调用链、生成专门的诊断脚本帮你收集更多数据。
+
+## 2. Codex 在调试中的角色定位
+
+先明确边界：**Codex 是分析助手，不是执行者**。
+
+它擅长的事：
+
+- 读完几百行日志文件，提取出异常模式和时间线
+- 追踪跨文件的调用链，画出完整的请求路径
+- 根据症状生成诊断脚本，帮你收集更多信息
+- 对比正常路径和异常路径的差异
+
+它不擅长的事：
+
+- 复现竞态条件（它无法在真实运行环境中模拟并发）
+- 看 flame graph 找瓶颈（它处理的是文本，不是可视化图表）
+- 判断"这个延迟在业务上是否可接受"（需要你的领域知识）
+
+一个有效的分工是：你负责定义问题边界和做决策，Codex 负责快速收集和分析信息。下面的三种策略和四个场景都是基于这个分工。
+
+## 3. 策略一：让 Codex 读日志分析模式
+
+日志是复杂问题的一手证据。但日志通常很长，而且关键信息往往散落在不同时间点的大量正常输出中间。
+
+### 基本用法
+
+用 `/mention` 把日志文件指向 Codex，让它分析：
+
+```
+/mention logs/app-2026-06-01.log
+/mention logs/app-2026-06-02.log
+
+这两个日志文件分别是正常日和异常日的。
+对比两天的日志，找出：
+1. 异常日有哪些正常日没有的错误
+2. 错误出现的时间模式（集中在某个时段？均匀分布？）
+3. 错误出现前后的上下文（之前有什么操作）
+```
+
+### 提取异常模式
+
+Codex 分析日志后通常会输出类似这样的结果：
+
+```
+异常日独有错误：
+- 14:23:17 ERROR DatabaseConnection timeout after 30000ms（出现 47 次）
+- 14:23:18 ERROR Redis connection refused（出现 12 次）
+
+时间模式：
+- 数据库超时集中在 14:20-14:45 之间
+- 之前没有类似的超时记录
+
+上下文：
+- 超时前 5 分钟，有一条 INFO: Batch import started (batch_id=2847)
+- 超时期间，内存使用率从 65% 飙升到 98%
+```
+
+这些信息直接指向了问题：批量导入任务在 14:20 启动，消耗了大量内存，导致数据库和 Redis 连接超时。
+
+### 生成时间线
+
+对于时序相关的问题，让 Codex 生成事件时间线：
+
+```
+基于日志内容，生成今天 14:00-15:00 之间的事件时间线。
+只关注 ERROR 和 WARN 级别的日志，以及和订单相关的 INFO 日志。
+格式：
+  HH:MM:SS | 事件 | 关联组件
+```
+
+### 大日志文件的处理
+
+如果日志文件太大（超过上下文窗口），先用命令行预处理：
+
+```bash
+# 提取错误和时间范围
+grep -E "ERROR|WARN" logs/app.log > /tmp/errors.log
+
+# 提取特定时间范围
+awk '/2026-06-01 14:/' logs/app.log > /tmp/hour14.log
+
+# 提取特定组件的日志
+grep "OrderService" logs/app.log > /tmp/order.log
+```
+
+然后把预处理后的文件 `/mention` 给 Codex 分析。
+
+## 4. 策略二：生成诊断脚本
+
+很多时候日志里的信息不够，需要运行专门的诊断脚本来收集更多数据。Codex 擅长根据症状生成这类脚本。
+
+### 基本思路
+
+```
+症状：API 接口响应时间从上周开始逐渐变慢，从平均 50ms 涨到了 300ms。
+已有的日志没有明显的错误信息。
+
+帮我生成一个 Node.js 诊断脚本，做以下事情：
+1. 在每个 API 处理函数的入口和出口加时间戳，测量实际处理时间
+2. 记录每个请求期间的数据库查询次数和耗时
+3. 记录请求期间的内存使用变化
+4. 输出 CSV 格式，方便后续分析
+
+脚本应该以中间件的形式注入，不需要修改业务代码。
+```
+
+### 注入探针代码
+
+对于性能问题，探针代码比完整脚本更实用：
+
+```
+我怀疑 getOrders 函数内部有 N+1 查询问题。
+帮我在这个函数里加探针代码：
+- 在每个数据库查询前后加 console.time/timeEnd
+- 统计总查询次数
+- 把探针输出到 stderr，不影响正常日志
+
+/mention src/services/orderService.js
+```
+
+Codex 会在函数里注入类似这样的代码：
+
+```javascript
+async function getOrders(userId) {
+  console.time('[probe] getOrders total');
+  console.time('[probe] query-1: findUser');
+  const user = await db.User.findById(userId);
+  console.timeEnd('[probe] query-1: findUser');
+
+  console.time('[probe] query-2: findOrders');
+  const orders = await db.Order.findAll({ where: { userId } });
+  console.timeEnd('[probe] query-2: findOrders');
+
+  // 探针：检测 N+1
+  let queryCount = 0;
+  const results = [];
+  for (const order of orders) {
+    queryCount++;
+    console.time(`[probe] query-${queryCount + 2}: findItems order-${order.id}`);
+    const items = await db.OrderItem.findAll({ where: { orderId: order.id } });
+    console.timeEnd(`[probe] query-${queryCount + 2}: findItems order-${order.id}`);
+    results.push({ ...order.toJSON(), items });
+  }
+
+  console.error(`[probe] N+1 check: ${orders.length} orders, ${queryCount} item queries`);
+  console.timeEnd('[probe] getOrders total');
+  return results;
+}
+```
+
+跑一遍就能看到是不是 N+1 的问题。
+
+### 对比基准脚本
+
+有时候你需要知道"正常"是什么样的，才能判断"异常"偏差有多大：
+
+```
+帮我写一个基准测试脚本：
+1. 连接本地数据库
+2. 对 orders 表执行 5 种常见查询，每种跑 100 次取平均值
+3. 同时记录 Redis 缓存的命中率
+4. 输出结果包括：查询语句、平均耗时、P50、P95、P99
+
+我要把这个结果和线上监控数据对比。
+```
+
+## 5. 策略三：追踪调用链
+
+复杂 bug 经常涉及多层调用。追踪调用链是定位问题的关键手段。
+
+### 让 Codex 追踪跨文件调用链
+
+```
+用户反馈：下单后偶尔会收到两封确认邮件。
+
+追踪这个问题的完整调用链：
+1. 订单创建的入口在哪个文件
+2. 订单确认邮件是在哪里触发的
+3. 邮件发送是同步还是异步
+4. 有没有重试机制
+5. 有没有消息队列参与
+
+/mention src/routes/order.js
+/mention src/services/orderService.js
+/mention src/services/emailService.js
+/mention src/workers/emailWorker.js
+```
+
+### 生成调用图
+
+让 Codex 输出调用关系的文本表示：
+
+```
+基于上面的文件分析，生成调用图。
+格式用缩进表示层级：
+
+placeOrder (order.js:23)
+  → createOrder (orderService.js:45)
+    → validateStock (stockService.js:12)
+    → db.insert (Order.js:67)
+    → emit('order.created') (eventBus.js:5)
+      → onOrderCreated (emailWorker.js:15)
+        → sendOrderEmail (emailService.js:23)
+      → onOrderCreated (analyticsWorker.js:8)  ← 注意：这里也监听了
+```
+
+如果你发现有两个地方监听了 `order.created` 事件，重复邮件的问题就有线索了。
+
+### 对比正常路径和异常路径
+
+```
+分析两种场景的调用链差异：
+
+场景 A（正常）：用户下单 → 创建订单 → 发一封确认邮件
+场景 B（异常）：用户下单 → 创建订单 → 发两封确认邮件
+
+重点对比：
+1. 两个场景的事件触发有什么不同
+2. 有没有条件分支可能导致重复触发
+3. 异步操作的完成顺序是否影响结果
+```
+
+## 6. 场景 A：性能瓶颈调试
+
+### 症状
+
+API 接口响应时间从 50ms 涨到 300ms，没有错误日志，功能正常但变慢了。
+
+### 调试流程
+
+**第一步：确认瓶颈在哪一层**
+
+让 Codex 帮你生成一个分层测量脚本：
+
+```javascript
+// perf-probe.js — 分层性能探针
+const http = require('http');
+
+function measureLayer(label, fn) {
+  return async (...args) => {
+    const start = performance.now();
+    const result = await fn(...args);
+    const duration = performance.now() - start;
+    console.error(`[perf] ${label}: ${duration.toFixed(2)}ms`);
+    return result;
+  };
+}
+
+// 包装各层函数
+const router = measureLayer('router', originalRouter);
+const service = measureLayer('service', originalService);
+const database = measureLayer('database', originalDatabase);
+const cache = measureLayer('cache', originalCache);
+```
+
+跑一次请求就能知道时间花在哪一层。
+
+**第二步：定位具体瓶颈**
+
+假设确定了是数据库层慢。让 Codex 分析具体的查询：
+
+```
+/mention src/models/Order.js
+/mention src/services/orderService.js
+
+分析所有和订单相关的数据库查询：
+1. 哪些查询没有使用索引（通过代码推断）
+2. 哪些查询可能在全表扫描
+3. 有没有 N+1 查询模式
+4. 有没有不必要的大数据量查询（查了整表但只用前 10 条）
+
+输出格式：文件名:行号 | 查询模式 | 疑似问题 | 建议优化
+```
+
+**第三步：验证假设**
+
+Codex 给出分析后，用 `/side` 做交叉验证：
+
+```
+/side 你说 getOrders 函数有 N+1 问题，因为循环里逐个查 order_items。
+验证一下：看看 Order 模型定义里有没有 include items 的关联配置。
+如果有，getOrders 可以用 eager loading 一次查出来。
+```
+
+### CPU profiling
+
+如果是 CPU 瓶颈（而不是 IO 瓶颈），需要 profiling 数据。让 Codex 帮你生成 profiling 脚本：
+
+```javascript
+// cpu-profile.js
+const v8 = require('v8');
+
+// 采样 30 秒的 CPU profile
+setTimeout(() => {
+  const profile = v8.getHeapStatistics();
+  console.error('[cpu-profile] Heap stats:', JSON.stringify(profile, null, 2));
+}, 30000);
+```
+
+对于 Node.js，更好的方式是用 `--prof` 启动，然后让 Codex 分析输出：
+
+```bash
+node --prof src/index.js
+# 跑完后生成 isolate-*.log
+```
+
+```
+/mention isolate-0xnnnnnn-v8.log
+
+分析这个 CPU profile 文件：
+1. 哪些函数占用的 CPU 时间最多（top 10）
+2. 有没有明显的热点函数（自身时间占比高的）
+3. 垃圾回收的频率和耗时
+```
+
+### 热路径定位
+
+让 Codex 直接读源码定位热路径：
+
+```
+这个接口 /api/dashboard 的处理函数涉及多个文件的调用。
+帮我梳理出从请求进来到响应返回的完整执行路径（热路径），
+标注每一步的预估耗时：
+
+/mention src/routes/dashboard.js
+/mention src/services/dashboardService.js
+/mention src/services/cacheService.js
+/mention src/services/analyticsService.js
+
+输出格式：
+步骤 N | 文件:行号 | 操作 | 预估耗时 | 可优化？
+```
+
+## 7. 场景 B：内存泄漏调试
+
+### 症状
+
+服务运行几个小时后内存持续增长，重启后恢复正常，过几个小时又开始增长。
+
+### 调试流程
+
+**第一步：确认是否是泄漏**
+
+内存增长不一定是泄漏——可能是正常的缓存增长。让 Codex 帮你生成一个监控脚本：
+
+```javascript
+// memory-monitor.js
+const v8 = require('v8');
+
+function logMemory() {
+  const mem = process.memoryUsage();
+  const heap = v8.getHeapStatistics();
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    rss_mb: (mem.rss / 1024 / 1024).toFixed(2),
+    heap_used_mb: (mem.heapUsed / 1024 / 1024).toFixed(2),
+    heap_total_mb: (mem.heapTotal / 1024 / 1024).toFixed(2),
+    external_mb: (mem.external / 1024 / 1024).toFixed(2),
+    heap_limit_mb: (heap.heap_size_limit / 1024 / 1024).toFixed(2),
+  }));
+}
+
+setInterval(logMemory, 60000); // 每分钟记录一次
+```
+
+**第二步：生成 heap snapshot 对比**
+
+让 Codex 生成 heap snapshot 采集脚本：
+
+```javascript
+// heap-snapshot.js
+const v8 = require('v8');
+const fs = require('fs');
+
+function takeSnapshot(label) {
+  const filename = `/tmp/heapdump-${label}-${Date.now()}.heapsnapshot`;
+  const stream = v8.getHeapSnapshot();
+  const file = fs.createWriteStream(filename);
+  stream.pipe(file);
+  console.error(`[heap] Snapshot written: ${filename}`);
+  return filename;
+}
+
+// 在启动时拍一次
+setTimeout(() => takeSnapshot('baseline'), 60000);  // 1 分钟后基线
+
+// 之后每小时拍一次
+setInterval(() => takeSnapshot('interval'), 3600000);
+```
+
+拍了基线和一段时间的快照后，Codex 可以帮你分析快照里的模式：
+
+```
+帮我分析 heap snapshot 的 JSON 结构。我无法直接给你二进制文件，
+但我可以告诉你：
+
+1. baseline snapshot 时 rss 是 120MB
+2. 6 小时后 rss 是 450MB
+3. 期间没有明显的流量增长
+
+基于项目代码，分析哪些地方最可能造成内存泄漏：
+/mention src/services/cacheService.js
+/mention src/services/sessionService.js
+/mention src/workers/notificationWorker.js
+/mention src/utils/eventEmitter.js
+
+重点看：
+- 有没有全局变量/缓存只增不减
+- 事件监听器有没有在对象销毁时移除
+- 闭包是否持有对大对象的引用
+- 定时器或 interval 有没有清理
+```
+
+**第三步：引用链追踪**
+
+内存泄漏的本质是对象被意外的引用持有，GC 无法回收。让 Codex 帮你在代码里搜索常见泄漏模式：
+
+```
+搜索项目中所有可能的内存泄漏模式：
+
+1. 全局 Map/Set 只增不减（没有 delete/remove 操作）
+2. EventEmitter.on() 没有对应的 removeListener()
+3. setInterval/setTimeout 的回调引用了外部变量
+4. 闭包中引用了大对象（比如整个请求上下文）
+5. WeakRef 和 FinalizationRegistry 的误用
+
+输出每个疑似泄漏的位置：文件名:行号 | 模式 | 风险等级 | 说明
+```
+
+### Python 内存泄漏
+
+Python 项目用 `tracemalloc`：
+
+```python
+# memory_debug.py
+import tracemalloc
+import linecache
+import sys
+
+tracemalloc.start()
+
+def take_snapshot(label):
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics('lineno')
+    print(f"\n=== Memory Snapshot: {label} ===", file=sys.stderr)
+    for stat in top_stats[:20]:
+        print(stat, file=sys.stderr)
+    return snapshot
+
+def compare_snapshots(s1, s2):
+    diff = s2.compare_to(s1, 'lineno')
+    print("\n=== Memory Growth ===", file=sys.stderr)
+    for stat in diff[:20]:
+        print(stat, file=sys.stderr)
+```
+
+让 Codex 把这个脚本集成到你的应用中：
+
+```
+帮我把这个 tracemalloc 脚本集成到 FastAPI 应用里：
+1. 在 app 启动时开始追踪
+2. 提供一个 /debug/memory 端点，触发快照和对比
+3. 只在 DEBUG 模式下启用
+
+/mention src/main.py
+```
+
+## 8. 场景 C：竞态条件调试
+
+### 症状
+
+某些操作在高并发下偶尔产生不一致的结果。本地单线程测试永远无法复现。
+
+### 调试流程
+
+竞态条件的调试思路和前两种不同——你不能通过日志或 profiling 直接"看到"问题。需要通过代码审查和模型分析来定位。
+
+**第一步：让 Codex 分析并发模型**
+
+```
+分析这个项目的并发模型：
+
+1. 是否使用了多线程/多进程？
+2. 共享状态在哪里？
+3. 共享状态的访问是否有锁/同步机制？
+4. 有没有使用乐观锁或 CAS？
+5. 数据库事务的隔离级别是什么？
+
+/mention src/services/orderService.js
+/mention src/services/stockService.js
+/mention src/models/Order.js
+```
+
+**第二步：审查锁机制**
+
+让 Codex 审查具体的并发代码：
+
+```
+重点审查这段代码的并发安全性：
+
+场景：两个用户同时购买同一件商品，库存只剩 1 件。
+
+步骤：
+1. 读取当前库存
+2. 判断库存是否足够
+3. 扣减库存
+4. 创建订单
+
+分析：
+- 这四步之间是否有原子性保证？
+- 如果步骤 1-2 之间另一个请求也在读库存，会怎样？
+- 步骤 3 的扣减是直接 SET 还是原子递减？
+- 如果步骤 4 失败，步骤 3 的库存扣减会回滚吗？
+
+/mention src/services/stockService.js
+/mention src/services/orderService.js
+```
+
+**第三步：生成并发测试**
+
+让 Codex 生成能暴露竞态条件的测试：
+
+```javascript
+// concurrency-test.js
+// 模拟 10 个用户同时购买同一件商品（库存 3 件）
+// 预期：只有 3 个订单成功，7 个失败
+// 如果成功订单 > 3，说明有竞态条件
+
+const Promise = require('bluebird');
+
+async function concurrencyTest() {
+  // 设置初始库存
+  await db.Stock.update({ quantity: 3 }, { where: { itemId: 'test-item' } });
+
+  // 10 个并发购买请求
+  const results = await Promise.all(
+    Array(10).fill(null).map((_, i) =>
+      orderService.purchase('test-item', `user-${i}`)
+        .then(() => ({ user: i, success: true }))
+        .catch((e) => ({ user: i, success: false, error: e.message }))
+    )
+  );
+
+  const successes = results.filter(r => r.success);
+  const failures = results.filter(r => !r.success);
+
+  console.log(`Success: ${successes.length}, Failed: ${failures.length}`);
+  console.log(`Expected: 3 success, 7 failed`);
+
+  if (successes.length !== 3) {
+    console.error('RACE CONDITION DETECTED!');
+    console.error('Successful orders:', successes);
+  }
+
+  // 清理
+  await db.Order.destroy({ where: { itemId: 'test-item' } });
+  await db.Stock.update({ quantity: 100 }, { where: { itemId: 'test-item' } });
+}
+
+concurrencyTest();
+```
+
+**第四步：时序复现**
+
+有时候你需要复现特定的时序。让 Codex 帮你设计一个控制时序的测试：
+
+```
+帮我写一个测试，精确控制以下时序：
+1. 用户 A 读取库存（值为 1）
+2. 用户 B 读取库存（值为 1）  ← 在 A 写入之前读取
+3. 用户 A 扣减库存（0）
+4. 用户 B 扣减库存（-1）      ← 应该被阻止但没有
+
+用 Jest 的 mock 或者手动 Promise 控制执行顺序。
+确保测试在单线程环境下也能暴露这个竞态条件。
+```
+
+### Python asyncio 竞态
+
+Python 的 asyncio 虽然是单线程的，但 `await` 点之间的代码仍然可以被中断：
+
+```python
+# asyncio_race_test.py
+import asyncio
+
+async def test_concurrent_purchase():
+    """模拟并发购买，暴露 asyncio 竞态条件"""
+    stock = {"quantity": 3}  # 模拟库存
+
+    async def purchase(user_id):
+        # 读取库存
+        current = stock["quantity"]  # ← await 之前读取
+        await asyncio.sleep(0.01)    # ← 模拟 IO，其他协程可以执行
+        if current > 0:              # ← 用的是旧值判断
+            stock["quantity"] -= 1    # ← 基于旧值扣减
+            return f"{user_id}: success"
+        return f"{user_id}: sold out"
+
+    results = await asyncio.gather(*[
+        purchase(f"user-{i}") for i in range(10)
+    ])
+    print(results)
+    print(f"Final stock: {stock['quantity']}")  # 预期 0，可能为负
+```
+
+## 9. 场景 D：跨服务 Bug 调试
+
+### 症状
+
+用户的操作涉及多个微服务（网关、认证、订单、支付、通知），某个环节出了问题，但不知道是哪个服务。
+
+### 调试流程
+
+**第一步：让 Codex 画出请求链路**
+
+```
+分析这个用户操作的完整请求链路：
+"用户点击'立即购买' → 收到'支付失败'错误"
+
+涉及的微服务：
+- gateway: API 网关
+- auth: 认证服务
+- order: 订单服务
+- payment: 支付服务
+- notification: 通知服务
+
+/mention gateway/src/routes/order.js
+/mention auth/src/middleware/verify.js
+/mention order/src/services/createOrder.js
+/mention payment/src/services/charge.js
+
+输出请求链路图：
+Gateway → Auth → Order → Payment → ?
+每一步标注：
+- 请求参数和响应格式
+- 超时设置
+- 错误处理逻辑
+- 重试机制
+```
+
+**第二步：接口契约验证**
+
+跨服务 Bug 的常见原因是接口契约不一致——A 服务以为返回的是 `{ id: 1 }`，B 服务实际返回的是 `{ orderId: 1 }`。
+
+让 Codex 检查接口契约：
+
+```
+检查以下服务间接口的契约一致性：
+
+1. Order 服务返回给 Payment 服务的订单格式
+2. Payment 服务期望接收的订单格式
+3. 两边的字段名、类型、必填项是否一致
+
+/mention order/src/controllers/orderController.js
+/mention payment/src/services/chargeService.js
+
+重点检查：
+- 字段命名风格（camelCase vs snake_case）
+- 金额单位（分 vs 元）
+- 时间格式（时间戳 vs ISO 字符串）
+- 空值表示（null vs undefined vs 空字符串）
+```
+
+**第三步：时序对齐**
+
+跨服务的日志时间戳需要对齐才能追踪问题。让 Codex 帮你做时间线对齐：
+
+```
+以下是从四个服务的日志中提取的相关条目（已按时间排序）。
+帮我画出时间线，标注请求在各服务间的流转：
+
+logs/gateway.log:
+14:23:01.234 POST /api/orders → auth service
+14:23:01.567 auth verified, → order service
+14:23:02.123 order created, → payment service
+14:23:05.456 payment timeout, return 504
+
+logs/auth.log:
+14:23:01.345 received verify request
+14:23:01.512 token valid, user_id=8842
+
+logs/order.log:
+14:23:01.678 received create order
+14:23:02.090 order_8842_001 created, amount=99.00
+
+logs/payment.log:
+14:23:02.234 received charge request
+14:23:07.234 charge timeout (5s limit exceeded)
+
+问题定位：payment 服务的 5 秒超时不够。
+从 gateway 发出支付请求到 payment 处理完成，经过了 3 秒的网络延迟 + 处理时间。
+```
+
+Codex 可以帮你分析出：gateway 到 payment 的请求在 14:23:02.123 发出，payment 服务在 14:23:02.234 才收到（111ms 延迟），然后支付处理超过了 5 秒限制。这可能是因为第三方支付网关慢，而不是你的服务有问题。
+
+## 10. 诊断脚本模板
+
+以下是四个常用的诊断脚本模板，可以直接让 Codex 改造后使用。
+
+### 模板一：性能诊断
+
+```javascript
+// diag-perf.js — API 性能诊断
+// 用法: node diag-perf.js --url http://localhost:3000/api/orders --count 100
+
+const http = require('http');
+
+const url = new URL(process.argv[2] || 'http://localhost:3000/api/orders');
+const count = parseInt(process.argv[4]) || 100;
+
+const timings = [];
+
+async function makeRequest() {
+  const start = process.hrtime.bigint();
+  return new Promise((resolve, reject) => {
+    http.get(url, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        const duration = Number(process.hrtime.bigint() - start) / 1e6;
+        timings.push({ status: res.statusCode, duration, size: data.length });
+        resolve();
+      });
+    }).on('error', reject);
+  });
+}
+
+async function run() {
+  console.log(`Running ${count} requests to ${url}...`);
+  for (let i = 0; i < count; i++) {
+    await makeRequest();
+    if ((i + 1) % 10 === 0) process.stderr.write(`${i + 1}/${count}\n`);
+  }
+
+  timings.sort((a, b) => a.duration - b.duration);
+  const avg = timings.reduce((s, t) => s + t.duration, 0) / timings.length;
+  const p50 = timings[Math.floor(count * 0.5)].duration;
+  const p95 = timings[Math.floor(count * 0.95)].duration;
+  const p99 = timings[Math.floor(count * 0.99)].duration;
+  const errors = timings.filter(t => t.status >= 400).length;
+
+  console.log('\n=== Performance Report ===');
+  console.log(`Requests:    ${count}`);
+  console.log(`Avg:         ${avg.toFixed(2)}ms`);
+  console.log(`P50:         ${p50.toFixed(2)}ms`);
+  console.log(`P95:         ${p95.toFixed(2)}ms`);
+  console.log(`P99:         ${p99.toFixed(2)}ms`);
+  console.log(`Min:         ${timings[0].duration.toFixed(2)}ms`);
+  console.log(`Max:         ${timings[count-1].duration.toFixed(2)}ms`);
+  console.log(`Errors:      ${errors} (${(errors/count*100).toFixed(1)}%)`);
+}
+
+run();
+```
+
+### 模板二：内存诊断
+
+```javascript
+// diag-memory.js — 内存使用追踪
+// 用法: node diag-memory.js --interval 60 --output /tmp/memory.csv
+
+const fs = require('fs');
+const path = require('path');
+
+const interval = parseInt(process.argv[2]) || 60;
+const outputFile = process.argv[3] || '/tmp/memory.csv';
+
+const header = 'timestamp,rss_mb,heap_used_mb,heap_total_mb,external_mb\n';
+fs.writeFileSync(outputFile, header);
+
+function record() {
+  const mem = process.memoryUsage();
+  const row = [
+    new Date().toISOString(),
+    (mem.rss / 1024 / 1024).toFixed(3),
+    (mem.heapUsed / 1024 / 1024).toFixed(3),
+    (mem.heapTotal / 1024 / 1024).toFixed(3),
+    (mem.external / 1024 / 1024).toFixed(3),
+  ].join(',') + '\n';
+
+  fs.appendFileSync(outputFile, row);
+
+  // 增长检测
+  const heapUsed = mem.heapUsed / 1024 / 1024;
+  if (heapUsed > 500) {
+    console.error(`[WARN] Heap usage ${heapUsed.toFixed(0)}MB exceeds 500MB`);
+  }
+}
+
+console.log(`Recording memory every ${interval}s to ${outputFile}`);
+setInterval(record, interval * 1000);
+record();
+```
+
+### 模板三：网络诊断
+
+```bash
+#!/bin/bash
+# diag-network.sh — 网络连通性和延迟诊断
+# 用法: ./diag-network.sh api.example.com db.example.com redis.example.com
+
+TARGETS=("$@")
+if [ ${#TARGETS[@]} -eq 0 ]; then
+  echo "Usage: $0 host1 host2 host3 ..."
+  exit 1
+fi
+
+echo "=== Network Diagnostics ==="
+echo "Time: $(date -Iseconds)"
+echo ""
+
+for target in "${TARGETS[@]}"; do
+  echo "--- $target ---"
+
+  # DNS 解析
+  dns_start=$(date +%s%N)
+  ip=$(dig +short "$target" | tail -1)
+  dns_ms=$(( ($(date +%s%N) - dns_start) / 1000000 ))
+  echo "  DNS: ${ip:-NXDOMAIN} (${dns_ms}ms)"
+
+  if [ -n "$ip" ]; then
+    # TCP 连接
+    tcp_result=$(nc -z -w 5 "$target" 443 2>&1 && echo "OK" || echo "FAIL")
+    echo "  TCP:443: $tcp_result"
+
+    # 延迟（5 次取平均）
+    ping_result=$(ping -c 5 -q "$target" 2>/dev/null | tail -1)
+    echo "  Latency: $ping_result"
+  fi
+  echo ""
+done
+```
+
+### 模板四：并发诊断
+
+```python
+#!/usr/bin/env python3
+# diag-concurrency.py — 并发安全性检测
+# 用法: python diag-concurrency.py --url http://localhost:8000/api/stock/test-item --concurrency 20 --stock 5
+
+import asyncio
+import aiohttp
+import argparse
+import time
+
+async def concurrent_test(url, concurrency, expected_stock):
+    async with aiohttp.ClientSession() as session:
+        # 重置库存
+        async with session.post(f"{url}/reset", json={"quantity": expected_stock}) as resp:
+            print(f"Stock reset: {await resp.text()}")
+
+        # 并发请求
+        start = time.time()
+        tasks = [
+            session.post(f"{url}/purchase", json={"user": f"user-{i}"})
+            for i in range(concurrency)
+        ]
+        responses = await asyncio.gather(*[r.json() for r in await asyncio.gather(*tasks)])
+        elapsed = time.time() - start
+
+        successes = [r for r in responses if r.get("success")]
+        failures = [r for r in responses if not r.get("success")]
+
+        print(f"\n=== Concurrency Test Results ===")
+        print(f"Concurrency:  {concurrency}")
+        print(f"Stock:        {expected_stock}")
+        print(f"Successes:    {len(successes)} (expected: {expected_stock})")
+        print(f"Failures:     {len(failures)}")
+        print(f"Elapsed:      {elapsed:.2f}s")
+
+        if len(successes) != expected_stock:
+            print(f"\n*** RACE CONDITION DETECTED ***")
+            print(f"Expected {expected_stock} successes, got {len(successes)}")
+        else:
+            print(f"\nNo race condition detected.")
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--url", required=True)
+parser.add_argument("--concurrency", type=int, default=20)
+parser.add_argument("--stock", type=int, default=5)
+args = parser.parse_args()
+
+asyncio.run(concurrent_test(args.url, args.concurrency, args.stock))
+```
+
+## 11. 常见陷阱
+
+### 11.1 在错误方向持续
+
+Codex 分析出一种可能的原因后，你可能一直让它在那个方向上深挖。如果方向是错的，越深挖越浪费时间。
+
+**对策**：设定时间盒。让 Codex 分析了 10 分钟还没定位到具体问题，停下来重新评估。用 `/fork` 分叉出一个分支探索其他方向，而不是在当前对话里反复迭代。
+
+```
+/fork
+# 在 fork 里探索另一个方向
+# 如果 10 分钟内有突破，merge 回主线程
+# 如果没有，放弃 fork
+```
+
+### 11.2 忽略环境差异
+
+"在我机器上没问题"是调试的经典陷阱。Codex 分析的是你给它看的代码和日志，它不知道你的生产环境和本地环境的差异。
+
+**对策**：把环境信息明确告诉 Codex：
+
+```
+分析之前先确认环境差异：
+- 本地 Node.js 版本：v20.11.0
+- 生产 Node.js 版本：v18.17.0
+- 本地数据库：PostgreSQL 16
+- 生产数据库：PostgreSQL 14
+- 本地 Redis：单实例
+- 生产 Redis：集群模式，3 主 3 从
+
+这些差异可能导致的问题有哪些？
+```
+
+### 11.3 过早优化
+
+定位到一个性能问题后，Codex 可能给出多个优化建议。如果你不加筛选地全部实施，可能引入新的问题。
+
+**对策**：只修复被测量证实的瓶颈。让 Codex 帮你测量修复前后的差异，用数据说话。
+
+```
+你建议了 5 个优化点。不要全部实施。
+先只做优化点 3（数据库索引），然后跑 diag-perf.js 对比前后数据。
+如果效果明显，再考虑其他优化点。
+```
+
+### 11.4 日志不够用
+
+有时候日志里根本没有你需要的信息，Codex 也无从分析。
+
+**对策**：先让 Codex 帮你加日志，复现问题后再分析。加日志时要精准——只在关键路径上加，不要到处加 console.log。
+
+```
+帮我在订单创建的关键路径上加结构化日志。
+格式：[traceId] [step] [duration_ms] message
+只加在这几个关键点：
+1. 请求进入 order service 时
+2. 库存检查前后
+3. 数据库写入前后
+4. 事件发送前后
+
+不要在其他地方加日志。
+```
+
+### 11.5 过度依赖 Codex 的判断
+
+Codex 的分析基于代码文本，它看不到运行时的实际行为。比如它可能分析出"这里有 N+1 查询"，但实际上数据库有查询缓存，N+1 在这个场景下不是问题。
+
+**对策**：Codex 的分析是假设，需要用实际数据验证。让 Codex 生成验证脚本，跑出数据后再下结论。
+
+## 12. 效率对比
+
+| 调试阶段 | 不用 Codex | 用 Codex |
+|---------|-----------|---------|
+| 收集日志 | grep、awk、手动筛选 | `/mention` 指向日志文件，让 Codex 提取模式 |
+| 追踪调用链 | 在编辑器里逐个打开文件 | `/mention` 多个文件，Codex 生成调用图 |
+| 生成诊断脚本 | 自己写脚本 | 描述症状，Codex 生成脚本 |
+| 分析性能 | 看 flame graph、读 profiling 输出 | Codex 分析 profiling 文本输出 |
+| 检查并发安全 | 手动审查锁和同步代码 | Codex 审查并发模式，生成并发测试 |
+| 跨服务追踪 | 手动对齐日志时间戳 | Codex 生成时间线和对齐分析 |
+
+Codex 在**信息收集和模式识别**阶段最有价值——它能在几秒内处理大量文本，找出你可能遗漏的模式。但在**判断和验证**阶段，仍然需要你做决策。
+
+## 13. 总结
+
+用 Codex 调试复杂问题的核心思路是**把 Codex 当作加速器，而不是替代品**。
+
+三个核心策略：
+
+1. **读日志分析模式**：把日志 `/mention` 给 Codex，让它提取异常模式和生成时间线
+2. **生成诊断脚本**：描述症状，让 Codex 生成收集信息的脚本
+3. **追踪调用链**：让 Codex 一次读多个文件，生成调用图和问题定位
+
+四个场景的调试流程各有侧重：
+
+- 性能瓶颈：分层测量 → 定位瓶颈层 → 分析具体查询
+- 内存泄漏：监控增长 → heap snapshot → 搜索泄漏模式
+- 竞态条件：分析并发模型 → 审查锁机制 → 生成并发测试
+- 跨服务 Bug：画请求链路 → 验证接口契约 → 对齐时序
+
+关键原则：**先分析，后修改。用数据验证，不凭猜测。**
+
+---
+
+## 延伸阅读
+
+- [用 Codex 修 Bug 全流程（第 60 篇）](60-workflow-bugfix.md) — 简单 bug 的高效修复流程
+- [会话管理（第 10 篇）](10-session-management.md) — /fork、/side 等调试中常用的会话操作
+- [多 Agent 协作总览（第 43 篇）](43-multi-agent.md) — 用子代理并行分析不同维度
+- [自定义 Agent 角色（第 44 篇）](44-custom-agent.md) — 定义专门的调试 Agent
+- [/fork 与 /side（第 45 篇）](45-fork-side.md) — 分叉探索不同调试方向
+- [多 Agent 目标协调（第 46 篇）](46-multi-agent-goal.md) — 用 /goal 保持调试方向
+- [执行策略（第 47 篇）](47-exec-policy.md) — 控制诊断脚本的执行权限
