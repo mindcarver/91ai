@@ -1,0 +1,128 @@
+# Desktop App 适合什么场景
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code Desktop App 在 CLI 的基础上加了多会话并行、可视化 diff 审查、内置终端/编辑器、side chat 分支对话。适合需要同时推进多个任务、频繁审查 AI 改动、或想从手机远程派活的人。不适合脚本化、CI/CD、纯终端重度用户。
+
+## Desktop App 是什么
+
+Claude Code 有三种使用方式：CLI（终端）、IDE 插件（VS Code / JetBrains）、Desktop App（桌面应用）。这三种方式底层跑的是同一个引擎，区别在于交互界面。
+
+Desktop App 是 Claude 桌面客户端里的 Code 标签页。打开 Claude 应用后，左上角有三个 Tab：Chat（聊天）、Cowork（Dispatch 和长任务）、Code（编程）。点 Code 就进入了 Desktop App 的界面。
+
+它不是独立的开发工具——没有 LSP、没有代码补全、没有 go-to-definition。它的定位更像一个 **AI 编程任务的指挥中心**：你在里面给 Claude 下任务、审查它改了什么、决定是否合并。实际的代码编辑能力比不上 Cursor 或 VS Code，但管理多个并行 AI 任务的能力是 CLI 做不到的。
+
+2026 年 4 月，Anthropic 对 Desktop App 做了一次重大改版，核心变化是把"单会话"改成了"多会话工作区"——你可以同时开好几个 Claude 会话，每个会话处理不同的任务，互相不干扰。这次改版不是换皮，而是把工作单元从"一次对话"变成了"一组并行对话"。
+
+## 适合 Desktop App 的场景
+
+### 场景一：多任务并行推进
+
+如果你经常同时处理多个编程任务——比如一个 session 做 refactor，一个 session 修 bug，一个 session 写测试——CLI 的做法是开三个终端窗口，手动 `cd` 到项目目录，记住哪个窗口在干什么。
+
+Desktop App 用一个窗口解决这件事。左侧 sidebar 列出所有活跃和近期的会话，按 Cmd+N 新建，按 Ctrl+Tab 切换。每个 session 自动分配独立的 Git worktree，改动互不影响。你可以把 session 按项目或状态分组过滤。
+
+实际的操作节奏是这样的：session 1 在做大规模重构，跑到一半需要等它想；你切到 session 2 开始修一个线上 bug；session 2 搞定的时候，session 1 也差不多了，你切回去审查 diff。这个节奏比在三个终端窗口之间跳来跳去顺畅得多。
+
+社区反馈表明，4 到 6 个并行 session 是实际使用中比较舒适的区间。超过这个数量，认知负担和 token 消耗都会成为问题。
+
+### 场景二：审查 AI 改了什么（可视化 diff）
+
+CLI 里看 diff 是纯文本的 unified diff 输出。改动少的时候还行，改动多的时候——比如 Claude 重构了十几个文件——在终端里逐行审查很痛苦。
+
+Desktop App 的 diff viewer 是图形化的：左侧文件列表，右侧是每个文件的改动。点击具体行可以添加评论（Cmd+Enter 提交），Claude 会读取你的评论并做出调整。还有一个 "Review code" 按钮，让 Claude 自己审查一遍它的改动，找出编译错误、逻辑问题、安全漏洞。
+
+对于"AI 做完，我来审"这种工作模式，可视化 diff 比 CLI 的纯文本体验好很多。
+
+### 场景三：定时任务和远程派发
+
+Desktop App 支持 Remote session（跑在 Anthropic 云端）和 Routines（定时/触发式云端任务）。
+
+- **Remote session**：选 Remote 环境启动 session，即使关掉应用或关机，任务继续在云端跑。适合大规模重构、长时间测试这类任务。
+- **Routines**：可以设定时触发（每晚跑）、API 触发（收到 HTTP 请求时跑）、GitHub 触发（有新 PR 时跑）。适合代码审查、文档更新、依赖升级这类重复性工作。
+- **Dispatch**：在 Cowork 标签页里给 Claude 发消息，它会自己判断要不要开一个 Code session 来处理。你在手机上收到推送通知，审批或查看结果。
+
+这些功能 CLI 也可以通过脚本和 CI 做到，但 Desktop App 提供了统一的界面来管理和监控这些任务。
+
+### 场景四：side chat 分支对话
+
+这是 Desktop App 里一个不起眼但好用的功能。按 Cmd+;（Windows 是 Ctrl+;）会弹出一个侧边对话窗口。
+
+场景是这样的：Claude 正在做一次大规模重构，跑到一半你想问它"你为什么选了这个方案？"但不想把这个提问塞进主线程——因为主线程里的上下文会影响后续的操作方向。Side chat 能读取主线程的上下文来回答你的问题，但它里面的对话不会注入回主线程。
+
+用完关掉，主线程继续原来的节奏。这在 CLI 里做不到——CLI 的每条消息都会进入主上下文。
+
+### 场景五：应用预览和自验证
+
+Desktop App 有一个内置的预览面板。Claude 修改前端代码后，可以自动启动 dev server，在内嵌浏览器里打开页面验证改动。它会截图、检查 DOM、点击元素、填表单，发现问题自己修。
+
+后端项目也能用：Claude 启动服务器后测试 API 接口、查看日志。这个自验证循环在 CLI 里也能触发，但 Desktop App 里你能直接看到运行中的页面，交互体验不一样。
+
+## 不适合 Desktop App 的场景
+
+### 脚本化和自动化
+
+如果你的工作流需要 `claude -p "问题" --output-format json` 这种非交互模式，或者要嵌入到 shell 脚本里，CLI 是唯一选择。Desktop App 不支持 `--print`、`--output-format` 这些参数，也没有 Agent SDK 集成。
+
+### CI/CD 管道
+
+GitHub Actions、GitLab CI 里的 Claude Code 调用必须用 CLI 的 headless 模式。Desktop App 是交互式工具，没法在 CI runner 上运行。
+
+### Linux 用户
+
+Desktop App 目前只支持 macOS 和 Windows。Linux 用户只能用 CLI。
+
+### 需要第三方模型提供商
+
+Desktop App 默认连 Anthropic API。企业部署可以配置 Vertex AI 和网关提供商，但如果你要用 Bedrock 或 Foundry，只能用 CLI。
+
+### 纯终端重度用户
+
+如果你已经习惯了 Vim / tmux 的工作流，把所有东西放在终端里，Desktop App 的价值不大。它的核心优势是图形化管理和并行可视化，这些在你的终端里要么不需要，要么已经有替代方案。
+
+## 与 CLI 的功能对比
+
+| 功能 | CLI | Desktop App |
+|------|-----|-------------|
+| 多会话 | 开多个终端窗口 | sidebar 统一管理 |
+| 会话隔离 | `--worktree` 手动指定 | 自动 Git worktree |
+| Diff 审查 | 纯文本输出 | 图形化 diff viewer，支持行内评论 |
+| 文件编辑 | 无内置编辑器 | 内置文件编辑面板 |
+| 终端 | 就是你的终端 | 内置终端面板 |
+| 应用预览 | 无 | 内嵌浏览器，支持自验证 |
+| Side chat | 不支持 | Cmd+; 分支对话 |
+| 远程 session | 不支持（需 Web） | 内置 Remote 环境 |
+| 定时任务 | cron / CI | Routines（定时/API/GitHub 触发） |
+| Dispatch 集成 | 不支持 | 手机派发，推送通知 |
+| Computer use | macOS 限定 | macOS + Windows |
+| 文件附件 | 不支持 | 图片、PDF 拖拽 |
+| @mention 文件 | 手动输入 | 自动补全 |
+| 插件管理 | `/plugin` 命令 | 图形化插件管理器 |
+| Connectors | 配置文件 | 图形化设置界面 |
+| 权限模式 | 全部（含 dontAsk） | 部分模式 |
+| 非交互模式 | `--print`、`--output-format` | 不支持 |
+| Agent SDK | 支持 | 不支持 |
+| Linux | 支持 | 不支持 |
+| 第三方提供商 | Bedrock/Vertex/Foundry | 默认 Anthropic API |
+
+**共享配置**：两者读取同一套配置文件——CLAUDE.md、`~/.claude/settings.json`、`.mcp.json` 都通用。在 CLI 里配置好的 hooks、skills、MCP servers，在 Desktop App 里直接可用。
+
+**互相切换**：在 CLI 里输入 `/desktop` 可以把当前 session 迁移到 Desktop App 继续运行。
+
+## 关键要点
+
+- Desktop App 的核心价值是**多会话并行管理**和**可视化审查**，不是代码编辑
+- 它和 CLI 不是替代关系，是互补关系——很多开发者两个都用：Desktop 做交互式指挥，CLI 做脚本化自动化
+- Git worktree 隔离让并行会话可以安全地操作同一个仓库，不用担心冲突
+- Side chat 解决了"想问问题但不想干扰主线程上下文"的痛点
+- 并行会话意味着 token 消耗也是并行的——4 个 session 大约 4 倍消耗，注意用量
+- Desktop App 没有 LSP、没有代码补全——它不是 IDE 替代品，是 AI 任务指挥台
+
+## 延伸阅读
+
+- [Desktop Application — Claude Code 官方文档](https://code.claude.com/docs/en/desktop)
+- [Redesigning Claude Code on desktop for parallel agents — Anthropic Blog](https://www.anthropic.com/news/claude-code-desktop-redesign)
+- [Introducing routines in Claude Code — Anthropic Blog](https://www.anthropic.com/news/routines)
+- [Claude Code Desktop Redesign: Complete Guide — Miraflow](https://miraflow.ai/blog/claude-code-desktop-redesign-parallel-sessions-routines-workspace-guide)
+- 系列第 01 篇「Claude Code 到底是什么」——产品形态全景
+- 系列第 14 篇「交互模式入门」——CLI 交互模式基础

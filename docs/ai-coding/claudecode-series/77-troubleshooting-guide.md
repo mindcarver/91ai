@@ -1,0 +1,303 @@
+# 排错大全
+
+> 更新日期：2025/06
+
+Claude Code 用着用着就报错了？这篇文章把常见问题按场景分类，给你具体的排查步骤和解决方法。从安装失败到性能卡顿，大部分问题都能自己搞定。
+
+## 先跑诊断
+
+遇到问题第一步，不要急着搜索，先让 Claude Code 自己告诉你哪里不对：
+
+```bash
+# 查看整体健康状态
+/doctor
+
+# 查看当前会话状态和用量
+/status
+
+# 查看 Claude Code 版本
+claude --version
+```
+
+`/doctor` 会检查认证状态、网络连接、Node.js 版本等关键信息。很多时候看一眼输出就知道问题在哪。
+
+## 安装和启动问题
+
+### 命令找不到
+
+终端输入 `claude` 提示 "command not found"，通常是 PATH 没配好。
+
+**原生安装器**装的位置是 `~/.local/bin/claude`。确认这个路径在 PATH 里：
+
+```bash
+echo $PATH | tr ':' '\n' | grep local
+```
+
+如果没出现，手动加上。在 `~/.bashrc` 或 `~/.zshrc` 里加一行：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+然后 `source ~/.zshrc`（或对应的 rc 文件）。
+
+**npm 安装**的情况不同，装完后 `claude` 应该在 npm 全局 bin 目录下。用 `npm bin -g` 查看路径，确认它在 PATH 中。如果 npm 安装和原生安装器冲突，建议卸载一个：`npm uninstall -g @anthropic-ai/claude-code`，只保留原生版本。
+
+### TLS/SSL 错误
+
+企业网络或代理环境下常见这类报错：
+
+```
+Error: unable to verify the first certificate
+```
+
+如果是公司代理注入了自签证书，设置 Node.js 跳过证书验证（开发环境可用，生产环境不建议）：
+
+```bash
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
+或者把公司 CA 证书加到 `NODE_EXTRA_CA_CERTS`：
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/company-ca.pem
+```
+
+### WSL 相关问题
+
+Windows 用户在 WSL 里用 Claude Code 会碰到几个坑：
+
+- **WSL1 不支持 WebSocket**：Claude Code 依赖 WebSocket 通信。检查你的 WSL 版本：`wsl -l -v`，如果是 1 就升级到 2：`wsl --set-version Ubuntu 2`
+- **文件系统性能差**：项目放在 Windows 挂载路径（`/mnt/c/`）下会很慢，移到 WSL 原生路径（`~/projects/`）下会好很多
+- **PATH 污染**：WSL 默认会把 Windows PATH 附加进来，可能导致调用了 Windows 的 node 而非 WSL 的。在 `/etc/wsl.conf` 里加 `[interop] appendWindowsPath=false` 可以隔离
+
+## 认证问题
+
+### 登录失败或反复要求登录
+
+先理清认证优先级：如果设了 `ANTHROPIC_API_KEY` 环境变量，它会覆盖 OAuth 登录。也就是说，即使你在浏览器里登录了订阅账户，只要环境里有这个变量，Claude Code 会用 API key 认证。
+
+检查当前认证方式：
+
+```bash
+echo $ANTHROPIC_API_KEY
+```
+
+如果有值但你想用订阅账户，`unset ANTHROPIC_API_KEY` 然后重新 `claude` 启动，走 OAuth 流程。
+
+### API key 无效
+
+确认 key 以 `sk-ant-` 开头，没有多余空格或换行符。从 Anthropic Console 重新复制一份，替换旧的。
+
+### 使用 Bedrock 或 Vertex
+
+如果你用 AWS Bedrock 或 Google Vertex，认证走的是另一套：
+
+```bash
+# Bedrock
+export CLAUDE_CODE_USE_BEDROCK=1
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=your-key
+export AWS_SECRET_ACCESS_KEY=your-secret
+
+# Vertex
+export CLAUDE_CODE_USE_VERTEX=1
+export CLOUD_ML_REGION=us-east5
+export ANTHROPIC_VERTEX_PROJECT_ID=your-project
+```
+
+凭证不对的话，先跑 `aws sts get-caller-identity`（Bedrock）或 `gcloud auth list`（Vertex）确认身份。
+
+## 网络和代理
+
+### 连接超时
+
+默认超时是 10 分钟（600000ms）。如果你的网络环境比较慢，可以调大：
+
+```bash
+export API_TIMEOUT_MS=1200000
+```
+
+### 代理配置
+
+HTTP 代理走标准环境变量：
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+```
+
+SOCKS5 代理也可以：
+
+```bash
+export HTTPS_PROXY=socks5://127.0.0.1:1080
+```
+
+## 错误码速查
+
+### 服务端错误（5xx）
+
+| 错误码 | 含义 | 处理方式 |
+|--------|------|----------|
+| 500 | 服务端内部错误 | 重试，通常自动恢复 |
+| 529 | 过载 | 等几分钟后重试 |
+| 503 | 服务不可用 | 检查 [status.anthropic.com](https://status.anthropic.com) |
+
+Claude Code 内置了自动重试机制，默认最多重试 10 次。可以通过环境变量调整：
+
+```bash
+export CLAUDE_CODE_MAX_RETRIES=15
+```
+
+一般不需要改，529 过载的话等一会儿就行。
+
+### 速率限制（429）
+
+- **正常限制**：用 `/status` 查看剩余用量。达到限制后等下一个计费周期
+- **会话限制**：单个会话 token 太多会触发。用 `/compact` 压缩上下文，或 `/clear` 清空重来
+- **并发限制**：同时跑太多 headless 实例会触发。减少并发数
+
+### 请求错误（4xx）
+
+| 错误码 | 含义 | 处理方式 |
+|--------|------|----------|
+| 400 | 请求格式错误 | 检查输入是否有特殊字符 |
+| 401 | 认证失败 | 检查 API key 或重新登录 |
+| 403 | 权限不足 | 确认账户权限和模型访问资格 |
+| 413 | 请求体太大 | 减少图片大小或压缩上下文 |
+
+### 上下文窗口溢出
+
+报错信息类似 "context window exceeded"。这是对话太长了。
+
+解决方案（按优先级）：
+
+1. `/compact` — 压缩当前对话，保留关键信息
+2. `/clear` — 清空对话历史重新开始
+3. 减少 MCP 工具定义 — 每个工具定义都占上下文空间，用 `claude mcp list` 查看已注册的工具，移除不常用的
+4. 拆分任务 — 不要在一个会话里做太多事
+
+## 性能问题
+
+### CPU 占用高
+
+Claude Code 本身是 Node.js 进程，CPU 飙高通常是以下原因：
+
+- **项目太大**：文件数特别多的项目，文件搜索和索引会吃 CPU。在 `.claude/settings.json` 里配置忽略目录
+- **MCP 服务器吃资源**：有些 MCP 服务器（特别是需要建索引的）会占大量 CPU。用 `claude mcp list` 查看，暂时禁用不必要的
+- **无限循环**：偶尔 Claude 会陷入重复调用的循环。按 `Escape` 中断，然后用更明确的指令重试
+
+### 内存占用高
+
+- 用 `/compact` 压缩对话上下文
+- 关闭不用的 MCP 服务器
+- 大项目用 `.claudeignore` 排除 `node_modules`、`.git` 等大目录
+
+### 响应变慢
+
+- 检查网络延迟：`curl -o /dev/null -s -w "%{time_total}\n" https://api.anthropic.com`
+- 确认用的是合适的模型：`/model` 查看，复杂任务用 Opus，日常用 Sonnet
+- 上下文太长会导致响应变慢，定期 `/compact`
+
+## MCP 服务器问题
+
+### 连接失败
+
+```bash
+# 查看已注册的 MCP 服务器
+claude mcp list
+
+# 查看具体服务器日志
+claude mcp get <server-name>
+```
+
+常见原因：
+- 服务器进程没启动：确认 npx 命令或服务器路径正确
+- 端口冲突：检查服务器监听的端口是否被占用
+- 权限问题：确认 Claude Code 有权限执行服务器命令
+
+### 工具调用超时
+
+MCP 工具执行时间太长会超时。如果某个工具经常超时，考虑：
+- 优化工具的实现，减少执行时间
+- 换一个更轻量的 MCP 服务器实现同样功能
+- 在对话中避免一次性触发太多工具调用
+
+## Hooks 问题
+
+### Hook 不触发
+
+检查 `.claude/settings.json` 里的 hooks 配置：
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "your-script.sh"
+      }
+    ]
+  }
+}
+```
+
+常见原因：
+- `command` 路径不是绝对路径：用 `which your-script.sh` 拿到完整路径
+- 脚本没有执行权限：`chmod +x your-script.sh`
+- `matcher` 匹配模式不对：确认工具名大小写正确（`Bash` 不是 `bash`）
+
+### Hook 导致卡住
+
+如果 hook 脚本卡住不返回，Claude Code 会一直等。在脚本里加超时机制：
+
+```bash
+timeout 10 your-command || true
+```
+
+## 权限问题
+
+### 反复弹出权限确认
+
+在 Allow 模式下，每次执行命令都会问你确认。如果觉得烦，有几种处理方式：
+
+- 对特定命令选 "Always allow" — 下次同样的命令不再询问
+- 切到 Auto-accept 模式 — 在 `/permissions` 里调整
+- 用 `--dangerously-skip-permissions` 跳过所有权限检查（仅限 CI/CD 或受信环境，参考第 43 篇权限模式详解）
+
+### 文件权限错误
+
+```
+Error: EACCES: permission denied
+```
+
+检查 `~/.claude/` 目录和项目目录的权限。`~/.claude/` 下的文件应该属于当前用户：
+
+```bash
+ls -la ~/.claude/
+```
+
+如果 owner 不对，`chown -R $(whoami) ~/.claude/` 修复。
+
+## 终端显示问题
+
+### 输出乱码
+
+Claude Code 用了富文本渲染，某些终端不完全支持。试试：
+- 确认终端支持真彩色（truecolor）
+- 换个终端试试（iTerm2、Windows Terminal、Alacritty 都可以）
+- 设环境变量禁用颜色：`export NO_COLOR=1`
+
+### 输入法问题
+
+在 CJK 输入法下，回车键行为可能冲突。如果输入中文时遇到问题，先切到英文输入法执行命令，再切回中文输入内容。
+
+## 什么时候该上报
+
+以上都试过了还是不行？通过 `/feedback` 提交问题报告，附上：
+- `/doctor` 的完整输出
+- 错误信息的完整文本（不要截图）
+- 你的操作系统、终端、Claude Code 版本
+- 复现步骤
+
+如果是安全相关问题，发邮件到 security@anthropic.com，不要公开提交。

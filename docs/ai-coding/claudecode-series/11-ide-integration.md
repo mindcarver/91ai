@@ -1,0 +1,294 @@
+# IDE 接入
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 可以在 VS Code 和 JetBrains 里以图形化面板运行，不再只靠终端。核心功能是 inline diff（在编辑器里看代码变更）和 selection context（自动感知你选中的代码）。Cursor 用户可以直接装同一个 VS Code 扩展，官方支持。
+
+## IDE 集成 vs 纯终端
+
+Claude Code 最初是纯终端工具。你在命令行里输入 `claude`，它就在终端里回复，文件变更用文字描述。这对于习惯终端的开发者够用，但有一个明显的不便：代码变更看不到直观的 diff 视图，需要自己切到编辑器确认改动。
+
+IDE 集成解决的核心问题有两个：
+
+- **视觉反馈**：代码变更以 diff 视图直接呈现在编辑器里，你可以逐行接受或拒绝，不用离开编辑器切到终端去读文字
+- **上下文自动共享**：你当前选中的代码、打开的标签页、编辑器里的错误和警告，自动传给 Claude，不用手动复制粘贴
+
+IDE 集成是终端模式的增强，不是替代。两种方式共享会话历史，可以混用。
+
+## VS Code 接入
+
+### 安装
+
+VS Code 扩展市场搜索 "Claude Code" 安装即可。要求 VS Code 版本 1.98.0 或更高。需要一个 Anthropic 账号（首次打开扩展时登录）。
+
+macOS 按 `Cmd+Shift+X`，Windows/Linux 按 `Ctrl+Shift+X` 打开扩展面板，搜索 "Claude Code"，点击 Install。
+
+VS Code 的分支版本（Devin Desktop、Kiro 等）也能装——在这些编辑器的扩展面板里搜索，或者通过 Open VSX Registry 安装。如果编辑器不支持安装扩展，就在内置终端里直接运行 `claude`，CLI 在任何终端里都能工作。
+
+### 基本使用
+
+装好扩展后，VS Code 界面会多出几个入口：
+
+- **编辑器右上角的 Spark 图标**：打开文件时可见，点击打开 Claude 面板
+- **状态栏右下角的 "Claude Code"**：不打开文件也能看到
+- **命令面板**：`Cmd+Shift+P` / `Ctrl+Shift+P`，输入 "Claude Code"
+
+面板默认在 secondary sidebar（右侧边栏）。你可以拖动面板的标签栏，把它放到左侧边栏或者编辑器区域里当标签页用。
+
+### 输入框功能
+
+面板底部的输入框支持几个关键操作：
+
+- **权限模式切换**：点击输入框底部的模式指示器。四种模式——`default`（每次都问）、`plan`（只出方案不执行）、`acceptEdits`（自动接受文件编辑）、`bypassPermissions`（跳过所有提示，只在沙箱环境用）
+- **命令菜单**：输入 `/` 打开，可以附加文件、切换模型、开关 extended thinking、查看用量等
+- **上下文用量**：输入框显示当前上下文窗口使用了多少
+- **多行输入**：`Shift+Enter` 换行不发送
+
+### @-mentions 引用文件
+
+在 prompt 里用 `@` 引用项目中的文件或文件夹：
+
+- `@src/auth.ts` — 引用特定文件
+- `@src/components/` — 引用整个文件夹（注意末尾斜杠）
+- `Option+K`（macOS）或 `Alt+K`（Windows/Linux）— 把当前选中的代码插入为引用，自动附带文件路径和行号（如 `@app.ts#5-10`）
+
+@-mentions 支持模糊匹配，输入部分文件名就能找到目标。比如输入 `@auth`，能匹配到 `auth.js`、`AuthService.ts` 等。
+
+选中代码时，输入框底部会显示选中了多少行。点旁边的眼睛图标可以控制是否让 Claude 看到你的选中内容。
+
+### 会话管理和多标签
+
+面板左上角有个历史记录按钮，可以按关键词搜索、按时间浏览、恢复之前的会话。
+
+用命令面板里的 "Open in New Tab" 或 "Open in New Window" 可以开多个会话，每个会话独立维护上下文。标签上的小圆点表示状态：蓝色表示有权限请求待处理，橙色表示 Claude 在标签隐藏时完成了工作。
+
+### Checkpoints
+
+每次 Claude 编辑文件时会自动创建 checkpoint。鼠标悬停到任意消息上会出现回退按钮，有三个选项：
+
+- 从此处分叉对话（保留代码改动）
+- 回退代码到此状态（保留对话历史）
+- 分叉对话并回退代码
+
+### @browser 浏览器集成
+
+装了 Claude in Chrome 扩展（1.0.36+）后，可以在 VS Code 里直接操控浏览器：
+
+```
+@browser go to localhost:3000 and check the console for errors
+```
+
+Claude 会打开新标签页执行任务，并共享你浏览器里的登录状态，能访问你已经登录的网站。
+
+### 插件管理
+
+输入框里输入 `/plugins` 打开插件管理界面。分两个标签页：
+
+- **Plugins**：已安装的插件在上半部分，可开关；可用插件在下半部分，可搜索安装
+- **Marketplaces**：添加或移除插件源（GitHub 仓库、URL、本地路径）
+
+安装插件时选作用范围：`Install for you`（全局）、`Install for this project`（项目级）、`Install locally`（仅本地仓库）。
+
+### URI Handler
+
+VS Code 扩展注册了 URI handler，可以从外部工具触发：
+
+```
+vscode://anthropic.claude-code/open?prompt=review%20my%20changes
+```
+
+两个可选参数：`prompt`（预填输入框的文本，URL 编码）和 `session`（恢复指定会话）。可以用来做脚本集成、快捷启动、浏览器书签等。
+
+### 关键快捷键
+
+| 命令 | 快捷键 | 说明 |
+|------|--------|------|
+| Focus Input | `Cmd+Esc`（Mac）/ `Ctrl+Esc`（Win/Linux） | 在编辑器和 Claude 之间切换焦点 |
+| Open in New Tab | `Cmd+Shift+Esc` / `Ctrl+Shift+Esc` | 新标签页开新会话 |
+| New Conversation | `Cmd+N` / `Ctrl+N` | 新建会话（需先开快捷键设置） |
+| Reopen Closed Session | `Cmd+Shift+T` / `Ctrl+Shift+T` | 恢复最近关闭的会话标签 |
+| Insert @-Mention | `Option+K`（Mac）/ `Alt+K`（Win/Linux） | 插入当前文件和选中内容的引用 |
+
+注意：macOS Tahoe 及更高版本上，系统 Game Overlay 快捷键默认占用了 `Cmd+Esc`。如果你发现快捷键不生效，去系统设置 → 键盘 → 键盘快捷键 → Game Controllers，关掉 Game Overlay。
+
+### 内置 IDE MCP Server
+
+VS Code 扩展激活时自动启动一个本地 MCP server（绑定 `127.0.0.1` 随机端口，只有本机能访问），让 CLI 也能利用 IDE 的能力。这个 server 名为 `ide`，对用户隐藏，但如果你用 `PreToolUse` hook 做工具白名单，需要知道它的存在。
+
+它向 Claude 暴露两个工具：
+
+- `getDiagnostics` — 获取编辑器的错误和警告（只读）
+- `executeCode` — 在 Jupyter notebook 里执行代码（每次都会先弹窗让你确认）
+
+### 与 CLI 的功能差异
+
+| 功能 | VS Code 扩展 | 终端 CLI |
+|------|-------------|---------|
+| 所有命令和技能 | 部分（输入 `/` 查看可用列表） | 全部 |
+| MCP server 配置 | 部分可视化管理 | 完整 |
+| Checkpoints | 图形化回退 | 支持 |
+| `!` bash 快捷方式 | 不支持 | 支持 |
+| Tab 补全 | 不支持 | 支持 |
+| 内联 diff | 编辑器内直接查看 | 终端文字输出 |
+| 会话历史 | 图形化搜索 | `/resume` 命令 |
+| 多会话标签 | 支持 | 需开多个终端 |
+
+如果你需要某个 CLI-only 功能（比如 `!` 快捷执行 bash 命令），在 VS Code 内置终端里运行 `claude` 即可。CLI 会自动连接 IDE，共享 diff 查看和选择上下文功能。
+
+扩展和 CLI 共享会话历史。在终端里运行 `claude --resume` 可以打开交互式选择器，搜索并继续之前在扩展里的会话。
+
+引用终端输出：用 `@terminal:名称` 把终端的输出内容传给 Claude，不用手动复制。
+
+### 常用设置项
+
+在 VS Code 设置里（`Cmd+,` / `Ctrl+,`，然后到 Extensions → Claude Code）可以调整：
+
+| 设置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `useTerminal` | `false` | 用终端模式代替图形面板 |
+| `initialPermissionMode` | `default` | 新会话的默认权限模式 |
+| `preferredLocation` | `panel` | Claude 打开位置：`sidebar` 或 `panel`（新标签） |
+| `autosave` | `true` | Claude 读写文件前自动保存 |
+| `useCtrlEnterToSend` | `false` | 用 Ctrl/Cmd+Enter 代替 Enter 发送 |
+| `respectGitIgnore` | `true` | 搜索文件时排除 .gitignore 匹配项 |
+
+## JetBrains 接入
+
+### 支持的 IDE
+
+IntelliJ IDEA、PyCharm、Android Studio、WebStorm、PhpStorm、GoLand。基本上 JetBrains 全家桶都支持。
+
+### 安装
+
+在 JetBrains Marketplace 搜索 "Claude Code [Beta]" 插件安装，或者在 IDE 的 Settings → Plugins → Marketplace 里搜索安装。装完重启 IDE。
+
+Claude Code CLI 也需要单独安装。如果你还没装，参考[安装指南](./06-installation-guide.md)。
+
+### 使用方式
+
+JetBrains 插件有两种使用方式：
+
+1. **IDE 内置终端**：在 IDE 底部打开 Terminal 标签页，运行 `claude`。插件会自动检测并激活所有集成功能
+2. **外部终端连接**：在外部终端运行 `claude` 后，输入 `/ide` 命令，把当前会话连接到正在运行的 JetBrains IDE
+
+确保在 IDE 项目根目录启动 Claude Code，这样它才能访问和 IDE 相同的文件。
+
+### 核心快捷操作
+
+- `Cmd+Esc`（macOS）/ `Ctrl+Esc`（Windows/Linux）— 快速启动 Claude Code
+- `Cmd+Option+K`（macOS）/ `Alt+Ctrl+K`（Windows/Linux）— 将当前选中代码插入为文件引用，格式如 `@src/auth.ts#L1-99`
+
+### Diff 查看
+
+JetBrains 插件会将 Claude 的文件编辑重定向到 IDE 的 diff 查看器。你可以直接在 IDE 里对比变更、逐块接受或拒绝。
+
+如果想让 diff 回到终端显示，在 Claude Code 里运行 `/config`，把 diff tool 设为 `terminal`。设为 `auto` 则默认用 IDE diff 查看器。
+
+### 诊断信息共享
+
+JetBrains 插件会自动把 IDE 里的编译错误、代码检查警告共享给 Claude。Claude 在生成或修改代码时能参考这些信息，不需要你手动贴过来。
+
+### 插件设置
+
+在 Settings → Tools → Claude Code [Beta] 里可以配置：
+
+- **Claude command**：自定义 Claude 启动命令（如 `/usr/local/bin/claude` 或 `npx @anthropic-ai/claude-code`）
+- **Option+Enter 多行输入**（仅 macOS）：开启后 Option+Enter 在 prompt 里插入换行
+- **自动更新**：插件自动检查并安装更新
+
+如果 ESC 键在 JetBrains 终端里不能中断 Claude Code 的操作，去 Settings → Tools → Terminal，取消勾选 "Move focus to the editor with Escape"，或者删除 "Switch focus to Editor" 快捷键。
+
+### WSL2 和远程开发
+
+**WSL2 用户**：如果遇到 "No available IDEs detected"，通常是 WSL2 的 NAT 网络或 Windows 防火墙阻止了连接。两种修复方式：
+
+1. 在 Windows 防火墙里允许 WSL2 流量（推荐，不改变网络模式）
+2. 切换 WSL2 到 mirrored 网络（需 Windows 11 22H2+）：在用户目录的 `.wslconfig` 里添加 `[wsl2]\nnetworkingMode=mirrored`，然后 `wsl --shutdown` 重启
+
+**远程开发**（JetBrains Gateway）：插件必须装在远程主机上，不是本地客户端。
+
+### 安全注意事项
+
+在 JetBrains IDE 里使用 `acceptEdits` 模式时要注意：Claude Code 可能修改 IDE 配置文件（如 `.idea/` 下的文件），这些文件可能被 IDE 自动执行。建议：
+
+- 对不信任的项目用 default 模式而非 auto-accept
+- 注意 Claude 有权限修改哪些文件
+
+## Cursor 用户
+
+Cursor 是基于 VS Code 的 AI 编辑器。Claude Code 官方支持在 Cursor 里安装同一个 VS Code 扩展。
+
+操作步骤：
+
+1. 打开 Cursor 的扩展面板（搜索 "Claude Code"）
+2. 安装即可，用法和 VS Code 里一致
+
+或者直接从 Cursor 的扩展市场安装——VS Code 扩展页面上有 "Install for Cursor" 的链接。
+
+需要注意：
+
+- Cursor 自己的 AI 侧边栏和 Claude Code 面板是两套独立系统，各自维护上下文和会话，互不干扰
+- 如果两个 AI 同时编辑同一个文件，可能产生冲突——建议一次只用一个
+- 如果你不想装扩展，也可以直接在 Cursor 的内置终端里运行 `claude`，CLI 模式完全可用
+
+## 核心功能：Inline Diff
+
+这是 IDE 集成最有价值的功能。
+
+没有 IDE 集成时，Claude Code 编辑文件后你只能看终端里的文字描述。要确认改动是否符合预期，得自己切到编辑器看。
+
+有了 inline diff，Claude 每次编辑文件，IDE 弹出标准的 diff 视图：左边是原文件，右边是修改后的内容，变更部分高亮。你可以：
+
+- 逐个变更块接受或拒绝
+- 一键接受全部变更
+- 在 diff 视图里直接微调
+
+这个功能在重构、批量修改、不确定 Claude 改得对不对的场景下特别有用。你不用盲信 AI 的输出，而是有可视化的审查环节。
+
+在 `acceptEdits` 模式下，diff 视图仍然会出现，只是不再等待你确认。你可以在 Claude 继续工作后，通过 checkpoint 查看和回退。
+
+## 核心功能：Selection Context
+
+IDE 集成的另一个关键能力：Claude 自动知道你在看什么。
+
+自动共享的信息：
+
+- **当前选中内容**：你在编辑器里高亮选中的代码片段
+- **活动标签页**：你当前打开的文件路径
+- **诊断信息**：编辑器的错误、警告、lint 提示
+
+这意味着不需要手动复制代码粘贴到终端。比如你看到一行报错，直接切到 Claude 面板说"帮我修这个"，Claude 就知道是哪个文件的哪行出了问题。
+
+如果你不想让某些敏感文件的内容被共享（比如 `.env`），在 Claude Code 设置里添加 `Read` deny 规则。匹配 deny 规则的文件，选中内容和文件路径都不会发给 Claude。
+
+在 JetBrains 里，`Cmd+Option+K` 快捷键把当前选中的代码以引用的方式插入 prompt，附带文件路径和行号——这比手动输入更准确。
+
+## 常见问题
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| VS Code 找不到 Claude Code 扩展 | VS Code 版本太旧 | 升级到 1.98.0+ |
+| Spark 图标不显示 | 没打开文件，或版本太旧 | 打开一个文件，确认 VS Code 版本 |
+| `Cmd+Esc` 在 macOS 上无效 | 系统 Game Overlay 占用了快捷键 | 系统设置 → 键盘 → Game Controllers 关掉 |
+| JetBrains 插件装了但没反应 | 没在 IDE 内置终端运行 `claude` | 在 IDE 底部的 Terminal 里运行 `claude` |
+| `/ide` 命令连接不上 IDE | 插件没启动或版本不匹配 | 确认插件已启用，重启 IDE，更新到最新版 |
+| diff 视图没弹出 | diff tool 配置为 `terminal` | 运行 `/config`，把 diff tool 改为 `auto` |
+| WSL2 里 IDE 集成不工作 | CLI 装在了 Windows 而非 WSL 里 | 在 WSL 环境内安装 Claude Code CLI |
+| `acceptEdits` 模式改了不该改的文件 | 权限太宽松 | 在可信项目中使用，或回到 default 模式 |
+
+## 关键要点
+
+- **IDE 集成是终端的增强，不是替代**：两种方式共享会话历史，可以混用
+- **Inline diff 是核心价值**：可视化审查代码变更，比读终端文字直观得多
+- **Selection context 省去复制粘贴**：选中的代码、打开的文件、错误信息自动共享
+- **VS Code 扩展功能最全**：图形面板、@-mentions、@browser、插件管理、URI handler
+- **JetBrains 用终端 + 插件组合**：在 IDE 内置终端运行 `claude`，插件自动增强体验
+- **Cursor 直接装同一个扩展**：官方支持，不需要额外配置
+- **敏感文件用 Read deny 规则保护**：防止选中内容泄露给 Claude
+
+## 延伸阅读
+
+- [Claude Code VS Code 官方文档](https://code.claude.com/docs/en/vs-code)
+- [Claude Code JetBrains 官方文档](https://code.claude.com/docs/en/jetbrains)
+- [Claude Code 的产品形态全景](./02-product-forms-overview.md)
+- [终端配置指南](./10-terminal-setup.md)

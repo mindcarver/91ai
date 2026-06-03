@@ -1,0 +1,118 @@
+# Claude Code on Web：在浏览器里跑 Claude Code
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code on Web 让你在浏览器里直接用 Claude Code，不需要装终端、不需要本地环境。每个任务跑在一个隔离的云端 sandbox 里，代码通过 GitHub 集成进出。适合快速修 bug、审 PR、同时跑多个任务。但它有文件系统隔离、无法访问本地工具等限制，不适合需要复杂本地依赖的场景。
+
+## Web 版是什么
+
+Claude Code 最早只有终端版——你打开命令行，输入 `claude`，然后开始对话。2025 年 10 月，Anthropic 发布了 Web 版（也叫 Claude Code on the Web），入口在 [claude.ai/code](https://claude.ai/code)。
+
+它的工作方式跟终端版有根本性的区别：
+
+**终端版**：Claude Code 跑在你自己的电脑上。它能看到你的整个文件系统，能跑你机器上的任何命令，访问你装的任何工具。你在 [01 - Claude Code 到底是什么](01-what-is-claude-code.md) 里看到的那个"实习生"比喻，它就坐在你的工位旁边。
+
+**Web 版**：Claude Code 跑在 Anthropic 的云端服务器上。你给它一个 GitHub 仓库地址，它把代码克隆到一个隔离的 sandbox 环境里，在那个环境里读代码、改文件、跑命令。完成后把变更推回 GitHub，生成一个 PR 让你审核。
+
+这个 sandbox 环境有两个关键的隔离机制：
+
+1. **文件系统隔离**：sandbox 里的 Claude Code 只能读写项目目录。你的 SSH 密钥、AWS 凭证、其他项目的代码——它碰不到。
+2. **网络隔离**：sandbox 的网络访问通过代理服务器控制，只有经过允许的域名才能连。即使 sandbox 里的代码被注入攻击了，攻击者也没法把你的数据传到外部服务器。
+
+Simon Willison（Django 联合创始人）在试用后写道：Web 版本质上就是把终端版 Claude Code "包在一个容器里"，上面加了一层 Web UI。核心行为跟终端版一模一样，区别在于便利性——你在浏览器里就能完成编码任务，而不需要打开终端。
+
+## 适合 Web 版的场景
+
+### 快速修 bug 或小功能
+
+你在手机上收到一个 issue，打开浏览器，告诉 Claude Code："这个登录接口在用户名含空格时返回 500，帮我修一下。" 它在 sandbox 里修完代码、跑完测试，生成 PR。你在手机上就能 review 并合并。
+
+### 不想污染本地环境
+
+你接到一个旧项目的维护任务，但不想在本地装一堆老版本的依赖。Web 版的 sandbox 是临时的——任务完成就没了，不会在你的电脑上留下 Node 6 或 Python 2 的痕迹。
+
+### 并行处理多个任务
+
+终端版一次只能跑一个任务（除非你开多个终端窗口）。Web 版支持并行执行——你可以同时让 Claude Code 修仓库 A 的 bug、给仓库 B 加测试、重构仓库 C 的认证模块，每个任务跑在独立的 sandbox 里。你在一个界面里看所有任务的进度，随时可以介入调整方向。
+
+这个并行能力是 Web 版跟终端版的一个实质差异。终端版的 `claude` 命令是单进程、单会话的。Web 版则把 Claude Code 变成了一个轻量的自动化服务——能同时处理 backlog 清理、bug 修复、测试补充这些任务，不占用你本地资源。
+
+### 团队协作和代码审核
+
+不是所有需要看代码的人都会用终端。产品经理想理解一个 PR 改了什么、安全团队想审 AI 生成的代码——他们打开浏览器就能看到 Claude Code 的完整执行过程，包括它读了哪些文件、改了什么、跑了哪些测试、结果如何。
+
+## Web 版怎么用
+
+1. 打开 [claude.ai/code](https://claude.ai/code)，用你的 Anthropic 账号登录（Pro、Max、Team、Enterprise 计划可用）。
+2. 关联你的 GitHub 仓库。Web 版需要通过 GitHub 集成来获取代码和推送变更。
+3. 用自然语言描述任务，比如"给用户模型加邮箱验证"或"修复 #42 issue 里报告的内存泄漏"。
+4. Claude Code 在 sandbox 里执行任务。你可以在浏览器里实时看到它的操作过程，随时介入修改方向。
+5. 任务完成后，Claude 生成 PR 草稿。你审核后点击"Create PR"提交。
+
+还有一个"Open in CLI"按钮，能把当前会话的聊天记录和修改过的文件一起传送到你本地的终端版 Claude Code。这个"teleport"功能意味着你可以在 Web 版启动一个任务，觉得需要更精细的控制时，无缝切换到终端继续。Anthropic 的设计思路不是用 Web 版替代终端，而是让两个版本互相补充。
+
+另外，iOS 版 Claude app 里也有一个 Claude Code 入口，可以在手机上查看和操作。
+
+## 限制和注意事项
+
+Web 版方便，但也有明确的边界。
+
+### GitHub 绑定
+
+Web 版只能通过 GitHub 仓库工作。你的代码如果在 GitLab、Bitbucket 或者纯本地项目里，Web 版用不了。终端版没有这个限制，它能直接操作本地文件系统上的任何目录。
+
+### 没有本地工具
+
+sandbox 是一个标准化的云端环境，里面没有你本地的自定义脚本、私有 npm 包、公司内部工具链。如果你的项目依赖本地特有的工具（比如特定的编译器、内部 CLI），Web 版跑不起来。
+
+### 无法访问内部网络
+
+sandbox 的网络访问受代理控制，只能连允许的域名。你的内部 API、staging 环境、公司 VPN 里的服务——统统访问不到。如果你的测试需要连内部数据库或 API，Web 版不适用。
+
+### 文件系统不持久
+
+sandbox 是临时的。任务结束后，sandbox 里的所有内容都会被销毁。如果你需要保留构建产物、日志或中间结果，必须确保 Claude Code 在 sandbox 销毁前把它们推到 GitHub。
+
+### Token 消耗
+
+Web 版的 sandbox 维持活状态、实时流式传输进度、支持并行任务——这些都比终端版的一次性会话消耗更多 token。社区反馈中一个普遍的担忧是 Web 版会更快地用完 Pro 计划的用量上限。如果你要做大量编码工作，终端版在成本控制上更有优势。
+
+### 不支持 MCP 和自定义 Skills
+
+Web 版运行在隔离的云端环境里，你本地的 MCP 服务器配置、自定义 Skills、Claude.md 文件中的本地指令——这些都不会被加载。终端版的完整扩展能力在 Web 版里不可用。
+
+## 与本地版的功能对比
+
+| 能力 | 终端版 (CLI) | Web 版 |
+|------|-------------|--------|
+| 代码来源 | 本地文件系统 | GitHub 仓库 |
+| 运行环境 | 你自己的电脑 | Anthropic 云端 sandbox |
+| 并行任务 | 手动开多个终端 | 原生支持，一个界面管理 |
+| 文件系统访问 | 完整访问 | 仅限 sandbox 内项目目录 |
+| 本地工具支持 | 全部可用 | 不可用 |
+| MCP 服务器 | 支持 | 不支持 |
+| 自定义 Skills | 支持 | 不支持 |
+| 内部网络访问 | 可以 | 不可以 |
+| 安装要求 | 需要安装 Node.js + npm | 浏览器即可 |
+| 移动端支持 | 无（需要 SSH） | iOS app + 浏览器 |
+| Git 集成 | 本地 git 命令 | GitHub PR 自动生成 |
+| Teleport（Web 到 CLI） | N/A | 支持 |
+| Token 消耗 | 相对较低 | 较高（sandbox 维持开销） |
+| 适用计划 | API 按量付费或订阅 | Pro / Max / Team / Enterprise |
+| 适合谁 | 日常开发、复杂项目 | 快速任务、团队协作、移动办公 |
+
+## 关键要点
+
+- Web 版把 Claude Code 从终端工具变成了一个浏览器里就能用的编码服务，降低了使用门槛。
+- 每个 Web 版任务跑在隔离的 sandbox 里，有文件系统和网络双重隔离，敏感凭证不会暴露给 sandbox 内的代码。
+- 并行任务执行是 Web 版相对于终端版的核心优势，适合同时处理多个独立编码任务。
+- Web 版依赖 GitHub 集成，无法访问本地工具和内部网络，不适合需要复杂本地环境的项目。
+- "Open in CLI" 的 teleport 功能让 Web 版和终端版可以无缝切换，不是二选一的关系。
+- Web 版的 token 消耗更高，长时间编码任务用终端版更经济。
+
+## 延伸阅读
+
+- [Anthropic 官方：Making Claude Code more secure and autonomous with sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) — sandbox 架构的技术细节
+- [Claude Code 官方文档：Sandboxing](https://code.claude.com/docs/en/sandboxing) — sandbox 配置和权限设置的完整参考
+- [Tessl：Anthropic brings Claude Code to the web and mobile](https://tessl.io/blog/anthropic-brings-claude-code-to-the-web-and-mobile/) — Web 版发布的详细报道和社区反馈
+- [01 - Claude Code 到底是什么](01-what-is-claude-code.md) — 理解 Claude Code 的核心概念

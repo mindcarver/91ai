@@ -1,0 +1,154 @@
+# Routines 与 Scheduled Tasks
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 提供了三种自动化执行的方式：Routines（云端例行任务）、Desktop Scheduled Tasks（本地定时任务）、和 `/loop`（会话内循环）。Routines 跑在 Anthropic 的基础设施上，你电脑关了也能运行；Desktop 任务跑在你本地，能直接访问你的文件；`/loop` 适合当前会话里快速轮询。选哪个取决于任务性质和你对环境的要求。
+
+## 为什么这很重要
+
+很多人用 Claude Code 的方式是"打开终端 → 说一句话 → 看结果 → 关掉"。这对于一次性任务够用，但有些工作需要定期重复：每天早上审查 PR、每周检查依赖安全、CI 失败后自动分析原因。
+
+手动做这些事当然可以，但你的时间是有限的。把重复性工作交给自动化，你只需要看结论就行。
+
+Claude Code 的自动化方案不是只有一个入口。云端、本地、会话内各有一种方式，它们的能力边界和适用场景不同。理解这些差异，你才能选对工具。
+
+## Routines（云端）
+
+Routines 是 Anthropic 托管的定时任务。它们跑在 Anthropic 的基础设施上，不依赖你的电脑是否开着。
+
+### 怎么创建
+
+在 CLI 里直接输入：
+
+```
+> /schedule daily PR review at 9am
+```
+
+也可以在 Claude Code Desktop 的 Routines 页面创建和管理。
+
+### Routines 能做什么
+
+- 每天、每周、或按 cron 表达式定时执行
+- 不需要你的电脑在线——任务是跑在云端的
+- 可以通过 API 调用或 GitHub 事件触发（比如 PR 创建时自动审查）
+- 适合需要持续运行、不依赖本地环境的任务
+
+典型场景：
+
+- 每天早上 9 点审查待处理的 PR
+- CI 失败后自动分析错误原因
+- 每周检查依赖是否有安全更新
+- 文档同步（PR 合并后自动更新文档）
+
+### Routines 的限制
+
+- 运行环境是云端，不能直接访问你本地电脑上的文件
+- 需要 Anthropic 账号和网络连接
+- 配额和计费按 Anthropic 的 API 用量计算
+
+## Scheduled Tasks（本地）
+
+Desktop Scheduled Tasks 跑在你自己的机器上。它们通过 Claude Code Desktop 应用设置和管理。
+
+### 怎么创建
+
+在 Claude Code Desktop 的 Routines 页面创建。页面同时支持本地任务和云端 Routines。
+
+### 本地任务的特点
+
+- 直接访问你本地文件系统——能读写你电脑上的任何文件
+- 能调用你本地安装的工具和命令行程序
+- 需要 Desktop 应用处于打开状态，电脑需要处于唤醒状态
+- 如果电脑关了或休眠了，任务不会执行
+
+典型场景：
+
+- 每天早上自动整理本地项目的 TODO
+- 定期运行本地数据库的查询和报告
+- 监控本地开发环境的状态
+
+### 云端 vs 本地怎么选
+
+```
+你的任务需要访问本地文件？
+  ├─ 是 → Desktop Scheduled Tasks（本地）
+  └─ 否 ↓
+你的电脑能保证一直开着？
+  ├─ 是 → Desktop 或 Routines 都行
+  └─ 否 → Routines（云端）
+你的任务需要 GitHub 事件触发？
+  ├─ 是 → Routines + GitHub 集成
+  └─ 否 → 按需选择
+```
+
+## /loop 模式
+
+`/loop` 是 Claude Code CLI 内置的循环执行命令。它不创建定时任务，而是在当前会话里反复执行一个提示。
+
+### 基本用法
+
+```
+> /loop 5m 检查部署状态
+```
+
+这条命令会让 Claude 每 5 分钟执行一次"检查部署状态"的提示，直到你手动停止。
+
+### /loop 适合什么
+
+- 轮询某个状态直到满足条件（"每隔 2 分钟检查 CI 是否通过"）
+- 持续监控（"监控日志里的异常"）
+- 会话内的重复性小任务
+
+### /loop 的局限
+
+- 只在当前 CLI 会话内有效，关掉终端就停了
+- 不适合需要跨天的长期定时任务
+- 每次执行都是独立的调用，消耗 token
+
+## 触发方式汇总
+
+Claude Code 的自动化有四种触发方式，对应不同的场景：
+
+| 触发方式 | 运行环境 | 需要电脑在线 | 适合场景 |
+|---------|---------|-------------|---------|
+| Routines（云端） | Anthropic 基础设施 | 不需要 | 定期审查、CI 分析、文档同步 |
+| Desktop Scheduled Tasks | 本地电脑 | 需要 | 本地文件操作、本地工具调用 |
+| `/loop` | 当前 CLI 会话 | 需要（会话内） | 短期轮询、状态监控 |
+| GitHub Actions | CI 服务器 | 不需要 | 代码事件触发的自动化 |
+
+### GitHub Actions 作为补充
+
+除了上面三种，你还可以用 GitHub Actions 来调度 Claude Code：
+
+```yaml
+name: Daily Report
+on:
+  schedule:
+    - cron: "0 9 * * *"
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: "总结昨天的提交和未解决的 issue"
+          claude_args: "--model opus"
+```
+
+这种方式适合有代码仓库的项目。它的好处是能访问仓库代码、能和 CI 流程集成，但需要配置 GitHub Actions 和 API key。
+
+## 关键要点
+
+- Routines 跑在云端，电脑关了也能运行，适合需要持续执行的定期任务
+- Desktop Scheduled Tasks 跑在本地，能直接访问你的文件和工具，但需要电脑在线
+- `/loop` 是会话内的循环执行，适合短期轮询，不适合长期任务
+- 选哪种取决于三个因素：是否需要本地访问、是否需要持续运行、触发方式是否需要事件驱动
+- GitHub Actions 是第四种选择，适合和代码仓库集成的自动化
+
+## 延伸阅读
+
+- [Schedule Recurring Tasks 官方文档](https://code.claude.com/docs/en/common-workflows) — 各种定时方式的官方说明
+- [Desktop Scheduled Tasks](https://code.claude.com/docs/en/desktop-scheduled-tasks) — Desktop 应用的定时任务配置
+- [GitHub Actions 集成](https://code.claude.com/docs/en/github-actions) — 用 CI 跑 Claude Code 的完整指南
+- [第 15 篇：Non-interactive 模式](15-non-interactive-mode.md) — 定时任务底层依赖 non-interactive 模式执行

@@ -1,0 +1,259 @@
+# CLAUDE.md 怎么写：让 AI 第一次进项目就不犯傻
+
+> 更新日期：2025/06
+
+**TL;DR：** CLAUDE.md 是 Claude Code 每次启动会话时自动加载的指令文件。它不是给人类看的项目文档，是给 AI 看的"项目入职手册"。写得好，AI 进来就知道怎么干活；写得烂（或写得太多），AI 会直接忽略。核心原则：只写 AI 猜不到的规则，控制在 80 行以内，详细内容拆到其他文件用 `@import` 引入。
+
+## CLAUDE.md 的定位
+
+上一篇讲了 `.claude` 目录的全景。这一篇聚焦其中最重要的文件——CLAUDE.md。
+
+先搞清楚一件事：**CLAUDE.md 不是 README.md**。
+
+README 是给人看的，写项目介绍、架构设计、使用方法。CLAUDE.md 是给 Claude 看的，写的是"你在这个项目里应该怎么干活"。两者目标不同，内容不同，写法也完全不同。
+
+CLAUDE.md 有三个层级：
+
+| 层级 | 路径 | 作用域 | 适用场景 |
+|------|------|--------|----------|
+| 全局 | `~/.claude/CLAUDE.md` | 所有项目 | 个人偏好：代码风格、常用工具链 |
+| 项目 | `.claude/CLAUDE.md` 或项目根 `CLAUDE.md` | 当前项目 | 项目规范：构建命令、测试方法、架构约定 |
+| 本地 | `CLAUDE.local.md` | 当前项目，不提交 git | 个人覆盖：调试用的临时指令 |
+
+加载顺序是全局 → 项目 → 本地，后面的同名规则会覆盖前面的。一般你在项目里只需要维护项目级的 CLAUDE.md。
+
+关键机制：Claude Code 在每次会话启动时，会自动读取这些文件，把内容注入到系统提示词（system prompt）里。这意味着 CLAUDE.md 的内容会占用上下文窗口的 token 额度。Pro 计划的实际可用 token 大约 44K，系统提示词和工具定义已经吃掉了 25-35K，留给 CLAUDE.md 和对话的空间很紧张。写太多等于浪费钱，还降低指令遵循率。
+
+## 应该写什么
+
+核心判断标准：**AI 能从代码里猜到的东西不写，AI 猜不到的东西才写**。
+
+具体来说，这几类必须写：
+
+**1. 构建和测试命令**
+
+AI 不知道你用的是 pnpm 还是 yarn，不知道测试怎么跑。
+
+```markdown
+# 开发命令
+- 安装依赖：pnpm install
+- 跑测试：pnpm test（单个文件用 pnpm test path/to/file）
+- 类型检查：pnpm typecheck
+- lint：pnpm lint
+```
+
+**2. 和默认不同的代码风格**
+
+如果你的项目有不同于社区惯例的约定，必须写清楚。
+
+```markdown
+# 代码风格
+- 用 ES modules（import/export），不用 CommonJS（require）
+- 组件用函数式 + hooks，不用 class 组件
+- CSS 用 CSS Modules，不用 Tailwind
+```
+
+**3. 项目特有的约定和禁忌**
+
+每个项目都有一些"老人知道、新人踩坑"的潜规则。AI 就是那个新人。
+
+```markdown
+# 项目约定
+- src/lib/ 下的文件是内部工具，不要在 src/app/ 里直接 import src/components/ 的文件
+- 数据库 migration 文件一旦合入主分支就不能修改，只能新增
+- API 路由必须先经过 src/middleware/auth.ts 校验
+```
+
+**4. 开发环境的坑**
+
+本地环境有什么特殊配置，不写 AI 会踩坑。
+
+```markdown
+# 环境注意
+- 需要先运行 docker compose up 启动本地数据库
+- 环境变量在 .env.local 里，不要提交 .env 文件
+- Node 版本要求 >= 20，用 nvm use 切换
+```
+
+## 不应该写什么
+
+知道不写什么比知道写什么更重要。以下内容写进去要么没用，要么有害。
+
+**1. AI 能从代码推断的东西**
+
+"这个项目使用 React"——AI 读了 package.json 就知道了。"文件命名用 kebab-case"——看一眼目录结构就明白了。这些写进去是噪音。
+
+**2. 详细的设计文档和 API 文档**
+
+CLAUDE.md 不是 wiki。长篇大论的架构说明、每个接口的参数文档，放单独文件或者项目 wiki 里，用 `@import` 引入路径。CLAUDE.md 本体保持精简。
+
+**3. 经常变动的内容**
+
+版本号、具体的 bug 列表、当前 sprint 的任务——这些东西今天写了明天就过期。过期信息比没有信息更糟，因为 AI 会按过期的指令行事。
+
+**4. 笼统的描述和废话**
+
+"请写出高质量的代码"——这种话对 AI 没有任何约束力。"遵循最佳实践"——什么叫最佳实践？写具体的要求：`函数复杂度不超过 10`，`所有 public 方法必须有 JSDoc`。
+
+**5. 当 linter 用的规则**
+
+"缩进用 2 空格"、"行尾加分号"、"字符串用单引号"——这些应该交给 Prettier 和 ESLint，不应该用 CLAUDE.md 来控制。AI 不如确定性工具可靠，用 CLAUDE.md 当 linter 是在浪费上下文空间。
+
+## 最小可用模板
+
+一个刚起步的项目，CLAUDE.md 有这几行就够了：
+
+```markdown
+# 项目：my-app
+
+## 开发命令
+- 安装依赖：npm install
+- 启动开发服务器：npm run dev
+- 跑测试：npm test
+- 构建：npm run build
+
+## 代码风格
+- TypeScript strict mode
+- 用函数式组件，不用 class
+
+## 约定
+- 新组件放 src/components/，用 PascalCase 命名
+- API 路由放 src/api/，按资源分文件
+```
+
+数一下，不超过 20 行。这 20 行覆盖了 AI 最需要的四类信息：项目名、怎么构建和测试、代码风格偏好、文件组织约定。足够让 AI 不犯低级错误。
+
+## 进阶结构
+
+项目变大后，CLAUDE.md 需要更多内容，但不能堆在同一个文件里。正确的做法是分层组织。
+
+**用 `@import` 拆分详细文档**：
+
+```markdown
+# 项目：big-app
+
+## 开发命令
+- 安装依赖：pnpm install
+- 跑测试：pnpm test
+
+## 详细规范
+@docs/coding-standards.md
+@docs/api-conventions.md
+@docs/testing-guide.md
+```
+
+这样 CLAUDE.md 本体依然精简，详细规范放在独立文件里。Claude 加载 CLAUDE.md 时会把 `@import` 引用的文件内容一并读入上下文。
+
+**用 `.claude/rules/` 做条件加载**：
+
+如果有些规则只针对特定类型的文件，不要全堆在 CLAUDE.md 里。在 `.claude/rules/` 下创建规则文件，用 YAML frontmatter 指定作用范围：
+
+```yaml
+---
+description: "Python 代码风格规则"
+globs: ["**/*.py"]
+---
+# Python 规则
+- 用 black 格式化，行宽 88
+- 类型注解必须覆盖所有 public 函数
+- docstring 用 Google 风格
+```
+
+这样只有当 AI 在处理 Python 文件时，这些规则才会被加载。比把所有语言的规则都塞进 CLAUDE.md 高效得多。
+
+**实操建议的行数上限**：项目 CLAUDE.md 本体控制在 80 行以内。Anthropic 官方示例不到 10 行，HumanLayer 团队（做 AI 编码工具评测的）推荐控制在 60 行以下。这不是硬限制，但超过这个数，指令遵循率会明显下降。有论文数据显示，Opus 4.7 在有 CLAUDE.md 时代码生成成功率 82%，但指令堆到 150-200 条后，遵循率开始塌方。
+
+## 常见反例
+
+**反例 1：把 CLAUDE.md 当 README 写**
+
+```markdown
+# My Project
+
+这是一个电商平台的后端服务，使用微服务架构，包含用户服务、
+订单服务、支付服务三个核心模块。用户服务负责......
+
+（后面还有 200 行架构介绍）
+```
+
+AI 读了两百行还没看到一条可执行的指令。上下文 token 白花了。
+
+**反例 2：规则大杂烩**
+
+```markdown
+# 规则
+- 用 TypeScript
+- 用 React
+- 用 CSS Modules
+- 用 pnpm
+- 组件用函数式
+- 不要用 any
+- 不要用 var
+- 不要用 console.log
+- 变量用 camelCase
+- 文件用 kebab-case
+- 组件文件用 PascalCase
+- 测试文件用 .test.tsx
+- import 排序：react → 第三方 → 内部
+- 每个组件一个文件
+- 组件导出用 default
+- 样式文件和组件同目录
+- ...
+```
+
+30 多条规则，大部分是 AI 看代码就能知道的。真正需要 AI 注意力的那几条被淹没了。
+
+**反例 3：用自然语言描述而不是指令**
+
+```markdown
+我希望你能写出优雅的代码，遵循 SOLID 原则，保持函数短小精悍，
+变量命名要语义化，注释要恰到好处，不要过度工程化......
+```
+
+这不是指令，是期望。AI 不理解"优雅"和"恰到好处"的具体标准。换成具体规则：
+
+```markdown
+- 函数不超过 30 行
+- public 方法必须有返回类型注解
+- 超过 3 个参数的对象封装为 options type
+```
+
+## 验证方法
+
+写完 CLAUDE.md 怎么验证它有没有用？三个方法。
+
+**方法 1：新会话测试法**
+
+开一个新会话，不做任何额外说明，直接让 Claude 干一个项目里的常见任务。看它会不会犯 CLAUDE.md 里说过的禁忌。比如 CLAUDE.md 里写了"用 pnpm"，你让 Claude 安装依赖，看它用的是不是 pnpm。
+
+**方法 2：指令精简法**
+
+每次发现 Claude 违反了 CLAUDE.md 里的规则，先问自己：这条规则是不是太模糊了？是不是被其他规则稀释了？尝试删掉一些不那么重要的规则，保留最关键的 5-8 条，看遵循率是否提升。
+
+**方法 3：自我改进循环**
+
+当 Claude 犯了错并且你纠正了它之后，加一句：
+
+```
+把这个教训更新到 CLAUDE.md，确保以后不再犯
+```
+
+这是最实用的长期策略。CLAUDE.md 不应该是一次性写完的，而是在使用过程中逐步完善的。每次犯错都是一次补充规则的机会。但要注意定期清理——累积到太多条时要合并和删减，保持在有效的指令数量范围内。
+
+## 关键要点
+
+- CLAUDE.md 是给 AI 的指令文件，不是给人看的项目文档
+- 三层结构：全局（个人偏好）→ 项目（项目规范）→ 本地（个人覆盖）
+- 只写 AI 猜不到的东西：构建命令、非默认风格、项目特有约定、环境坑
+- 不要写：AI 能推断的、详细文档、频繁变动的内容、笼统废话、linter 能做的事
+- 项目级 CLAUDE.md 控制在 80 行以内，详细内容用 `@import` 拆文件
+- 用 `.claude/rules/` 做文件类型级别的条件加载
+- 通过"新会话测试"和"自我改进循环"持续优化
+- 指令超过 150 条后遵循率显著下降，少即是多
+
+## 延伸阅读
+
+- [Anthropic 官方 Memory 文档](https://docs.anthropic.com/en/docs/claude-code/memory) — CLAUDE.md 的官方说明和 import 语法
+- [HumanLayer: Getting Claude to Actually Read Your CLAUDE.md](https://www.humanlayer.dev/blog/stop-claude-from-ignoring-your-claude-md) — 指令数量上限和遵循率分析
+- [Instruction Adherence in Coding Agent Configuration Files (arXiv)](https://arxiv.org/pdf/2605.10039) — CLAUDE.md 有效性的学术量化研究
+- [CLAUDE.md Is Not Documentation. It Is Leverage](https://alirezarezvani.medium.com/claude-md-is-not-documentation-it-is-leverage-164ce8472c0b) — 关于 CLAUDE.md 定位的深度讨论

@@ -1,0 +1,492 @@
+# Agent SDK 入门
+
+> 更新日期：2025/06
+
+**TL;DR：** Agent SDK 把 Claude Code 的完整能力（读文件、改代码、跑命令、搜索代码库）变成一个 Python/TypeScript 库，你可以用代码调用。和直接调 Anthropic API 不同，你不需要自己实现工具执行循环——Claude 自己就能操作文件系统和终端。适合把 Claude Code 嵌进内部平台、CI/CD、批处理系统。
+
+## Agent SDK 是什么
+
+如果你读过第 69 篇（Headless 模式），已经知道怎么用 `claude -p "任务"` 把 Claude Code 塞进脚本里跑。Headless 模式本质上是启动一个 CLI 进程，传参数进去，拿结果出来。
+
+Agent SDK 做的是同一件事，但方式不同：它把 Claude Code 变成一个**库**，你在 Python 或 TypeScript 代码里调用，而不是在 shell 里拼命令行参数。
+
+类比一下：
+
+- **CLI 交互模式**像面对面跟同事说需求
+- **Headless 模式**像给同事发邮件，他处理完回你
+- **Agent SDK**像给同事配了一台工位在你隔壁办公室，你通过内部系统给他派活，他能用自己电脑上的所有工具干活
+
+底层机制上，每次你的代码调用 SDK 的 `query()` 函数，SDK 会启动一个 `claude` CLI 子进程，通过 stdio 跟它通信。子进程拥有自己的 shell、工作目录和会话文件。你不需要手动管理这些——SDK 帮你处理。
+
+## SDK vs CLI vs Headless
+
+| 维度 | CLI 交互模式 | Headless (`-p`) | Agent SDK |
+|------|------------|----------------|-----------|
+| 调用方式 | 终端里输入 | shell 脚本里拼命令 | Python/TypeScript 代码 |
+| 语言 | 无（命令行） | Bash/任何能跑命令的语言 | Python、TypeScript |
+| 工具控制 | `--allowedTools` 参数 | `--allowedTools` 参数 | `allowed_tools` 配置项 |
+| 会话管理 | 自动 | `--resume` 参数 | `session_id` + `resume` 选项 |
+| 自定义工具 | 不支持 | 不支持 | 支持（进程内 MCP 服务器） |
+| 输出解析 | 直接看 | `--output-format json` | 结构化的消息对象 |
+| 适合场景 | 日常开发 | 脚本、CI | 嵌入应用、生产系统 |
+
+Headless 模式和 SDK 的核心区别：Headless 是"拼命令行字符串"，SDK 是"写代码调函数"。当你需要条件逻辑、错误处理、自定义工具、会话管理时，SDK 比 shell 脚本好维护得多。
+
+还有一个容易混淆的东西：**Client SDK**（`anthropic` Python 包 / `@anthropic-ai/sdk` TypeScript 包）。Client SDK 给你直接的 API 访问——你发消息，自己实现工具执行循环。Agent SDK 给你的是 Claude 自带工具执行能力。对比代码：
+
+```python
+# Client SDK：你自己实现工具循环
+response = client.messages.create(...)
+while response.stop_reason == "tool_use":
+    result = your_tool_executor(response.tool_use)
+    response = client.messages.create(tool_result=result, ...)
+
+# Agent SDK：Claude 自己处理工具调用
+async for message in query(prompt="修复 auth.py 里的 bug"):
+    print(message)
+```
+
+## 安装和初始化
+
+### Python SDK
+
+```bash
+pip install claude-agent-sdk
+```
+
+要求 Python 3.10 以上。如果 pip 报 `No matching distribution found`，检查你的 Python 版本。
+
+Python SDK 会自动捆绑 Claude Code CLI 二进制文件，不需要单独安装 Claude Code。
+
+### TypeScript SDK
+
+```bash
+npm install @anthropic-ai/claude-agent-sdk
+```
+
+需要 Node.js 18 以上。SDK 会捆绑对应平台的原生二进制文件（如 `@anthropic-ai/claude-agent-sdk-darwin-arm64`）作为可选依赖，所以你不需要单独安装 Claude Code。
+
+### 认证
+
+两种 SDK 都通过环境变量认证：
+
+```bash
+export ANTHROPIC_API_KEY=your-api-key
+```
+
+也支持第三方 API 提供商：
+
+- **Amazon Bedrock**：设置 `CLAUDE_CODE_USE_BEDROCK=1`，配置 AWS 凭证
+- **Google Vertex AI**：设置 `CLAUDE_CODE_USE_VERTEX=1`，配置 GCP 凭证
+- **Microsoft Azure**：设置 `CLAUDE_CODE_USE_FOUNDRY=1`，配置 Azure 凭证
+
+## 第一个 SDK 程序
+
+### Python 版本
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions
+
+async def main():
+    async for message in query(
+        prompt="当前目录下有哪些文件？",
+        options=ClaudeAgentOptions(allowed_tools=["Bash", "Glob"]),
+    ):
+        if hasattr(message, "result"):
+            print(message.result)
+
+asyncio.run(main)
+```
+
+### TypeScript 版本
+
+```typescript
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+for await (const message of query({
+  prompt: "当前目录下有哪些文件？",
+  options: {
+    allowedTools: ["Bash", "Glob"],
+  },
+})) {
+  if (message.type === "result" && message.subtype === "success") {
+    console.log(message.result);
+  }
+}
+```
+
+两个例子做的事情一样：给 Claude 一个任务，限制它只能用 `Bash` 和 `Glob` 两个工具，然后流式接收结果。SDK 会自动启动 Claude Code 子进程，Claude 自己决定用哪些工具、怎么用，处理完后返回结果。
+
+## 核心概念
+
+### query() 函数
+
+SDK 的核心入口。接收一个 prompt 和一组选项，返回消息的异步迭代器。
+
+Python 签名：
+
+```python
+async def query(
+    *,
+    prompt: str | AsyncIterable[dict[str, Any]],
+    options: ClaudeAgentOptions | None = None,
+) -> AsyncIterator[Message]
+```
+
+参数说明：
+
+- `prompt`：任务描述，字符串或异步消息流
+- `options`：配置项，控制工具权限、工作目录、模型选择等
+
+### 消息类型
+
+`query()` 返回的消息有几种类型：
+
+| 消息类型 | 说明 |
+|---------|------|
+| `UserMessage` | 用户发送的消息 |
+| `AssistantMessage` | Claude 的回复（包含文本和工具调用） |
+| `SystemMessage` | 系统事件（初始化、会话信息） |
+| `ResultMessage` | 最终结果 |
+| `StreamEvent` | 流式输出中的增量事件 |
+
+处理消息时按类型过滤：
+
+```python
+from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
+
+async for message in query(
+    prompt="分析这个项目的目录结构",
+    options=ClaudeAgentOptions(allowed_tools=["Read", "Glob"]),
+):
+    if isinstance(message, AssistantMessage):
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                print(f"Claude: {block.text}")
+```
+
+### ClaudeAgentOptions 配置项
+
+常用配置：
+
+```python
+options = ClaudeAgentOptions(
+    allowed_tools=["Read", "Edit", "Bash"],  # 允许的工具
+    permission_mode="acceptEdits",            # 权限模式
+    cwd="/path/to/project",                   # 工作目录
+    system_prompt="你是一个代码审查专家",       # 系统提示
+    max_turns=10,                             # 最大工具调用轮次
+    max_budget_usd=1.00,                      # 花费上限
+    model="claude-sonnet-4-20250514",         # 模型选择
+)
+```
+
+`allowed_tools` 控制哪些工具可用。SDK 内置的工具包括：
+
+| 工具 | 功能 |
+|------|------|
+| Read | 读文件 |
+| Write | 创建新文件 |
+| Edit | 编辑已有文件 |
+| Bash | 运行终端命令 |
+| Glob | 按模式搜索文件 |
+| Grep | 按内容搜索文件 |
+| WebSearch | 搜索网页 |
+| WebFetch | 抓取网页内容 |
+
+## 自定义工具
+
+除了内置工具，你还可以注册自定义工具让 Claude 调用。这通过进程内 MCP 服务器实现。
+
+### Python 自定义工具
+
+```python
+import asyncio
+import aiohttp
+from claude_agent_sdk import (
+    query, ClaudeAgentOptions, tool, create_sdk_mcp_server
+)
+
+# 定义工具
+@tool("get_weather", "根据坐标获取当前温度", {"latitude": float, "longitude": float})
+async def get_weather(args: dict) -> dict:
+    async with aiohttp.ClientSession() as session:
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={args['latitude']}&longitude={args['longitude']}"
+            f"&current=temperature_2m"
+        )
+        async with session.get(url) as resp:
+            data = await resp.json()
+
+    return {
+        "content": [{
+            "type": "text",
+            "text": f"当前温度: {data['current']['temperature_2m']}°C"
+        }]
+    }
+
+# 注册到 MCP 服务器
+weather_server = create_sdk_mcp_server(
+    name="weather-tools",
+    version="1.0.0",
+    tools=[get_weather],
+)
+
+# 使用
+async def main():
+    async for message in query(
+        prompt="北京（纬度 39.9，经度 116.4）现在多少度？",
+        options=ClaudeAgentOptions(
+            mcp_servers={"weather": weather_server},
+            allowed_tools=["mcp__weather__get_weather"],
+        ),
+    ):
+        if hasattr(message, "result"):
+            print(message.result)
+
+asyncio.run(main)
+```
+
+### TypeScript 自定义工具
+
+```typescript
+import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+const weatherServer = createSdkMcpServer({
+  name: "weather-tools",
+  version: "1.0.0",
+  tools: [
+    tool(
+      "get_weather",
+      "根据坐标获取当前温度",
+      {
+        latitude: z.number().describe("纬度"),
+        longitude: z.number().describe("经度"),
+      },
+      async (args) => {
+        const resp = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${args.latitude}&longitude=${args.longitude}&current=temperature_2m`
+        );
+        const data = await resp.json();
+        return {
+          content: [
+            { type: "text" as const, text: `当前温度: ${data.current.temperature_2m}°C` },
+          ],
+        };
+      }
+    ),
+  ],
+});
+
+for await (const message of query({
+  prompt: "北京（纬度 39.9，经度 116.4）现在多少度？",
+  options: {
+    mcpServers: { weather: weatherServer },
+    allowedTools: ["mcp__weather__get_weather"],
+  },
+})) {
+  if (message.type === "result" && message.subtype === "success") {
+    console.log(message.result);
+  }
+}
+```
+
+自定义工具的命名规则：注册到名为 `weather` 的 MCP 服务器上的 `get_weather` 工具，在 `allowed_tools` 里用 `mcp__weather__get_weather` 引用。
+
+## 会话管理
+
+### 单次查询 vs 会话延续
+
+`query()` 是一次性的：发任务、收结果、结束。如果你想让 Claude 记住上一次的上下文，需要用会话。
+
+### 恢复会话
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, SystemMessage, ResultMessage
+
+async def main():
+    session_id = None
+
+    # 第一次查询：拿到 session_id
+    async for message in query(
+        prompt="读一下 auth.py 的内容",
+        options=ClaudeAgentOptions(allowed_tools=["Read", "Glob"]),
+    ):
+        if isinstance(message, SystemMessage) and message.subtype == "init":
+            session_id = message.data["session_id"]
+
+    # 恢复会话，Claude 记得上次读过什么
+    async for message in query(
+        prompt="现在告诉我 auth.py 里哪些函数需要加类型注解",
+        options=ClaudeAgentOptions(resume=session_id),
+    ):
+        if isinstance(message, ResultMessage):
+            print(message.result)
+
+asyncio.run(main)
+```
+
+原理：SDK 把会话记录存为 JSONL 文件（默认在 `~/.claude/projects/` 下）。恢复会话时，Claude 加载之前的对话历史，知道之前读过什么文件、做过什么分析。
+
+### 长连接会话
+
+Python SDK 提供 `ClaudeSDKClient` 用于保持长连接：
+
+```python
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+async def main():
+    options = ClaudeAgentOptions(
+        allowed_tools=["Read", "Glob", "Grep"],
+    )
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query("分析项目结构")
+        async for msg in client.receive_response():
+            print(msg)
+
+        # 同一个会话继续
+        await client.query("哪些模块测试覆盖不足？")
+        async for msg in client.receive_response():
+            print(msg)
+
+asyncio.run(main)
+```
+
+## 权限和安全
+
+### 权限模式
+
+```python
+options = ClaudeAgentOptions(
+    permission_mode="acceptEdits",  # 自动接受文件编辑
+)
+```
+
+可选模式：
+
+- `"default"`：遇到敏感操作需要确认（SDK 环境下会失败，因为没有交互界面）
+- `"acceptEdits"`：自动接受文件读写，不需要确认
+- `"bypassPermissions"`：跳过所有权限检查（只在隔离环境中使用）
+
+### 最小权限原则
+
+给每个任务分配刚好够用的工具，不多给：
+
+```python
+# 只读分析
+ClaudeAgentOptions(allowed_tools=["Read", "Glob", "Grep"])
+
+# 需要改文件
+ClaudeAgentOptions(allowed_tools=["Read", "Edit"])
+
+# 需要跑命令（谨慎）
+ClaudeAgentOptions(allowed_tools=["Read", "Edit", "Bash"])
+```
+
+### Hooks
+
+Hooks 让你在工具执行前后插入自定义逻辑——比如记录审计日志：
+
+```python
+from datetime import datetime
+from claude_agent_sdk import query, ClaudeAgentOptions, HookMatcher
+
+async def log_file_change(input_data, tool_use_id, context):
+    file_path = input_data.get("tool_input", {}).get("file_path", "unknown")
+    with open("./audit.log", "a") as f:
+        f.write(f"{datetime.now()}: modified {file_path}\n")
+    return {}
+
+options = ClaudeAgentOptions(
+    permission_mode="acceptEdits",
+    hooks={
+        "PostToolUse": [
+            HookMatcher(matcher="Edit|Write", hooks=[log_file_change])
+        ]
+    },
+)
+```
+
+### 成本控制
+
+```python
+ClaudeAgentOptions(
+    max_turns=5,           # 最多 5 轮工具调用
+    max_budget_usd=1.00,   # 花费上限 1 美元
+)
+```
+
+这两个参数防止任务失控。一个典型的单文件代码审查大约消耗 5,000 token，成本约 $0.02。全项目安全审计可能到 30,000-50,000 token。
+
+## 常见问题
+
+**Q：Agent SDK 和 Client SDK（`anthropic` 包）有什么区别？**
+
+Client SDK 给你直接的 API 访问——你发 prompt，Claude 回复，如果 Claude 想用工具，你自己执行工具再把结果送回去。Agent SDK 内置了工具执行能力——Claude 自己能读文件、改文件、跑命令。用 Client SDK 你需要自己写工具执行循环，用 Agent SDK 不需要。
+
+**Q：SDK 里能用 MCP 服务器吗？**
+
+能。通过 `mcp_servers` 配置项传入。既可以用进程内 MCP 服务器（自定义工具），也可以连接外部 MCP 服务器（如 Playwright）：
+
+```python
+ClaudeAgentOptions(
+    mcp_servers={
+        "playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]}
+    }
+)
+```
+
+**Q：SDK 支持 Subagents 吗？**
+
+支持。你可以定义专门的子代理，主 agent 会自动委派任务：
+
+```python
+from claude_agent_sdk import AgentDefinition
+
+ClaudeAgentOptions(
+    allowed_tools=["Read", "Glob", "Grep", "Agent"],
+    agents={
+        "code-reviewer": AgentDefinition(
+            description="代码质量审查专家",
+            prompt="分析代码质量并给出改进建议",
+            tools=["Read", "Glob", "Grep"],
+        )
+    },
+)
+```
+
+**Q：SDK 适合生产环境吗？**
+
+适合，但需要注意几个事项：每个会话是一个独立的子进程，占用内存（建议 1 GiB 起步）；会话状态默认存在本地磁盘，容器重启会丢失，需要配置 `SessionStore` 持久化；并发会话数受内存限制。详细的生产部署指南见官方 [Hosting 文档](https://code.claude.com/docs/en/agent-sdk/hosting)。
+
+**Q：Headless 模式和 SDK 怎么选？**
+
+如果你的需求是跑脚本、CI/CD 集成，headless 模式够用（第 69 篇）。如果你需要自定义工具、会话管理、条件逻辑、嵌入 Web 应用，用 SDK。
+
+**Q：SDK 怎么调试？**
+
+Python 里可以直接 print 消息对象看内容。TypeScript 里用 `includePartialMessages: true` 看流式输出。两者都可以设置 `CLAUDE_CODE_ENABLE_TELEMETRY=1` 开启 OpenTelemetry 追踪。
+
+## 关键要点
+
+1. **Agent SDK 把 Claude Code 变成库**：Python 和 TypeScript 都支持，在代码里调用，不再拼命令行
+2. **和 Client SDK 的本质区别**：Agent SDK 内置工具执行，你不需要自己写工具循环
+3. **自定义工具通过 MCP 服务器注册**：用 `@tool` 装饰器（Python）或 `tool()` 函数（TypeScript）定义
+4. **会话通过 session_id 恢复**：Claude 能记住之前的上下文，支持多轮交互
+5. **权限用 allowed_tools 控制**：给每个任务最小权限，生产环境配 hooks 做审计
+6. **成本用 max_turns 和 max_budget_usd 控制**：防止任务跑飞
+
+## 延伸阅读
+
+- [Agent SDK Overview - Claude Code 官方文档](https://code.claude.com/docs/en/agent-sdk/overview)
+- [Agent SDK Quickstart - Claude Code 官方文档](https://code.claude.com/docs/en/agent-sdk/quickstart)
+- [Python SDK 参考 - Claude Code 官方文档](https://code.claude.com/docs/en/agent-sdk/python)
+- [TypeScript SDK 参考 - Claude Code 官方文档](https://code.claude.com/docs/en/agent-sdk/typescript)
+- [Hosting the Agent SDK - Claude Code 官方文档](https://code.claude.com/docs/en/agent-sdk/hosting)
+- [anthropics/claude-agent-sdk-python - GitHub](https://github.com/anthropics/claude-agent-sdk-python)
+- 系列第 69 篇：Headless 模式（CLI 自动化的基础）
+- 系列第 61 篇：MCP 入门（理解 MCP 服务器的工作原理）

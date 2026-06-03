@@ -1,0 +1,304 @@
+# 自定义 Slash Commands：把高频操作变成一条命令
+
+> 更新日期：2025/06
+
+**TL;DR：** 自定义 Slash Commands 就是把反复输入的 prompt 存成 Markdown 文件，放到 `.claude/commands/` 目录下。支持参数化、Bash 命令注入、模型选择。项目级命令跟着仓库走，clone 即用，团队共享零成本。
+
+## 为什么这很重要
+
+第 29 篇列出了 Claude Code 内置的斜杠命令。但内置命令解决的是通用需求——你团队里的工作流不会跟别人一模一样。
+
+举个例子：每次提交代码你都要手写一段 prompt，让 Claude 按 Conventional Commits 格式生成 commit message。一天写十次，每次都得重新描述要求。如果你把这个 prompt 存成一个 `/project:commit` 命令，以后只需要敲一条命令就行。
+
+更实际的好处：**新人入职，clone 仓库就有全套工作流命令可用**。不用看文档，不用问老员工，直接 `/project:commit`、`/project:deploy`，标准统一，执行一致。
+
+## 命令文件放在哪里
+
+两个位置，两种作用域：
+
+| 位置 | 作用域 | 调用方式 | 适用场景 |
+|------|--------|----------|----------|
+| `.claude/commands/` | 项目级 | `/project:命令名` | 团队共享，跟着仓库走 |
+| `~/.claude/commands/` | 用户级 | `/user:命令名` | 个人习惯，跨项目通用 |
+
+项目级命令提交到 git，别人 clone 就能用。用户级命令只存在于本地，适合你自己的偏好。
+
+子目录会变成命名空间。比如：
+
+```
+.claude/commands/
+├── posts/
+│   ├── new.md          → /project:posts:new
+│   ├── check_links.md  → /project:posts:check_links
+│   └── publish.md      → /project:posts:publish
+├── deploy/
+│   ├── staging.md      → /project:deploy:staging
+│   └── production.md   → /project:deploy:production
+└── commit.md           → /project:commit
+```
+
+冒号分隔层级，一目了然。
+
+## 基本写法
+
+一个命令就是一个 Markdown 文件。最简单的命令没有任何 frontmatter，直接写 prompt 内容：
+
+```markdown
+<!-- .claude/commands/review.md -->
+审查当前暂存的代码变更，关注以下方面：
+- 是否有明显的 bug
+- 变量命名是否清晰
+- 是否有遗漏的错误处理
+- 是否符合项目的代码风格
+```
+
+调用时输入 `/project:review`，Claude 就会按这段 prompt 执行。
+
+### 加上 frontmatter
+
+frontmatter 控制命令的行为：
+
+```markdown
+---
+description: 审查暂存区的代码变更
+allowed-tools: Read, Grep, Bash(git diff:*)
+model: haiku
+---
+
+审查当前暂存的代码变更，关注以下方面：
+- 是否有明显的 bug
+- 变量命名是否清晰
+- 是否有遗漏的错误处理
+```
+
+各字段含义：
+
+| 字段 | 作用 | 示例 |
+|------|------|------|
+| `description` | 在 `/help` 中显示的说明 | `"审查暂存区的代码变更"` |
+| `allowed-tools` | 限定命令可用的工具 | `Bash(git add:*), Read, Grep` |
+| `model` | 指定使用的模型 | `haiku`（快）、`sonnet`（平衡） |
+| `argument-hint` | 输入框的参数提示 | `[message]`、`[file-path]` |
+
+`model` 选 `haiku` 适合简单重复任务（生成 commit message、格式化），省 token 速度快。选 `sonnet` 适合需要深度理解的任务（代码审查、架构分析）。
+
+## 参数化命令
+
+如果命令每次执行都要传不同内容，就需要参数化。
+
+### `$ARGUMENTS`：拿全部参数
+
+`$ARGUMENTS` 捕获命令名后面输入的所有内容：
+
+```markdown
+---
+description: 按 Conventional Commits 格式提交
+allowed-tools: Bash(git add:*), Bash(git commit:*)
+argument-hint: [commit message]
+model: haiku
+---
+
+# 提交变更
+
+<git_diff>
+!`git diff --cached`
+</git_diff>
+
+按 Conventional Commits 规范生成 commit message。
+如果用户提供了参数（$ARGUMENTS），优先使用用户的内容作为 commit message。
+如果参数为空，根据 diff 内容自动生成。
+```
+
+用法：
+
+```
+/project:commit feat: 新增用户注册接口
+/project:commit                          # 不传参数，自动生成
+```
+
+### Bash 命令注入
+
+用 `!` 反引号语法可以在 prompt 中执行 Bash 命令，把输出注入到 prompt 里：
+
+```markdown
+<当前分支>
+!`git branch --show-current`
+</当前分支>
+
+<最近提交>
+!`git log --oneline -5`
+</最近提交>
+
+基于以上信息，分析当前分支的工作进度。
+```
+
+这在 `git diff`、`git log`、`find` 等场景下很实用——先把信息收集好，再让 AI 分析。
+
+### `$1`、`$2`：位置参数
+
+对于需要多个独立参数的命令，可以用 `$1`、`$2` 按位置取值：
+
+```markdown
+---
+description: 在指定目录创建新组件
+argument-hint: <component-name> <directory>
+---
+
+在 $2 目录下创建名为 $1 的 React 组件，包含：
+- 组件主文件
+- 样式文件（CSS Modules）
+- 测试文件
+- index 导出文件
+```
+
+用法：`/project:new-component UserProfile src/components`
+
+实际使用中，`$ARGUMENTS` 比 `$1`/`$2` 更常见。大部分命令只需要一个自由文本参数，`$ARGUMENTS` 就够了。只有当你需要明确区分多个参数时才用位置参数。
+
+### `@` 文件引用
+
+用 `@` 前缀可以引用项目文件内容：
+
+```markdown
+参考项目的代码风格：
+@.eslintrc.js
+@tsconfig.json
+
+基于以上配置，审查当前变更的代码。
+```
+
+## 团队共享
+
+自定义命令最大的价值在于团队复用。核心思路：**把命令当成代码的一部分来管理**。
+
+### 建立团队命令库
+
+典型的项目命令结构：
+
+```
+.claude/commands/
+├── commit.md           # 标准化提交
+├── review.md           # 代码审查
+├── test.md             # 运行测试
+├── deploy/
+│   ├── staging.md      # 部署到测试环境
+│   └── production.md   # 部署到生产环境
+└── db/
+    ├── migrate.md      # 数据库迁移
+    └── seed.md         # 填充测试数据
+```
+
+这套命令跟着仓库走。新人 clone 之后直接能用，不需要额外配置。
+
+### 实际部署建议
+
+1. **先在 `~/.claude/commands/` 里实验**。命令写法调试好了再搬到项目目录。
+2. **从高频操作开始**。统计你和团队每天重复最多的 prompt，优先自动化。
+3. **写好 `description`**。这是团队成员看到命令说明的唯一途径，不写等于没有文档。
+4. **用 `allowed-tools` 收紧权限**。比如部署命令只给 `Bash(deploy:*)` 权限，避免误操作。
+
+### 命令版本管理
+
+命令文件就是 Markdown，跟代码一起走 git 流程。好处：
+
+- 命令变更有历史记录，可追溯
+- 可以通过 PR 审查命令内容的改动
+- 回滚代码时命令也跟着回滚
+- 不同分支可以有不同版本的命令
+
+## 命名规范
+
+命令名好不好，直接影响使用效率。几条实用的规则：
+
+### 用动词开头
+
+```
+commit.md     → /project:commit        # 提交
+review.md     → /project:review        # 审查
+deploy.md     → /project:deploy        # 部署
+migrate.md    → /project:migrate       # 迁移
+```
+
+不要用名词。`committer.md`、`reviewer.md` 看起来像角色，不像动作。
+
+### 用子目录分组
+
+超过 5 个命令时开始分组：
+
+```
+.claude/commands/
+├── posts/
+│   ├── new.md
+│   ├── check_links.md
+│   └── publish.md
+├── deploy/
+│   ├── staging.md
+│   └── production.md
+└── commit.md
+```
+
+用冒号分隔层级：`/project:posts:new`、`/project:deploy:staging`。
+
+### 文件名用 snake_case
+
+```diff
+- checkLinks.md
++ check_links.md
+
+- new-post.md
++ new.md          # 如果在 posts/ 目录下，不需要重复前缀
+```
+
+目录名已经提供了上下文，文件名保持简短。
+
+### description 要写清楚
+
+```diff
+- description: 新建
++ description: 在 content/posts/ 下新建一篇博客草稿
+```
+
+description 是团队成员看到的第一行说明。写得越具体，别人越知道什么时候该用这个命令。
+
+## 常见问题
+
+### 命令和 Skill 有什么区别？
+
+Skill 是更复杂的自动化流程，支持多步骤编排、条件分支。自定义命令就是一个 prompt 模板，简单直接。如果你的需求就是"给 AI 一段固定的指令，可能带参数"，用命令就够了。需要复杂流程控制才上 Skill。
+
+### 命令里能调用其他命令吗？
+
+不能直接嵌套调用。如果多个命令有重复部分，把公共内容写成模板，在各自的命令文件里用 `@` 引用。
+
+### 用户级和项目级命令重名怎么办？
+
+优先匹配项目级。如果项目里有 `commit.md`，`/project:commit` 用项目级的。`/user:commit` 仍然可以显式调用用户级的。
+
+### 命令里能用环境变量吗？
+
+可以，通过 Bash 注入：
+
+```markdown
+当前环境：!`echo $NODE_ENV`
+用户目录：!`echo $HOME`
+```
+
+但不要在命令里放密钥或 token。命令文件会提交到 git。
+
+### 怎么调试命令？
+
+在 Claude Code 里直接输入 `/project:命令名` 执行，看输出是否符合预期。调整 Markdown 内容后重新执行即可，不需要重启。
+
+## 关键要点
+
+- 命令文件是 `.claude/commands/` 下的 Markdown，调用格式 `/project:名` 或 `/user:名`
+- frontmatter 的 `description`、`allowed-tools`、`model`、`argument-hint` 控制行为
+- `$ARGUMENTS` 接全部参数，`$1`/`$2` 接位置参数，`!` 反引号注入 Bash 输出
+- 项目级命令跟着 git 走，团队 clone 即用，是最自然的共享方式
+- 命名用动词开头、snake_case，子目录分组，description 写清楚用途
+
+## 延伸阅读
+
+- [第 29 篇：内置斜杠命令速查表](29-built-in-slash-commands.md) — 自定义命令的前置知识
+- [第 22 篇：Plugin 命令](22-plugin-commands.md) — 更重量级的扩展机制
+- [Claude Code 官方文档 - Custom Slash Commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands) — 官方参考

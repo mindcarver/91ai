@@ -1,0 +1,348 @@
+# Sandbox 选择
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 在你机器上跑 shell 命令、改文件、发网络请求。这些操作的风险取决于环境——如果你本机有 SSH key 和生产凭证，一次 prompt injection 就可能造成严重后果。五种隔离方案从轻到重：内置 Bash Sandbox（操作系统级进程隔离）、Dev Container（VS Code 开发容器）、Docker 自定义容器、虚拟机、以及 Claude Code 网页版。选哪种取决于你的威胁模型：你在处理什么数据、跑什么代码、能接受多大的爆炸半径。
+
+## 为什么这很重要
+
+[第 43 篇](43-permission-modes-explained.md)讲了权限模式——谁来决定每一次操作能不能执行。但权限模式管的是"能不能做"，不是"做了之后会怎样"。即使权限审批完全正确，Claude 执行的命令仍然在你本机的完整环境中运行。它能访问你的文件系统、网络、环境变量。
+
+问题在于：Claude 读到的内容不都是可信的。第 49 篇讨论了 prompt injection——恶意文本藏在网页、GitHub Issue、MCP 返回值里，诱导 Claude 执行非预期操作。如果 Claude 在你的本机上跑，而且你用了 `bypassPermissions` 或 `auto` 模式，一次成功的 injection 可能导致：
+
+- 你的 SSH 私钥被读到并发送到外部服务器
+- 生产数据库被修改
+- 你的 home 目录被删除
+- git 凭证被窃取
+
+Sandbox 要解决的不是"如何阻止 Claude 做坏事"（那是权限模式的活），而是"即使 Claude 做了坏事，爆炸半径有多大"。
+
+## 内置 Bash Sandbox
+
+这是 Claude Code 自带的轻量级隔离，不需要安装 Docker 或虚拟机。它利用操作系统原生的沙箱机制：
+
+- **macOS**：Seatbelt（Apple 的 sandbox-exec）
+- **Linux / WSL2**：bubblewrap（Flatpak 用的同一个容器工具）
+
+### 工作原理
+
+开启后，Claude 执行的每一条 Bash 命令都在受隔离的子进程中运行。隔离包括：
+
+**文件系统隔离**：命令只能写入当前工作目录。读取默认不限制（否则很多命令无法正常工作），但你可以通过配置收紧：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "denyRead": ["~/"],
+      "allowRead": ["."]
+    }
+  }
+}
+```
+
+这段配置禁止 Bash 命令读取你的 home 目录，但允许读取当前项目目录。如果你想保护 `~/.ssh`、`~/.aws` 等敏感路径，可以这样设。
+
+**网络隔离**：默认行为是——命令首次访问一个新的网络域名时会弹出提示。你可以选择放行或拒绝。也可以在配置中指定允许的域名白名单：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["github.com", "registry.npmjs.org", "pypi.org"],
+      "allowLocalBinding": false,
+      "allowAllUnixSockets": false
+    }
+  }
+}
+```
+
+这段配置只允许 Bash 命令访问 GitHub、npm 和 PyPI。`allowLocalBinding: false` 禁止命令监听本地端口——防止被用来做反向 shell。
+
+### 怎么开启
+
+在 Claude Code 会话中输入 `/sandbox` 命令即可切换。或者在配置中设为默认：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  }
+}
+```
+
+`autoAllowBashIfSandboxed: true` 的意思是——如果命令已经在 sandbox 里跑，就不需要再弹权限确认了。逻辑是：既然已经隔离了，确认的意义不大。
+
+### 不隔离什么
+
+这是内置 Bash Sandbox 的关键局限：
+
+- **Read / Edit / Write 工具不走 sandbox**。这三个是 Claude Code 的内置文件操作工具，它们走的是权限系统（第 43 篇），不走操作系统沙箱。也就是说，sandbox 只管 Bash 命令的子进程，不管 Claude 自身的文件读写。
+- **MCP 服务器不走 sandbox**。MCP 工具的进程不在沙箱内运行。
+- **不提供内核级隔离**。它依赖操作系统的用户态限制机制，不是虚拟化。如果 Claude 执行的命令利用了内核漏洞（理论上，实际上极其罕见），隔离可能被突破。
+
+### 什么时候用
+
+- 日常开发，你不想装 Docker 但希望 Bash 命令有基本隔离
+- 你的项目不涉及高敏感数据
+- 作为其他隔离方案的补充——即使你用了 Docker，开启内置 sandbox 也能多一层保护
+
+## Dev Container
+
+Dev Container 是 VS Code 的开发容器规范，Claude Code 官方支持在其中运行。它把整个开发环境放进 Docker 容器，文件系统、网络、进程都跟宿主机隔开。
+
+### 配置方式
+
+在项目根目录创建 `.devcontainer/devcontainer.json`：
+
+```json
+{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  }
+}
+```
+
+`features` 那一行会自动在容器里安装 Claude Code。你也可以自定义更多配置。
+
+Anthropic 官方仓库提供了一个更完整的沙箱配置，包含网络防火墙：
+
+```json
+{
+  "name": "Claude Code Sandbox",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW"
+  ],
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand"
+}
+```
+
+这个配置有几个值得注意的地方：
+
+- `--cap-add=NET_ADMIN` 和 `NET_RAW`：给容器网络管理权限，这样容器内部可以用 iptables 做防火墙
+- `init-firewall.sh`：容器启动时自动执行防火墙初始化脚本，用 iptables 设置网络白名单
+- `workspaceMount`：把宿主机项目目录 bind mount 到容器的 `/workspace`，容器内可以编辑代码但访问不到宿主机的其他路径
+
+对应的 Dockerfile 安装了 iptables、ipset 等网络工具，以及 git、jq、nano 等常用开发工具。
+
+### 和内置 Sandbox 的区别
+
+Dev Container 是"把 Claude 装进容器"，内置 Sandbox 是"在 Claude 运行的系统上加限制"。前者隔离的是整个运行环境，后者只隔离 Bash 子进程。
+
+在 Dev Container 里，Claude 的 Read / Edit / Write 工具也受容器边界限制——它只能读容器内的文件系统。宿主机的 `~/.ssh`、`~/.aws` 之类的路径，容器里根本不存在（除非你显式 mount 进去）。
+
+### 什么时候用
+
+- 团队项目，你希望统一所有人的开发环境
+- 你已经在用 VS Code 的 Dev Container 功能
+- 你需要比内置 Bash Sandbox 更强的隔离，但不想维护独立的虚拟机
+
+### 局限性
+
+- 需要安装 Docker Desktop 或等效的容器运行时
+- bind mount 的目录对容器来说是可读写的——如果你的项目目录里有 `.env` 文件，容器里的 Claude 仍然能读到
+- 容器内的 root 用户对容器内的文件系统有完整权限，只是出不了容器
+- 需要团队所有人都配置好 Docker 环境
+
+## Docker 自定义容器
+
+如果你不用 VS Code，或者需要更精细的控制，可以自己写 Docker 配置。这在 CI 流水线和 Agent SDK 场景下更常见。
+
+### 加固型容器配置
+
+Anthropic 文档给了一个安全加固的 `docker run` 示例：
+
+```bash
+docker run \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --security-opt seccomp=/path/to/seccomp-profile.json \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=100m \
+  --tmpfs /home/agent:rw,noexec,nosuid,size=500m \
+  --network none \
+  --memory 2g \
+  --cpus 2 \
+  --pids-limit 100 \
+  --user 1000:1000 \
+  -v /path/to/code:/workspace:ro \
+  agent-image
+```
+
+逐行解释这些安全措施：
+
+- `--cap-drop ALL`：去掉所有 Linux capabilities。容器内的进程连 `ping` 都跑不了，更别说 `mount` 或 `iptables`
+- `no-new-privileges`：禁止子进程通过 setuid 提权
+- `seccomp`：限制可用的系统调用，只允许白名单里的 syscall
+- `--read-only`：整个文件系统只读。可写区域只有两个 tmpfs 挂载点
+- `--network none`：完全断网。容器没有网络栈，不能发任何请求
+- `--memory 2g --cpus 2 --pids-limit 100`：资源限制，防止资源耗尽攻击
+- `--user 1000:1000`：不以 root 身份运行
+
+这是"最小权限容器"的教科书配置。但注意，`--network none` 意味着 Claude 连 API 请求都发不出去。实际使用时需要通过代理或特定网络配置来放行 Anthropic API 端点。
+
+### Agent SDK 场景
+
+用 Agent SDK 构建自动化流水线时，容器是标准的隔离方式。SDK 本身支持编程式配置 sandbox：
+
+```python
+from claude_agent_sdk import query, ClaudeAgentOptions, SandboxSettings
+
+sandbox_settings = SandboxSettings(
+    enabled=True,
+    autoAllowBashIfSandboxed=True,
+    network={"allowLocalBinding": True},
+)
+
+async for message in query(
+    prompt="Build and test my project",
+    options=ClaudeAgentOptions(sandbox=sandbox_settings),
+):
+    print(message)
+```
+
+### 什么时候用
+
+- CI/CD 流水线，Claude Code 需要在无交互环境跑
+- Agent SDK 构建的自动化系统
+- 你对容器安全有专业要求，需要精确控制每一个安全参数
+- 需要在多个环境中复现一致的执行环境
+
+## 虚拟机
+
+虚拟机提供最强的隔离——独立的内核，在云部署中还有独立的虚拟化硬件。
+
+### 三种 VM 方案
+
+**云实例**：在 AWS、GCP、Azure 上开一个虚拟机，装好 Claude Code，通过 SSH 连接。爆炸半径被限制在云实例内，跟你的本机完全无关。
+
+**本地 Hypervisor**：用 macOS 的 Virtualization.framework、Linux 的 KVM/QEMU、Windows的 Hyper-V 跑本地虚拟机。你需要自己管理虚拟机的创建和销毁，但不需要云费用。
+
+**MicroVM**：用 Firecracker 或类似技术跑轻量级虚拟机。Docker Desktop 的沙箱功能就提供了一个基于 microVM 的方案——有自己的 Docker daemon 和工作区同步。启动快、开销小，适合需要频繁创建销毁的场景。
+
+### 和容器的本质区别
+
+容器共享宿主机的内核。虚拟机有自己独立的内核。这意味着：
+
+- 容器内的 root 进程理论上可以通过内核漏洞影响宿主机
+- 虚拟机内的 root 进程只能影响虚拟机本身
+
+对于绝大多数场景，容器隔离已经足够。但如果你在评估不受信任的代码，或者安全策略明确要求内核级隔离，VM 是唯一的选择。
+
+### 什么时候用
+
+- 安全策略要求内核级隔离
+- 你在处理不受信任的代码（比如开源贡献审核、漏洞研究）
+- 合规要求明确规定必须使用虚拟化隔离
+- 你用 Docker Desktop，它的沙箱功能恰好满足你的需求
+
+## 威胁模型对比
+
+选哪种方案，取决于你在防御什么。下面这张表把五种方案放在一个坐标系里。
+
+### 隔离强度对比
+
+| 方案 | 隔离范围 | 内核隔离 | 网络控制 | 文件系统隔离 | 需要额外安装 |
+|------|---------|---------|---------|-------------|-------------|
+| 内置 Bash Sandbox | Bash 子进程 | 否 | 白名单提示 | 工作目录写入限制 | 否 |
+| Dev Container | 容器内全部 | 否 | 可配 iptables | 容器边界 | Docker Desktop |
+| Docker 自定义容器 | 容器内全部 | 否 | 可完全断网 | 容器边界 + mount 控制 | Docker |
+| 虚拟机 | 完整 OS | 是 | 完全独立 | 完全独立 | Hypervisor / 云 |
+| Claude Code 网页版 | 服务端 | 是 | 完全隔离 | 无本地访问 | 无 |
+
+### 威胁场景到方案映射
+
+**"我只是日常开发，不想 Claude 误操作删掉我 home 目录"**
+
+内置 Bash Sandbox 就够了。它默认限制写入范围在工作目录，防止了最常见的误操作。
+
+**"我处理公司项目，本机有 SSH key 和云凭证"**
+
+至少用 Dev Container。容器边界确保 Claude 看不到你 home 目录里的凭证。或者用内置 Sandbox + 文件系统 deny 规则保护敏感路径。
+
+**"我在 CI 里跑 Claude Code Agent，需要无人值守"**
+
+Docker 自定义容器 + `bypassPermissions`。CI 环境本身就是隔离的，容器内放开权限提升效率。但要用 `--network` 限制网络访问、用 `--read-only` 保护文件系统。
+
+**"我要让 Claude 审核不受信任的开源贡献"**
+
+虚拟机。PR 里的代码可能包含 prompt injection，审核过程中 Claude 会读取这些代码。你需要最强的隔离——独立的内核、独立的文件系统、独立的网络。审核完销毁虚拟机。
+
+**"我是团队管理员，要给全组织统一安全策略"**
+
+通过托管设置（Managed Settings）强制开启内置 Bash Sandbox：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false
+  }
+}
+```
+
+`failIfUnavailable: true` 确保——如果操作系统不支持沙箱（比如某些精简的 Linux 环境），Claude Code 直接拒绝启动，而不是降级运行。
+
+### 防御层次叠加
+
+安全不是选一个方案就完事。实际部署往往是多层叠加：
+
+```
+虚拟机 (最强隔离)
+  └─ Docker 容器 (环境一致 + 资源限制)
+      └─ 内置 Bash Sandbox (Bash 命令级隔离)
+          └─ 权限模式 (操作审批)
+              └─ deny 规则 (硬性限制)
+```
+
+每一层挡不住的东西，下一层来兜底。最极端的场景下你可以五层全上。日常开发可能只用权限模式 + 内置 Bash Sandbox 两层就够了。
+
+## 组织级强制执行
+
+个人可以选择任意方案。但组织管理者需要强制执行——不能靠开发者自觉。
+
+### 内置 Bash Sandbox：唯一可以被 Claude Code 强制执行的方案
+
+通过托管设置下发，Claude Code 自身检查 sandbox 是否启用。如果配置了 `failIfUnavailable: true`，sandbox 不可用就直接拒绝启动。
+
+### Dev Container：约定而非强制
+
+把 `.devcontainer/devcontainer.json` 提交到仓库，团队成员使用 VS Code 打开项目时会自动进入容器。但 Claude Code 不会检查自己是否在容器里运行——开发者可以跳过 Dev Container 直接在本机跑 Claude Code。如果要强制，需要通过组织的设备管理工具（MDM）或软件白名单来实现。
+
+### Docker 自定义容器和 VM：通过分发渠道控制
+
+只通过批准的镜像分发 Claude Code，用 MDM 或软件白名单防止在本机安装。这已经不是 Claude Code 自身能管的事情了，需要组织的基础设施策略来支撑。
+
+## 关键要点
+
+- Sandbox 和权限模式解决不同的问题：权限模式管"能不能做"，sandbox 管"做了之后的爆炸半径"
+- 内置 Bash Sandbox 是最简单的起步方案，不需要额外安装，macOS 用 Seatbelt、Linux 用 bubblewrap 做操作系统级隔离
+- 内置 Bash Sandbox 只管 Bash 子进程，不管 Claude 的 Read / Edit / Write 工具——这些走权限系统
+- Dev Container 把整个 Claude Code 装进容器，所有工具都受容器边界限制，适合团队统一环境
+- Docker 自定义容器适合 CI/CD 和 Agent SDK 场景，可以精确控制 capabilities、seccomp、网络、资源限制
+- 虚拟机提供内核级隔离，适合审核不受信任代码或合规要求严格的场景
+- 威威模型决定方案选择：日常开发用内置 Sandbox，CI 用 Docker 容器，不受信任代码审核用虚拟机
+- 安全是多层叠加的，不是单选题——内置 Sandbox + 权限模式 + deny 规则是日常开发的标准组合
+
+## 延伸阅读
+
+- [Claude Code 官方 Sandbox 文档](https://code.claude.com/docs/en/sandboxing) — 内置 Bash Sandbox 的配置方法和文件系统/网络隔离选项
+- [Choose a sandbox environment](https://code.claude.com/docs/en/sandbox-environments) — 五种隔离方案的官方对比表
+- [Dev Container 集成](https://code.claude.com/docs/en/devcontainer) — VS Code Dev Container 的配置方法
+- [Agent SDK 安全部署](https://code.claude.com/docs/en/agent-sdk/secure-deployment) — Docker 容器加固配置和安全建议
+- [第 43 篇：Permission Modes 全解](43-permission-modes-explained.md) — 权限模式是 sandbox 的互补层
+- [第 49 篇：Prompt Injection 与工具投毒](49-prompt-injection-tool-poisoning.md) — 理解为什么需要 sandbox 的攻击面分析

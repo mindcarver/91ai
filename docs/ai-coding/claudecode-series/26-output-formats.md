@@ -1,0 +1,295 @@
+# 输出格式与结构化结果
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 的非交互模式（`claude -p`）支持四种输出方式：`text`（纯文本，默认）、`json`（结构化 JSON，含 session_id、费用、token 用量等元数据）、`stream-json`（流式 JSON，逐行输出事件，适合实时处理）、`json` + `--json-schema`（约束输出结构，拿到确定性格式的数据）。写脚本解析用 `json`，实时显示用 `stream-json`，人眼看用 `text`。
+
+## 为什么这很重要
+
+第 15 篇讲了非交互模式（`claude -p`），让 Claude Code 跑在管道和脚本里。但跑完之后你拿到的是什么？
+
+如果只是 `text`，你拿到一坨文字。想从中提取信息得靠正则或 grep，脆弱又不靠谱。
+
+`json` 和 `stream-json` 给你结构化的、机器可读的输出。你能拿到 Claude 的回复内容、本次会话 ID、消耗的 token 数和费用、是否出错、执行耗时。这些信息在 CI/CD、自动化流水线、成本监控里都能直接用。
+
+## 四种格式
+
+### text（默认）
+
+纯文本，直接输出 Claude 的回复内容。不带任何元数据。
+
+```bash
+claude -p "解释什么是闭包"
+```
+
+输出就是一段文字。人看没问题，程序解析不靠谱。
+
+适合场景：手动跑一次、结果贴到文档里、管道下游不需要元数据。
+
+### json
+
+一个 JSON 对象，包含回复内容和完整的元数据。
+
+```bash
+claude -p "总结这个项目" --output-format json
+```
+
+输出结构：
+
+```json
+{
+  "result": "这是一个 React 项目...",
+  "session_id": "abc123def456",
+  "is_error": false,
+  "total_cost_usd": 0.042,
+  "duration_ms": 8350,
+  "duration_api_ms": 7800,
+  "num_turns": 2,
+  "usage": {
+    "input_tokens": 15230,
+    "output_tokens": 890,
+    "cache_creation_input_tokens": 12000,
+    "cache_read_input_tokens": 0
+  },
+  "model_usage": {
+    "claude-sonnet-4-20250514": {
+      "inputTokens": 15230,
+      "outputTokens": 890,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 12000,
+      "costUSD": 0.042,
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000
+    }
+  }
+}
+```
+
+关键字段：
+
+| 字段 | 含义 |
+|------|------|
+| `result` | Claude 的回复文本 |
+| `session_id` | 会话 ID，可用于后续 `--resume` 恢复 |
+| `is_error` | 是否出错 |
+| `total_cost_usd` | 本次调用预估费用（美元） |
+| `duration_ms` | 总耗时（毫秒） |
+| `duration_api_ms` | API 调用耗时（毫秒） |
+| `num_turns` | 对话轮数（工具调用会增加轮数） |
+| `usage` | 总 token 消耗 |
+| `model_usage` | 按模型拆分的 token 和费用明细 |
+
+适合场景：脚本解析、CI 流水线、成本追踪、结果入库。
+
+### stream-json
+
+流式输出，每一行是一个 JSON 对象（NDJSON 格式）。适合实时处理。
+
+```bash
+claude -p "解释递归" --output-format stream-json --verbose --include-partial-messages
+```
+
+每行是一个事件。事件类型包括：
+
+- **文本片段**：token 级别的流式输出，逐字生成
+- **工具调用**：Claude 在用哪个工具、参数是什么
+- **工具结果**：工具执行后的返回
+- **最终结果**：包含和 `json` 格式一样的元数据
+
+`--verbose` 让输出包含更完整的信息，`--include-partial-messages` 让你拿到逐 token 的流式文本。
+
+用 `jq` 过滤特定事件：
+
+```bash
+# 只显示流式文本，不显示其他事件
+claude -p "Write a poem" --output-format stream-json --verbose --include-partial-messages | \
+  jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text'
+```
+
+适合场景：实时显示进度、流式 UI、长时间任务的进度监控。
+
+### 结构化输出（json + json-schema）
+
+配合 `--json-schema` 约束 Claude 的输出格式：
+
+```bash
+claude -p "列出这个项目的依赖" \
+  --output-format json \
+  --json-schema '{
+    "type": "object",
+    "properties": {
+      "dependencies": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "version": {"type": "string"}
+          }
+        }
+      }
+    }
+  }'
+```
+
+输出的 `structured_output` 字段会严格遵循你定义的 schema。不再是自由文本，而是可以直接反序列化的结构化数据。
+
+适合场景：CI 里提取结构化信息、自动化流水线对接下游系统、需要确定性格式的场景。
+
+## 适用场景
+
+### 场景一：CI 流水线里的代码审查
+
+```bash
+# CI 脚本里
+RESULT=$(claude -p "审查 src/ 目录的代码质量" --output-format json)
+
+# 检查是否出错
+IS_ERROR=$(echo "$RESULT" | jq -r '.is_error')
+if [ "$IS_ERROR" = "true" ]; then
+  echo "审查失败"
+  echo "$RESULT" | jq -r '.errors[]'
+  exit 1
+fi
+
+# 提取结果
+REVIEW=$(echo "$RESULT" | jq -r '.result')
+COST=$(echo "$RESULT" | jq -r '.total_cost_usd')
+echo "审查完成，费用: \$$COST"
+echo "$REVIEW"
+```
+
+### 场景二：批量处理的成本监控
+
+```bash
+#!/bin/bash
+TOTAL_COST=0
+for file in src/*.ts; do
+  RESULT=$(claude -p "为 $file 写单元测试" --output-format json)
+  COST=$(echo "$RESULT" | jq -r '.total_cost_usd // 0')
+  TOTAL_COST=$(echo "$TOTAL_COST + $COST" | bc)
+  echo "$file: \$$COST"
+done
+echo "总费用: \$$TOTAL_COST"
+```
+
+### 场景三：实时进度展示
+
+```bash
+#!/bin/bash
+claude -p "重构 auth 模块" --output-format stream-json --verbose --include-partial-messages | \
+while IFS= read -r line; do
+  TYPE=$(echo "$line" | jq -r '.type // empty')
+  case "$TYPE" in
+    "content_block_delta")
+      TEXT=$(echo "$line" | jq -r '.delta.text // empty')
+      printf "%s" "$TEXT"
+      ;;
+    "tool_use")
+      TOOL=$(echo "$line" | jq -r '.name // empty')
+      echo ""
+      echo "[调用工具: $TOOL]"
+      ;;
+    "result")
+      echo ""
+      echo "--- 完成 ---"
+      echo "$line" | jq '{cost: .total_cost_usd, turns: .num_turns}'
+      ;;
+  esac
+done
+```
+
+### 场景四：结构化数据提取
+
+```bash
+# 提取项目的技术栈信息，输出为确定的 JSON 结构
+claude -p "分析 package.json，列出技术栈" \
+  --output-format json \
+  --json-schema '{
+    "type": "object",
+    "properties": {
+      "framework": {"type": "string"},
+      "language": {"type": "string"},
+      "testRunner": {"type": "string"},
+      "buildTool": {"type": "string"}
+    },
+    "required": ["framework", "language"]
+  }'
+```
+
+`structured_output` 字段就是严格按 schema 输出的 JSON，直接 `jq` 提取。
+
+## 脚本解析的注意事项
+
+### jq 是你的朋友
+
+解析 JSON 输出用 `jq`。别用 grep 或正则解析 JSON，容易出错：
+
+```bash
+# 提取回复文本
+claude -p "xxx" --output-format json | jq -r '.result'
+
+# 提取费用
+claude -p "xxx" --output-format json | jq -r '.total_cost_usd // 0'
+
+# 提取会话 ID（用于后续恢复）
+claude -p "xxx" --output-format json | jq -r '.session_id'
+```
+
+### 费用是预估值
+
+`total_cost_usd` 是客户端计算的预估值，和实际账单可能有差异。做成本监控可以用，做精确计费不靠谱。
+
+### 错误处理要双重检查
+
+```bash
+RESULT=$(claude -p "xxx" --output-format json 2>&1)
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "Claude Code 执行失败，退出码: $EXIT_CODE"
+  echo "$RESULT"
+  exit 1
+fi
+
+IS_ERROR=$(echo "$RESULT" | jq -r '.is_error // false')
+if [ "$IS_ERROR" = "true" ]; then
+  echo "执行出错:"
+  echo "$RESULT" | jq -r '.errors[]? // "未知错误"'
+  exit 1
+fi
+```
+
+两道检查：先看进程退出码（进程级别失败），再看 `is_error` 字段（API 级别失败）。都过了才算成功。
+
+### stream-json 逐行处理
+
+`stream-json` 的每一行都是独立的 JSON。用 `while read` 逐行处理：
+
+```bash
+claude -p "xxx" --output-format stream-json | while IFS= read -r line; do
+  echo "$line" | jq -r '.type // empty'
+done
+```
+
+不要试图把整个输出一次性读进来。流式输出的意义就是边生成边处理。
+
+### json-schema 不是万能的
+
+`--json-schema` 能约束输出结构，但不能保证内容准确性。Claude 可能输出结构正确但内容编造的 JSON。对关键数据做二次校验。
+
+## 关键要点
+
+- 四种输出方式：`text`（人看）、`json`（脚本解析）、`stream-json`（实时处理）、`json` + `--json-schema`（结构化输出）。
+- `json` 格式包含完整元数据：会话 ID、费用、耗时、token 用量、按模型拆分的明细。
+- `--json-schema` 约束输出结构，适合需要确定性格式的 CI 场景。
+- 脚本里用 `jq` 解析，别用正则。
+- 费用是预估值。错误处理要看两道：进程退出码和 `is_error` 字段。
+
+## 延伸阅读
+
+- [第 15 篇：非交互模式](15-non-interactive-mode.md) -- `claude -p` 的基础用法
+- [第 16 篇：管道和 Unix 用法](16-pipe-and-unix-usage.md) -- 把 Claude Code 嵌入 Unix 管道
+- [第 20 篇：后台任务命令](20-background-tasks.md) -- 后台任务的输出和状态管理
+- [第 27 篇：--bare 和脚本速度优化](27-bare-mode-speed.md) -- 脚本场景下的启动优化
+- [Claude Code 官方 Headless 模式文档](https://code.claude.com/docs/en/headless) -- 非交互模式的完整参考

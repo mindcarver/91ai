@@ -1,0 +1,289 @@
+# Skills 入门：把重复任务变成可复用能力
+
+> 更新日期：2025/06
+
+**TL;DR：** Skill 是 Claude Code 的标准操作手册。你写一份 `SKILL.md`，Claude 会在需要时自动加载并按流程执行。和 CLAUDE.md 的区别是：CLAUDE.md 的每一行都常驻上下文，Skill 只在触发时才加载，长篇参考资料不占 token。2026 年 1 月起，自定义 Slash Commands 已经并入 Skills，旧文件继续能用，新能力建议用 Skills 格式。
+
+## Skill 是什么（用大白话说）
+
+你入职一家公司，老员工给你一份操作手册："收到客户投诉，先查订单号，再看物流状态，最后回复邮件模板 A。" 你照着做就行，不用每次都从零想。
+
+Skill 就是给 Claude 写的这份操作手册。
+
+具体来说，一个 Skill 是一个目录，里面有一个 `SKILL.md` 文件：
+
+```
+my-skill/
+├── SKILL.md           # 主指令（必需）
+├── template.md        # 可选：输出模板
+├── examples.md        # 可选：示例
+└── scripts/
+    └── validate.sh    # 可选：脚本
+```
+
+Claude Code 启动时只读取每个 Skill 的名称和描述（几行文本）。当你聊到相关话题，Claude 才加载 `SKILL.md` 的完整内容。如果 Skill 引用了其他文件，那些文件也是按需读取。
+
+这意味着一个 200 行的 Skill，不触发时在上下文里只占一行描述文本。这是它和 CLAUDE.md 最大的区别。
+
+### CLAUDE.md vs Skill：什么时候用什么
+
+| | CLAUDE.md | Skill |
+|---|---|---|
+| 加载方式 | 每次会话全量加载 | 按需加载，只读描述 |
+| 适合放什么 | 项目规范、命名约定、架构约束 | 操作流程、检查清单、参考资料 |
+| token 成本 | 每行都算 | 不触发时不占 |
+| 触发方式 | 自动（始终在场） | 自动匹配描述，或手动 `/skill-name` |
+
+一句话判断：**如果这段话每次对话都要知道，放 CLAUDE.md；如果只在特定任务时才需要，放 Skill。**
+
+## 什么时候该用 Skill 而不是 Command
+
+如果你读过第 34 篇（自定义 Slash Commands），可能想知道为什么还要学 Skill。背景是：2026 年 1 月，Anthropic 把自定义 Slash Commands 并入了 Skills 系统。旧的 `.claude/commands/` 文件继续能用，但 Skills 多了几个能力。
+
+**从 Command 升级到 Skill 的信号：**
+
+- 你的 `.claude/commands/deploy.md` 超过 50 行，每次改都要塞进上下文
+- 你想在命令旁边附带模板文件、示例文件或脚本
+- 你希望 Claude 在没有手动输入 `/deploy` 的情况下，看到你问"准备上线"就能自动触发
+- 你想控制谁能调用——只有你手动触发，还是 Claude 也能自动触发
+
+如果只是三五行简单指令，Command 够用。但只要出现上面任何一个信号，就该考虑 Skill 了。
+
+## 第一个 Skill：从零开始
+
+目标：创建一个 Skill，帮你总结当前 git 仓库的未提交改动，并标记风险点。
+
+### 步骤 1：创建目录
+
+```bash
+mkdir -p ~/.claude/skills/summarize-changes
+```
+
+`~/.claude/skills/` 是个人级目录，所有项目都能用。
+
+### 步骤 2：写 SKILL.md
+
+把以下内容保存为 `~/.claude/skills/summarize-changes/SKILL.md`：
+
+```markdown
+---
+description: 总结未提交的代码变更并标记风险。当用户问改了什么、想写 commit message、或想 review diff 时使用。
+---
+
+## 当前变更
+
+!`git diff HEAD`
+
+## 指令
+
+用两三个要点总结上面的变更，然后列出你注意到的风险，比如缺少错误处理、硬编码值、需要补充测试。如果 diff 为空，说明没有未提交的变更。
+```
+
+这段内容有三个关键部分：
+
+1. **YAML frontmatter**（`---` 之间）：`description` 字段告诉 Claude 什么时候该用这个 Skill
+2. **动态注入**（`` !`git diff HEAD` ``）：Claude Code 在加载 Skill 前先执行命令，把输出插入到内容里
+3. **指令部分**：告诉 Claude 怎么处理数据
+
+### 步骤 3：测试
+
+打开一个 git 项目，随便改个文件，启动 Claude Code：
+
+```bash
+claude
+```
+
+两种触发方式：
+
+```text
+# 方式 1：自然语言触发（Claude 自动匹配 description）
+> 我改了什么？
+
+# 方式 2：手动调用
+> /summarize-changes
+```
+
+两种方式都应该返回：你改动的摘要 + 风险提示。
+
+## Skill 的核心组成
+
+### YAML frontmatter
+
+放在 `SKILL.md` 开头，用 `---` 包裹。常用字段：
+
+```yaml
+---
+name: my-skill                    # 显示名称（可选，默认用目录名）
+description: 做什么、什么时候用      # 推荐写，Claude 靠它判断是否触发
+when_to_use: 附带的触发场景描述      # 可选，追加到 description
+argument-hint: "[issue-number]"   # 可选，自动补全时的参数提示
+arguments: issue branch           # 可选，命名参数，用 $issue $branch 引用
+disable-model-invocation: true    # 可选，禁止 Claude 自动调用，只允许手动 /name
+user-invocable: false             # 可选，从 / 菜单隐藏，只让 Claude 用
+allowed-tools: Bash(git *)        # 可选，Skill 激活时免确认的工具
+context: fork                     # 可选，在子 agent 中运行
+---
+```
+
+只有 `description` 推荐写。其他都按需。
+
+### Markdown 内容
+
+frontmatter 之后就是 Claude 执行时看到的指令。写法和写 prompt 一样——但要简洁。Claude 已经知道什么是 PDF、什么是 REST API，不需要解释这些概念。
+
+一个反面例子：
+
+```markdown
+## PDF 处理
+
+PDF（Portable Document Format）是一种常见的文件格式，包含文本、
+图片和其他内容。要提取文本，你需要使用一个库。有很多可用的库，
+但 pdfplumber 推荐使用，因为它易用且能处理大多数情况……
+```
+
+正面例子：
+
+```markdown
+## PDF 处理
+
+用 pdfplumber 提取文本：
+
+​```python
+import pdfplumber
+with pdfplumber.open("file.pdf") as pdf:
+    text = pdf.pages[0].extract_text()
+​```
+```
+
+区别在于：反面例子在解释 Claude 已知的知识。正面例子直接给出方案。
+
+### 附带文件
+
+当 `SKILL.md` 内容超过 500 行，把详细内容拆到单独文件：
+
+```
+pdf-skill/
+├── SKILL.md              # 主指令 + 导航索引
+├── FORMS.md              # 表单填写指南
+├── reference.md          # API 参考
+└── examples.md           # 使用示例
+```
+
+在 `SKILL.md` 里用链接指向它们：
+
+```markdown
+## 进阶内容
+
+- 表单填写：见 [FORMS.md](FORMS.md)
+- API 参考：见 [reference.md](reference.md)
+- 使用示例：见 [examples.md](examples.md)
+```
+
+Claude 只在需要时才读这些文件。这是 Skill 省 token 的核心机制。
+
+## 触发描述怎么写
+
+`description` 是 Skill 最重要的一行。Claude 用它决定"当前对话是否该加载这个 Skill"。如果你的 Skill 有 100 个可用，Claude 只看描述来筛选。
+
+### 写法原则
+
+- 用第三人称（"处理 PDF 文件"，不是"我可以帮你处理"）
+- 包含做什么 + 什么时候用
+- 写出用户会说的关键词
+
+### 好的描述
+
+```yaml
+description: 总结未提交的代码变更并标记风险。当用户问改了什么、想写 commit message、或想 review diff 时使用。
+```
+
+```yaml
+description: 分析 Excel 表格、创建透视表、生成图表。当用户提到 Excel 文件、电子表格、.xlsx 时使用。
+```
+
+### 不好的描述
+
+```yaml
+description: 帮助处理文档
+```
+
+```yaml
+description: 处理数据
+```
+
+太泛了。Claude 没法判断"用户问 commit message"和"处理文档"有什么关系。
+
+### 如果 Skill 不该被自动触发
+
+比如部署操作，你不希望 Claude 看到代码写完就自动部署：
+
+```yaml
+---
+description: 部署应用到生产环境
+disable-model-invocation: true
+---
+```
+
+加了 `disable-model-invocation: true`，Claude 不会自动调用。只有你手动输入 `/deploy` 才触发。
+
+## Skill 的存放位置
+
+| 位置 | 路径 | 谁能用 |
+|------|------|--------|
+| 个人级 | `~/.claude/skills/<name>/SKILL.md` | 你所有项目 |
+| 项目级 | `.claude/skills/<name>/SKILL.md` | 这个项目的人 |
+| 企业级 | 通过 managed settings 分发 | 组织内所有人 |
+
+同名时的优先级：企业级 > 个人级 > 项目级。
+
+项目级 Skill 可以提交到 git 仓库，整个团队共享。比如：
+
+```bash
+# 项目级 Skill——帮团队统一 commit 风格
+.claude/skills/commit/
+└── SKILL.md
+```
+
+个人级放在 home 目录，跨项目通用。比如你个人的代码审查偏好、常用的调试流程。
+
+另外，Claude Code 支持热更新：你改了 Skill 文件，当前会话立刻生效，不用重启。新增的顶层目录需要重启才能识别。
+
+## 常见问题
+
+### Skill 没有被自动触发
+
+按顺序检查：
+
+1. `description` 里有没有包含用户会说的关键词
+2. 在 Claude Code 里问 "What skills are available?"，确认 Skill 出现在列表中
+3. 试着把你的请求措辞改得更贴近 description
+4. 先用手动 `/skill-name` 确认 Skill 本身能正常工作
+
+### Skill 被误触发（不该用的时候用了）
+
+两个办法：
+
+1. 让 `description` 更具体，缩小适用范围
+2. 加 `disable-model-invocation: true`，改成纯手动触发
+
+### 有很多 Skill 时描述被截断
+
+当可用 Skill 数量多时，描述有字符预算（模型上下文窗口的 1%）。超出时，最不常用的 Skill 描述会被截断。两个对策：
+
+- 把关键信息放在描述前面
+- 在 `skillOverrides` 里把低优先级的设为 `name-only`
+
+## 关键要点
+
+- **Skill = 按需加载的操作手册**。不触发时只占一行描述的 token，触发后才加载完整指令。
+- **CLAUDE.md 放事实，Skill 放流程**。项目规范、命名约定放 CLAUDE.md；操作步骤、检查清单放 Skill。
+- **description 是关键**。写清楚"做什么"和"什么时候用"，Claude 才能在对的时刻触发。
+- **超过 50 行的 Command 应该升级为 Skill**。Skill 支持附带文件、动态注入、自动触发，Command 不支持。
+- **存放位置决定可见范围**。个人级放 `~/.claude/skills/`，项目级放 `.claude/skills/`，可以提交到 git 共享。
+
+## 延伸阅读
+
+- [Claude Code 官方 Skills 文档](https://code.claude.com/docs/en/skills) — 完整的 frontmatter 字段、高级模式、排错
+- [Agent Skills 最佳实践](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) — 写高质量 Skill 的官方指南
+- [29 - 内置 Slash Commands 地图](29-built-in-slash-commands.md) — Claude Code 自带的命令和捆绑 Skills
+- [35 - `.claude` 目录全景](35-dot-claude-directory-overview.md) — 理解 Skill 在 `.claude` 目录中的位置

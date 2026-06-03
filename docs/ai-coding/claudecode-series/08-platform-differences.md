@@ -1,0 +1,305 @@
+# Windows / WSL / macOS / Linux：平台差异和注意事项
+
+> 更新日期：2025/06
+
+**TL;DR：** macOS 和 Linux 原生体验最好。Windows 原生支持在 2025 年底有了质的飞跃——现在连 Git Bash 都不装也能跑。WSL2 仍是 Windows 用户的主力方案，支持沙盒而原生 Windows 不支持。选哪个平台不只是"装得上"的问题——shell 差异、路径格式、权限模型、终端能力都会影响你的日常使用。这篇文章把各平台的真实差异说清楚，帮你在遇到问题时知道该从哪里查。
+
+## 平台差异总览
+
+| 维度 | macOS | Linux | Windows（原生） | WSL |
+|------|-------|-------|-----------------|-----|
+| 安装方式 | 原生脚本 / Homebrew | 原生脚本 / apt / dnf / apk | 原生脚本 / WinGet | 按 Linux 方式装 |
+| 默认 Shell | zsh / bash | bash | PowerShell / Git Bash | bash |
+| 路径格式 | `/Users/...` | `/home/...` | `C:\Users\...` 或 `/c/...` | `/mnt/c/Users/...` |
+| 文件权限 | Unix 原生 | Unix 原生 | 无执行权限位 | 依赖 WSL 版本 |
+| 终端体验 | Terminal.app / iTerm2 | 各种终端模拟器 | Windows Terminal | Windows Terminal |
+| OAuth 登录 | 浏览器自动打开 | 浏览器自动打开 | 浏览器自动打开 | 可能打不开浏览器 |
+| 沙盒支持 | 支持 | 支持 | **不支持** | WSL2 支持 |
+| Shell 工具 | Bash | Bash | PowerShell + Bash（需 Git for Windows） | Bash |
+| 已知问题 | 少 | 少 | 路径格式、PowerShell 兼容性 | 浏览器 OAuth、跨文件系统性能 |
+
+一句话总结：**能用 Unix 就用 Unix**。如果你的主力系统是 Windows，优先用 WSL2（支持沙盒）。Windows 原生支持在持续改善，但缺少沙盒且路径格式问题仍然存在。
+
+## macOS
+
+macOS 是 Claude Code 开发和测试的主要平台，体验最顺滑。
+
+### 安装
+
+推荐原生安装（一行命令，不需要 Node.js）：
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+如果你习惯 Homebrew，也可以：
+
+```bash
+brew install --cask claude-code
+```
+
+两种方式都能用。原生安装的版本更新最快，Homebrew 的稳定版比 latest 晚大约一周。
+
+### 可能遇到的问题
+
+**Keychain 弹窗**
+
+首次登录时，macOS 可能弹出 Keychain 访问确认。点"始终允许"就行，之后不会再弹。如果你点了"拒绝"，后续认证可能失败——去"钥匙串访问"里手动重置 `claude` 相关条目。
+
+**dyld 错误**
+
+如果你看到 `dyld: Library not loaded` 或者 `code signature invalid`，通常是二进制文件下载不完整导致的。删掉 `~/.local/bin/claude` 重新安装一次就好。
+
+**Gatekeeper 阻止**
+
+macOS 可能提示"无法验证开发者"。在"系统设置 > 隐私与安全性"里点"仍要打开"，或者用命令行绕过：
+
+```bash
+xattr -d com.apple.quarantine ~/.local/bin/claude
+```
+
+## Linux
+
+Linux 和 macOS 一样是 Unix 体系，Claude Code 跑在上面几乎不会有兼容性问题。
+
+### 各发行版安装
+
+Ubuntu / Debian 用 apt，Fedora / RHEL 用 dnf，Alpine 用 apk。具体命令在[安装指南](./06-installation-guide.md)里有完整说明。
+
+### 需要注意的发行版：Alpine
+
+Alpine 用的是 musl libc 而不是 glibc，这会导致一些运行时问题。装完 Claude Code 后需要额外安装依赖：
+
+```bash
+apk add libgcc libstdc++ ripgrep
+export USE_BUILTIN_RIPGREP=0
+```
+
+`USE_BUILTIN_RIPGREP=0` 这个环境变量是告诉 Claude Code 用系统的 ripgrep 而不是自带的版本，因为自带的版本链接的是 glibc，在 Alpine 上跑不起来。
+
+### 无头服务器
+
+在纯命令行的 Linux 服务器上（比如云主机），OAuth 登录时会给你一个 URL 让你手动在浏览器里打开。这和桌面环境不同——桌面环境会自动打开浏览器。在服务器上操作流程：
+
+1. 启动 `claude`
+2. 终端显示一个 `https://console.anthropic.com/...` 的 URL
+3. 在你本地电脑的浏览器里打开这个 URL 完成授权
+4. 回到终端，认证自动完成
+
+## Windows（原生）
+
+Windows 原生支持在 2025 年底有了质的提升——不再需要 WSL 也能跑了。2026 年 5 月的更新进一步移除了对 Git Bash 的硬性依赖，Windows 原生 PowerShell 就够了。但"能跑"和"跑得好"之间还有一些差距。
+
+### 前置条件
+
+- **Windows 10 1809+** 或 Windows 11
+- **Git for Windows**：不再是硬性依赖，但强烈推荐。装了 Git for Windows 之后，Claude Code 会多一个 Bash 工具可用，跑 shell 脚本时兼容性更好。不装的话 Claude Code 只用 PowerShell
+- **Windows Terminal**：强烈推荐，比传统 CMD 或 PowerShell 窗口好用很多
+
+### 安装
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+或者用 WinGet：
+
+```powershell
+winget install Anthropic.ClaudeCode
+```
+
+### 路径格式：最大的坑
+
+Windows 用反斜杠 `\` 作路径分隔符，Unix 用正斜杠 `/`。Claude Code 内部统一用 Unix 格式，但 Windows 环境变量和 PowerShell 吐出来的路径是 `\` 格式的。
+
+更麻烦的是 Git Bash 的 MINGW 路径。Git Bash 把 `C:\Users\carver\project` 显示为 `/c/Users/carver/project`。当 Claude Code 在 Git Bash 里运行时，它拿到的是 MINGW 格式的路径，但实际操作文件时需要 Windows 格式。这个转换偶尔会出问题。
+
+常见的路径问题：
+
+- `No such file or directory`：路径格式不匹配，检查是 `\` 还是 `/`
+- MINGW 路径转换失败：`/c/` 开头的路径没有被正确转换成 `C:\`
+- 相对路径解析不一致：在 PowerShell 和 Git Bash 里，同一个相对路径可能指向不同的位置
+
+### PowerShell 兼容性
+
+Claude Code 在 Windows 上默认用 PowerShell。大部分 bash 命令能正常工作，但有些差异：
+
+- PowerShell 的字符串引号规则和 bash 不同
+- 环境变量的引用方式：bash 用 `$VAR`，PowerShell 用 `$env:VAR`
+- 管道行为在某些边界情况下不一样
+- PowerShell 5.x 的 TLS 版本太旧可能导致安装脚本下载失败，升级到 PowerShell 7+ 能解决
+
+### 实际建议
+
+如果你在 Windows 上用 Claude Code，推荐的工作方式：
+
+1. 安装 Windows Terminal + Git for Windows
+2. 在 Windows Terminal 里用 Git Bash 而不是 PowerShell 作为默认 shell
+3. 项目放在 Windows 原生文件系统上（`C:\Users\...`），不要放在 WSL 挂载路径里
+
+### Shell 工具配置
+
+Claude Code 在不同平台上用的 shell 工具不一样，这会影响它执行命令的方式：
+
+**PowerShell 工具**（Windows 默认，其他平台可选）：
+
+- Windows 上自动启用，不需要额外配置
+- macOS / Linux / WSL 上需要手动开启：`CLAUDE_CODE_USE_POWERSHELL_TOOL=1`
+- 已知限制：不会加载你的 PowerShell profile（`$PROFILE`），所以 profile 里配的别名和函数用不了
+- Windows 原生不支持沙盒，即使用 PowerShell 工具也一样
+
+**Bash 工具**（macOS / Linux 默认，Windows 需要 Git for Windows）：
+
+- Windows 上装了 Git for Windows 后自动启用
+- 如果你的 Git Bash 装在非标准路径，手动指定：
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_GIT_BASH_PATH": "C:\\Program Files\\Git\\bin\\bash.exe"
+  }
+}
+```
+
+你也可以通过设置文件指定默认 shell：
+
+```json
+{
+  "defaultShell": "powershell"
+}
+```
+
+这在 hooks 和 skills 里尤其有用——如果你的 hook 脚本是 PowerShell 写的，明确指定 shell 能避免执行失败。
+
+## WSL
+
+WSL（Windows Subsystem for Linux）是 Windows 用户使用 Claude Code的主流方案。本质上是 Windows 里跑了一个真正的 Linux 内核，Claude Code 把它当作 Linux 处理。
+
+一个重要的区别：**WSL2 支持沙盒，Windows 原生不支持**。沙盒会限制 Claude Code 能执行哪些命令、能访问哪些文件。如果你在意安全性，WSL2 是更好的选择。官方的对比：
+
+| 方案 | 前置条件 | 沙盒 | 适用场景 |
+|------|----------|------|----------|
+| Windows 原生 | 无（Git for Windows 可选） | 不支持 | Windows 原生项目 |
+| WSL 2 | 启用 WSL 2 | 支持 | Linux 工具链或需要沙盒 |
+| WSL 1 | 启用 WSL 1 | 不支持 | WSL 2 不可用时的备选 |
+
+### WSL1 vs WSL2
+
+**用 WSL2，别用 WSL1。** 这是唯一的建议。WSL1 没有真正的 Linux 内核，只做系统调用翻译。Claude Code 的二进制文件在 WSL1 上会报 `Exec format error`，因为某些系统调用不被支持。WSL2 跑的是完整 Linux 内核，没有这个问题。
+
+确认你用的是 WSL2：
+
+```bash
+wsl -l -v
+```
+
+如果 VERSION 列显示 1，升级它：
+
+```bash
+wsl --set-version Ubuntu 2
+```
+
+### 安装 Claude Code
+
+在 WSL2 里按 Linux 方式安装：
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+### 跨文件系统：性能陷阱
+
+WSL2 可以访问 Windows 文件（通过 `/mnt/c/`），Windows 也可以访问 WSL 文件（通过 `\\wsl$\`）。但是：
+
+**把项目放在 WSL 文件系统里**（`~/project`），而不是 Windows 文件系统里（`/mnt/c/Users/.../project`）。
+
+原因：WSL2 访问 `/mnt/c/` 路径时，需要经过 9P 文件协议协议翻译，IO 性能比原生 WSL 文件系统慢 3-5 倍。Claude Code 频繁读写文件、跑 git 命令，性能差异会很明显。
+
+### OAuth 登录问题
+
+WSL2 的一个经典问题：`claude` 启动后尝试打开浏览器做 OAuth，但 WSL2 里没有 GUI 环境，浏览器打不开。
+
+解决方法：
+
+```bash
+# 方法 1：让 WSL 能打开 Windows 浏览器（WSL2 通常自动支持）
+# 如果不行，手动设置 BROWSER 环境变量
+export BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+
+# 方法 2：用 --no-browser 标志，手动复制 URL
+claude --no-browser
+```
+
+大部分 WSL2 发行版已经能自动调用 Windows 浏览器。如果你用的是老版本 WSL 或者非标准发行版，可能需要手动设置。
+
+### nvm 冲突
+
+如果你在 WSL 里用 nvm 管理 Node.js，npm 全局安装的 Claude Code 可能和原生安装的版本冲突。推荐用原生安装方式（`curl` 脚本），不走 npm。
+
+## 跨平台注意事项
+
+不管你用什么平台，有几个共性问题值得知道。
+
+### 行尾符：CRLF vs LF
+
+Windows 用 `\r\n`（CRLF），Unix 用 `\n`（LF）。如果你的团队有人用 Windows 有人用 macOS/Linux，git diff 里可能看到满屏的行尾符变化。
+
+解决方法——在项目根目录放一个 `.gitattributes`：
+
+```
+* text=auto eol=lf
+```
+
+这会让所有文本文件统一用 LF。Claude Code 生成的代码默认用 LF，在 Windows 上通常也没问题。
+
+### 环境变量
+
+不同平台设置环境变量的方式不同：
+
+```bash
+# macOS / Linux（bash/zsh）
+export MY_VAR="value"
+
+# Windows PowerShell
+$env:MY_VAR = "value"
+
+# Windows CMD
+set MY_VAR=value
+```
+
+Claude Code 读取环境变量的方式是一致的（都是 Unix 风格的 `$VAR`），但你需要确保变量在你用的 shell 里正确设置了。如果 Claude Code 找不到某个环境变量，检查一下你启动 `claude` 时用的 shell 类型。
+
+### 脚本可移植性
+
+让 Claude Code 写脚本时，如果你需要跨平台使用，告诉它用 POSIX 兼容的语法。避免用 bash 专属特性（如 `[[` ）或者平台特定的命令路径。Python 脚本通常比 shell 脚本更容易跨平台。
+
+## 常见平台问题速查
+
+| # | 问题 | 平台 | 原因 | 解决 |
+|---|------|------|------|------|
+| 1 | `command not found: claude` | 全部 | PATH 没包含安装目录 | 把 `~/.local/bin` 加到 PATH |
+| 2 | `Exec format error` | WSL1 | 没有真正的 Linux 内核 | 升级到 WSL2 |
+| 3 | 浏览器打不开做 OAuth | WSL | 没有 GUI 环境 | 设置 `BROWSER` 环境变量或用 `--no-browser` |
+| 4 | `dyld: Library not loaded` | macOS | 二进制文件损坏 | 删掉重新安装 |
+| 5 | Gatekeeper 阻止运行 | macOS | 安全策略 | `xattr -d com.apple.quarantine` |
+| 6 | 路径中 `\` 和 `/` 混乱 | Windows | 路径分隔符差异 | 用 Git Bash，避免 PowerShell |
+| 7 | MINGW 路径转换失败 | Windows | `/c/` 没转成 `C:\` | 在 Windows 原生路径下操作 |
+| 8 | Alpine 运行时报缺库 | Alpine | musl libc 不兼容 | 装 `libgcc libstdc++ ripgrep` |
+| 9 | 文件 IO 特别慢 | WSL | 项目在 `/mnt/c/` 上 | 把项目移到 `~/` 下 |
+| 10 | TLS 错误无法下载 | Windows | PowerShell 版本太旧 | 升级 PowerShell 到 7+ |
+
+## 关键要点
+
+- **macOS 和 Linux 是一等公民**，安装和日常使用几乎没有平台特有的问题。遇到问题大概率是网络或配置问题，不是平台问题。
+- **Windows 原生支持在快速改善**——现在已经不依赖 Git Bash 也能跑了。但路径格式（反斜杠 vs 正斜杠、MINGW 路径转换）和 PowerShell 兼容性仍然是最常见的坑。推荐在 Windows Terminal 里用 Git Bash。注意 Windows 原生不支持沙盒。
+- **WSL2 是 Windows 用户的主力方案**，体验接近原生 Linux，而且支持沙盒。关键注意点：一定要用 WSL2（不是 WSL1），项目放在 WSL 文件系统里（不是 `/mnt/c/`），解决好浏览器 OAuth 问题。
+- **Shell 工具选择影响大**：macOS/Linux 默认用 Bash 工具，Windows 默认用 PowerShell 工具。装了 Git for Windows 后 Windows 上也能用 Bash 工具。可以通过 `CLAUDE_CODE_GIT_BASH_PATH` 和 `CLAUDE_CODE_USE_POWERSHELL_TOOL` 环境变量控制。
+- **跨平台的行尾符和环境变量差异**不是 Claude Code 特有的问题，但在团队协作中会经常碰到。提前配好 `.gitattributes` 能省很多麻烦。
+- 安装遇到问题先跑 `claude doctor`，它会检查你的环境配置并给出具体建议。安装细节参考[安装指南](./06-installation-guide.md)。
+
+## 延伸阅读
+
+- [Claude Code 官方安装排查文档](https://code.claude.com/docs/en/troubleshoot-install)：按平台分类的错误和解决方案
+- [WSL 官方文档 - 文件系统性能](https://learn.microsoft.com/en-us/windows/wsl/filesystems)：理解 WSL 跨文件系统性能差异的根因
+- [安装方式大全](./06-installation-guide.md)：各平台具体安装命令和步骤
+- [Claude Code 到底是什么](./01-what-is-claude-code.md)：了解 Claude Code 的核心定位

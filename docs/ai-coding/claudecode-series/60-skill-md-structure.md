@@ -1,0 +1,462 @@
+# SKILL.md 结构：一份文件的完整解剖
+
+> 更新日期：2025/06
+
+**TL;DR：** SKILL.md 是一个 Skill 的入口文件，由 YAML frontmatter 和 Markdown 指令两部分组成。frontmatter 里的 `description` 决定 Claude 什么时候自动触发，`allowed-tools` 控制权限，`disable-model-invocation` 决定能不能自动调用。Markdown 正文是 Claude 触发后看到的操作指令。附带的 resources 目录（scripts/、references/、examples/）按需加载，不触发时不占 token。写好 SKILL.md 的核心是：frontmatter 精准匹配触发场景，正文只写 Claude 猜不到的操作细节。
+
+## 为什么这很重要
+
+上一篇（59）讲了 Skill 是什么、怎么创建第一个 Skill。那篇侧重"用起来"，这篇侧重"写对了"。
+
+为什么要专门拿一篇来讲一个文件的格式？因为 SKILL.md 写得好不好，直接决定了三件事：
+
+1. **能不能触发**。`description` 写得太泛，Claude 不知道什么时候该用；写得太窄，该用的时候又匹配不上。
+2. **触发了有没有用**。正文写得啰嗦，Claude 被无关信息干扰；写得太简略，Claude 不知道该做什么。
+3. **附带资源会不会被用到**。scripts/、references/ 这些目录放进去但 SKILL.md 里没引用，Claude 根本不知道它们存在。
+
+把这三个问题搞清楚，你的 Skill 就能稳定工作。搞不清楚，Skill 就是个摆设。
+
+## SKILL.md 完整结构
+
+一个 Skill 目录的完整样子：
+
+```
+my-skill/
+├── SKILL.md                  # 主指令文件（必需）
+├── references/               # 可选：参考文档
+│   ├── api-guide.md
+│   └── troubleshooting.md
+├── examples/                 # 可选：使用示例
+│   ├── basic-usage.md
+│   └── advanced-case.md
+├── scripts/                  # 可选：可执行脚本
+│   ├── validate.sh
+│   └── generate.py
+└── assets/                   # 可选：输出用的模板
+    └── template.json
+```
+
+其中只有 `SKILL.md` 是必需的。其他目录按需创建。
+
+SKILL.md 本身的结构：
+
+```
+┌─────────────────────────┐
+│  YAML frontmatter       │  ← 元数据，控制触发和行为
+│  (--- 之间的内容)        │
+├─────────────────────────┤
+│  Markdown 正文          │  ← 操作指令，Claude 触发后执行
+│  (步骤、规则、示例)      │
+└─────────────────────────┘
+```
+
+## Frontmatter 逐字段详解
+
+frontmatter 放在文件开头，用 `---` 包裹。这是 Claude Code 读取 Skill 元数据的地方。
+
+### name：显示名称
+
+```yaml
+name: explain-code
+```
+
+- 可选字段。不写的话默认用目录名。
+- 出现在 `/` 命令菜单和 Skill 列表里。
+- 用短横线分隔单词：`fix-issue`、`deploy-staging`。
+
+### description：触发描述（最重要的字段）
+
+```yaml
+description: This skill should be used when the user asks to "explain this code", "how does this work", "walk me through the code". Use when the user wants to understand code logic or flow.
+```
+
+这是整个 frontmatter 里最值得花时间打磨的字段。Claude 用它做两件事：
+
+1. 判断当前对话是否应该加载这个 Skill
+2. 在 Skill 列表里展示这个 Skill 的用途
+
+写法要点：
+
+- 包含用户实际会说的话，用引号括起来
+- 说明"做什么"和"什么时候用"
+- 用英文写（Claude 的触发匹配对英文更准确，即使用户用中文提问）
+
+几个实际例子：
+
+```yaml
+# 好：具体，包含触发短语
+description: Summarize uncommitted changes and flag risks. Use when user asks about diffs, wants commit messages, or says "what did I change".
+```
+
+```yaml
+# 好：限定了文件类型
+description: Analyze Excel spreadsheets, create pivot tables, generate charts. Use when user mentions Excel files, .xlsx, or spreadsheets.
+```
+
+```yaml
+# 差：太泛，Claude 无法判断
+description: Help with documents
+```
+
+如果你的 Skill 不该被自动触发（比如部署操作），有两个控制手段：
+
+```yaml
+# 方式 1：完全禁止自动调用，只能手动 /name
+disable-model-invocation: true
+
+# 方式 2：从 / 菜单隐藏，只让 Claude 内部调用
+user-invocable: false
+```
+
+### version：版本号
+
+```yaml
+version: 1.0.0
+```
+
+- 可选。用于 Plugin 分发时标记版本。
+- 个人或团队内部用的 Skill 通常不需要。
+
+### argument-hint：参数提示
+
+```yaml
+argument-hint: "[issue-number]"
+```
+
+- 可选。控制用户在 `/` 菜单输入时看到的参数提示。
+- 配合 `$ARGUMENTS` 或 `$1`、`$2` 使用。
+
+### arguments：命名参数
+
+```yaml
+arguments: issue branch
+```
+
+- 可选。定义命名参数，在正文里用 `$issue`、`$branch` 引用。
+- 比 `$1`、`$2` 的位置参数更清晰。
+
+### allowed-tools：工具权限
+
+```yaml
+# 单个工具
+allowed-tools: Read
+
+# 多个工具，逗号分隔
+allowed-tools: Read, Write, Edit
+
+# 限定 Bash 命令范围
+allowed-tools: Read, Bash(git:*), Bash(npm:*)
+```
+
+- 可选。不写则继承当前会话的权限。
+- `Bash(git:*)` 表示只允许执行 git 开头的 Bash 命令。
+- 用得好可以降低误操作风险——比如部署 Skill 只给 `Bash(deploy:*)` 权限。
+
+### model：指定模型
+
+```yaml
+model: haiku
+```
+
+- 可选。指定执行这个 Skill 时使用的模型。
+- `haiku`：快、省 token，适合格式化、简单生成。
+- `sonnet`：平衡，大多数场景。
+- `opus`：深度推理，复杂分析。
+- 不写则用当前会话的模型。
+
+### context：运行上下文
+
+```yaml
+context: fork
+```
+
+- 可选。设为 `fork` 时，Skill 在子 agent 中运行。
+- 适合长时间运行的任务，不阻塞主会话。
+- 比如跑全量测试、大规模重构。
+
+## Markdown 正文怎么写
+
+frontmatter 之后是 Claude 触发 Skill 后看到的指令。写法原则：**只写 Claude 猜不到的操作细节**。
+
+### 结构模板
+
+```markdown
+---
+name: fix-issue
+description: Fix a GitHub issue. Use when user says "fix issue" or provides an issue number.
+allowed-tools: Read, Write, Edit, Bash(git:*), Bash(gh:*)
+argument-hint: "[issue-number]"
+---
+
+Fix GitHub issue $ARGUMENTS.
+
+1. Run: !`gh issue view $ARGUMENTS`
+2. Read the issue description and understand the problem
+3. Find the relevant code files
+4. Implement the fix
+5. Write tests for the fix
+6. Create a commit with message "fix: resolve #$ARGUMENTS"
+```
+
+几个关键点：
+
+**用编号步骤**。Claude 对"1. 2. 3."的遵循度高于段落描述。
+
+**用 `!` 反引号注入动态内容**。`` !`gh issue view $1` `` 在 Skill 加载时先执行命令，把输出插入到上下文里。这是 Skill 最强大的能力之一——先把信息收集好，再让 Claude 分析。
+
+**不要解释常识**。Claude 知道什么是 git、什么是 PR。你只需要告诉它"先做什么、后做什么、有什么特殊要求"。
+
+### 动态注入的实用模式
+
+```markdown
+# 注入 git diff
+当前改动：
+!`git diff HEAD`
+
+# 注入项目结构
+项目文件：
+!`find . -type f -name "*.py" | head -20`
+
+# 注入环境信息
+Node 版本：!`node --version`
+包管理器：!`npm --version 2>/dev/null || echo "npm not found"`
+
+# 注入文件内容
+ESLint 配置：
+!`cat .eslintrc.js 2>/dev/null || echo "No eslint config"`
+```
+
+## 渐进加载：三级加载机制
+
+这是 Skill 省 token 的核心设计。理解它，你才能决定什么内容放在哪一级。
+
+### 第一级：元数据（始终在上下文）
+
+Claude Code 启动时，只读取每个 Skill 的 name 和 description。假设你有 20 个 Skill，这一级总共只占大约 2000 token（每个 Skill 约 100 token）。
+
+```
+你的 Skill 列表（Claude 始终能看到）：
+├── explain-code: "Explains code with diagrams..."
+├── fix-issue: "Fix a GitHub issue..."
+├── summarize-changes: "Summarize uncommitted changes..."
+└── ...（其他 17 个，每个一行描述）
+```
+
+这就是为什么 `description` 写得精准很重要——Claude 只凭这一行决定要不要往下读。
+
+### 第二级：SKILL.md 正文（触发时加载）
+
+当 Claude 判断当前对话需要某个 Skill，它会加载 SKILL.md 的完整内容。建议控制在 5000 词以内。
+
+```
+用户问："这个函数怎么工作？"
+Claude 判断：匹配 explain-code Skill
+→ 加载 SKILL.md 全文（约 500 词）
+→ 其他 19 个 Skill 仍然只占描述行
+```
+
+### 第三级：附带资源（按需读取）
+
+SKILL.md 里引用的 references/、examples/、scripts/，Claude 只在实际需要时才读取。
+
+```
+Skill 执行过程中需要 API 参考
+→ 读取 references/api-guide.md（约 2000 词）
+→ 不需要的内容不读
+```
+
+一个关键细节：**scripts/ 里的脚本可以执行而不读入上下文**。这意味着一个 500 行的 Python 脚本，执行时 token 成本为 0——Claude 只需要知道"运行这个脚本"就行了。
+
+### 三级加载的实践意义
+
+| 内容类型 | 放哪里 | 加载时机 | Token 成本 |
+|----------|--------|----------|------------|
+| 触发描述 | frontmatter `description` | 始终 | ~100 词 |
+| 操作步骤 | SKILL.md 正文 | 触发时 | ~500-2000 词 |
+| 参考文档 | references/ | 需要时 | 按需 |
+| 示例文件 | examples/ | 需要时 | 按需 |
+| 可执行脚本 | scripts/ | 执行时 | 0（不读入上下文） |
+| 输出模板 | assets/ | 需要时 | 按需 |
+
+**判断方法**：如果一个信息每次执行都需要，放正文。如果只在特定子场景需要，放 references/。如果是可执行逻辑，放 scripts/。
+
+## 实战示例：一个完整的 Skill
+
+目标：创建一个代码审查 Skill，检查当前分支的变更，输出结构化的审查报告。
+
+### 目录结构
+
+```
+code-review/
+├── SKILL.md
+├── references/
+│   └── checklist.md
+└── scripts/
+    └── count-changes.sh
+```
+
+### SKILL.md
+
+```markdown
+---
+name: code-review
+description: Review code changes on the current branch. Use when user says "review", "code review", "check my changes", or "what do you think of this".
+allowed-tools: Read, Grep, Bash(git:*)
+---
+
+Review the code changes on the current branch.
+
+## Context
+
+Branch: !`git branch --show-current`
+Target: !`git merge-base main HEAD 2>/dev/null || echo "HEAD~10"`
+Diff stats: !`git diff --stat $(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")`
+
+## Steps
+
+1. Read the full diff: !`git diff $(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")`
+2. For each changed file, evaluate:
+   - Correctness: Does the code do what it claims?
+   - Error handling: Are edge cases covered?
+   - Naming: Are variables and functions self-documenting?
+   - Security: Any hardcoded secrets, SQL injection, XSS risks?
+3. If the diff is large (>500 lines), read the detailed review checklist: [checklist.md](references/checklist.md)
+4. Output the review in this format:
+
+## Review Summary
+
+- **Files changed**: N files
+- **Risk level**: Low / Medium / High
+- **Must-fix issues**: (list, or "None")
+- **Suggestions**: (list)
+
+### Details
+
+(Per-file analysis)
+```
+
+### references/checklist.md
+
+```markdown
+# Detailed Review Checklist
+
+Use this checklist when the diff is large or the changes touch critical paths.
+
+## Security
+- [ ] No hardcoded credentials or API keys
+- [ ] Input validation on all user-facing endpoints
+- [ ] SQL queries use parameterized statements
+- [ ] File paths are sanitized
+
+## Performance
+- [ ] No N+1 queries in loops
+- [ ] Large data sets use pagination
+- [ ] Expensive operations are cached
+
+## Testing
+- [ ] New functions have unit tests
+- [ ] Edge cases are covered
+- [ ] Breaking changes have migration tests
+```
+
+### scripts/count-changes.sh
+
+```bash
+#!/bin/bash
+# Count lines changed per file
+BASE=$(git merge-base main HEAD 2>/dev/null || echo "HEAD~10")
+git diff --numstat "$BASE" | awk '
+  BEGIN { added=0; deleted=0; files=0 }
+  { added+=$1; deleted+=$2; files++ }
+  END { printf "%d files, +%d lines, -%d lines", files, added, deleted }
+'
+```
+
+这个 Skill 的 token 预算：
+
+- 不触发时：~100 词（只有 description）
+- 触发时：~600 词（SKILL.md 正文 + 动态注入的 diff）
+- 需要详细检查时：额外 ~200 词（checklist.md）
+- 脚本执行：0 词（直接运行，不读入上下文）
+
+## 附带资源的使用方式
+
+### references/：参考文档
+
+放 Claude 在特定子场景下需要查阅的资料。比如 API 文档、错误码列表、配置参考。在 SKILL.md 里用 Markdown 链接引用：
+
+```markdown
+如果遇到认证问题，查阅 [authentication.md](references/authentication.md)
+```
+
+Claude 只在遇到认证问题时才读这个文件。
+
+### examples/：使用示例
+
+放输入输出的示例对。Claude 可以参考这些示例来理解预期行为：
+
+```markdown
+参考示例：[basic-test.js](examples/basic-test.js)
+```
+
+### scripts/：可执行脚本
+
+这是 token 效率最高的资源类型。脚本可以被执行但不读入上下文：
+
+```markdown
+Run: !`bash scripts/validate.sh`
+```
+
+适合放：数据校验、报告生成、批量操作、格式转换。
+
+### assets/：静态资源
+
+放模板文件、图标等输出用的资源。Claude 需要时读取：
+
+```markdown
+使用此模板生成报告：[template.json](assets/template.json)
+```
+
+## 常见错误
+
+### 把所有内容塞进 SKILL.md 正文
+
+SKILL.md 写了 800 行，里面包括完整 API 文档、10 个示例、3 个脚本内容。每次触发 Claude 都要读完全部 800 行，大部分内容跟当前任务无关。
+
+正确做法：正文只写步骤和规则（50-200 行），API 文档放 references/，示例放 examples/，脚本放 scripts/。
+
+### description 写成功能说明
+
+```yaml
+# 错误：这是功能说明，不是触发描述
+description: A code review tool that checks for bugs, security issues, and style violations
+```
+
+```yaml
+# 正确：包含用户会说的关键词
+description: Review code changes on the current branch. Use when user says "review", "code review", "check my changes"
+```
+
+### 不引用附带资源
+
+建了 references/ 目录，放了文件，但 SKILL.md 里从没提到。Claude 不知道这些文件存在，永远不会去读。每个附带资源都必须在 SKILL.md 里有引用路径。
+
+### 动态注入写错了命令
+
+`` !`git diff`` ` 这种写法会导致命令执行失败。正确写法是 `` !`git diff` ``——反引号紧跟感叹号。
+
+## 关键要点
+
+- SKILL.md 由 YAML frontmatter（控制触发和行为）和 Markdown 正文（操作指令）两部分组成
+- `description` 是最值得花时间写的字段，要包含用户实际会说的触发短语
+- 三级加载机制让 Skill 不触发时只占约 100 词的 token，附带资源按需读取
+- 正文用编号步骤，用 `!` 反引号注入动态内容，不要解释常识
+- 附带资源分四类：references/（文档）、examples/（示例）、scripts/（脚本）、assets/（模板）
+- 脚本执行不占上下文 token，是处理大量数据最高效的方式
+
+## 延伸阅读
+
+- [59 - Skills 入门](59-skills-getting-started.md) — Skill 的基本概念和第一个 Skill 的创建过程
+- [36 - CLAUDE.md 怎么写](36-how-to-write-claude-md.md) — CLAUDE.md 和 SKILL.md 的定位对比
+- [35 - `.claude` 目录全景](35-dot-claude-directory-overview.md) — Skill 在 `.claude` 目录中的位置
+- [34 - 自定义 Slash Commands](34-custom-slash-commands.md) — Skill 的前身，理解演进关系

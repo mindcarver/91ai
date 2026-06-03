@@ -1,0 +1,490 @@
+# Claude Code CLI Flags 总览
+
+> 更新日期：2025/06
+
+**TL;DR：** `claude --model sonnet --effort high -p "解释这段代码"` 一行命令就能控制模型、推理深度和运行模式。本文按使用场景分类整理所有 CLI flags，方便随时查阅。
+
+## 常用 flags 速查表
+
+日常开发中最常碰到的 flags：
+
+| Flag | 参数 | 说明 | 默认值 |
+|------|------|------|--------|
+| `--model` | `sonnet`, `opus` 或完整模型名 | 指定本次会话使用的模型 | settings.json 中的配置 |
+| `--effort` | `low`, `medium`, `high`, `xhigh`, `max` | 推理深度，影响 token 用量和回答质量 | `medium` |
+| `-p` / `--print` | 无 | 非交互模式，回答后直接退出 | 交互模式 |
+| `-c` / `--continue` | 无 | 继续当前目录最近一次对话 | 新会话 |
+| `-r` / `--resume` | 会话 ID 或名称 | 恢复指定会话 | 新会话 |
+| `--permission-mode` | 见下方详解 | 设置权限模式 | `default` |
+| `--allowedTools` | 工具名或模式 | 免确认直接使用的工具 | 无 |
+| `--verbose` | 无 | 显示完整输出，适合调试 | 关闭 |
+| `--version` / `-v` | 无 | 输出版本号 | — |
+
+## 模型与推理控制
+
+### --model：选择模型
+
+指定本次会话使用的模型。可以用简短别名或完整模型名：
+
+```bash
+# 用别名（会自动解析到最新版本）
+claude --model sonnet
+claude --model opus
+
+# 用完整模型名
+claude --model claude-sonnet-4-6
+```
+
+**优先级**：`--model` > `ANTHROPIC_MODEL` 环境变量 > settings.json 中的 `model` > 系统默认。这个 flag 只影响当前会话，不会持久化。
+
+### --effort：控制推理深度
+
+控制模型在回答时花多少 token 去「想」。级别越高，回答越周全，花的钱也越多。
+
+| 级别 | 适用场景 | token 消耗 |
+|------|----------|-----------|
+| `low` | 格式化、简单问答、快速查找 | 最低 |
+| `medium` | 日常编码、重构、调试（默认） | 中等 |
+| `high` | 架构设计、复杂 bug 分析 | 较高 |
+| `xhigh` | 深度推理、多模块协调 | 高 |
+| `max` | 最复杂的问题，不心疼 token | 最高 |
+
+```bash
+# 快速问个简单问题
+claude --effort low -p "这个函数返回什么类型？"
+
+# 复杂架构讨论用高推理
+claude --effort high "帮我分析这个微服务架构的瓶颈"
+```
+
+可用的级别取决于模型本身。如果指定的级别不被模型支持，会回退到该模型支持的最高级别。
+
+### --fallback-model：备用模型
+
+当主模型不可用（过载或下线）时自动切换到备用模型。仅在 `-p` 模式和后台会话中生效：
+
+```bash
+claude -p --fallback-model sonnet "检查类型错误"
+```
+
+### --max-turns：限制轮次
+
+限制 agent 的自主操作轮次。仅在 `-p` 模式下有效，超限时以错误退出：
+
+```bash
+# 最多让 agent 操作 3 轮就停下
+claude -p --max-turns 3 "修复 lint 错误"
+```
+
+### --max-budget-usd：控制预算
+
+设置本次调用的最大花费（美元）。仅在 `-p` 模式下有效：
+
+```bash
+claude -p --max-budget-usd 1.00 "给这个文件加注释"
+```
+
+## 权限与安全
+
+### --permission-mode：权限模式
+
+控制 Claude Code 执行操作前是否需要你确认。六种模式：
+
+| 模式 | 行为 |
+|------|------|
+| `default` | 每次文件编辑和命令执行都确认 |
+| `acceptEdits` | 文件编辑自动通过，命令执行仍需确认 |
+| `plan` | 只做规划，不执行任何修改操作 |
+| `auto` | 根据操作风险等级自动判断是否需要确认 |
+| `dontAsk` | 自动通过，但仍有基本安全检查 |
+| `bypassPermissions` | 跳过所有权限检查（等同于 `--dangerously-skip-permissions`） |
+
+```bash
+# 做规划，不改任何东西
+claude --permission-mode plan "这个模块怎么重构？"
+
+# 用 auto 模式减少确认弹窗
+claude --permission-mode auto "修复所有 TypeScript 报错"
+```
+
+交互模式中可以用 `Shift+Tab` 快速切换模式。
+
+### --allowedTools 与 --disallowedTools
+
+控制哪些工具可以免确认使用，哪些工具直接禁用。
+
+`--allowedTools` 指定免确认的工具列表：
+
+```bash
+# git 相关操作和文件读取免确认
+claude --allowedTools "Bash(git log *)" "Bash(git diff *)" "Read"
+```
+
+`--disallowedTools` 指定禁止使用的工具：
+
+```bash
+# 禁止编辑文件和删除操作
+claude --disallowedTools "Edit" "Bash(rm *)"
+```
+
+两者的区别：`--allowedTools` 只是免去确认，工具本身仍在可用列表里；`--disallowedTools` 则直接把工具从可用列表移除。如果你想限制哪些工具可用（而不是免确认），用 `--tools` 代替。
+
+### --tools：限制可用工具
+
+直接指定 Claude 可以使用的工具集合：
+
+```bash
+# 只允许 Bash、Edit、Read 三种工具
+claude --tools "Bash,Edit,Read"
+
+# 禁用所有工具（纯对话模式）
+claude --tools ""
+```
+
+### --dangerously-skip-permissions
+
+等价于 `--permission-mode bypassPermissions`。跳过所有权限确认。名字里带 "dangerously" 不是随便起的——建议只在 CI 或完全受控的脚本里用，日常开发别碰。
+
+## 输入输出控制
+
+### -p / --print：非交互模式
+
+最基本的非交互 flag。Claude 回答完毕后直接退出，不进入对话循环。脚本化和 SDK 调用的基础：
+
+```bash
+# 直接输出回答
+claude -p "这段代码有什么问题？"
+
+# 结合管道使用
+cat error.log | claude -p "分析这些错误日志"
+```
+
+### --output-format：输出格式
+
+控制 `-p` 模式下的输出格式。三种选项：
+
+| 格式 | 用途 |
+|------|------|
+| `text` | 纯文本，适合终端直接阅读（默认） |
+| `json` | 结构化 JSON，适合脚本解析 |
+| `stream-json` | 流式 JSON，适合实时处理 |
+
+```bash
+# 输出 JSON，方便脚本处理
+claude -p --output-format json "列出所有 TODO 注释"
+
+# 流式输出，适合对接其他工具
+claude -p --output-format stream-json "重构这个函数"
+```
+
+### --input-format：输入格式
+
+配合 `--input-format stream-json` 可以从 stdin 接收流式 JSON 输入，实现与 Agent SDK 的双向通信。
+
+### --json-schema：结构化输出
+
+要求输出符合指定的 JSON Schema。仅在 `-p` 模式下有效：
+
+```bash
+claude -p --json-schema '{"type":"object","properties":{"files":{"type":"array"}}}' \
+  "列出所有修改过的文件"
+```
+
+## 会话管理
+
+### -c / --continue：继续最近对话
+
+加载当前目录中最近一次会话继续聊天：
+
+```bash
+claude -c
+
+# 配合 -p 使用
+claude -c -p "继续刚才的重构"
+```
+
+### -r / --resume：恢复指定会话
+
+通过会话 ID 或名称恢复。不加参数时显示交互式选择器：
+
+```bash
+# 按名称恢复
+claude -r "auth-refactor"
+
+# 按 ID 恢复
+claude -r abc123-def456
+
+# 交互式选择
+claude -r
+```
+
+### --session-id：指定会话 ID
+
+使用特定的 UUID 作为本次会话 ID。适合脚本中需要固定会话标识的场景：
+
+```bash
+claude --session-id "550e8400-e29b-41d4-a716-446655440000"
+```
+
+### -n / --name：会话命名
+
+给本次会话起个名字，方便后续用 `-r` 恢复：
+
+```bash
+claude -n "feature-auth" "实现登录功能"
+```
+
+### --fork-session：分叉会话
+
+配合 `--resume` 或 `--continue` 使用，创建一个新会话但保留原会话的完整上下文：
+
+```bash
+claude --resume abc123 --fork-session
+```
+
+### --from-pr：从 PR 恢复
+
+恢复与特定 PR 关联的会话。支持 GitHub、GitLab、Bitbucket：
+
+```bash
+claude --from-pr 42
+
+# 也支持完整 URL
+claude --from-pr https://github.com/org/repo/pull/42
+```
+
+### --no-session-persistence：不持久化会话
+
+会话不写入磁盘，退出后无法恢复。仅在 `-p` 模式下有效。适合处理敏感数据时使用。
+
+## 配置覆盖
+
+### --settings：自定义配置文件
+
+指定一个 JSON 文件或内联 JSON 覆盖本次会话的配置。优先级高于 `settings.json` 文件：
+
+```bash
+# 用文件覆盖
+claude --settings ./my-settings.json
+
+# 内联 JSON
+claude --settings '{"model":"opus","effortLevel":"high"}'
+```
+
+### --setting-sources：选择配置来源
+
+指定加载哪些配置层。默认全部加载：
+
+```bash
+# 只加载用户级和项目级配置，跳过 local
+claude --setting-sources user,project
+```
+
+### --mcp-config：MCP 服务器配置
+
+从 JSON 文件加载 MCP 服务器配置。可以指定多个文件：
+
+```bash
+claude --mcp-config ./mcp-servers.json
+
+# 严格模式：只使用这里指定的 MCP，忽略其他来源
+claude --strict-mcp-config --mcp-config ./mcp.json
+```
+
+`--strict-mcp-config` 配合 `--mcp-config` 使用时，只加载你指定的 MCP 配置，忽略项目级和用户级的 MCP 配置。
+
+### --add-dir：添加工作目录
+
+让 Claude 可以读写指定目录的文件。默认只能访问当前目录：
+
+```bash
+claude --add-dir ../shared-lib --add-dir ../configs
+```
+
+### --bare：最小模式
+
+跳过 hooks、skills、plugins、MCP、auto memory、CLAUDE.md 的自动加载。只保留 Bash、文件读写、文件编辑三种工具。CI 或脚本场景下启动更快：
+
+```bash
+claude --bare -p "列出 src 目录下的所有 .ts 文件"
+```
+
+## 系统提示词控制
+
+四个 flags 用来定制系统提示词。替换类和追加类可以组合使用。
+
+| Flag | 行为 |
+|------|------|
+| `--system-prompt` | 替换整个默认提示词 |
+| `--system-prompt-file` | 从文件加载，替换默认提示词 |
+| `--append-system-prompt` | 在默认提示词末尾追加内容 |
+| `--append-system-prompt-file` | 从文件加载并追加到默认提示词末尾 |
+
+```bash
+# 追加规则（保留 Claude Code 默认身份）
+claude --append-system-prompt "所有代码必须使用 TypeScript strict 模式"
+
+# 完全替换（适合非编码的 agent 场景）
+claude --system-prompt-file ./custom-agent.txt
+```
+
+`--system-prompt` 和 `--system-prompt-file` 互斥，不能同时使用。追加类 flags 可以和替换类组合。替换会丢掉默认的工具指引和安全说明，你需要在自定义提示词中补上。
+
+## 后台与远程
+
+### --bg：后台运行
+
+将会话放到后台执行，立即返回会话 ID：
+
+```bash
+claude --bg "调查那个 flaky test"
+```
+
+### --remote：远程会话
+
+在 claude.ai 上创建一个新会话：
+
+```bash
+claude --remote "修复登录 bug"
+```
+
+### --worktree / -w：隔离工作树
+
+在独立 git worktree 中工作，不影响当前工作区：
+
+```bash
+# 自动生成 worktree 名称
+claude -w
+
+# 指定名称
+claude -w feature-auth
+
+# 从 PR 创建 worktree
+claude -w '#42'
+```
+
+配合 `--tmux` 可以在独立 tmux 面板中运行：
+
+```bash
+claude -w feature-auth --tmux
+```
+
+## 调试与诊断
+
+### --verbose：详细输出
+
+显示每一轮的完整输入输出，排查 agent 行为异常时打开：
+
+```bash
+claude --verbose
+```
+
+### --debug：调试模式
+
+启用调试日志，可按类别过滤：
+
+```bash
+# 只看 API 和 MCP 相关日志
+claude --debug "api,mcp"
+
+# 排除特定类别
+claude --debug "!statsg,!file"
+```
+
+### --debug-file：调试日志写入文件
+
+将调试日志写入指定文件，隐式启用调试模式：
+
+```bash
+claude --debug-file /tmp/claude-debug.log
+```
+
+## 完整 flags 列表
+
+按字母排序的完整参考表：
+
+| Flag | 简写 | 说明 |
+|------|------|------|
+| `--add-dir` | | 添加额外工作目录 |
+| `--agent` | | 指定 agent |
+| `--agents` | | 动态定义子 agent |
+| `--allow-dangerously-skip-permissions` | | 将 bypassPermissions 加入模式切换 |
+| `--allowedTools` | | 免确认工具列表 |
+| `--append-system-prompt` | | 追加系统提示词 |
+| `--append-system-prompt-file` | | 从文件追加系统提示词 |
+| `--bare` | | 最小模式，跳过扩展加载 |
+| `--bg` | | 后台运行 |
+| `--channels` | | 频道通知（研究预览） |
+| `--chrome` | | 启用 Chrome 集成 |
+| `--continue` | `-c` | 继续最近对话 |
+| `--dangerously-skip-permissions` | | 跳过所有权限确认 |
+| `--debug` | | 调试模式 |
+| `--debug-file` | | 调试日志写入文件 |
+| `--disable-slash-commands` | | 禁用所有斜杠命令 |
+| `--disallowedTools` | | 禁止使用的工具 |
+| `--effort` | | 推理深度 |
+| `--exclude-dynamic-system-prompt-sections` | | 优化提示词缓存 |
+| `--exec` | | 执行 shell 命令而非启动会话 |
+| `--fallback-model` | | 备用模型 |
+| `--fork-session` | | 分叉会话 |
+| `--from-pr` | | 从 PR 恢复会话 |
+| `--ide` | | 连接 IDE |
+| `--init` | | 运行 Setup hooks |
+| `--init-only` | | 只运行 hooks 不启动会话 |
+| `--input-format` | | 输入格式 |
+| `--json-schema` | | JSON Schema 结构化输出 |
+| `--max-budget-usd` | | 最大花费 |
+| `--max-turns` | | 最大轮次 |
+| `--mcp-config` | | MCP 服务器配置 |
+| `--model` | | 指定模型 |
+| `--name` | `-n` | 会话命名 |
+| `--no-chrome` | | 禁用 Chrome 集成 |
+| `--no-session-persistence` | | 不持久化会话 |
+| `--output-format` | | 输出格式 |
+| `--permission-mode` | | 权限模式 |
+| `--plugin-dir` | | 加载插件目录 |
+| `--plugin-url` | | 从 URL 加载插件 |
+| `--print` | `-p` | 非交互模式 |
+| `--remote` | | 远程会话 |
+| `--remote-control` | `--rc` | 启用远程控制 |
+| `--resume` | `-r` | 恢复指定会话 |
+| `--session-id` | | 指定会话 UUID |
+| `--setting-sources` | | 配置来源 |
+| `--settings` | | 配置覆盖 |
+| `--strict-mcp-config` | | 仅使用指定的 MCP 配置 |
+| `--system-prompt` | | 替换系统提示词 |
+| `--system-prompt-file` | | 从文件替换系统提示词 |
+| `--teleport` | | 在本地终端恢复远程会话 |
+| `--teammate-mode` | | agent 协作显示模式 |
+| `--tmux` | | tmux 面板运行（配合 -w） |
+| `--tools` | | 限制可用工具 |
+| `--verbose` | | 详细输出 |
+| `--version` | `-v` | 输出版本号 |
+| `--worktree` | `-w` | 隔离工作树 |
+
+## 优先级规则
+
+当同一个配置出现在多个地方时，优先级从高到低：
+
+1. **CLI flags**（`--model`、`--effort` 等）
+2. **环境变量**（`ANTHROPIC_MODEL` 等）
+3. **settings.local.json**（项目级，不提交到 git）
+4. **settings.json**（项目级）
+5. **~/.claude/settings.json**（用户级）
+6. **系统默认值**
+
+CLI flags 只影响当前会话，不会写入任何配置文件。
+
+## 关键要点
+
+- `--model` 和 `--effort` 是控制模型行为最直接的方式，优先级高于所有配置文件
+- 权限相关 flags（`--permission-mode`、`--allowedTools`、`--disallowedTools`）让你精确控制安全边界
+- `-p` 模式下的 flags（`--output-format`、`--max-turns`、`--max-budget-usd`）是脚本化的基础
+- `--settings` 和 `--mcp-config` 可以临时覆盖配置，不用改配置文件
+- `--bare` 模式适合 CI 和脚本场景，启动更快
+
+## 延伸阅读
+
+- [14 - 交互模式入门](./14-interactive-mode-getting-started.md) — 交互模式的基本操作
+- [CLI Reference (官方文档)](https://code.claude.com/docs/en/cli-reference) — 官方完整参考
+- [Claude Code Cheat Sheet 2026](https://angelo-lima.fr/en/claude-code-cheatsheet-2026-update/) — 社区维护的速查表

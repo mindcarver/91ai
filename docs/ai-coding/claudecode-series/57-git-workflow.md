@@ -1,0 +1,413 @@
+# Git 工作流
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 能直接帮你创建分支、写 commit message、提 PR、解冲突。但它不会主动做这些事——你得告诉它什么时候做、怎么做。这篇文章把 Git 工作流的每个环节拆开，给出对应的提示词和注意事项。
+
+## 为什么 Git 工作流值得单独讲
+
+很多人用 Claude Code 的方式是：改完代码，自己手动 `git add`、`git commit`、`git push`。能用，但浪费了 Claude Code 的一个核心能力——它能读懂改了什么，生成准确的 commit message，甚至帮你提 PR。
+
+反过来，也有人直接说"帮我提交代码"，Claude Code 就一股脑把所有改动全 add 进去，commit message 写得像散文，PR description 复制粘贴 commit message。也不好。
+
+问题不在 Claude Code，在于你没给它规范。这篇文章做的事情就是：把 Git 工作流中 Claude Code 能帮忙的每个环节，配上具体的提示词和约束条件。
+
+## 分支策略
+
+### 什么时候创建分支
+
+两个场景：开始做新功能、开始修 bug。不要在 main 分支上直接让 Claude Code 改代码。
+
+这样做的原因不是"最佳实践"这种空话。是因为 Claude Code 改代码的范围经常超出你的预期——你让它改一个函数，它可能顺手重构了旁边三个。如果改坏了，在 feature 分支上你可以整个扔掉重来。直接在 main 上改，`git reflog` 翻历史，体验很差。
+
+### 创建分支的提示词
+
+```text
+创建一个新分支 feature/user-profile-page，从当前的 main 分支切出来。
+切完之后确认当前分支名。
+```
+
+Claude Code 会执行 `git checkout main && git pull && git checkout -b feature/user-profile-page`。让它确认分支名是为了防止出错——有时候本地 main 落后于远程，切出来的分支基础就不对。
+
+### 分支命名约定
+
+提前告诉 Claude Code 你的命名规则：
+
+```text
+项目的分支命名规则：
+- 新功能：feature/简短描述
+- 修 bug：fix/简短描述
+- 重构：refactor/简短描述
+- 文档：docs/简短描述
+
+从现在开始，每次需要创建分支时自动按这个规则命名。
+```
+
+如果你在项目的 `CLAUDE.md` 里写上这段规则，每次会话都会自动生效，不用每次重复。
+
+### 用 Worktree 做并行开发
+
+做到一半需要切去修紧急 bug？不要 `git stash`，用 worktree。系列第 68 篇有详细讲解，这里说核心用法：
+
+```text
+用 worktree 创建一个新目录来修 bug：
+- 分支名：fix/login-timeout
+- 从 main 切出
+- 完成后我会回来继续当前功能
+```
+
+这样你的功能开发不受影响，bug 修完后合并回来就行。
+
+## 提交规范
+
+### 让 Claude Code 生成 commit message
+
+不要自己写 commit message。让 Claude Code 先看 diff，再生成 message。这样写出来的内容才准确。
+
+```text
+查看当前所有改动（git diff 和 git status），然后：
+1. 列出改动涉及的文件和每个文件改了什么
+2. 生成一个 commit message，格式为 conventional commits：
+   type(scope): 简短描述
+   type 只用：feat, fix, refactor, docs, test, chore
+3. 不执行 commit，只展示给我看
+```
+
+先看再提交。Claude Code 有时会误判改动类型——把重构标成 feat、把 bug fix 标成 chore。你扫一眼，不对就改。
+
+### 检查要提交的内容
+
+直接说"帮我提交"是危险操作。Claude Code 可能把不该提交的文件也 add 进去——`.env`、临时文件、测试生成的 fixture。
+
+正确的做法：
+
+```text
+执行 git status，列出所有改动文件。我来决定哪些需要提交。
+```
+
+或者更精确：
+
+```text
+只 add 以下文件并提交：
+- src/components/UserProfile.tsx
+- src/hooks/useProfile.ts
+- tests/user-profile.test.ts
+
+不要 add 其他文件。
+不要使用 git add . 或 git add -A。
+```
+
+`不要使用 git add .` 这条约束很重要。Claude Code 偷懒的时候会用 `git add .`，你得明确禁止。
+
+### 一个完整的提交提示词
+
+```text
+请执行以下步骤完成提交：
+
+1. 运行 git status 查看改动
+2. 只 add 这些文件：[列出文件]
+3. 生成 conventional commit 格式的 message
+4. 展示将要提交的 diff 和 commit message
+5. 等我确认后再执行 git commit
+```
+
+让 Claude Code 等你确认。自动提交改坏了可以回退，但多确认一次总是更安全。
+
+### Commit message 的质量
+
+Claude Code 生成的 commit message 有几个常见问题：
+
+| 问题 | 例子 | 修正 |
+|------|------|------|
+| 太笼统 | `feat: update user module` | `feat(profile): add avatar upload with size validation` |
+| 描述过程而非结果 | `refactor: changed forEach to map` | `refactor(cart): use map for item transformation` |
+| 英文语法错误 | `feat: add new feature for user can edit profile` | `feat(profile): add edit functionality` |
+| 夹带无关改动 | `feat: add search + fix typo in readme` | 拆成两个 commit |
+
+如果你发现 commit message 质量不稳定，把你的规范写进 `CLAUDE.md`：
+
+```markdown
+## Commit 规范
+- 格式：type(scope): 描述
+- type 只用 feat/fix/refactor/docs/test/chore
+- 描述用英文，祈使句，不超过 72 字符
+- 每个 commit 只做一件事
+- 不加 Co-Authored-By 行
+```
+
+## PR 创建和审查
+
+### 创建 PR
+
+Claude Code 可以通过 `gh` CLI 直接创建 GitHub PR。前提是你装了 `gh` 并且已经登录（`gh auth login`）。
+
+```text
+基于当前分支的改动创建一个 PR：
+1. 先运行 git log main..HEAD --oneline 查看这个分支的所有 commit
+2. 根据 commit 历史和代码 diff 写 PR description
+3. PR description 包含：
+   - Summary：1-3 句话说明做了什么
+   - Changes：改动列表
+   - Test plan：怎么验证
+4. 展示完整的 PR title 和 description 给我确认
+5. 确认后用 gh pr create 提交
+```
+
+### PR Description 的质量
+
+好的 PR description 应该让审查者不需要看代码就知道改了什么、为什么改、怎么测。Claude Code 生成的 PR description 常见两个问题：
+
+**问题一：复制 commit message。** 三个 commit 的 message 是 `feat: add form`、`fix: validation`、`test: add tests`，PR description 也写成这三条。正确做法是综合成一个连贯的说明。
+
+**问题二：只说做了什么，不说为什么。** "添加了表单验证"——但为什么需要验证？之前的验证有什么问题？你的审查者需要这个上下文。
+
+用这个提示词改进：
+
+```text
+写 PR description 时：
+- Summary 解释为什么要做这个改动，不只是做了什么
+- Changes 按文件或模块分组，不是按 commit 列表
+- Test plan 写具体步骤，不是"已测试"
+- 如果是修 bug，附上复现条件
+```
+
+### 用 Claude Code 做 PR 审查
+
+收到别人的 PR，可以让 Claude Code 帮你初审：
+
+```text
+审查 PR #42 的代码改动：
+1. 用 gh pr diff 42 获取 diff
+2. 关注以下方面：
+   - 逻辑错误或边界情况
+   - 安全问题（SQL 注入、XSS、硬编码密钥）
+   - 性能问题（N+1 查询、不必要的循环）
+   - 命名和代码组织
+3. 给出审查意见，按严重程度排序
+4. 不要评论代码风格偏好，只报告实际问题
+```
+
+"不要评论代码风格偏好"——这条约束防止 Claude Code 在 PR review 里刷屏一堆"建议用 const 替代 let"。
+
+## 冲突解决
+
+### 冲突是怎么产生的
+
+两个分支改了同一个文件的同一个区域，合并时 Git 不知道保留哪一边。这就是冲突。
+
+用 Claude Code 时冲突更容易出现，原因是：Claude Code 经常改文件中间的代码（加逻辑、加注释），这些位置恰好是别人也可能改的地方。
+
+### 用 Claude Code 解决冲突
+
+```text
+当前分支 merge 时出现冲突。请：
+1. 运行 git status 列出所有冲突文件
+2. 对每个冲突文件，展示冲突区域的两种版本
+3. 分析冲突原因，给出建议的解决方案
+4. 等我确认后再执行 git add
+```
+
+关键在"等我确认"。冲突解决是最容易出错的操作——保留错了代码，功能就坏了。让 Claude Code 分析，你做决定。
+
+### 指定解决策略
+
+有时候你知道应该保留哪一边：
+
+```text
+解决所有冲突，策略如下：
+- src/api/ 目录下的文件：保留当前分支（HEAD）的版本
+- src/components/ 目录下的文件：保留合并进来的版本
+- 其他文件：先展示冲突内容，等我决定
+```
+
+### 复杂冲突的处理
+
+一个文件有十几个冲突区域，逐个看很痛苦。可以让 Claude Code 先分类：
+
+```text
+这个文件有多个冲突区域。请：
+1. 把冲突分成三类：
+   - 可以自动解决的（两边改了不同行）
+   - 需要人工判断的（两边改了同一区域）
+   - 需要合并两边的（两边都加了有用代码）
+2. 对每类冲突给出处理建议
+3. 展示处理后的文件内容让我确认
+```
+
+### 预防冲突
+
+减少冲突比解决冲突更重要。几个实际的做法：
+
+1. **缩短分支存活时间。** 一个功能分支活三天以上，和 main 的差异就很大了。小功能一天做完提 PR，大功能拆成多个小 PR。
+2. **频繁从 main 同步。** 每天至少 rebase 一次 main 到你的分支：
+
+```text
+把当前分支 rebase 到最新的 main：
+1. git fetch origin
+2. git rebase origin/main
+3. 如果有冲突，按上面的流程解决
+```
+
+3. **用 worktree 做并行开发。** 两个 Claude Code 会话在同一个工作目录里改代码，几乎必然冲突。用 worktree 隔离，改完再合并。
+
+## Release Notes
+
+### 为什么需要 Release Notes
+
+commit message 是给开发者看的，changelog 和 release notes 是给用户看的。两者受众不同，内容也不同。一个 commit 写 `refactor: extract validation logic to shared module`，用户不需要知道这个。用户需要知道的是"v2.1 新增了批量导出功能"。
+
+### 让 Claude Code 生成 Release Notes
+
+```text
+基于 v2.0 到当前的 git log 生成 release notes：
+
+1. 运行 git log v2.0..HEAD --oneline 获取所有 commit
+2. 分类整理：
+   - New Features（新功能）
+   - Bug Fixes（修复的问题）
+   - Breaking Changes（不兼容的改动）
+   - Other Changes（其他改进）
+3. 用用户能理解的语言描述，不是 commit message 的原文
+4. 标注需要特别关注的改动（数据库迁移、配置变更等）
+5. 展示给我确认
+```
+
+### 基于 Conventional Commits 自动化
+
+如果你的 commit 都遵循 conventional commits 格式，生成 release notes 可以更自动化：
+
+```text
+根据 conventional commit 历史生成 CHANGELOG：
+- feat 开头的 → 新功能
+- fix 开头的 → bug 修复
+- refactor 开头的 → 内部改进（不列入用户 release notes）
+- 涉及 BREAKING CHANGE 的 → 显著标注
+
+格式参考 Keep a Changelog 风格。
+```
+
+### Release Notes 的质量检查
+
+Claude Code 生成的 release notes 常见问题：
+
+- **照搬 commit message。** 技术细节太多，用户看不懂。需要用非技术语言重写。
+- **遗漏重要改动。** `git log` 里的 commit 太多，Claude Code 可能漏掉重要的。让它先列出再分类。
+- **没标注破坏性变更。** 数据库 migration、API 接口变更这类东西必须高亮。
+
+用这个提示词做最终检查：
+
+```text
+检查这份 release notes：
+1. 是否所有 breaking change 都标注了
+2. 是否用用户能理解的语言写的（不是开发者术语）
+3. 是否包含了升级时需要注意的步骤
+4. 是否有遗漏的重要功能
+```
+
+## 完整工作流示例
+
+从创建分支到合并 PR 的完整流程：
+
+**场景：给项目添加用户头像上传功能。**
+
+**第一步——创建分支：**
+
+```text
+从 main 创建分支 feature/avatar-upload，确认分支创建成功。
+```
+
+**第二步——开发功能：**
+
+（正常用 Claude Code 开发，提示词参考系列其他篇）
+
+**第三步——检查改动：**
+
+```text
+运行 git status 和 git diff，列出所有改动文件和改动内容。
+我来决定哪些文件需要提交。
+```
+
+**第四步——提交：**
+
+```text
+只 add 以下文件：
+- src/components/AvatarUpload.tsx
+- src/hooks/useAvatar.ts
+- src/api/upload.ts
+- tests/avatar-upload.test.ts
+
+生成 conventional commit message。展示给我确认后再提交。
+```
+
+**第五步——提 PR：**
+
+```text
+创建 PR，要求：
+- Title: "feat: add user avatar upload with size and format validation"
+- Description 包含 Summary、Changes、Test plan
+- 基于当前分支的 commit 和 diff 写 description
+- 展示给我确认后再提交
+```
+
+**第六步——处理审查意见：**
+
+审查者提了意见后：
+
+```text
+PR #15 有审查意见，请用 gh pr view 15 --comments 查看。
+逐条分析意见，说明哪些需要改、怎么改。
+不改代码，只给方案让我选。
+```
+
+**第七步——合并后清理：**
+
+```text
+PR 已合并。执行清理：
+1. 切回 main 分支
+2. git pull origin main
+3. 删除本地 feature/avatar-upload 分支
+4. 删除远程 feature/avatar-upload 分支
+```
+
+## 常见坑
+
+### 让 Claude Code 自动提交而不审查
+
+"帮我提交代码" 这句话默认让 Claude Code 自己决定提交哪些文件、写什么 message。改了 10 个文件，它可能 10 个全 add，message 写一句 "update code"。每次都看 diff、确认 message、分批提交。
+
+### 在 main 分支上直接改
+
+Claude Code 改的范围经常超出预期。在 main 上改，改坏了就得 `git reflog`。始终从 feature 分支开始。
+
+### Commit 太大
+
+一个 commit 包含功能代码 + 测试 + 文档 + 顺手重构。这种 commit 回退的时候很痛苦——你只想回退重构部分，但它们搅在一起了。一个 commit 做一件事。
+
+### 不处理冲突就 push
+
+有时候 rebase 后有冲突，Claude Code 没有完全解决就 push 了。push 前确认两件事：代码能编译、测试能跑。
+
+### PR description 太简略
+
+"这个 PR 添加了头像上传功能"——一句话的 PR description 让审查者只能自己看 diff。好的 description 应该让审查者看完就知道要不要合、有没有风险。
+
+## 关键要点
+
+- 每次开发都在 feature 分支上做，不要在 main 上直接改
+- Commit message 让 Claude Code 先看 diff 再生成，你看完确认再提交
+- 禁止 `git add .` 和 `git add -A`，明确指定要提交的文件
+- PR description 要解释"为什么"，不只是"做了什么"
+- 冲突解决必须人工确认，不要让 Claude Code 自动决定保留哪边
+- 频繁从 main 同步，用 worktree 避免并行开发的冲突
+- Release notes 面向用户，不是 commit message 的搬运
+- 一个完整工作流：建分支 → 开发 → 查 diff → 分批提交 → 提 PR → 处理审查 → 合并清理
+
+## 延伸阅读
+
+- [Claude Code 官方文档 - Git Integration](https://docs.anthropic.com/en/docs/claude-code/git-integration) — 官方的 Git 工作流建议
+- [SFEIR Institute: Git Integration Tutorial](https://institute.sfeir.com/en/claude-code/claude-code-git-integration/tutorial/) — Claude Code Git 集成教程
+- [Conventional Commits](https://www.conventionalcommits.org/) — commit message 规范
+- [Keep a Changelog](https://keepachangelog.com/) — changelog 格式规范
+- 系列第 53 篇「修 Bug 标准流程」 — bug fix 场景的 Git 工作流
+- 系列第 68 篇「Worktrees 并行开发」 — 多分支并行，避免冲突
+- 系列第 70 篇「GitHub Actions 和 GitLab CI」 — 自动化 PR 审查和代码检查

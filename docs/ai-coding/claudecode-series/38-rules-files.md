@@ -1,0 +1,220 @@
+# Rules 文件
+
+> 更新日期：2025/06
+
+**TL;DR：** `.claude/rules/` 目录下的 `.md` 文件是 CLAUDE.md 的按需拆分版。它们通过 `paths` frontmatter 实现路径作用域——只有当 Claude 操作匹配路径时才加载对应的规则。好处是减少上下文污染：项目有 10 个模块，Claude 改模块 A 时不会加载模块 B 的规则。用 rules 做专项约束，用 CLAUDE.md 做全局约束。
+
+## Rules 和 CLAUDE.md 的区别
+
+### 加载时机不同
+
+- **CLAUDE.md**：每次会话都加载，无条件
+- **Rules 文件**：按 `paths` 条件加载，只加载匹配当前操作的文件
+
+### 容量不同
+
+- **CLAUDE.md**：建议控制在 80 行以内，写核心规则
+- **Rules 文件**：每个文件单独计算，可以写得更详细
+
+### 组织方式不同
+
+- **CLAUDE.md**：一个文件，所有全局规则
+- **Rules 文件**：按主题拆分，每个文件一个关注点
+
+### 什么时候用哪个
+
+| 内容类型 | 放哪里 |
+|---------|--------|
+| 构建命令、测试方法 | CLAUDE.md |
+| 代码风格的基本约定 | CLAUDE.md |
+| 某个目录的特殊规范 | Rules（带 paths） |
+| 某种文件类型的处理规则 | Rules（带 paths） |
+| 第三方库的使用约束 | Rules（带 paths） |
+
+原则：**全局性的写 CLAUDE.md，局部性的写 Rules**。
+
+## 路径作用域
+
+### 基本 frontmatter
+
+Rules 文件支持 YAML frontmatter 中的 `paths` 字段：
+
+```markdown
+---
+paths:
+  - "src/api/**"
+  - "src/routes/**"
+---
+
+# API 开发规范
+
+- 所有接口必须返回统一格式：{ code, data, message }
+- 错误处理用自定义 AppError 类，不要直接 throw Error
+- 请求参数校验用 zod schema
+```
+
+当 Claude 操作 `src/api/` 或 `src/routes/` 下的文件时，这条规则才会被加载。
+
+### 不加 paths 的行为
+
+```markdown
+---
+---
+
+# 全局代码规范
+
+- 变量名要有意义，不要用 a、b、c
+```
+
+没有 `paths`（或 `paths` 为空）的 Rules 文件，行为和 CLAUDE.md 一样——每次会话都加载。这种用法适合把 CLAUDE.md 里装不下的通用规则拆出来。
+
+### paths 匹配规则
+
+paths 使用 glob 模式：
+
+| 模式 | 匹配 |
+|------|------|
+| `src/api/**` | src/api/ 下所有文件（含子目录） |
+| `*.test.ts` | 所有测试文件 |
+| `docs/**` | docs/ 下所有文件 |
+| `**/*.sql` | 所有 SQL 文件 |
+
+可以写多个 paths，只要匹配任意一个就会加载。
+
+## 实用示例
+
+### 示例 1：数据库操作规范
+
+文件：`.claude/rules/database.md`
+
+```markdown
+---
+paths:
+  - "src/db/**"
+  - "migrations/**"
+  - "**/*.sql"
+---
+
+# 数据库规范
+
+- 迁移文件必须可回滚，up 和 down 都要写
+- 查询禁止 SELECT *，明确列出字段
+- 新增字段必须有默认值或允许 NULL
+- 索引命名：idx_表名_字段名
+- 写迁移前先备份数据（用 .backup 文件说明备份方式）
+```
+
+### 示例 2：测试文件规范
+
+文件：`.claude/rules/testing.md`
+
+```markdown
+---
+paths:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "tests/**"
+---
+
+# 测试规范
+
+- 测试文件和源文件同目录，不单独建 __tests__ 目录
+- describe 命名用中文描述场景
+- 每个测试只验证一个行为
+- mock 数据放在文件顶部的 const 对象里
+- 跑单个测试：pnpm test <文件路径>
+```
+
+### 示例 3：React 组件规范
+
+文件：`.claude/rules/react-components.md`
+
+```markdown
+---
+paths:
+  - "src/components/**"
+  - "src/pages/**"
+---
+
+# React 组件规范
+
+- 组件用函数声明 + named export，不用 default export
+- Props 类型定义在组件文件顶部，用 interface 不用 type
+- 状态逻辑提取成 custom hook
+- 样式用 CSS Modules，文件名：ComponentName.module.css
+- 组件文件不超过 200 行，超过就拆子组件
+```
+
+### 示例 4：通用规范（无 paths，始终加载）
+
+文件：`.claude/rules/commit-style.md`
+
+```markdown
+---
+---
+
+# 提交规范
+
+- commit message 用中文
+- 格式：类型: 简短描述（不超过 50 字）
+- 类型：feat / fix / refactor / docs / test / chore
+- 不写大段的 commit body
+```
+
+## 常见反模式
+
+### 反模式 1：所有规则都写在一个 rules 文件里
+
+```markdown
+# 不要这样做
+# .claude/rules/all-rules.md
+# 把 API 规范、测试规范、React 规范、数据库规范全塞在一个文件里
+```
+
+这个文件会很大，而且全部无条件加载（如果没写 paths）或只在匹配特定路径时加载（如果写了 paths，那其他规则就不会被加载）。按主题拆文件才是正确用法。
+
+### 反模式 2：paths 写得太宽
+
+```markdown
+---
+paths:
+  - "**"
+---
+```
+
+匹配所有文件，等于没有路径过滤。还不如不写 paths。
+
+### 反模式 3：和 CLAUDE.md 内容重复
+
+CLAUDE.md 里写了"用 pnpm"，rules 里又写了一遍。加载时两份都生效，浪费 token。全局规则只写一次，写在 CLAUDE.md 里。
+
+### 反模式 4：rules 文件里写过程性指令
+
+```markdown
+# 不要这样做
+- 改代码前先读文件
+- 改完后跑测试
+- 测试不通过就继续修
+```
+
+这不是规则，这是工作流程描述。Claude 默认就会这样做。rules 文件应该写约束性规则——"必须怎么做"或"不能怎么做"。
+
+### 反模式 5：rules 文件太多太碎
+
+一个项目 30 个 rules 文件，每个 3 行。Claude 需要花时间判断该加载哪些，反而不如合并成 5-8 个主题文件。一般项目 3-10 个 rules 文件就够了。
+
+## 关键要点
+
+- Rules 文件是 CLAUDE.md 的按需拆分，通过 paths 实现路径作用域
+- 全局规则写 CLAUDE.md，局部规则写 Rules
+- paths 用 glob 模式，匹配当前操作时才加载
+- 按主题拆文件（数据库、测试、组件、API），不要全塞一个文件
+- rules 写约束性规则（必须/不能），不写过程性描述
+- 3-10 个 rules 文件适合大多数项目
+
+## 延伸阅读
+
+- 第 36 篇「CLAUDE.md 怎么写」——全局配置文件的写法
+- 第 37 篇「CLAUDE.local.md 与个人偏好」——个人配置和团队配置的分离
+- 第 35 篇「`.claude` 目录全景」——完整的配置文件地图
+- 第 31 篇「`/compact` 与上下文压缩」——rules 减少上下文污染的原理

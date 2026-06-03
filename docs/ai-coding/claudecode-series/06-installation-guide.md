@@ -1,0 +1,172 @@
+# Claude Code 安装方式大全
+
+> 更新日期：2025/06
+
+**TL;DR：** 推荐用原生安装（一行命令），不需要 Node.js，装完自动更新。macOS 用户也可以用 Homebrew，Windows 用户也可以用 WinGet。npm 安装仍可用但已不是首选。
+
+## 前置条件
+
+在装 Claude Code 之前，确认你的系统符合要求：
+
+- **操作系统**：macOS 13.0+、Windows 10 1809+（或 WSL）、Ubuntu 20.04+、Debian 10+、Alpine 3.19+
+- **内存**：至少 4GB
+- **架构**：x64 或 ARM64
+- **网络**：需要能访问外网
+
+一个重要的变化：如果你用原生安装方式（下面第一个），不再需要提前装 Node.js。早期版本必须先装 Node.js 18+，现在这个限制只对 npm 安装方式有效。
+
+## 安装方式一：原生安装（推荐）
+
+这是官方推荐的方式，一行命令搞定，装完自动更新。
+
+**macOS / Linux / WSL**：
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**Windows PowerShell**：
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+**Windows CMD**（如果你还在用命令提示符）：
+
+```cmd
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+装完后二进制文件在 `~/.local/bin/claude`（macOS/Linux）或 `%USERPROFILE%\.local\bin\claude.exe`（Windows）。如果提示找不到命令，把 `~/.local/bin` 加到 PATH 里。
+
+想装特定版本：
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash -s 2.1.89
+```
+
+想用稳定通道（比最新版晚约一周，但经过更多测试）：
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash -s stable
+```
+
+## 安装方式二：Homebrew（macOS / Linux）
+
+如果你习惯用 Homebrew 管理软件，这个方式更符合你的工作流：
+
+```bash
+# 稳定版（比 latest 晚约 1 周）
+brew install --cask claude-code
+
+# 滚动更新版
+brew install --cask claude-code@latest
+```
+
+好处是卸载和更新都用熟悉的 `brew` 命令。缺点是版本会比原生安装的 latest 通道略慢。
+
+## 安装方式三：WinGet（Windows）
+
+Windows 用户如果用 WinGet 管理软件：
+
+```powershell
+winget install Anthropic.ClaudeCode
+```
+
+卸载同样是 `winget uninstall Anthropic.ClaudeCode`。
+
+## Linux 包管理器安装
+
+### apt（Debian / Ubuntu）
+
+```bash
+# 添加 GPG 密钥
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
+  -o /etc/apt/keyrings/claude-code.asc
+
+# 添加软件源
+echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] \
+  https://downloads.claude.ai/claude-code/apt/stable stable main" \
+  | sudo tee /etc/apt/sources.list.d/claude-code.list
+
+# 安装
+sudo apt update && sudo apt install claude-code
+```
+
+### dnf（Fedora / RHEL）
+
+```bash
+sudo tee /etc/yum.repos.d/claude-code.repo <<'EOF'
+[claude-code]
+name=Claude Code
+baseurl=https://downloads.claude.ai/claude-code/rpm/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://downloads.claude.ai/keys/claude-code.asc
+EOF
+
+sudo dnf install claude-code
+```
+
+### apk（Alpine）
+
+```bash
+wget -O /etc/apk/keys/claude-code.rsa.pub \
+  https://downloads.claude.ai/keys/claude-code.rsa.pub
+echo "https://downloads.claude.ai/claude-code/apk/stable" \
+  >> /etc/apk/repositories
+apk add claude-code
+```
+
+Alpine 用户注意：因为使用 musl libc 而非 glibc，需要额外装依赖并设置环境变量：
+
+```bash
+apk add libgcc libstdc++ ripgrep
+export USE_BUILTIN_RIPGREP=0
+```
+
+## npm 安装（历史方式）
+
+npm 安装仍然可用，但官方已不再将其作为首选推荐：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+这种方式要求你先装好 Node.js 18 或更高版本。如果你已经在用 Node.js 并且习惯了 npm 全局安装工具，这条路仍然走得通。但新用户建议用原生安装。
+
+## 安装后验证
+
+不管用哪种方式装，装完跑两条命令确认：
+
+```bash
+claude --version
+claude doctor
+```
+
+`claude doctor` 会检查你的环境配置，告诉你有没有 PATH 问题、网络问题等。如果输出全部通过，就可以直接用了。
+
+## 常见安装问题
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `command not found: claude` | PATH 没包含安装目录 | 把 `~/.local/bin` 加到 PATH |
+| 安装脚本下载失败 | 网络代理或防火墙 | 检查代理设置，确保能访问 `claude.ai` |
+| Windows 上 TLS 报错 | PowerShell 版本太旧 | 升级 PowerShell 到 5.1+ |
+| WSL 里装不上 | 没装 curl 或网络没配好 | 先 `sudo apt install curl` |
+| Alpine 运行时缺库 | musl 环境缺依赖 | 装 `libgcc libstdc++ ripgrep` |
+| npm 安装报 EACCES | npm 全局目录权限问题 | 用 nvm 管理 Node.js，或修改 npm 全局路径 |
+
+## 关键要点
+
+- **首选原生安装**：一行命令，不需要 Node.js，自动更新，覆盖 macOS / Windows / Linux
+- **包管理器适合特定场景**：Homebrew 用户、企业统一部署、已有包管理工作流
+- **npm 是历史方案**：能用，但新用户不需要走这条路
+- **装完一定跑 `claude doctor`**：能帮你排查大部分环境问题
+
+## 延伸阅读
+
+- [Claude Code 官方安装文档](https://code.claude.com/docs/en/setup)
+- [安装问题排查](https://code.claude.com/docs/en/troubleshoot-install)
+- [Claude Code 到底是什么](./01-what-is-claude-code.md)

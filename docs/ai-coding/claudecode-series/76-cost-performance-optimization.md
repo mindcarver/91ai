@@ -1,0 +1,170 @@
+# 成本和性能优化：让每一分钱都花在刀刃上
+
+> 更新日期：2025/06
+
+## TL;DR
+
+Claude Code 按 token 计费。输入便宜，输出贵，thinking token 按输出价算。省钱的优先级：选对模型 > 管好上下文 > 调 effort 级别 > 开 fast mode。一条命令看开销：`/usage`。
+
+## Claude Code 的成本构成
+
+Claude Code 的费用来自三部分：
+
+- **输入 token**：你发的指令、CLAUDE.md 内容、文件内容、历史对话
+- **输出 token**：Claude 的回复、生成的代码、工具调用结果
+- **Thinking token**：扩展思考过程，按输出 token 单价计费
+
+关键数字（以 Anthropic Max 和 Team 计划为参考）：
+
+| 模型 | 输入单价 | 输出单价 | 适合场景 |
+|------|---------|---------|---------|
+| Haiku | 最低 | 最低 | 子代理简单任务 |
+| Sonnet | 中等 | 中等 | 日常编码（默认） |
+| Opus | 较高 | 较高 | 复杂架构、难 debug |
+
+企业用户实测平均成本：约 $13/开发者/天，月均 $150-250/开发者。
+
+## 看懂 /usage 输出
+
+在对话中输入 `/usage`，你会看到当前会话的 token 消耗和费用。关注几个指标：
+
+- **Total Cost**：本次会话总花费
+- **Input Tokens**：发送给模型的总量（含缓存命中部分）
+- **Output Tokens**：模型生成的总量（含 thinking token）
+- **Cache Hit Rate**：缓存命中率，越高说明重复内容越多，成本越低
+
+养成习惯：每天结束时跑一次 `/usage`，一周后你就对自己的消费模式有数了。
+
+## 模型选择策略
+
+这是影响成本最大的单一因素。
+
+**日常编码用 Sonnet**。Sonnet 的性价比是三个模型中最高的。写代码、改 bug、重构、写测试——这些占开发者 80% 的工作，Sonnet 都能胜任。
+
+**Opus 留给难活**。架构设计、跨模块重构、复杂 bug 排查——这些任务需要更强的推理能力。用 Opus 完成后，切回 Sonnet 继续日常开发。
+
+**Haiku 给子代理**。配置 agent team 时，简单的搜索、格式化、文件操作任务指定 Haiku 模型，成本只有 Sonnet 的一小部分。
+
+一个实用配置：用 `opusplan` 模型别名——规划阶段用 Opus，执行阶段自动切回 Sonnet。这样只在你需要深度思考时才花 Opus 的钱。
+
+```bash
+# 在 CLAUDE.md 或启动时指定
+claude --model opusplan
+```
+
+## Effort 级别优化
+
+Effort 级别控制模型投入多少思考资源。级别越高，thinking token 越多，费用越高。
+
+| 级别 | 效果 | 适用场景 |
+|------|------|---------|
+| low | 快速响应，少思考 | 简单格式化、小改动 |
+| medium | 平衡（Sonnet 默认） | 日常编码 |
+| high | 深度思考 | 复杂逻辑、多文件修改 |
+| xhigh | 更深度 | 架构级改动 |
+| max | 最大思考 | Opus 默认级别，最难问题 |
+
+注意：Sonnet 默认 medium，Opus 默认 max。如果你用 Opus 但任务不需要最大思考量，手动降低 effort 可以省下不少钱。
+
+```bash
+# 临时降低 effort
+claude --effort medium
+
+# 在对话中用斜杠命令切换
+/effort medium
+```
+
+`MAX_THINKING_TOKENS` 环境变量可以硬性限制 thinking token 的上限。设一个合理值（比如 10000），防止模型在复杂问题上过度思考烧钱。
+
+## Fast Mode
+
+Fast mode 让 Opus 的响应速度提升到 2.5 倍，代价是更高的 token 单价。
+
+当前定价参考（Opus 4.8）：输入 $10/MTok，输出 $50/MTok（fast mode 下）。如果你本来就用 Opus，fast mode 换来的是时间——适合等待成本高于 token 成本的场景。
+
+打开方式：对话中输入 `/fast`，或启动时加 `--fast`。
+
+什么场景值得开 fast mode：
+
+- Demo 前紧急修 bug
+- 实时 Pair programming 场景
+- 你拿着计时器等结果的紧张时刻
+
+什么场景不该开：日常批量编码、自动化流水线、不赶时间的重构。这些场景下速度提升不带来实际收益，白花钱。
+
+## Prompt Cache 优化
+
+Prompt caching 是 Claude Code 内置的自动优化。当你的对话中包含重复内容（比如 CLAUDE.md、系统提示、相同文件多次引用），这部分 token 会走缓存路径，费用降低约 90%。
+
+缓存是自动的，但你可以做一些事来提高命中率：
+
+- **保持 CLAUDE.md 稳定**：频繁修改 CLAUDE.md 会让缓存失效。写好一次，少改
+- **用 `/compact` 而非 `/clear`**：compact 会保留关键上下文并压缩，clear 全部清掉重来
+- **相关任务在同一个会话完成**：跨会话意味着从头加载上下文，缓存命中率归零
+
+缓存行为可以在企业层级配置，部分 tier 可以禁用缓存（不建议）。
+
+## 上下文治理省钱
+
+上下文越长，每轮对话的输入 token 越多，费用线性增长。很多人忽视了这一点。
+
+**定期清理**：
+
+- `/clear`：彻底清空上下文，适合切换任务时
+- `/compact`：压缩上下文保留要点，适合长会话中期
+- `/context`：查看当前上下文大小，做到心中有数
+
+**CLAUDE.md 瘦身**：控制在 200 行以内。把不常用的指令移到 skills 里，按需调用。CLAUDE.md 的每一行都会在每次请求时发送，是持续的成本源。
+
+**子代理分流**：agent team 的 token 消耗大约是标准会话的 7 倍。用 agent team 时，确保每个代理的任务范围小且明确。把大任务拆成小任务分配，而不是让一个代理干所有事。
+
+**禁用不用的 MCP 服务器**：每个活跃的 MCP 服务器都会增加上下文。如果你不在用 Playwright，就别让它跑着。在 `.claude/settings.json` 中按需启用。
+
+## 成本预算和控制
+
+**个人层面**：
+
+- 每周查看 `/usage` 历史，找到自己的高消耗模式
+- 给 `MAX_THINKING_TOKENS` 设上限，防止 thinking 失控
+- 长会话用 `/compact` 定期压缩
+
+**团队层面**：
+
+- Anthropic 提供团队级用量仪表盘，可以按成员查看
+- Rate limit 按 TPM/RPM 分配。小团队（5 人以下）每人约 360k TPM，大团队按比例增加
+- 设置预算告警，超出阈值自动通知
+
+**企业层面**：
+
+- 年度计划比月度计划便宜约 20%
+- prompt caching 企业级配置可以全局开启/关闭
+- 考虑混合策略：核心开发用 Max 计划，轻量任务用 API 按量计费
+
+## 性能优化速查表
+
+| 手段 | 节省幅度 | 实施难度 | 副作用 |
+|------|---------|---------|-------|
+| 日常用 Sonnet | 约 60% vs Opus | 低 | 部分复杂任务质量下降 |
+| 降低 effort 级别 | 20-50% thinking token | 低 | 思考深度降低 |
+| 用 `/compact` 管理 | 30-50% 输入 token | 低 | 可能丢失细节上下文 |
+| CLAUDE.md 控制在 200 行内 | 10-20% 输入 token | 中 | 需要拆分到 skills |
+| 子代理用 Haiku | 约 80% vs Sonnet 代理 | 中 | 仅适合简单任务 |
+| 禁用未使用的 MCP | 5-15% 输入 token | 低 | 需要时重新启用 |
+| Fast mode | 节省时间，增加成本 | 低 | 仅特定场景值得 |
+
+## 关键要点
+
+- 模型选择影响最大。80% 的任务用 Sonnet，Opus 留给真正需要深度推理的场景
+- Effort 级别和 thinking token 上限是精细控制成本的关键旋钮
+- 上下文治理是被低估的省钱手段——每多一轮对话，所有历史都重新计费
+- `/usage` 是你的仪表盘，养成定期查看的习惯
+- Fast mode 用时间换钱，只在等待成本高于 token 成本时开启
+- Prompt caching 是免费的优化，保持 CLAUDE.md 稳定、减少不必要的会话切换
+
+## 延伸阅读
+
+- [第 33 篇：/usage 与成本意识](./33-usage-cost-awareness.md) — 本篇的前置知识
+- [第 65 篇：Subagents 入门](./65-subagents-getting-started.md) — 子代理的成本结构
+- [第 67 篇：Agent Teams](./67-agent-teams-view-dynamic.md) — 多代理协作时的开销
+- [Claude Code 官方成本文档](https://code.claude.com/docs/en/costs) — 定价细节和团队管理
+- [Fast Mode 文档](https://code.claude.com/docs/en/fast-mode) — 快速模式的完整说明

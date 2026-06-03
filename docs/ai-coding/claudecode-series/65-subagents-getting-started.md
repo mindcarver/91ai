@@ -1,0 +1,284 @@
+# Subagents 入门
+
+> 更新日期：2025/06
+
+**TL;DR：** Subagent 是 Claude Code 内置的任务委派机制。你在 `.claude/agents/` 目录下放一个 Markdown 文件，定义一个专门角色（比如"只读代码审查员"），Claude Code 就会在遇到匹配的任务时自动把这个任务交给它处理。每个 subagent 有独立的上下文窗口和工具权限，完成后只返回摘要给主会话。
+
+## Subagent 是什么
+
+想象你是一个技术负责人，手下带一个项目。项目里有些活需要专门的人来做：代码审查、写测试、查 bug、写文档。你不可能什么都自己干，也不想每件事都临时找外援。
+
+Subagent 就是你的"专家顾问"。每个 subagent 有三个特点：
+
+- **独立上下文**：它有自己的上下文窗口，不占你主会话的空间。它可以读几十个文件、跑一堆搜索，这些中间过程不会塞进你的主对话里。
+- **专门角色**：你通过 system prompt 定义它的专长和行为方式。代码审查的 subagent 和写文档的 subagent 是完全不同的角色。
+- **受限工具**：你可以限制它只能用哪些工具。一个只读审查的 subagent 不应该有写文件的权限。
+
+一个更具体的类比：subagent 就像你让同事帮忙看一段代码——你把相关文件发给他，告诉他你要什么，他看完后给你一份报告。他不会跑到你的编辑器里乱改东西，也不会把中间翻过的每一页纸都塞给你。
+
+## 为什么需要 Subagent
+
+不用 subagent，一个长会话里做所有事，会遇到两个问题：
+
+**上下文膨胀**。Claude Code 读 30 个文件、跑 10 次搜索之后，主会话的上下文窗口已经塞满了。后面的任务质量会下降，因为模型要在一堆无关信息里找重点。Subagent 把大量中间信息隔离在它自己的上下文里，只返回你需要的结论。
+
+**角色混淆**。让同一个会话既审查代码又写测试还调 bug，模型的注意力会被分散。每个 subagent 只做一件事，有明确的 system prompt 约束行为，输出更稳定。
+
+还有一个实际的考量：**工具权限控制**。你希望审查代码的 AI 只能读不能写，调试 bug 的 AI 能读也能改但不能删。通过 subagent 的 `tools` 字段可以做到这种细粒度控制。
+
+## Subagent vs Agent Teams
+
+这两个概念容易混淆，说一下区别：
+
+| 维度 | Subagent | Agent Teams |
+|------|----------|-------------|
+| 运行方式 | 在当前会话内部启动 | 启动独立的 Claude Code 会话 |
+| 通信 | 单向：完成后返回摘要给主会话 | 双向：团队成员之间可以通信 |
+| 上下文 | 完全隔离，主会话看不到中间过程 | 部分共享，由 lead agent 协调 |
+| 并行 | 可以并行启动多个 subagent | 天然并行，每个成员是独立进程 |
+| 适用场景 | 单一、明确的子任务 | 大型、需要协调的多步骤任务 |
+
+简单说：subagent 是"派一个人出去办事，带报告回来"；agent teams 是"组一个项目组，大家各自干活但有协调机制"。本文只讲 subagent。
+
+## 第一个 Subagent：只读代码审查员
+
+从创建一个最简单的 subagent 开始。这个 subagent 只做一件事：审查代码变更，给出意见。它只能读文件和搜索代码，不能写文件、不能跑命令。
+
+### 创建步骤
+
+**方法一：用 `/agents` 命令（推荐）**
+
+在 Claude Code 交互模式中输入：
+
+```
+/agents
+```
+
+选择 "Create New Agent"，然后选择 "Project-level"。Claude 会引导你填写 subagent 的名称、描述和职责。你也可以选择让 Claude 根据你的项目自动生成。
+
+**方法二：手动创建文件**
+
+在项目根目录下创建文件：
+
+```bash
+mkdir -p .claude/agents
+```
+
+创建 `.claude/agents/code-reviewer.md`，内容如下：
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review specialist. Use when you need to review code changes for quality, security, and maintainability.
+tools: Read, Grep, Glob, Bash
+model: sonnet
+---
+
+你是一位资深代码审查员。你的任务：
+
+1. 先运行 `git diff` 查看最近的代码变更
+2. 逐文件审查修改内容
+3. 按以下维度给出意见：
+
+   - 是否有明显的 bug 或逻辑错误
+   - 错误处理是否充分
+   - 是否有硬编码的密钥或敏感信息
+   - 变量和函数命名是否清晰
+   - 是否存在重复代码
+
+输出格式：
+
+- **Critical**：必须修复的问题
+- **Warning**：建议修复的问题
+- **Note**：可以关注的改进点
+
+每个问题给出具体的文件名、行号和修改建议。
+```
+
+### 使用方式
+
+创建文件后，在 Claude Code 会话中直接提出需求：
+
+```
+帮我审查一下最近的代码变更
+```
+
+Claude Code 看到 "审查代码变更" 这个意图，匹配到 `code-reviewer` 的 description，会自动把任务委派给它。你也可以显式指定：
+
+```
+用 code-reviewer subagent 审查最近的代码变更
+```
+
+Subagent 会在独立的上下文窗口里工作——跑 `git diff`、读相关文件、分析代码。完成后，它返回一份审查报告给主会话。你看到的是结论，不是中间翻过的几十个文件。
+
+## Subagent 的配置结构
+
+### 文件位置
+
+Subagent 配置文件存在两个位置：
+
+| 类型 | 位置 | 作用范围 | 优先级 |
+|------|------|---------|--------|
+| 项目级 | `.claude/agents/` | 当前项目 | 高 |
+| 用户级 | `~/.claude/agents/` | 所有项目 | 低 |
+
+同名 subagent 发生冲突时，项目级的优先。建议优先使用项目级——可以跟着项目一起提交到 Git，团队成员都能用。
+
+### 文件格式
+
+每个 subagent 是一个 Markdown 文件，由两部分组成：
+
+**YAML frontmatter（配置区）**：
+
+```yaml
+---
+name: your-sub-agent-name     # 必填，小写字母 + 连字符
+description: ...               # 必填，描述什么场景触发这个 subagent
+tools: Read, Grep, Glob, Bash # 可选，省略则继承所有工具
+model: sonnet                  # 可选，可选 sonnet / opus / haiku / inherit
+---
+```
+
+各字段说明：
+
+- `name`：唯一标识符。用小写字母和连字符，比如 `code-reviewer`、`test-runner`。
+- `description`：Claude Code 根据这个字段判断是否委派任务。写清楚"什么情况下用这个 subagent"。描述越具体，自动委派越准确。
+- `tools`：逗号分隔的工具列表。省略这个字段意味着继承所有工具（包括 MCP 工具）。指定工具列表后，subagent 只能用列出的工具。
+- `model`：可选值包括 `sonnet`（默认）、`opus`、`haiku`、`inherit`（跟随主会话的模型）。
+
+**Markdown 正文（system prompt）**：
+
+frontmatter 下方的所有内容就是 subagent 的 system prompt。这部分定义它的角色、工作流程、输出格式等。写法和写普通的 system prompt 一样。
+
+### 示例：测试运行器
+
+```markdown
+---
+name: test-runner
+description: Use proactively to run tests and fix failures. Activate when code changes are made or when the user asks to verify tests.
+tools: Read, Edit, Bash, Grep, Glob
+---
+
+你是测试自动化专家。收到代码变更后：
+
+1. 运行 `npm test`（或对应项目的测试命令）
+2. 如果测试失败，分析失败原因
+3. 修复测试，但保留测试的原始意图——不要通过删除断言来"解决"失败
+4. 再次运行测试验证修复
+
+输出：
+- 测试运行结果
+- 如果有修复，列出改了什么以及为什么
+```
+
+注意这个 subagent 有 `Edit` 和 `Bash` 权限——它需要修改文件和运行命令。和前面的只读审查员不同，这是一个"动手型"角色。
+
+## 工具权限控制
+
+工具权限是 subagent 配置中最值得认真设计的部分。
+
+### 权限逻辑
+
+`tools` 字段的两种模式：
+
+- **省略 `tools`**：subagent 继承主会话的所有工具，包括你装的 MCP 工具。好处是方便，坏处是权限太宽。
+- **指定 `tools`**：subagent 只能用你列出的工具。好处是安全可控，坏处是如果漏掉了必要的工具，subagent 会卡住。
+
+### 常用工具列表
+
+| 工具 | 能力 | 典型用途 |
+|------|------|---------|
+| `Read` | 读取文件内容 | 几乎所有 subagent 都需要 |
+| `Grep` | 搜索代码内容 | 代码搜索、模式匹配 |
+| `Glob` | 按模式列出文件 | 查找特定类型的文件 |
+| `Bash` | 执行 shell 命令 | 运行测试、git 操作 |
+| `Edit` | 编辑文件 | 修复 bug、修改代码 |
+| `Write` | 创建新文件 | 生成文档、创建新组件 |
+| `WebSearch` | 搜索网页 | 查找文档、搜索解决方案 |
+| `WebFetch` | 抓取网页内容 | 读取在线文档 |
+
+### 权限设计原则
+
+**最小权限原则**。只给 subagent 完成任务所需的最少工具。代码审查员不需要 `Edit` 和 `Write`——它的工作是读代码、给意见，不是改代码。
+
+**注意 MCP 工具的继承**。省略 `tools` 字段时，subagent 会继承所有 MCP 工具。如果你的项目接了数据库 MCP Server，一个没有限制工具的 subagent 理论上可以操作数据库。对敏感操作，务必显式指定 `tools`。
+
+**一个已知的限制**：有用户报告 subagent 的工具权限限制偶有失效的情况（参见 [GitHub Issue #4740](https://github.com/anthropics/claude-code/issues/4740)）。在涉及生产环境或敏感数据时，不要把工具权限当作唯一的安全防线。
+
+## 结果返回机制
+
+Subagent 的工作方式是"黑盒式"的：
+
+1. Claude Code 把任务和必要的上下文传给 subagent
+2. Subagent 在自己的上下文窗口里工作（读文件、搜索、分析）
+3. 工作完成后，subagent 返回一个**摘要**给主会话
+4. 主会话拿到摘要，继续后续的对话
+
+这里有几个需要注意的点：
+
+**返回的是摘要，不是完整输出**。Subagent 可能读了 30 个文件、跑了很多搜索，但你看到的只是它总结后的结论。这是设计如此——目的是保护主会话的上下文不被撑爆。
+
+**你不能和 subagent 交互**。任务委派出去后，你不能在中间追问或给反馈。如果结果不满意，你只能在主会话里调整请求再委派一次。
+
+**Subagent 没有记忆**。每次被调用，subagent 都是从零开始。它不会记得上次被调用时做了什么。这意味着你的 system prompt 需要足够自包含——它应该能独立完成任务，不依赖"上次对话"的上下文。
+
+**延迟问题**。Subagent 每次启动时要从头收集上下文（读文件、搜索等），这会带来额外的延迟。对于轻量任务（改一个文件），直接在主会话里做反而更快。Subagent 的优势在重量级任务上——需要大量搜索和阅读的场景。
+
+## 什么时候用 Subagent
+
+以下是 subagent 表现好的场景：
+
+- **代码审查**：需要读很多文件、理解上下文、给出结构化意见。审查过程不需要和用户交互。
+- **代码库探索**：理解项目结构、追踪调用链、查找特定模式。探索过程产生大量中间信息，只关心结论。
+- **文档查询**：去网上或本地文档里找特定信息，只返回相关内容。
+- **运行测试并修复**：跑测试、分析失败、自动修复。整个过程相对机械。
+- **安全扫描**：查找潜在的安全问题。只需要读权限，输出结构化报告。
+
+这些场景有共同特点：**任务边界清晰、中间过程信息量大、最终只需要摘要、不需要和用户来回对话**。
+
+## 什么时候不用
+
+- **简单修改**：改一个配置项、修一个 typo。直接在主会话里做更快，启动 subagent 的开销不值得。
+- **需要来回对话的任务**：你想随时追问、调整方向。Subagent 是"发射后不管"的，你没法在中间干预。
+- **需要主会话上下文的任务**：subagent 看不到主会话的对话历史。如果你的任务依赖"之前讨论的那些东西"，subagent 会不知道你在说什么。
+- **单文件编辑**：改一个文件、加一个函数。这种任务主会话直接做就行，subagent 反而多了一层延迟。
+
+一个判断标准：**如果任务的中间过程对你有价值（不只是结论），不要用 subagent**。因为 subagent 只返回摘要，你会丢失过程信息。
+
+## 常见问题
+
+**Q：Subagent 能创建 subagent 吗？**
+
+不能。Subagent 不能使用 Task 工具（也就是委派任务给其他 subagent）。这是有意为之，防止无限递归。
+
+**Q：项目级和用户级 subagent 怎么选？**
+
+项目特有的角色（比如"这个项目的测试运行器"）放 `.claude/agents/`。通用角色（比如"通用代码审查员"）放 `~/.claude/agents/`。从项目级开始，等模式稳定了再提取到用户级。
+
+**Q：Subagent 的 model 字段怎么选？**
+
+大多数情况用默认的 `sonnet` 就够了。需要深度推理的任务（复杂架构分析）可以用 `opus`。对延迟敏感的简单任务可以用 `haiku`。`inherit` 适合你想让 subagent 用和主会话一样的模型的场景。
+
+**Q：怎么调试 subagent？**
+
+直接查看 `.claude/agents/` 目录下的 Markdown 文件。Subagent 的行为完全由文件内容决定。如果行为不符合预期，检查 system prompt 是否足够具体、`description` 是否准确描述了触发条件、`tools` 是否包含了必要的工具。
+
+**Q：Subagent 什么时候自动触发？**
+
+Claude Code 根据 `description` 字段和你的请求内容做匹配。匹配成功就自动委派。你也可以在请求中显式指定 subagent 名字来强制触发。如果自动触发不准确，改善 `description` 的措辞——写得更具体、加上触发示例。
+
+## 关键要点
+
+- Subagent 是定义在 `.claude/agents/` 里的 Markdown 文件，用 YAML frontmatter 配置名称、描述、工具和模型。
+- 每个 subagent 有独立的上下文窗口，不占主会话空间，完成后只返回摘要。
+- 通过 `tools` 字段控制工具权限，遵循最小权限原则。省略 `tools` 意味着继承所有工具。
+- Subagent 每次调用从零开始，没有记忆。System prompt 需要自包含。
+- 适合边界清晰、中间信息量大、只需要结论的任务。不适合简单修改、需要来回对话、依赖主会话上下文的场景。
+- 用 `/agents` 命令创建，或手动在 `.claude/agents/` 目录下创建 Markdown 文件。
+
+## 延伸阅读
+
+- [Subagents 官方文档](https://docs.anthropic.com/en/docs/claude-code/sub-agents) — Anthropic 官方文档，配置字段和示例的权威来源
+- [awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) — 社区收集的 100+ 个 subagent 配置示例
+- [51 - 新项目快速理解](./51-new-project-onboarding.md) — 用 Claude Code 理解陌生项目的完整流程
+- [61 - MCP 入门](./61-mcp-getting-started.md) — 让 Claude Code 连接外部工具和数据的基础教程

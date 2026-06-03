@@ -1,0 +1,449 @@
+# 图片、截图和前端调试
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 是个文本模型——它天生看不到屏幕。但通过截图粘贴、Computer Use、Chrome DevTools MCP 和 Playwright MCP，你可以给它一双眼睛。本文讲三种"让它看见"的方式各自的适用场景、怎么搭一套截图 → 改代码 → 再截图的闭环验证流程、以及怎么做视觉 diff 抓回归。依赖第 52 篇的代码追踪能力。
+
+## 为什么这很重要
+
+前端开发有一个其他领域不太有的痛点：代码对不对，光看文本不够，得看效果。
+
+你写了一个 Flexbox 布局，`justify-content: space-between` 看着没毛病。但在某个屏幕宽度下，第三个元素被挤到了下一行，和设计稿差了 20 像素。这个信息存在于视觉层面，不存在于代码层面。Claude Code 再能读代码，它也没法从 CSS 文本里"脑补"出实际渲染效果。
+
+更麻烦的是这类问题：
+
+- 移动端适配在模拟器里看着对，真机上字号溢出了
+- 深色模式下链接颜色和背景融在一起了
+- 表单提交后 loading 状态闪了一下但消失了，用户感知不到
+- console 里有一堆 React hydration warning，但页面看起来"没事"
+
+这些问题的共性是：**症状在屏幕上，根因在代码里，中间隔了一个渲染引擎。** 你需要把屏幕上的信息翻译成 Claude Code 能理解的输入，它才能帮你定位。
+
+## Claude Code "看"东西的三种方式
+
+### 方式一：直接粘贴截图
+
+最简单，零配置。
+
+你截一张图（macOS 用 `Cmd+Shift+4` 区域截图，或 `Cmd+Shift+3` 全屏），然后在 Claude Code 对话里 `Cmd+V` 粘贴。Claude Code 内置了图片理解能力，能识别截图里的文字、布局、颜色、元素位置。
+
+**适合的场景：**
+
+- "这个页面和设计稿哪里不一样？"
+- "为什么导航栏跑到页面左边去了？"
+- "这个表格在小屏幕上溢出了，看截图。"
+- "这个弹窗的按钮被挡住了，帮我看一下。"
+
+**优点：** 不需要任何配置，截了图粘上去就行。
+
+**缺点：** 是一次性的。你截图 → Claude 分析 → 给建议 → 你改代码 → 你再截图 → 再粘 → 再分析。每一轮都需要你手动操作，没法自动化。
+
+**怎么让它更好用：**
+
+```text
+[粘贴截图]
+
+这是当前页面的渲染效果。问题是右下角的"提交"按钮被 footer 遮挡了。
+
+相关文件：
+- src/components/CheckoutForm.tsx（表单组件）
+- src/components/Footer.tsx（底部栏）
+- src/styles/checkout.css（样式）
+
+请分析为什么按钮被遮挡，给出修复方案。
+不要直接改代码，先说明原因。
+```
+
+关键做法：**截图 + 相关文件路径 + 具体问题描述** 三件套缺一不可。光给截图不说哪错了，Claude Code 只能泛泛地描述"我看到了一个页面"。光说问题不给截图，它只能猜。
+
+### 方式二：Computer Use
+
+Computer Use 是 Claude Code 内置的一个 MCP 服务，默认关闭。打开之后，Claude Code 能直接控制你的电脑——截图、移动鼠标、点击、输入文字。
+
+**开启方法：**
+
+1. 在 Claude Code 里输入 `/mcp`
+2. 找到 `computer-use` 这个内置服务
+3. 把它启用
+
+启用后 Claude Code 多了几个能力：截图（`computer_screenshot`）、鼠标操作（`computer_mouse`）、键盘输入（`computer_keyboard`）。
+
+**适合的场景：**
+
+- "帮我截一张当前浏览器页面的截图，看看改完之后效果对不对。"
+- 自动化操作：打开应用 → 输入内容 → 截图确认
+- 需要连续多次截图做对比的调试场景
+
+**一个实际的调试流程：**
+
+```text
+我改了 src/styles/modal.css 的 z-index。
+请帮我：
+1. 截一张当前浏览器页面的截图
+2. 看看弹窗现在是不是在最上层了
+3. 如果不对，分析原因并给出下一步修改建议
+```
+
+Claude Code 会自己截图、自己看、自己分析。你不需要手动截图再粘贴了。
+
+**注意事项：**
+
+- Computer Use 能控制你的鼠标和键盘，有安全风险。建议只在调试时临时开启，用完关掉
+- 截图分辨率取决于你的屏幕设置，Retina 屏幕截图会比较大，可能占用更多上下文
+- 它截的是整个屏幕或指定区域，不是单个浏览器标签页。如果屏幕上杂东西多，截图里的无关信息可能干扰分析
+
+### 方式三：Chrome DevTools MCP 和 Playwright MCP
+
+这是目前前端调试最强的方案，也是最需要配置的。
+
+**Chrome DevTools MCP**（Google 维护）连接一个正在运行的 Chrome 浏览器，让 Claude Code 能读取 DOM 结构、查看 console 日志、分析网络请求、截图。它侧重"调试"——看一个正在运行的应用出了什么问题。
+
+**Playwright MCP**（Microsoft 维护）提供浏览器自动化能力，让 Claude Code 能打开页面、点击按钮、填表单、跑测试。它侧重"驱动"——自动执行一系列操作。
+
+两者不是竞争关系，是互补的。DevTools 看状态，Playwright 做操作。
+
+#### Chrome DevTools MCP 的调试能力
+
+连接到浏览器后，Claude Code 可以：
+
+- **截图**：`take_screenshot` 抓取当前页面或指定元素
+- **读 DOM**：`take_snapshot` 获取页面的可访问性树（比截图更结构化）
+- **看 console**：`list_console_messages` 拿到所有控制台日志、错误、警告
+- **查网络请求**：`list_network_requests` 看页面发了哪些请求、返回了什么
+- **执行 JS**：`evaluate_script` 在页面里跑一段 JavaScript 检查运行时状态
+
+这些能力组合起来就是一整套前端调试工具。你不需要切到浏览器打开 DevTools 再把信息手动复制过来——Claude Code 直接从浏览器里拿。
+
+#### 一个实际的前端调试场景
+
+```text
+页面加载后，用户列表显示空白。
+请用 Chrome DevTools 做以下检查：
+
+1. 截一张当前页面截图
+2. 查看 console 有没有错误
+3. 查看网络请求，确认 /api/users 接口是否返回了数据
+4. 如果接口返回了数据，检查前端组件是否正确渲染
+
+相关文件：src/pages/UserList.tsx
+```
+
+Claude Code 会按顺序执行：截图看到空白 → console 发现一个 React key 警告 → 网络请求看到接口返回了 200 和数据 → 读组件代码发现 map 用的 key 有重复。根因找到了，整个流程不需要你手动操作浏览器。
+
+#### Playwright MCP 的自动化能力
+
+当你的需求不只是"看"而是"做"时，用 Playwright：
+
+```text
+用 Playwright 做以下操作：
+1. 打开 localhost:3000
+2. 在搜索框输入"Claude Code"
+3. 点击搜索按钮
+4. 截图查看搜索结果页面
+5. 确认搜索结果列表不为空
+```
+
+Playwright 会真的打开一个浏览器，执行这些操作，截图回来。对于需要多步操作才能触发的 bug（比如"登录 → 加商品 → 结算 → 到付款页才出问题"），Playwright 能自动走完整个流程。
+
+## 截图闭环验证：改完就看的反馈循环
+
+这是本文最核心的实践。
+
+前端开发最大的效率杀手是"改了代码 → 切到浏览器 → 刷新 → 发现不对 → 切回编辑器 → 再改"这个循环。每个循环可能 30 秒，但如果要改 10 轮，就是 5 分钟的上下文切换。
+
+用 Claude Code + 截图能力，你可以把这个循环自动化。
+
+### 基本模式
+
+```
+你描述问题 → Claude 读代码 → Claude 改代码 → Claude 截图 → Claude 看截图判断 → 如果不对，继续改 → 循环直到正确
+```
+
+### 具体操作
+
+**第一步：给 Claude Code 上下文**
+
+```text
+src/components/ProductCard.tsx 的卡片在移动端布局乱了。
+设计要求是：图片在上、标题在下、价格在标题右侧。
+
+当前页面在 localhost:3000/products。
+请截图看当前效果，然后分析问题。
+```
+
+**第二步：让它截图并分析**
+
+如果用了 Computer Use 或 Chrome DevTools MCP：
+
+```text
+截图 localhost:3000/products 页面。
+看截图，描述你看到的 ProductCard 布局。
+对比设计要求，列出不符合的地方。
+```
+
+**第三步：改代码后再截图验证**
+
+```text
+按你的分析修复布局问题。改完后截图验证。
+如果效果不对，继续调整。
+最多迭代 3 轮。
+```
+
+"最多迭代 3 轮"这个限制很重要。没有它，Claude Code 可能无限循环下去——改一点截一次，改一点截一次，每次都"还差一点"。3 轮是个合理的上限，超过 3 轮说明方向可能不对，需要你介入。
+
+### Round-Trip Screenshot Testing
+
+社区里管这个叫 "round-trip screenshot testing"：Claude Code 改代码 → 跑测试（自动截图）→ 看截图判断效果 → 不对就再改。和上面的手动循环相比，区别是截图步骤自动化了。
+
+实现方式：在测试脚本里加截图步骤（Playwright 的 `page.screenshot()` 或 Cypress 的 `cy.screenshot()`），Claude Code 改完代码后跑测试，测试自动截图，Claude Code 读截图判断效果。
+
+## 视觉 Diff：抓出你肉眼看不到的变化
+
+改了一个按钮的颜色，你目测觉得没区别。但在 13 寸屏幕上，文字和按钮边缘的间距从 12px 变成了 10px，文本换行了。这种微妙的变化肉眼很难每次都注意到。
+
+视觉 diff 就是把"改之前"和"改之后"的截图做对比，标出差异。
+
+### 用 Claude Code 做视觉 diff 的思路
+
+Claude Code 本身没有内置的视觉 diff 工具，但你可以用两种方式实现：
+
+**方式一：让 Claude Code 对比两张截图**
+
+```text
+[粘贴截图 A：改之前的页面]
+[粘贴截图 B：改之后的页面]
+
+这两张截图分别是修改前后的同一页面。
+请对比两张图，列出所有视觉差异。
+重点关注：布局偏移、元素位置变化、颜色变化、文字换行。
+```
+
+Claude Code 的图片理解能力足够发现明显的布局差异、颜色差异和元素位移。但像素级的差异（比如 1px 的偏移、#333 和 #335 的颜色差异）它可能看不出来。
+
+**方式二：用 Playwright 截图 + 外部 diff 工具**
+
+在 Playwright 测试里加截图断言：
+
+```javascript
+// tests/visual.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('product card layout', async ({ page }) => {
+  await page.goto('http://localhost:3000/products');
+  const card = page.locator('.product-card').first();
+  // 第一次运行会生成基准截图
+  // 后续运行会跟基准对比
+  await expect(card).toHaveScreenshot('product-card.png');
+});
+```
+
+Playwright 的 `toHaveScreenshot` 会做像素级对比。第一次跑时生成基准截图（baseline），后续每次跑都跟 baseline 比。差异超过阈值就报错。
+
+让 Claude Code 跑这个测试，如果失败，它会看到 diff 报告，知道哪里变了：
+
+```text
+运行视觉回归测试：pnpm test -- tests/visual.spec.ts
+如果测试失败，分析失败原因：
+1. 是有意为之的样式变化？
+2. 还是意外引入的布局偏移？
+
+给出判断和下一步建议。
+```
+
+### 什么时候需要视觉 diff
+
+不是所有项目都需要。判断标准：
+
+| 场景 | 是否需要 |
+|------|---------|
+| 设计还原度要求高（品牌官网、营销页） | 需要 |
+| 组件库或设计系统 | 强烈需要 |
+| 后台管理系统 | 通常不需要 |
+| 有专门 QA 团队做视觉回归 | 不需要（他们有专业工具） |
+| 个人项目或原型 | 不需要，手动看一眼就行 |
+
+## Console 日志和错误排查
+
+前端调试不只有视觉层面，很多问题藏在 console 里。
+
+### 让 Claude Code 读 console
+
+如果你接了 Chrome DevTools MCP：
+
+```text
+查看当前页面的 console 日志。
+过滤 error 和 warning 级别。
+列出所有错误，每个错误包含：
+- 错误信息
+- 来源文件和行号
+- 出现次数
+
+然后分析这些错误的根因。
+```
+
+常见的有价值信息：
+
+- **React/Vue 的 hydration mismatch**——服务端渲染和客户端渲染不一致
+- **CORS 错误**——API 调用被浏览器拦截了
+- **资源加载失败**——图片、字体、JS 文件 404 了
+- **Deprecated API 警告**——用了即将废弃的 API，未来版本会挂
+
+### 让 Claude Code 查网络请求
+
+```text
+查看当前页面的网络请求。
+找出所有失败的请求（状态码 >= 400）。
+对每个失败的请求，说明：
+- 请求的 URL 和方法
+- 状态码
+- 响应内容（如果有）
+- 可能的失败原因
+
+相关后端代码在 src/api/ 目录。
+```
+
+网络请求的问题通常比 console 错误更容易定位——请求发给了谁、返回了什么、状态码多少，信息都是结构化的。Claude Code 拿到这些信息后，可以直接去读对应的后端代码找原因。
+
+### 组合使用：一个完整的前端调试流程
+
+一个真实场景：用户反馈"提交订单后页面卡住了"。
+
+```text
+用户反馈：提交订单后页面没反应，一直转圈。
+
+请按以下步骤调试：
+1. 截图看当前页面状态
+2. 查看 console 有没有报错
+3. 查看网络请求，找到 POST /api/orders 的状态和响应
+4. 根据以上信息判断问题出在前端还是后端
+5. 如果是前端，读相关代码定位具体位置
+6. 如果是后端，说明后端返回了什么、可能的失败原因
+
+相关文件：src/pages/Checkout.tsx, src/api/orders.ts
+```
+
+Claude Code 执行后可能发现：console 有一个 `Unhandled Promise Rejection`，网络请求显示 `POST /api/orders` 返回了 500，响应体是 `{"error": "insufficient stock"}`。但前端没有处理这个错误——它只处理了 200 的情况，其他状态码被忽略了，loading 状态永远不会结束。
+
+根因定位完成：不是前端"卡住了"，是后端返回了错误但前端没处理。
+
+## 实战场景
+
+### 场景一：CSS 布局调试
+
+**问题：** 导航栏在 iPad 竖屏模式下，菜单项换行了，挤到了第二行。
+
+```text
+[粘贴 iPad 竖屏截图]
+
+这是 iPad 竖屏（768px 宽度）下的导航栏。
+菜单项换行了，设计要求是不换行。
+
+相关文件：
+- src/components/Navbar.tsx
+- src/styles/navbar.css
+
+请分析换行的原因，给出修复方案。
+注意媒体查询断点的设置。
+```
+
+Claude Code 会读 CSS，找到 `@media (min-width: 768px)` 的断点，可能发现菜单项的 `min-width` 加起来超过了 768px。修复方案可能是减小 padding、缩短文案、或把断点调到 1024px。
+
+### 场景二：截图转代码
+
+**问题：** 设计师给了设计稿截图，需要还原成组件。
+
+```text
+[粘贴设计稿截图]
+
+请根据这个设计稿，实现一个 React 组件。
+要求：
+- 使用 Tailwind CSS
+- 响应式：桌面端左右布局，移动端上下布局
+- 图片使用占位符（placeholder）
+
+组件文件放在 src/components/PricingCard.tsx
+```
+
+Claude Code 能从截图里识别出布局结构、颜色、间距、文字内容，然后生成对应的代码。准确率取决于设计稿的复杂度——简单的卡片类组件通常一次就能到位，复杂的仪表盘可能需要几轮调整。
+
+### 场景三：移动端适配验证
+
+**问题：** 需要确认页面在不同屏幕尺寸下的表现。
+
+用 Playwright MCP 做多视口截图：
+
+```text
+用 Playwright 做以下操作：
+1. 打开 localhost:3000
+2. 分别在以下视口尺寸截图：
+   - 375x667（iPhone SE）
+   - 390x844（iPhone 14）
+   - 768x1024（iPad）
+   - 1440x900（桌面）
+3. 每个截图标注视口尺寸
+4. 对比四个截图，列出布局问题
+```
+
+### 场景四：回归检测
+
+**问题：** 改了按钮样式，不确定有没有影响到其他地方。
+
+```text
+我刚修改了 src/styles/button.css 中的基础按钮样式。
+请帮我确认没有引入回归：
+
+1. 截图首页，看按钮是否正常
+2. 截图登录页，看按钮是否正常
+3. 截图设置页，看按钮是否正常
+4. 如果任何一个页面的按钮看起来不对，说明问题所在
+
+每个页面的路由：
+- / (首页)
+- /login (登录)
+- /settings (设置)
+```
+
+## 常见坑
+
+### 截图太模糊，Claude Code 看不清
+
+高 DPI 屏幕截图默认分辨率很高，但经过粘贴和压缩可能变模糊。如果 Claude Code 说"看不清楚"，试试：
+
+- 用区域截图而不是全屏截图，减少不必要的信息
+- 用 Chrome DevTools MCP 的 `take_screenshot` 直接截图，不走剪贴板
+- 对比时确保两张截图分辨率一致
+
+### 只给截图不给代码路径
+
+"看这个页面哪里有问题"——Claude Code 会描述它看到了什么，但不知道去哪个文件改。一定要附上相关文件路径。
+
+### Computer Use 忘了关
+
+Computer Use 能控制你的鼠标键盘。调试完之后，回到 `/mcp` 把它关掉。否则 Claude Code 可能在你不期望的时候移动鼠标或点击。
+
+### 信任视觉分析结果不做验证
+
+Claude Code 看截图可能把蓝色认成紫色，把 14px 字号说成 16px。它对颜色和尺寸的判断是近似值，不是精确值。如果涉及品牌色值、像素级对齐，用开发者工具确认，不要只信 Claude Code 的视觉判断。
+
+### 过度依赖自动化截图
+
+不是所有前端问题都需要截图。如果问题能用文字描述清楚（比如"点击提交按钮后 500 错误"），先让 Claude Code 读代码和 console 日志。截图是在文字描述不够用时的补充，不是每次调试的第一步。
+
+## 关键要点
+
+- Claude Code 看不到屏幕，但你可以通过三种方式给它视觉信息：粘贴截图（最简单）、Computer Use（自动截图）、Chrome DevTools MCP（最强大的调试组合）
+- 截图 + 文件路径 + 问题描述 三件套是有效视觉调试的最小输入
+- 截图闭环验证：改代码 → 截图 → 对比 → 继续改。限制迭代轮数（3 轮以内）
+- 视觉 diff 用 Playwright 的 screenshot assertion 做像素级对比，用 Claude Code 做语义级对比
+- Console 日志和网络请求是视觉信息的重要补充，很多时候根因不在屏幕上而在控制台里
+- Chrome DevTools MCP 适合调试（看状态），Playwright MCP 适合操作（走流程）。两者互补
+
+## 延伸阅读
+
+- [Claude Code Computer Use 官方文档](https://code.claude.com/docs/en/computer-use) — Computer Use 功能的启用和使用方法
+- [Chrome DevTools MCP](https://github.com/anthropics/claude-code/tree/main/mcp-servers/chrome-devtools) — Google 维护的 Chrome 调试 MCP 服务
+- [Playwright MCP 官方文档](https://playwright.dev/docs/getting-started-mcp) — Microsoft 维护的浏览器自动化 MCP 服务
+- [Giving Claude Code Eyes: Round-Trip Screenshot Testing](https://medium.com/@rotbart/giving-claude-code-eyes-round-trip-screenshot-testing-ce52f7dcc563) — 截图闭环验证的实践文章
+- [Playwright vs Chrome DevTools MCP: Driving vs Debugging](https://stevekinney.com/writing/driving-vs-debugging-the-browser) — 两个工具的定位对比
+- 系列第 52 篇「找代码与追调用链」 — 前端调试的前置技能
+- 系列第 61 篇「MCP 入门」 — MCP 服务的通用配置方法

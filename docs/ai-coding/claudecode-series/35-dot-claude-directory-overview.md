@@ -1,0 +1,321 @@
+# `.claude` 目录全景
+
+> 更新日期：2025/06
+
+**TL;DR：** `.claude` 目录是 Claude Code 读取项目配置的入口。它不是魔法——就是一组固定路径的文件，Claude Code 启动时按固定顺序加载。搞清楚每个文件放什么、什么时候加载、谁优先生效，就掌握了 Claude Code 的项目级配置。
+
+## `.claude` 目录是什么
+
+用 Claude Code 打开一个项目，它会去两个地方读配置：
+
+- **项目级** `.claude/`：在仓库根目录下，提交到 git，团队共享
+- **全局级** `~/.claude/`：在你的 home 目录下，个人配置，跨项目生效
+
+官方文档的说法是："Most users only edit `CLAUDE.md` and `settings.json`." 这句话是真的——大部分项目只需要这两个文件。其他目录（rules、skills、agents、hooks 等）是按需加的，不是起步必需。
+
+本篇的目标是给你一张全景地图：每个文件/目录干什么用、什么时候加载、该不该提交、和系列里哪些文章对应。
+
+## 完整目录结构
+
+下面是两个层级的完整结构。不需要每个都用，但要清楚每个的位置和用途。
+
+```
+your-project/
+├── CLAUDE.md                    # 项目指令，每次会话都加载
+├── CLAUDE.local.md              # 个人项目偏好，不提交（手动创建，加入 .gitignore）
+├── .mcp.json                    # MCP 服务器配置，团队共享
+├── .worktreeinclude             # worktree 中要复制的 gitignore 文件列表
+└── .claude/
+    ├── settings.json            # 项目级权限、hooks、环境变量
+    ├── settings.local.json      # 个人覆盖，自动 gitignore
+    ├── rules/                   # 按主题拆分的指令文件
+    │   ├── code-style.md        #   无 frontmatter = 每次都加载
+    │   └── api-design.md        #   有 paths frontmatter = 按需加载
+    ├── commands/                # 自定义 slash commands（单文件格式）
+    │   └── review.md            #   变成 /project:review
+    ├── skills/                  # 技能定义（目录格式）
+    │   └── code-review/
+    │       └── SKILL.md         #   技能入口文件
+    ├── agents/                  # 子代理定义
+    │   └── security-auditor.md  #   独立上下文的专家角色
+    ├── workflows/               # 动态工作流脚本
+    │   └── deploy.js            #   编排多个子代理的脚本
+    ├── output-styles/           # 自定义输出格式
+    │   └── concise.md           #   改变 Claude 的回复风格
+    └── agent-memory/            # 子代理的持久记忆
+        └── security-auditor/    #   按代理名分目录
+
+~/.claude/                       # 全局配置（个人，跨项目）
+├── CLAUDE.md                    # 个人全局指令
+├── settings.json                # 个人全局设置
+├── rules/                       # 个人全局规则
+├── skills/                      # 个人全局技能
+├── agents/                      # 个人全局代理
+├── keybindings.json             # 自定义快捷键
+├── themes/                      # 自定义颜色主题
+├── projects/                    # 会话数据和自动记忆
+│   └── <project>/memory/        #   Claude 给自己写的笔记
+└── plugins/                     # 已安装的插件
+```
+
+注意几个位置特殊的文件：`CLAUDE.md` 在项目根目录而不是 `.claude/` 里面；`.mcp.json` 也在根目录；`settings.local.json` 创建后自动被 git 忽略。
+
+## 核心文件详解
+
+### CLAUDE.md
+
+项目级的指令文件，Claude Code 启动时第一个读取的内容。写什么它就遵守什么——架构说明、构建命令、代码风格约定、安全边界。它是 `.claude` 体系中最高杠杆的文件，一行好的指令能省掉十次对话纠正。
+
+CLAUDE.md 还有一个特点：它**能在 compact 后存活**。当你运行 `/compact` 或 Claude 自动压缩上下文时，对话中的临时指令会丢失，但 CLAUDE.md 会从磁盘重新读取。这意味着 CLAUDE.md 是唯一可靠的持久指令来源。
+
+- 详细写法 → [36 - CLAUDE.md 怎么写](36-how-to-write-claude-md.md)
+- 个人项目偏好 → [37 - CLAUDE.local.md 与个人偏好](37-claude-local-md.md)
+
+### rules/
+
+把 CLAUDE.md 里过长或按主题分类的指令拆出来。每个 `.md` 文件是一个独立的规则模块。
+
+两种模式：
+- **无 frontmatter**：每次会话都加载，相当于 CLAUDE.md 的延伸
+- **有 paths frontmatter**：只在 Claude 操作匹配路径的文件时才加载
+
+```yaml
+---
+paths:
+  - "src/api/**/*.ts"
+  - "**/controllers/**"
+---
+# API 设计规则
+- RESTful 路由用复数名词
+- 所有端点必须有输入验证
+```
+
+路径匹配用标准 glob 语法（`**/*.ts`、`src/api/**`）。monorepo 里按目录拆规则文件，不同模块的规范互不干扰。
+
+- 详细用法 → [38 - Rules 文件](38-rules-files.md)
+
+### settings.json / settings.local.json
+
+项目级的权限和配置中心。`settings.json` 提交到 git，`settings.local.json` 是个人覆盖（自动 gitignore）。
+
+`settings.json` 能配的东西：
+
+```json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": ["Bash(npm test *)", "Read", "Glob"],
+    "deny": ["Read(./.env)", "Bash(rm -rf *)"]
+  },
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "Write|Edit", "hooks": ["npx prettier --write $FILE_PATH"] }
+    ]
+  }
+}
+```
+
+权限规则的三层逻辑：deny 优先 > 未列出的命令会弹确认 > allow 直接执行。
+
+- 详细配置 → [39 - Settings 文件](39-settings-files.md)
+
+### commands/
+
+自定义 slash commands 的原始格式。一个 `.md` 文件就是一个命令：
+
+```
+.claude/commands/review.md  →  /project:review
+```
+
+commands 已被 skills 系统吸收。如果一个 skill 和一个 command 同名，skill 优先。新项目建议直接用 skills。
+
+- 详细用法 → [34 - 自定义 Slash Commands](34-custom-slash-commands.md)
+
+### skills/
+
+技能是可复用的工作流。每个技能一个目录，入口文件是 `SKILL.md`：
+
+```
+.claude/skills/
+├── code-review/
+│   └── SKILL.md
+└── deploy/
+    ├── SKILL.md
+    └── templates/
+        └── release-notes.md
+```
+
+skill 和 rule 的区别：rule 告诉 Claude "怎么做事"（被动约束），skill 告诉 Claude "做什么事"（主动工作流）。skill 有 YAML frontmatter 可以配工具白名单、模型选择、是否允许自动触发等。
+
+- 详细用法 → [59 - Skills 入门](59-skills-getting-started.md)
+
+### agents/
+
+子代理定义。每个 `.md` 文件定义一个有独立上下文、独立工具权限、可选独立模型的专家角色：
+
+```
+.claude/agents/
+├── code-reviewer.md      # 只读权限，用 sonnet 模型
+└── security-auditor.md   # 只读 + Grep，专门审安全
+```
+
+子代理运行在独立上下文窗口里，完成后返回压缩的摘要。主会话不会被中间过程撑满。
+
+- 详细用法 → [65 - Subagents 入门](65-subagents-getting-started.md)
+
+### hooks/
+
+不是独立的目录，而是配置在 `settings.json` 里的生命周期钩子。支持的触发点：
+
+- `PreToolUse`：工具执行前（可阻断）
+- `PostToolUse`：工具执行后（可自动格式化）
+- `Notification`：Claude 通知你时（可转发到 Slack）
+- `Stop`：Claude 完成任务时
+- `SessionStart`：会话启动时
+
+hook 的本质是把确定性的自动化逻辑从 AI 判断中拿走——文件保存后自动跑 prettier 不需要 Claude 决定，用 hook 做更可靠。
+
+- 详细用法 → [63 - Hooks 入门](63-hooks-getting-started.md)
+
+### workflows/
+
+动态工作流脚本，用 JavaScript 编写。每个 `.js` 文件变成一个 `/<name>` 命令。和 skills 不同，workflows 是真正的脚本，可以编排多个子代理、控制执行顺序、处理分支逻辑。
+
+适用场景：多个子代理需要协调执行（比如并行代码审查 + 安全审计），或者需要根据中间结果决定下一步。
+
+### .mcp.json
+
+MCP（Model Context Protocol）服务器配置文件，放在项目根目录。定义 Claude Code 可以连接的外部工具：
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "..." }
+    }
+  }
+}
+```
+
+- 详细用法 → [61 - MCP 入门](61-mcp-getting-started.md)
+
+### 其他目录
+
+几个不太常用但值得知道的：
+
+| 路径 | 作用 |
+|------|------|
+| `output-styles/*.md` | 自定义 Claude 的回复格式（比如强制 JSON、强制简洁） |
+| `agent-memory/<name>/` | 子代理的持久记忆，跨会话保留 |
+| `.worktreeinclude` | git worktree 里需要复制但被 gitignore 的文件列表 |
+| `~/.claude/projects/<name>/memory/` | Claude 给自己写的项目笔记（auto memory） |
+
+## 文件优先级和加载顺序
+
+配置冲突时的优先级，从高到低：
+
+| 优先级 | 来源 | 位置 |
+|--------|------|------|
+| 1（最高） | 托管策略（managed policy） | 系统级，IT 设置 |
+| 2 | CLI 参数 | 命令行 flags |
+| 3 | 本地覆盖 | `.claude/settings.local.json` |
+| 4 | 项目设置 | `.claude/settings.json` |
+| 5（最低） | 用户设置 | `~/.claude/settings.json` |
+
+CLAUDE.md 的加载走的是另一条路径：Claude Code 从当前目录向上遍历，加载沿途的所有 CLAUDE.md。子目录的 CLAUDE.md 在访问该目录下的文件时按需加载。
+
+rules 的加载：全局 rules（`~/.claude/rules/`）先加载，项目 rules（`.claude/rules/`）后加载。项目 rules 的优先级更高。
+
+## 初始化 `.claude` 目录
+
+从零开始的最小配置：
+
+```
+your-project/
+├── CLAUDE.md          # 30-50 行：构建命令、架构概述、关键约定
+└── .claude/
+    └── settings.json  # 基础权限规则
+```
+
+`CLAUDE.md` 的基本骨架：
+
+```markdown
+# 项目名
+
+## 常用命令
+- 构建：`npm run build`
+- 测试：`npm test`
+- 启动：`npm run dev`
+
+## 架构
+- 前端：React + TypeScript，在 src/
+- 后端：Express，在 server/
+- 数据库：PostgreSQL，migration 在 db/
+
+## 约定
+- 组件用 PascalCase，文件用 kebab-case
+- 所有 API 端点必须有输入验证
+- 提交信息遵循 Conventional Commits
+```
+
+`settings.json` 的基本骨架：
+
+```json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": ["Bash(npm run *)", "Bash(git status)", "Bash(git diff *)", "Read"],
+    "deny": ["Read(./.env)"]
+  }
+}
+```
+
+随着使用深入，按需加 rules、skills、agents。不需要一开始就把所有目录都建出来。
+
+## 常见问题
+
+**Q：`.claude` 目录要提交到 git 吗？**
+
+大部分要。`settings.json`、`rules/`、`skills/`、`agents/`、`commands/`、`workflows/` 都是团队共享配置，应该提交。`settings.local.json` 自动 gitignore，不用管。`CLAUDE.local.md` 需要手动加入 `.gitignore`。
+
+**Q：commands 和 skills 该用哪个？**
+
+新项目用 skills。commands 是早期格式（单文件），skills 是它的超集（目录 + frontmatter + 支持文件）。同名时 skill 优先。已有的 commands 文件不需要删，继续工作。
+
+**Q：Claude 忽略了我的 rules 文件，为什么？**
+
+检查三点：文件是否在 `.claude/rules/` 目录下（不是 `.claude/rule/`）；扩展名是否是 `.md`；如果有 `paths:` frontmatter，glob 模式是否匹配你正在编辑的文件。
+
+**Q：修改了 CLAUDE.md 但没生效？**
+
+CLAUDE.md 在会话启动时读取。修改后需要开新会话或运行 `/compact` 才能生效。
+
+**Q：`~/.claude/` 占用空间太大怎么办？**
+
+运行 `claude project purge <路径>` 清理指定项目的数据（会话记录、debug 日志、文件快照）。30 天前的数据会在启动时自动清理。
+
+## 关键要点
+
+- `.claude` 目录有项目级和全局级两层，项目级提交 git，全局级个人独享
+- 大部分项目只需要 `CLAUDE.md` + `settings.json` 两个文件，其他按需加
+- 配置优先级：托管策略 > CLI 参数 > settings.local.json > 项目 settings.json > 全局 settings.json
+- CLAUDE.md 是唯一能在上下文压缩后存活的指令来源——重要的规则写在这里
+- rules 可以用 paths frontmatter 实现按需加载，避免无用的上下文消耗
+- commands 已被 skills 吸收，新项目直接用 skills
+
+## 延伸阅读
+
+- [01 - Claude Code 到底是什么](01-what-is-claude-code.md) — 理解 Claude Code 的基本定位
+- [36 - CLAUDE.md 怎么写](36-how-to-write-claude-md.md) — 指令文件的详细写法
+- [38 - Rules 文件](38-rules-files.md) — 模块化和路径作用域规则
+- [39 - Settings 文件](39-settings-files.md) — 权限、hooks、环境变量配置
+- [59 - Skills 入门](59-skills-getting-started.md) — 可复用工作流
+- [61 - MCP 入门](61-mcp-getting-started.md) — 外部工具连接
+- [63 - Hooks 入门](63-hooks-getting-started.md) — 生命周期自动化
+- [65 - Subagents 入门](65-subagents-getting-started.md) — 专家子代理
+- [官方文档 - Explore the .claude directory](https://code.claude.com/docs/en/claude-directory) — Anthropic 官方文件参考

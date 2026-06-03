@@ -1,0 +1,167 @@
+# CLAUDE.local.md 与个人偏好
+
+> 更新日期：2025/06
+
+**TL;DR：** `CLAUDE.local.md` 是项目根目录下的一个特殊文件——它和 `CLAUDE.md` 格式一样，但不会被提交到 git。用它存放你个人的项目偏好：调试习惯、临时指令、不想让团队看到的配置。团队的规则写 `CLAUDE.md`，你自己的规则写 `CLAUDE.local.md`。两个文件会同时生效，local 的规则在后面加载，优先级更高。
+
+## CLAUDE.md vs CLAUDE.local.md
+
+### 核心区别
+
+| 对比项 | CLAUDE.md | CLAUDE.local.md |
+|--------|-----------|-----------------|
+| 加载方式 | 每次会话自动加载 | 每次会话自动加载 |
+| 是否提交 git | 是，团队共享 | 否，仅本地 |
+| 谁来维护 | 团队一起维护 | 个人维护 |
+| 优先级 | 先加载 | 后加载，同名规则覆盖 CLAUDE.md |
+| 适合内容 | 项目规范、构建命令、代码风格 | 个人偏好、临时调试指令 |
+
+加载顺序：全局 `~/.claude/CLAUDE.md` → 项目 `CLAUDE.md` → 项目 `CLAUDE.local.md`。后面的会覆盖前面的同名规则。
+
+### 文件关系图
+
+```
+~/.claude/CLAUDE.md           ← 你的全局偏好（所有项目生效）
+    ↓
+项目根/CLAUDE.md              ← 团队规范（提交 git）
+    ↓
+项目根/CLAUDE.local.md        ← 你的项目级个人偏好（不提交）
+```
+
+三层叠加，local 是最后一层，优先级最高。
+
+## 什么放 local
+
+### 个人工具偏好
+
+你和团队用的工具不一样。比如团队用 ESLint，你更习惯在本地用 Biome 做快速检查：
+
+```markdown
+# 个人偏好
+- 本地 lint 用 biome check，不等 ESLint
+- 跑测试前先跑 typecheck，有类型错误就别跑了
+```
+
+### 临时调试指令
+
+正在调试某个问题，需要 Claude 反复检查特定文件：
+
+```markdown
+# 临时调试
+- 重点关注 src/api/auth.ts 和 src/middleware/token.ts
+- 每次修改后运行 pnpm test src/api/auth.test.ts
+- 日志里看到的错误码是 ERR_TOKEN_EXPIRED
+```
+
+调试完了，删掉这段就行。不需要提交到 git 污染团队配置。
+
+### 个人工作流偏好
+
+```markdown
+# 工作方式
+- 改代码前先解释要改什么、为什么改
+- 一次只改一个文件，改完让我确认再改下一个
+- 不要自动 git commit，我来决定什么时候提交
+```
+
+这些偏好是你个人的工作方式，不应该强加给整个团队。
+
+### 敏感路径
+
+你的本地开发环境可能和团队其他人不同：
+
+```markdown
+# 本地环境
+- 本地数据库在 /usr/local/var/postgres
+- 测试用的 API Key 在 .env.local（不要读这个文件的内容）
+```
+
+### 简单的覆盖
+
+团队 CLAUDE.md 里有一条规则你不认同，但又不想改团队的文件：
+
+```markdown
+# 覆盖
+- 团队规则说用 const enum，我这里要求用 union type 代替
+```
+
+local 里写的规则会覆盖 CLAUDE.md 中的同名规则。
+
+## 什么不放 local
+
+### 项目构建命令
+
+```markdown
+# 不要放这里
+- 安装依赖：pnpm install
+- 构建：pnpm build
+```
+
+构建命令是每个开发者都需要的，应该写在团队的 CLAUDE.md 里。写在 local 里只有你一个人能用，其他人用 Claude Code 时就不知道怎么构建。
+
+### 代码风格规范
+
+```markdown
+# 不要放这里
+- 用单引号，不用双引号
+- 缩进 2 空格
+```
+
+代码风格是团队约定，不应该因人而异。
+
+### 架构决策
+
+```markdown
+# 不要放这里
+- 新功能必须写测试
+- API 路由统一用 kebab-case
+```
+
+架构决策影响所有人，应该在团队 CLAUDE.md 或 `.claude/rules/` 里。
+
+### 大段重复内容
+
+如果 local 文件写了几十行，考虑把通用部分提升到 CLAUDE.md 或全局 `~/.claude/CLAUDE.md`。local 应该精简——几条覆盖或补充，不是又一份完整的配置。
+
+## 团队协作
+
+### 首次使用
+
+`CLAUDE.local.md` 需要手动创建。同时把它加到 `.gitignore`：
+
+```bash
+# 在项目根目录
+echo "CLAUDE.local.md" >> .gitignore
+touch CLAUDE.local.md
+```
+
+有些项目的 `.gitignore` 模板已经包含了 `CLAUDE.local.md`，先检查一下再添加。
+
+### 和 .gitignore 的关系
+
+Claude Code 不会主动创建 `CLAUDE.local.md`。它也不负责把文件加到 `.gitignore`。这两步都需要你手动做。
+
+如果忘记加 `.gitignore`，这个文件会被 git 追踪，你的个人偏好会推到远程仓库——这不是灾难，但违背了 local 文件的初衷。
+
+### 团队成员之间的独立性
+
+每个人的 `CLAUDE.local.md` 内容可以完全不同。Alice 的 local 里写"先跑测试再改代码"，Bob 的 local 里写"先做静态分析再改代码"。互不影响，因为文件不共享。
+
+### 代码评审时的注意点
+
+如果 local 文件里有"每次改完自动 commit"之类的规则，你在代码评审时可能会看到一些比较随意的 commit 信息。这不是 bug——是 local 规则在驱动。review 时忽略 commit 信息，看代码本身。
+
+## 关键要点
+
+- `CLAUDE.local.md` 和 `CLAUDE.md` 格式一样，但不提交 git
+- 放个人偏好、临时调试指令、工具习惯
+- 不放项目规范、构建命令、架构决策——这些属于团队
+- 创建后手动加入 `.gitignore`
+- 保持精简，几条覆盖或补充就够，不要写成第二份完整配置
+
+## 延伸阅读
+
+- 第 36 篇「CLAUDE.md 怎么写」——团队配置文件的写法
+- 第 38 篇「Rules 文件」——按路径作用域拆分规则
+- 第 35 篇「`.claude` 目录全景」——完整的配置文件地图
+- 第 40 篇「环境变量」——敏感信息的另一种管理方式

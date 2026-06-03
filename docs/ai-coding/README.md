@@ -29,6 +29,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | --- | --- | --- |
 | [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 想系统学习 Claude Code 工程化的人 | 从 CLAUDE.md、Skills、Subagents、Hooks、MCP 到 Headless、Agent SDK、Plugins 的 32 讲路线。 |
 | [Claude Code 工程化实战系列](./claude-code-engineering/) | 想逐篇阅读和沉淀团队材料的人 | 34 篇独立文章，覆盖个人使用、工作流沉淀、Subagents、MCP、Hooks、CI/CD、SDK、Plugins 和组织治理。 |
+| [Claude Code 工具全书](./claudecode-series/) | 想全面了解 Claude Code 各方面能力的人 | 78 篇独立文章，覆盖安装、CLI 命令、交互模式、配置、权限安全、日常开发工作流、Skills/MCP/Hooks/Subagents、并行开发、Headless/CI/SDK、团队治理和排错。 |
 
 ### Codex 系列
 

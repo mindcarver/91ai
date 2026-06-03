@@ -1,0 +1,423 @@
+# 管道与 Unix 化用法：把 Claude Code 当成命令行工具
+
+> 更新日期：2025/06
+
+**TL;DR：** `cat file | claude -p "分析"`、`git diff | claude -p "审查"`——把任何命令的输出通过管道喂给 Claude，它读完后给出结果，写回 stdout。不需要给它文件系统权限，不需要交互。这一篇整理管道的各种写法：从基本用法、git diff 审查、日志分析，到跟 jq/grep/awk/xargs 的组合，以及管道解决不了的场景。
+
+## 管道基础
+
+管道的核心思想：一个命令的 stdout 直接变成另一个命令的 stdin。对 Claude Code 来说，当检测到 stdin 有数据时，它会自动读取全部内容，拼接到你的 prompt 后面。
+
+```bash
+cat error.log | claude -p "解释这些错误"
+```
+
+这里发生的事情：
+
+1. `cat error.log` 把文件内容写到 stdout
+2. 管道 `|` 把 stdout 接到 `claude -p` 的 stdin
+3. Claude 看到两个输入：prompt 里的"解释这些错误" + stdin 里的日志内容
+4. Claude 处理后把结果写到 stdout，然后退出
+
+不需要 `--stdin` 标志，不需要额外参数。管道接上了就自动读。
+
+### 三种给 Claude 喂数据的方式
+
+```bash
+# 1. 管道（最常用）
+cat file.txt | claude -p "分析内容"
+
+# 2. 文件重定向
+claude -p "分析内容" < file.txt
+
+# 3. Here-document（脚本中的多行输入）
+claude -p "分析这段配置" <<EOF
+server {
+    listen 80;
+    server_name example.com;
+}
+EOF
+```
+
+三种效果一样，选你顺手的。管道最灵活，因为前面可以是任何命令。
+
+### 管道的安全优势
+
+用管道传数据有一个容易被忽略的好处：**不需要给 Claude 文件读取权限**。
+
+对比两种方式：
+
+```bash
+# 方式 A：管道传入，Claude 不需要任何工具权限
+cat secret-config.yaml | claude -p "这个配置有什么问题"
+
+# 方式 B：让 Claude 自己读文件，需要给 Read 权限
+claude -p "读 secret-config.yaml 并分析问题" --allowedTools "Read"
+```
+
+方式 A 中，Claude 看不到你的文件系统，只能处理管道传给它的文本。对于敏感文件或受限制的环境，管道是更安全的路径。
+
+## 常用管道模式
+
+### 1. 文件内容分析
+
+```bash
+cat package.json | claude -p "列出所有过时的依赖，按紧急程度排序"
+```
+
+### 2. 命令输出分析
+
+```bash
+docker logs my-app --tail 200 | claude -p "找出崩溃原因"
+```
+
+### 3. API 响应处理
+
+```bash
+curl -s https://api.example.com/status | claude -p "这个 API 状态正常吗？有哪些异常指标"
+```
+
+### 4. 剪贴板内容处理
+
+macOS 上分析剪贴板里复制的代码或错误信息：
+
+```bash
+pbpaste | claude -p "解释这段代码的逻辑"
+```
+
+Linux 上换成 `xclip -selection clipboard -o`。
+
+### 5. 编译/构建错误诊断
+
+```bash
+npm run build 2>&1 | tail -50 | claude -p "构建失败的原因是什么，怎么修"
+```
+
+注意 `2>&1` 把 stderr 也接进来，因为很多构建工具的错误输出在 stderr。
+
+### 6. 输出重定向到文件
+
+```bash
+cat requirements.txt | claude -p "标出每个依赖的用途和版本是否合理" > deps-review.txt
+```
+
+### 7. 多步管道
+
+```bash
+# 先用 grep 过滤出错误行，再交给 Claude 分析
+grep -i "error\|fail\|exception" app.log | tail -100 | claude -p "这些错误的共同原因是什么"
+```
+
+先把噪音滤掉，再让 Claude 处理。避免把大量无关日志塞进上下文浪费 token。
+
+## git diff 管道
+
+把代码变更管道给 Claude 做审查，是最实用的管道模式之一。
+
+### 审查当前改动
+
+```bash
+git diff | claude -p "检查这个 diff 里的拼写错误和逻辑问题"
+```
+
+### 审查相对于某个分支的改动
+
+```bash
+git diff main | claude -p "这个变更可能引入什么 bug"
+```
+
+### 审查已提交的变更
+
+```bash
+# 最近一次提交
+git show | claude -p "审查这次提交的代码质量"
+
+# 最近 3 次提交
+git log -3 --oneline | claude -p "总结这三条提交做了什么"
+```
+
+### 审查 PR diff
+
+用 GitHub CLI 拉取 PR 的 diff：
+
+```bash
+gh pr diff 42 | claude -p "审查这个 PR 的安全风险"
+```
+
+### 加上 system prompt 做专项审查
+
+```bash
+git diff main | claude -p \
+  --append-system-prompt "你是一名安全工程师，只关注安全漏洞：注入、鉴权绕过、敏感数据泄露。" \
+  "审查这个 diff 中的安全风险"
+```
+
+`--append-system-prompt` 给 Claude 设定一个角色，让输出更聚焦。不加的话 Claude 会做通用审查，什么都提一点。
+
+### 注意 `--no-color`
+
+有些 git 命令输出带 ANSI 颜色码，喂给 Claude 虽然不影响理解，但会增加不必要的 token：
+
+```bash
+git diff --no-color main | claude -p "审查变更"
+```
+
+`--no-color` 在脚本和管道里是好习惯。
+
+## 日志分析
+
+### 错误日志
+
+```bash
+tail -200 /var/log/app/error.log | claude -p "分析错误模式，给出根因判断"
+```
+
+### 结构化日志（JSON 格式）
+
+很多现代服务输出 JSON 格式的日志。可以先用 jq 过滤，再交给 Claude：
+
+```bash
+# 提取最近的错误级别日志
+tail -500 /var/log/app.log | jq -c 'select(.level == "error")' | \
+  claude -p "分析这些错误的共同原因"
+```
+
+### 时间范围筛选
+
+```bash
+# 最近一小时的日志
+awk -v date="$(date -v-1H '+%Y-%m-%dT%H')" '$0 >= date' /var/log/app.log | \
+  claude -p "这一小时内的异常事件"
+```
+
+### 多文件汇总
+
+```bash
+cat /var/log/app/access.log /var/log/app/error.log | \
+  tail -300 | claude -p "access log 和 error log 之间有关联吗"
+```
+
+### Docker 容器日志
+
+```bash
+docker logs --since 1h my-container 2>&1 | claude -p "分析这个容器最近一小时的异常"
+```
+
+## 批量文件处理
+
+### 逐文件分析，汇总报告
+
+```bash
+#!/bin/bash
+# review.sh - 批量审查 Python 文件
+
+echo "# 代码审查报告" > review-report.md
+echo "生成时间: $(date)" >> review-report.md
+
+for file in src/**/*.py; do
+  echo "审查: $file"
+  echo -e "\n## $file\n" >> review-report.md
+  cat "$file" | claude -p \
+    --allowedTools "" \
+    "简洁地指出代码中的问题，每条一行" >> review-report.md
+done
+
+echo "完成: review-report.md"
+```
+
+注意 `--allowedTools ""` 明确禁用所有工具，确保 Claude 只处理管道传入的内容，不会去读其他文件。
+
+### 用 GNU parallel 并行处理
+
+串行处理多个文件很慢，因为每次调用 Claude 都要等它响应。用 `parallel` 可以同时跑多个：
+
+```bash
+# 最多 4 个并行任务
+find src -name "*.py" | parallel -j 4 \
+  'cat {} | claude -p "列出这个文件中的代码问题" > review/{/}.txt'
+```
+
+`{/}` 是 parallel 的替换符，表示去掉路径后的文件名。每个文件的结果写到 `review/` 目录。
+
+### 用 xargs 批量处理
+
+```bash
+# 找出所有 TODO 并生成摘要
+grep -rl "TODO\|FIXME\|HACK" src/ | head -20 | while read file; do
+  echo "文件: $file"
+  grep -n "TODO\|FIXME\|HACK" "$file" | claude -p "这些 TODO 的优先级排序"
+  echo "---"
+done
+```
+
+### 结合 JSON 输出做结构化批处理
+
+```bash
+#!/bin/bash
+# 批量提取函数签名
+
+for file in src/*.py; do
+  result=$(cat "$file" | claude -p \
+    --output-format json \
+    "提取所有函数名，返回 JSON 数组")
+  
+  functions=$(echo "$result" | jq -r '.result')
+  echo "$file: $functions"
+done
+```
+
+## 与其他工具组合
+
+### jq：处理 JSON
+
+Claude 的输出经常是 JSON，用 jq 提取特定字段：
+
+```bash
+# 提取 Claude 的回复文本
+claude -p "分析项目结构" --output-format json | jq -r '.result'
+
+# 提取成本信息
+claude -p "快速总结" --output-format json | jq '.total_cost_usd'
+
+# 提取结构化输出
+cat auth.py | claude -p "提取函数签名" \
+  --output-format json \
+  --json-schema '{"type":"object","properties":{"functions":{"type":"array","items":{"type":"string"}}}}' \
+  | jq '.structured_output.functions'
+```
+
+反过来，先用 jq 预处理 JSON 日志再喂给 Claude：
+
+```bash
+cat metrics.json | jq -c '.[] | select(.status >= 400)' | \
+  claude -p "这些失败的请求有什么规律"
+```
+
+### grep：过滤噪音
+
+大量日志中只有一部分跟你的问题相关，先用 grep 过滤：
+
+```bash
+# 只看异常堆栈
+grep -A 5 "Traceback\|Exception\|Error" app.log | tail -100 | \
+  claude -p "分析这些异常的根因"
+```
+
+### awk：提取字段
+
+```bash
+# 从 Nginx 访问日志中提取慢请求
+awk '$NF > 2 {print}' access.log | tail -50 | \
+  claude -p "这些慢请求的特征"
+```
+
+`$NF > 2` 过滤响应时间超过 2 秒的行。
+
+### xargs：批量调用
+
+```bash
+# 对每个 go 文件生成文档注释
+find . -name "*.go" -not -path "*/vendor/*" | head -10 | \
+  xargs -I {} sh -c 'cat {} | claude -p "为导出的函数生成 godoc 注释" > {}_doc.txt'
+```
+
+### tee：同时查看和保存
+
+```bash
+git diff main | claude -p "审查变更" | tee review-$(date +%Y%m%d).txt
+```
+
+`tee` 把 Claude 的输出同时打到终端和文件里。
+
+### 组合管道：多层处理
+
+```bash
+# 从日志中提取错误 → 过滤重复 → Claude 分析
+grep "ERROR" app.log \
+  | awk '!seen[$0]++' \
+  | tail -50 \
+  | claude -p "去重后的错误分析"
+```
+
+## 管道的局限
+
+管道不是万能的。知道什么时候不该用管道，比知道怎么用更重要。
+
+### 输入大小限制
+
+没有硬性的字节数上限，但 Claude 的上下文窗口有 token 限制。把一个 5000 行的日志文件整个管道进去，大部分 token 都花在了读取上，留给分析和输出的空间就少了。
+
+应对方法：
+
+```bash
+# 截取关键部分
+tail -200 app.log | claude -p "分析最近的错误"
+
+# 用 grep 预过滤
+grep -i "error\|panic\|fatal" app.log | tail -100 | claude -p "分析"
+```
+
+### 没有后续对话
+
+管道模式是单次的：输入 → 输出 → 结束。你没法追问"第三个问题能展开说说吗"。如果你需要来回讨论，用交互模式更合适。
+
+如果确实需要多轮，可以拿到 session ID 后用 `--resume` 继续（见第 15 篇非交互模式）。
+
+### Claude 看不到文件名
+
+管道传入的内容对 Claude 来说就是一段文本，它不知道这些内容来自哪个文件：
+
+```bash
+cat config.yaml | claude -p "检查配置问题"
+# Claude 不知道这是 config.yaml，也不知道它在项目中的位置
+```
+
+需要文件名信息时，手动加到 prompt 里：
+
+```bash
+echo "文件: config.yaml" && cat config.yaml | claude -p "检查配置问题"
+```
+
+### 没有 CLAUDE.md 和项目上下文
+
+管道模式不会自动加载项目级的 CLAUDE.md（除非你用 `--bare` 以外的模式在项目目录下运行）。如果你的 prompt 依赖项目规范，用 `--append-system-prompt-file` 手动带入：
+
+```bash
+cat src/auth.py | claude -p \
+  --append-system-prompt-file CLAUDE.md \
+  "检查这段代码是否符合项目规范"
+```
+
+### 编码和二进制问题
+
+管道传的是文本。二进制文件、压缩包、图片不能直接管道。确保传给 Claude 的是可读文本。
+
+### 管道中的错误处理
+
+管道默认不会因为中间命令失败而中断。用 `set -o pipefail` 或检查 `PIPESTATUS`：
+
+```bash
+set -o pipefail
+cat maybe-missing.log | claude -p "分析" || echo "管道失败"
+```
+
+## 关键要点
+
+1. **管道是 `claude -p` 的核心用法**：`command | claude -p "prompt"` 把任何命令的输出交给 Claude 处理
+2. **管道不需要文件系统权限**：数据通过 stdin 传入，Claude 不需要 Read 权限就能看到内容
+3. **先用 grep/head/tail 过滤，再喂给 Claude**：减少噪音，节省 token，提高分析质量
+4. **`--output-format json` 配合 jq 实现结构化管道**：Claude 输出 JSON，jq 提取字段，传给下一个命令
+5. **批处理用 for 循环或 GNU parallel**：多个文件并行处理，比串行快数倍
+6. **管道的局限要清楚**：单次交互、看不到文件名、大输入费 token、没有项目上下文
+
+## 延伸阅读
+
+- [Run Claude Code programmatically - 官方文档](https://docs.anthropic.com/en/docs/claude-code/headless)
+- [CLI reference - 官方文档](https://docs.anthropic.com/en/docs/claude-code/cli-reference)
+- [Wrapping Claude CLI for Agentic Applications](https://avasdream.com/blog/claude-cli-agentic-wrapper)
+- [Claude Code Batch Processing Complete Guide](https://smartscope.blog/en/generative-ai/claude/claude-code-batch-processing/)
+- 系列第 15 篇：`claude -p` 非交互模式
+- 系列第 26 篇：输出格式与结构化结果
+- 系列第 27 篇：`--bare` 和脚本速度优化
+- 系列第 69 篇：Headless 模式
+- 系列第 70 篇：GitHub Actions / GitLab CI

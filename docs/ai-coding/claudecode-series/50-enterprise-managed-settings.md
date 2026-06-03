@@ -1,0 +1,163 @@
+# 企业托管设置
+
+> 更新日期：2025/06
+
+如果你是团队管理员，需要在组织内统一管控 Claude Code 的行为——禁止访问某些域名、限制可用 MCP 服务器、锁定权限规则——普通设置文件做不到。用户可以随时修改自己的 `settings.json`，覆盖任何项目级配置。
+
+企业托管设置就是解决这个问题的。它引入了一个"托管层"，在设置优先级链中位于最高位，用户无法通过本地配置绕过。
+
+## 前置知识
+
+本文依赖 [第 39 篇：Settings 文件详解](39-settings-files.md)。如果你还不了解 Claude Code 的设置层级（用户级、项目级、本地级），先读那篇。
+
+## 托管层的优先级位置
+
+设置优先级从高到低：
+
+1. **托管层（Managed）** ← 本文主题，最高优先级
+2. 命令行参数
+3. 本地设置（`.claude/settings.local.json`）
+4. 项目设置（`.claude/settings.json`）
+5. 用户设置（`~/.claude/settings.json`）
+
+托管层一旦定义了某个键，下面所有层级对该键的值都会被覆盖。用户改自己的配置文件也没用。
+
+## 四种托管策略下发通道
+
+托管层内部也有优先级排序，来源之间**不合并**——第一个非空来源直接生效：
+
+| 优先级 | 通道 | 适用平台 | 说明 |
+|--------|------|----------|------|
+| 1 | 服务器远程下发 | 全平台 | 从 Anthropic 服务器拉取，需要 Teams/Enterprise 计划 |
+| 2 | MDM / 系统策略 | macOS plist / Windows HKLM | 通过移动设备管理系统推送 |
+| 3 | 文件系统 | 全平台 | 管理员写入固定的系统路径 |
+| 4 | HKCU 注册表 | 仅 Windows | 当前用户注册表项 |
+
+优先级高的非空来源生效后，后面的直接忽略。比如 MDM 推了策略，文件系统的 `managed-settings.json` 就不会被读取。
+
+### 服务器远程下发
+
+从 Anthropic 服务器在用户认证时拉取托管策略，之后每小时轮询更新。
+
+**前提条件**：
+- Claude for Teams 计划（CLI 版本 2.1.38+）
+- Claude for Enterprise 计划（CLI 版本 2.1.30+）
+
+不支持 Bedrock、Vertex、Foundry 等第三方 API 提供商。
+
+管理员可以在 Anthropic 管理后台配置策略。一个关键选项是 `forceRemoteSettingsRefresh`：开启后，CLI 启动时会阻塞直到拉取到最新的远程策略。如果网络不通，CLI 直接退出，不会以旧策略运行。这是"故障关闭"（fail-closed）设计。
+
+### MDM / 系统策略
+
+macOS 通过 `com.anthropic.claudecode` 配置描述文件（plist）下发。Windows 通过 `HKLM\SOFTWARE\ClaudeCode` 注册表项。Linux 目前不支持 MDM，需要用文件系统方式。
+
+### 文件系统托管
+
+管理员将 `managed-settings.json` 写入系统级路径：
+
+- **macOS**: `/Library/Application Support/ClaudeCode/managed-settings.json`
+- **Linux/WSL**: `/etc/claude-code/managed-settings.json`
+- **Windows**: `C:\Program Files\ClaudeCode\managed-settings.json`
+
+支持 drop-in 目录：在 `managed-settings.json` 同级创建 `managed-settings.d/` 目录，放入多个 JSON 片段文件，按文件名字母序合并。适合按团队拆分策略：
+
+```
+/etc/claude-code/
+  managed-settings.json
+  managed-settings.d/
+    01-base-permissions.json
+    02-frontend-team.json
+    03-backend-team.json
+```
+
+## 核心控制项
+
+### 权限规则锁定
+
+通过 `permissions.allow` 和 `permissions.deny` 定义允许和禁止的操作模式：
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Read"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
+```
+
+关键行为：allow/deny 规则是**跨层级合并**的例外。管理员定义的规则作为基线，开发者可以在自己的设置中追加更多规则，但不能删除管理员定义的条目。
+
+如果需要完全锁定，禁止开发者添加任何自定义规则，启用 `allowManagedPermissionRulesOnly: true`。
+
+### 沙箱控制
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["github.com", "internal.company.com"]
+    }
+  }
+}
+```
+
+启用沙箱后，Claude Code 的文件系统和网络操作会被限制。`allowedDomains` 控制可以访问的外部域名白名单。
+
+### MCP 服务器管控
+
+```json
+{
+  "allowedMcpServers": ["company-internal-tools", "github"],
+  "deniedMcpServers": ["dangerous-tool"],
+  "allowManagedMcpServersOnly": true
+}
+```
+
+- `allowedMcpServers` / `deniedMcpServers`：白名单/黑名单
+- `allowManagedMcpServersOnly: true`：只允许托管设置中列出的 MCP 服务器，用户无法自行添加
+
+### 其他控制项
+
+- **`strictKnownMarketplaces` / `blockedMarketplaces`**：控制插件市场来源
+- **`strictPluginOnlyCustomization`**：锁定自定义项只能通过插件提供
+- **`allowManagedHooksOnly`**：只允许托管设置中定义的 hooks
+- **`allowedHttpHookUrls`**：限制 hooks 可以调用的 HTTP URL
+- **`disableAgentView`**：禁用 Agent 视图（Teams/Enterprise 专用）
+- **`minimumVersion`**：设定最低 CLI 版本，低于此版本拒绝启动
+
+### policyHelper 动态策略
+
+管理员可以部署一个名为 `policyHelper` 的可执行文件。CLI 启动时调用它，动态计算托管设置。适合需要根据用户身份、时间、设备状态等条件动态调整策略的场景。
+
+只有通过 MDM 或系统级 `managed-settings.json` 配置的 `policyHelper` 才会被执行。
+
+## 验证托管状态
+
+在 Claude Code 中运行 `/status` 命令，会显示 `Enterprise managed settings` 及其来源：
+
+- `(remote)` — 服务器远程下发
+- `(plist)` — macOS MDM
+- `(HKLM)` — Windows 系统注册表
+- `(HKCU)` — Windows 用户注册表
+- `(file)` — 文件系统托管
+
+如果没有看到这一行，说明托管设置没有生效。
+
+## 安全边界的诚实说明
+
+托管设置是客户端控制。在不受管理的设备上，拥有管理员/sudo 权限的用户理论上可以修改或删除文件系统托管策略。服务器远程策略同样存储在客户端本地缓存中。
+
+如果组织需要更强的安全保障：
+- 通过 MDM 管理终端设备，限制管理员权限
+- 使用 `forceRemoteSettingsRefresh` 确保策略实时更新
+- 结合端点安全工具监控托管配置文件的完整性
+
+托管设置的价值在于提高绕过门槛和统一管理体验，而不是提供密码学级别的不可篡改性。

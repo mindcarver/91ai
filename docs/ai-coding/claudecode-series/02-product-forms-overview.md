@@ -1,0 +1,281 @@
+# Claude Code 的产品形态全景
+
+> 更新日期：2025/06
+
+**TL;DR：** Claude Code 不只是一个终端命令。你可以在 VS Code 里用它、在 JetBrains 里用它、在桌面应用里用它、在浏览器里用它、甚至让它自动跑在 CI/CD 流水线里。每种形态有不同的适用场景和限制，选对了能让工作流顺畅很多，选错了就是给自己找别扭。
+
+## 为什么需要了解产品形态
+
+如果你只把 Claude Code 当成"终端里的一个命令"，大概率会错过它更适合你的使用方式。比如：
+
+- 你每天 80% 的时间在 VS Code 里写代码——这时候用 CLI 版本需要在终端和编辑器之间反复切换，而 VS Code 扩展能让你直接在编辑器里和 Claude 交互。
+- 你是一个团队的技术负责人，想让 Claude Code 自动审查 PR——这就需要了解它的 GitHub Actions 集成。
+- 你不在电脑前，但想用手机派一个任务给 Claude Code——Remote Control 功能就是为这个场景设计的。
+
+了解所有形态，才能在不同场景下选择最合适的那一个。
+
+## Claude Code 的所有产品形态一览
+
+| 形态 | 平台 | 核心特点 | 适合场景 | 限制 |
+|------|------|----------|----------|------|
+| CLI | macOS / Linux / Windows 终端 | 完整功能、最灵活、脚本化 | 高级用户、自动化、CI/CD | 纯文字交互，学习曲线较高 |
+| VS Code 扩展 | VS Code、Cursor、Windsurf | 内联 diff、@-mentions、选择上下文 | VS Code 日常开发 | 依赖 CLI 后端 |
+| JetBrains 插件 | IntelliJ / PyCharm / WebStorm 等 | 项目感知、交互式 diff、Agent 集成 | JetBrains 用户日常开发 | 需要 JetBrains AI 订阅 |
+| Desktop App | macOS / Windows | 多会话、视觉 diff、Cowork 模式 | 桌面全流程开发 | 预览版，功能还在完善 |
+| Web 版 | 浏览器（claude.ai/code） | 远程控制、跨设备接力 | 移动办公、远程派发任务 | 功能子集，依赖网络 |
+| Remote Control | 手机 / 平板 / 浏览器 | 从任意设备接管本地会话 | 不在电脑前时继续工作 | 需要本地 CLI 在运行 |
+| GitHub Actions | CI/CD | 自动 PR review、修复 CI 错误 | 团队协作、自动化代码审查 | 权限配置较复杂 |
+| Agent SDK | Python / TypeScript | 嵌入自定义系统 | 构建自己的 AI 编程工具 | 需要开发能力 |
+
+下面逐个展开。
+
+## CLI（命令行）：核心形态
+
+CLI 是 Claude Code 的"本体"。所有其他形态要么是 CLI 的包装，要么依赖 CLI 作为后端。
+
+### 它能做什么
+
+CLI 提供完整的功能集：
+
+- **交互模式**：在终端里启动 `claude`，用自然语言对话，实时看它读文件、改代码、跑命令
+- **非交互模式**：用 `claude -p "你的提示"` 一次性运行，适合脚本和自动化
+- **会话管理**：`claude -c` 继续上次对话，`claude -r` 恢复历史会话
+- **完整工具链**：读写文件、搜索代码、运行 shell 命令、git 操作
+- **配置灵活**：权限模式、模型选择、MCP 服务器、Hooks 全部可配置
+
+### 为什么 CLI 是基础
+
+CLI 选择终端不是偶然的。终端是所有开发工具的底层——git、npm、docker、python 都在终端里运行。Claude Code 站在终端里，意味着它可以调用任何命令行工具，也可以被任何脚本调用。
+
+这带来两个优势：一是它能操作的环境最完整，没有"这个编辑器插件不支持"的限制；二是它天然适合自动化——一个 `claude -p` 命令放进 shell 脚本里，就能变成 CI/CD 的一部分。
+
+### 适合谁
+
+- 经常在终端里工作的后端工程师、DevOps
+- 需要写脚本批量处理代码的人
+- 想把 Claude Code 嵌入 CI/CD 的团队
+- 想要最完整功能、不介意纯文字界面的用户
+
+### 局限
+
+纯文字交互意味着：看不到实时的代码高亮对比，不能用鼠标选择文件，不能直接截图给 Claude 看。如果你习惯了图形界面的代码 diff，CLI 里的文字版 diff 会感觉简陋。
+
+## VS Code 扩展：编辑器内集成
+
+VS Code 扩展是 Claude Code 目前用户量最大的 IDE 集成方式。根据 [VS Code Marketplace 的数据](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code)，下载量已超过一千万次。
+
+### 安装和运行
+
+在 VS Code 扩展商店搜索 "Claude Code" 安装即可。但要注意：这个扩展不是独立运行的，它需要一个本地的 Claude Code CLI 作为后端。也就是说，你仍然需要先[安装 CLI](06-installation-guide.md)。
+
+### 核心功能
+
+- **侧边栏聊天面板**：不用切换到终端，直接在编辑器侧边栏里和 Claude 对话
+- **内联 diff**：Claude 提出的代码修改以 diff 形式直接显示在编辑器里，可以逐行接受或拒绝——这比 CLI 里看文字 diff 直观得多
+- **@-mentions**：在对话中用 `@文件名` 引用项目文件，Claude 会自动读取它的内容
+- **选择上下文**：选中一段代码后发起对话，Claude 能直接看到你选中的内容
+- **Plan Mode**：Claude 先展示计划，你审查后再让它执行
+
+### 实际体验
+
+和 CLI 最大的区别是**上下文切换成本降低了**。在 CLI 里，你要从编辑器切到终端，描述问题，看结果，再切回编辑器。在 VS Code 扩展里，你在看代码的同时就能和 Claude 对话，它的修改建议直接显示在你正在看的文件里。
+
+社区反馈中一个被反复提到的优点是内联 diff。当你让 Claude 修改一个文件时，改动像 git diff 一样高亮显示在编辑器中，你可以精确选择接受哪些、拒绝哪些。这在 CLI 里做不到——CLI 只能整体接受或要求修改。
+
+也有一些用户反馈 diff 视图偶尔会丢失上下文、行号显示不完整，说明这个功能仍在迭代中。
+
+### 适合谁
+
+- 日常使用 VS Code（或 Cursor、Windsurf 等 VS Code 兼容编辑器）的开发者
+- 希望在编辑器内完成大部分工作的前端和全栈工程师
+- 不太习惯终端操作的用户
+
+### 局限
+
+- 依赖 CLI 后端，CLI 出问题扩展也不能用
+- diff 体验还在完善中
+- 某些高级 CLI 功能（如后台任务、会话恢复）在扩展里不如 CLI 方便
+
+## JetBrains 插件：JetBrains 生态集成
+
+JetBrains 的集成有两条路径：一是 Claude Code 的[官方 JetBrains 插件](https://code.claude.com/docs/en/jetbrains)，二是 JetBrains 自己的 [Claude Agent](https://blog.jetbrains.com/ai/2025/09/introducing-claude-agent-in-jetbrains-ides/)。
+
+### 两条路径的区别
+
+**Claude Code 插件**（Anthropic 提供）：
+
+- 在 JetBrains IDE 中通过终端集成运行 Claude Code
+- 支持交互式 diff 查看
+- 支持选择上下文共享（选中代码后发起对话）
+- 安装方式：安装 Claude Code CLI → 在 JetBrains AI Chat 中添加自定义 Agent
+
+**Claude Agent**（JetBrains 提供，2025 年 9 月发布）：
+
+- 直接集成在 JetBrains AI Chat 中
+- 包含在 JetBrains AI 订阅里
+- 自动使用最新版本的 Claude 模型
+- 支持 slash 命令
+
+这两者不是同一个东西。社区讨论中有用户[指出](https://www.reddit.com/r/Jetbrains/comments/1pj1uc8/no_claude_code_integration/)：Claude Agent 使用的是 Anthropic 提供的 SDK，而 Claude Code 是 Anthropic 自己的 CLI 工具。如果你想要完整的 Claude Code 功能（比如运行 shell 命令、编辑任意文件），应该用 Claude Code 插件；如果你只是想在 AI Chat 里用 Claude 的能力，Claude Agent 就够了。
+
+### 适合谁
+
+- IntelliJ、PyCharm、WebStorm、GoLand 等 JetBrains IDE 的用户
+- 已经有 JetBrains AI 订阅的团队
+
+### 局限
+
+- Claude Agent 需要额外的 JetBrains AI 订阅
+- 和 VS Code 扩展相比，社区讨论和教程更少，遇到问题时可参考资料有限
+- JetBrains 插件的更新节奏可能和 Claude Code 本身的更新不完全同步
+
+## Desktop App：桌面全流程
+
+Claude Desktop App 在 2026 年 4 月进行了[重大改版](https://www.oschina.net/news/394703)，从简单的聊天客户端变成了一个三模式工具：
+
+- **Chat**：普通聊天，帮你想方案、回答问题
+- **Cowork**：帮你在电脑上做事——整理文件、生成报告、自动化任务
+- **Code**：图形化界面运行 Claude Code，不需要终端
+
+### Code 模式的特点
+
+Code 模式是 Desktop App 中最值得关注的。它提供了一个图形界面来运行 Claude Code：
+
+- **多会话并行**：在侧边栏同时运行多个 Claude Code 会话，不需要开多个终端窗口
+- **Git Worktrees 集成**：每个会话可以关联独立的 worktree，避免改动冲突
+- **内置编辑器和 Diff 查看器**：代码修改以可视化 diff 展示
+- **拖放分栏**：同时查看多个会话的进展
+
+这些功能在 CLI 里需要手动配置（开多个终端、手动创建 worktree），Desktop App 做了图形化封装。
+
+### 实际价值
+
+Desktop App 的价值在于**降低了使用门槛**。如果你对终端操作不熟悉，或者不想记 CLI 的各种参数，Desktop App 提供了一个"点击就能用"的入口。Code 标签页里的操作本质上和 CLI 一样，但你不需要在终端里打字。
+
+Cowork 模式则是一个独立的能力——它让 Claude 可以操作你的桌面应用（比如操作 Excel、写文档、整理文件），这和 Claude Code 的代码编辑能力是不同的方向。
+
+### 适合谁
+
+- 不太习惯终端操作的工程师
+- 需要同时跑多个 Claude Code 会话的人
+- 想用 Cowork 做桌面自动化的人
+- macOS 和 Windows 用户（Linux 暂不支持 Desktop App）
+
+### 局限
+
+- 仍然是预览版，功能在快速变化
+- 和 CLI 相比，某些高级配置（比如 MCP 服务器、Hooks）在 Desktop App 里配置不够方便
+- 目前 Remote Control 功能对 Desktop App 会话的支持还不完整——[社区已经提出 feature request](https://github.com/anthropics/claude-code/issues/29006)
+
+## Web 版与远程控制
+
+### claude.ai/code
+
+在 claude.ai 的 Code 标签页中，你可以通过浏览器访问 Claude Code 的部分能力。这不需要本地安装任何东西。
+
+Web 版的主要用途是**远程任务管理**。你可以在浏览器里给 Claude Code 派任务，它会连接到你本地运行的 CLI 实例（如果配置了 Remote Control），或者在云端 sandbox 中执行。
+
+### Remote Control
+
+[Remote Control](https://code.claude.com/docs/en/remote-control) 是一个独立但相关的功能。它让你从手机、平板或任何浏览器接管本地正在运行的 Claude Code 会话。
+
+工作方式：
+
+1. 你的电脑上运行着 Claude Code CLI
+2. 你启动 Remote Control，获得一个会话 URL 或 QR 码
+3. 在手机或浏览器中打开这个 URL，就能看到会话状态、发送指令
+
+实际场景：你在公司启动了一个代码重构任务，下班后在家用手机看进展、给反馈。或者你在开会时让 Claude Code 继续处理一个 bug，会后回来检查结果。
+
+### 适合谁
+
+- 需要跨设备工作的远程开发者
+- 想在通勤、会议间隙继续跟进 Claude Code 任务的人
+- 不想在公司电脑上安装额外软件的情况（用 Web 版）
+
+### 局限
+
+- Web 版功能是 CLI 的子集，不是完整替代
+- Remote Control 需要本地 CLI 持续运行——电脑关了，会话就断了
+- 网络延迟会影响交互体验
+- 通过 Web 版执行的操作涉及代码上传到云端 sandbox，需注意数据安全
+
+## CI/CD 集成：让 Claude Code 跑在流水线里
+
+Claude Code 的 CI/CD 集成主要有三种方式：
+
+### GitHub Actions
+
+[官方的 claude-code-action](https://github.com/anthropics/claude-code-action) 让你能在 GitHub PR 和 Issue 中自动触发 Claude Code：
+
+- **PR Review**：Claude 自动审查代码变更，给出建议
+- **Issue 响应**：根据 issue 描述自动生成修复代码
+- **CI 错误修复**：读取 CI 失败日志，自动提交修复
+
+使用方式是在 `.github/workflows/` 中配置 action，提供 Anthropic API Key 作为 secret。
+
+### Headless 模式
+
+用 `claude -p "提示内容"` 在非交互模式下运行。这在任何 CI/CD 平台上都能用——GitLab CI、Jenkins、Azure DevOps 等。输出可以是纯文本或 JSON 格式，方便脚本解析。
+
+### Agent SDK
+
+[Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) 提供了 Python 和 TypeScript 的编程接口，让你把 Claude Code 的能力嵌入自己的系统。适合需要高度定制化的场景——比如自建代码审查平台、内部工具集成。
+
+### 适合谁
+
+- 想自动化代码审查的团队
+- 需要在 CI 流程中做代码质量检查的工程团队
+- 构建内部开发者工具的平台团队
+
+### 局限
+
+- GitHub Actions 的权限配置有一定复杂度，需要仔细设置允许和禁止的操作
+- Headless 模式下的权限提示问题——某些需要确认的操作在非交互模式下会卡住
+- CI/CD 中的每次调用都消耗 token，需要关注成本
+- Agent SDK 仍较新，API 可能有变化
+
+## 其他集成：第三方和社区方案
+
+除了 Anthropic 官方提供的产品形态，社区中还有一些第三方集成：
+
+- **Slack 集成**：通过 Slack bot 触发 Claude Code 任务。目前主要是社区方案和第三方工具实现，不是 Anthropic 官方产品
+- **Chrome 扩展**：让 Claude Code 的部分能力在浏览器中使用。同样是第三方方案
+- **移动端**：除了官方 Remote Control，还有 [Omnara](https://www.reddit.com/r/ClaudeAI/comments/1t9faek/mobile_claude_code_may_2026_current_best_picks_by/)（付费）、Happy Coder（开源）等第三方移动端客户端
+
+这些第三方方案的功能和稳定性需要自行评估。如果涉及代码发送到第三方服务器，要注意数据安全。
+
+## 怎么选：决策表
+
+不同场景下的推荐形态：
+
+| 场景 | 推荐形态 | 原因 |
+|------|----------|------|
+| 日常写代码，主要用 VS Code | VS Code 扩展 | 上下文切换最少，diff 体验好 |
+| 日常写代码，主要用 JetBrains | JetBrains 插件 | 不需要换编辑器 |
+| 后端 / DevOps，习惯终端 | CLI | 最灵活，完整功能 |
+| 不习惯终端，但想用 Claude Code | Desktop App | 图形界面，多会话 |
+| 不在电脑前，想跟进任务 | Remote Control + 手机 | 跨设备接力 |
+| 团队协作，自动审查 PR | GitHub Actions | 自动化，减少人工审查工作量 |
+| 批量处理、脚本化任务 | CLI（headless 模式） | 可编程、可嵌入 |
+| 构建自己的 AI 工具 | Agent SDK | 最大灵活性 |
+
+一个常见的组合是：**日常工作用 VS Code 扩展 + 偶尔用 CLI 处理复杂任务 + GitHub Actions 做自动审查**。不需要只用一种。
+
+## 关键要点
+
+- Claude Code 有多种产品形态——CLI 是核心，VS Code 扩展和 JetBrains 插件提供编辑器内体验，Desktop App 提供图形界面，Web 和 Remote Control 提供跨设备能力，CI/CD 集成提供自动化。
+- CLI 是所有形态的基础。VS Code 扩展和 JetBrains 插件都依赖本地 CLI 作为后端。了解 CLI 的工作方式有助于理解其他形态的行为。
+- 选形态不是"哪个更好"，而是"哪个更适合你的工作方式"。经常在 VS Code 里写代码的人用扩展效率最高；习惯终端的人直接用 CLI 最顺手；想让 Claude Code 自动审查代码的团队用 GitHub Actions。
+- 每种形态都有局限。CLI 是纯文字交互，VS Code 扩展依赖 CLI 后端，Desktop App 还是预览版，Web 版功能是子集。根据场景组合使用比只用一种更实际。
+- 第三方集成（Slack、Chrome、移动端）在持续出现，但不是官方产品，评估时需要关注数据安全和稳定性。
+
+## 延伸阅读
+
+- [Claude Code 官方文档 - VS Code](https://code.claude.com/docs/en/vs-code)：VS Code 扩展的安装和配置
+- [Claude Code 官方文档 - JetBrains](https://code.claude.com/docs/en/jetbrains)：JetBrains 插件的安装和使用
+- [JetBrains Blog: Introducing Claude Agent](https://blog.jetbrains.com/ai/2025/09/introducing-claude-agent-in-jetbrains-ides/)：JetBrains 官方关于 Claude Agent 集成的公告
+- [Claude Code 官方文档 - Remote Control](https://code.claude.com/docs/en/remote-control)：远程控制功能的使用方式
+- [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action)：GitHub Actions 集成的官方仓库
+- [Claude Code 官方文档 - Headless Mode](https://code.claude.com/docs/en/headless)：非交互模式的文档
+- [Claude Code 官方文档 - Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)：SDK 入门和 API 参考
