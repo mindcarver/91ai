@@ -804,4 +804,4 @@ printenv PROJECT_B_KEY | codex login --with-api-key
 - [Codex CLI 命令行参考](https://developers.openai.com/codex/cli/reference) — 所有命令和参数详解
 - [Codex 配置参考](https://developers.openai.com/codex/config-reference) — config.toml 和 requirements.toml 全字段说明
 - [Codex Access Tokens 文档](https://developers.openai.com/codex/authentication/access-tokens) — 企业 access token 的创建、轮换和吊销
-- [系列上一篇：安装与环境搭建](./02-installation.md)
+- [系列上一篇：安装与环境搭建](./02-install-guide.md)

@@ -25,7 +25,7 @@
 
 - 你在家用 `o3` 模型写个人项目，在公司用 `gpt-5.4-mini` 做日常任务，两个环境怎么切换？
 - 你 clone 了一个陌生人的仓库让 Codex 帮你看代码，这个仓库的 `.codex/config.toml` 会不会偷偷把你的 API 请求转发到第三方服务器？
-- 公司 IT 部门要求所有 Codex 实例必须用公司代理，不能开启 full-auto 模式，怎么强制执行？
+- 公司 IT 部门要求所有 Codex 实例必须用公司代理，不能开启 `approval_policy = "never"`，怎么强制执行？
 - 你想把 Codex 集成到 CI/CD 里，需要一次性覆盖十几个配置项，难道手写 config.toml？
 
 这些需求的共同点是：**同一个 Codex 二进制，在不同上下文下应该有不同的行为**。这就需要一个有优先级的、分层的配置系统。
@@ -239,17 +239,12 @@ requirements.toml 能约束的内容包括：
 
 ```toml
 # /etc/codex/requirements.toml
-approval_policy = "on-request"
-
-[network]
-managed_allowed_domains_only = true
-allowed_domains = ["api.openai.com", "api.internal.company.com"]
-
-[feature_requirements]
-smart_approvals = false
+allowed_approval_policies = ["on-request"]
+allowed_sandbox_modes = ["read-only", "workspace-write"]
+web_search = "disabled"
 ```
 
-这段配置的含义是：所有用户的审批策略不能比 `on-request` 更宽松（即不能开 full-auto），网络只能访问指定的两个域名，Smart Approvals 功能被禁用。不管用户的 config.toml 写什么，这些约束都会被强制执行。
+这段配置的含义是：所有用户的审批策略只能是 `on-request`，沙箱只能在 `read-only` 和 `workspace-write` 中选择，并且禁用 web search。不管用户的 config.toml 写什么，这些约束都会被强制执行。
 
 关键点：**requirements.toml 是不可覆盖的**。如果用户 config.toml 试图设 `approval_policy = "never"`，Codex 会发现这违反了 requirements.toml 的约束，恢复为 `on-request`，并记录一条警告。
 
@@ -687,34 +682,18 @@ AGENTS.md（项目文档，不是配置，但和配置体系有关联）：
 
 ```toml
 # IT 部门强制策略
-approval_policy = "on-request"
-
-[network]
-managed_allowed_domains_only = true
-allowed_domains = [
-    "api.openai.com",
-    "api.internal.company.com",
-    "github.com",
-]
-
-[feature_requirements]
-smart_approvals = false
-
+allowed_approval_policies = ["on-request"]
+allowed_sandbox_modes = ["read-only", "workspace-write"]
+web_search = "disabled"
 allow_managed_hooks_only = true
-
-[hooks.SessionStart]
-[[hooks.SessionStart]]
-hooks = [
-  { type = "command", command = "/usr/local/bin/codex-audit-startup", timeout_sec = 5 }
-]
 ```
 
 这个配置的效果：
 
-- 所有开发者不能用 full-auto 模式——审批策略至少是 `on-request`
-- Codex 只能访问指定的 4 个域名
-- Smart Approvals 实验功能被关闭
-- 用户和项目不能自定义钩子——只有 IT 部门设置的 `codex-audit-startup` 会在会话开始时运行
+- 所有开发者不能用 `approval_policy = "never"`——审批策略至少是 `on-request`
+- 不能启用 `danger-full-access` 沙箱
+- Web search 被禁用
+- 用户和项目不能自定义钩子，只能使用管理员托管的 hooks
 - 如果有人在 config.toml 里写 `approval_policy = "never"`，会被自动恢复为 `on-request`
 
 对开发者来说，这些约束是透明的。他们的用户级 config.toml 照常工作，只是某些字段被锁死了。如果想知道自己的配置被哪些约束影响，可以运行 `/debug-config` 查看来源。

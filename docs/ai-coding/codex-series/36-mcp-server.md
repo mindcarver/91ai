@@ -250,7 +250,7 @@ codex mcp-server
 | `prompt` | string（必需） | 发给 Codex 的初始提示词 |
 | `model` | string | 覆盖模型选择 |
 | `cwd` | string | 工作目录 |
-| `approval-policy` | enum | `untrusted`、`on-failure`、`on-request`、`never` |
+| `approval-policy` | enum | `untrusted`、`on-request`、`never` |
 | `sandbox` | enum | `read-only`、`workspace-write`、`danger-full-access` |
 | `config` | object | 任意 config.toml 覆盖 |
 | `developer-instructions` | string | 注入为 developer 角色消息 |
@@ -282,7 +282,7 @@ codex mcp-server
 
 当 Codex 作为 MCP 服务器被调用时，如果 Codex Agent 内部需要执行 shell 命令或修改文件，它不能弹出终端提示——因为它运行在另一个 Agent 的进程里。这时它会通过 MCP 的 **elicitation** 机制，向宿主发送一个审批请求。宿主 Agent 收到请求后，需要实现一个 elicitation handler 来处理。
 
-如果你的宿主不支持 elicitation（比如一个简单的 MCP 客户端），那么所有需要审批的操作都会阻塞。解决办法是在调用时指定 `approval-policy: "never"`，让 Codex 在 full-auto 模式下运行，但这意味着放弃审批控制。
+如果你的宿主不支持 elicitation（比如一个简单的 MCP 客户端），那么所有需要审批的操作都会阻塞。解决办法是在调用时指定 `approval-policy: "never"`，让 Codex 不再请求交互式审批，但这意味着放弃人工审批控制。
 
 ## 6. 实战案例
 

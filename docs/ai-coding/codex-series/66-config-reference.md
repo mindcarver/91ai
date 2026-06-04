@@ -87,8 +87,8 @@ model_provider = "openai"
 | 属性 | 值 |
 |------|-----|
 | 类型 | `string`（枚举） |
-| 默认值 | `"untrusted"` |
-| 可选值 | `"untrusted"` / `"on-request"` / `"on-failure"` / `"never"` / `"granular"` |
+| 默认值 | 由当前权限预设和配置层决定，常见 Auto 预设为 `"on-request"` |
+| 可选值 | `"untrusted"` / `"on-request"` / `"never"` / `"granular"` |
 | Profile 支持 | 是 |
 
 控制命令执行的审批行为。
@@ -97,7 +97,6 @@ model_provider = "openai"
 |----|------|
 | `untrusted` | 只信任白名单命令，其他都问 |
 | `on-request` | 模型主动请求审批时才问 |
-| `on-failure` | 命令执行失败时才问 |
 | `never` | 永不审批，直接执行 |
 | `granular` | 按沙箱规则做细粒度判断 |
 

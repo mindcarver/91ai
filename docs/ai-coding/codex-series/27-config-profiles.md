@@ -92,7 +92,7 @@ profile = "work"
 
 [profiles.work]
 model = "o3"
-approval_policy = "unless-trusted"
+approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 [profiles.quick]
@@ -513,7 +513,7 @@ sandbox_mode = "workspace-write"
 # ~/.codex/staging.config.toml
 # 测试环境：允许大部分操作，但限制网络
 model = "o3"
-approval_policy = "unless-trusted"
+approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 # ~/.codex/prod.config.toml
@@ -568,7 +568,7 @@ profile = "commercial"
 
 [profiles.commercial]
 model = "o3"
-approval_policy = "unless-trusted"
+approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 [profiles.opensource]
@@ -630,7 +630,7 @@ profile = "team-default"
 
 [profiles.team-default]
 model = "o3"
-approval_policy = "unless-trusted"
+approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 web_search = "live"
 

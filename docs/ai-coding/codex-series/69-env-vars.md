@@ -1,1105 +1,277 @@
-# 环境变量参考：所有 CODEX_ 变量详解
+# 环境变量参考：Codex 稳定公开变量
 
-> TL;DR: Codex CLI 通过环境变量控制认证、模型选择、沙箱行为、代理设置、日志级别等。本文列出所有支持的环境变量、类型、默认值和用途。环境变量的优先级低于 CLI 参数但高于 config.toml 默认值，适合 CI/CD 和容器化场景。理解环境变量的完整清单，是用好 Docker 部署、GitHub Actions 集成、多环境切换的基础。
-
----
-
-## 1. 环境变量在 Codex 中的角色
-
-Codex CLI 的配置体系有四层优先级，从高到低：
-
-| 优先级 | 来源 | 说明 |
-|--------|------|------|
-| 1（最高） | CLI 参数 | `codex -m gpt-5.5 --sandbox workspace-write` |
-| 2 | 环境变量 | `CODEX_MODEL=gpt-5.5` |
-| 3 | config.toml | `model = "gpt-5.4"` |
-| 4（最低） | 内置默认值 | 源码中的硬编码默认值 |
-
-环境变量排在第二层。它的优势是：不需要改配置文件，不需要改命令行参数，在 shell 里 export 一下就行。这在以下场景特别有用：
-
-- **CI/CD 流水线**：每个 job 设不同的环境变量，不改代码
-- **Docker 容器**：通过 `-e` 或 `--env-file` 注入配置
-- **多环境切换**：开发环境、测试环境、生产环境用不同的变量值
-- **临时测试**：试一个新模型或新配置，改一下变量就行，不污染 config.toml
-
-但也有限制。环境变量不能覆盖所有 config.toml 的字段。有些复杂结构（比如 `model_providers` 里的嵌套表、`shell_environment_policy` 的过滤规则）只能通过 TOML 文件配置。环境变量覆盖的是"高频、单值"的配置项——模型名、API Key、沙箱模式、代理地址这类东西。
-
-从源码看，Codex 的配置加载器在解析 config.toml 之后，会检查环境变量覆盖。对应关系通常是 `CODEX_` 前缀 + 配置项名的 SCREAMING_SNAKE_CASE 形式。比如 `model` 对应 `CODEX_MODEL`，`sandbox_mode` 对应 `CODEX_SANDBOX_MODE`。
-
-下面按功能分组，逐一列出每个环境变量。
+> TL;DR：Codex 的长期配置应优先写在 `config.toml`，环境变量主要用于 shell 级临时覆盖、自动化凭据、安装器行为和诊断日志。不要把 `CODEX_MODEL`、`CODEX_SANDBOX_MODE`、`CODEX_EXEC_APPROVAL_POLICY` 这类未在官方稳定列表中记录的名字当成可靠配置入口；模型、沙箱和审批策略用 CLI 参数或 `config.toml` 配置。
 
 ---
 
-## 2. 认证相关
+## 1. 环境变量适合做什么
 
-认证是环境变量最常用的领域。在 CI/CD 和容器化场景下，API Key 几乎都是通过环境变量注入的。
+环境变量不是 Codex 的完整配置系统。它们适合三类场景：
 
-### 2.1 CODEX_API_KEY
+- **临时运行上下文**：本次 shell 或 CI job 使用不同的 Codex home、SQLite 状态目录或证书。
+- **自动化凭据**：给一次 `codex exec` 注入 API Key，或给受信任自动化提供 access token。
+- **安装与诊断**：静默安装、改变安装目录、打开 Rust 日志。
 
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_API_KEY` |
-| 类型 | string |
-| 默认值 | 无 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 是 |
+模型、审批策略、沙箱模式、Provider、MCP、Hooks、Skills、Web search 等长期配置，优先使用：
 
-Codex CLI 最核心的环境变量。填入 OpenAI API Key，用于直接认证，跳过 ChatGPT 浏览器登录流程。
+```toml
+# ~/.codex/config.toml
+model = "gpt-5.5"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+```
+
+一次性运行则用 CLI 参数：
 
 ```bash
-export CODEX_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxx"
-codex "解释这个函数的逻辑"
+codex -m gpt-5.5 --sandbox workspace-write --ask-for-approval on-request
+codex exec --sandbox workspace-write "修复失败的测试"
 ```
 
-在 CI/CD 中的用法：
+## 2. 状态目录
 
-```yaml
-# GitHub Actions
-- name: Run Codex
-  env:
-    CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
-  run: codex exec --ephemeral "检查代码质量"
-```
-
-```dockerfile
-# Docker
-docker run -e CODEX_API_KEY="sk-proj-xxx" codex-image
-```
-
-**注意事项**：
-
-- 不要把 key 硬编码在代码里、commit 到 git 仓库、或者写在 Dockerfile 里
-- 使用平台提供的 secrets 机制（GitHub Actions secrets、GitLab CI variables、Kubernetes Secrets）
-- 如果 `CODEX_API_KEY` 和 ChatGPT 登录状态同时存在，`CODEX_API_KEY` 优先
-- key 以 `sk-proj-` 开头的是 project key，以 `sk-` 开头的是 legacy key
-
-### 2.2 OPENAI_API_KEY
+### CODEX_HOME
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `OPENAI_API_KEY` |
-| 类型 | string |
-| 默认值 | 无 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 是 |
+| --- | --- |
+| 默认值 | `~/.codex` |
+| 适用范围 | CLI、IDE extension、app-server、安装器 |
+| 作用 | 设置 Codex 状态根目录 |
 
-OpenAI SDK 的标准环境变量名。Codex 也支持读取这个变量作为 API Key。当 `CODEX_API_KEY` 未设置时，Codex 会回退到 `OPENAI_API_KEY`。
+`CODEX_HOME` 控制 Codex 的用户级状态位置，包括配置、认证、日志、会话、Skills 和 standalone package metadata。
 
 ```bash
-# 两种写法等价
-export CODEX_API_KEY="sk-proj-xxx"
-export OPENAI_API_KEY="sk-proj-xxx"
-```
-
-**优先级**：`CODEX_API_KEY` > `OPENAI_API_KEY`。
-
-如果你同时使用 OpenAI Python SDK 和 Codex CLI，设 `OPENAI_API_KEY` 可以两者共用。如果你需要给 Codex 用一个不同的 key，用 `CODEX_API_KEY` 覆盖。
-
-### 2.3 CODEX_HOME
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_HOME` |
-| 类型 | path |
-| 默认值 | `~/.codex`（Unix）、`%APPDATA%\codex`（Windows） |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-控制 Codex 的主配置目录。所有用户级文件都存在这个目录下：`config.toml`、`auth.json`、会话历史、记忆文件等。
-
-```bash
-# 把配置目录移到自定义位置
-export CODEX_HOME="/data/codex-config"
+mkdir -p /data/codex-home
+export CODEX_HOME=/data/codex-home
 codex "hello"
 ```
 
-使用场景：
+注意：如果设置了 `CODEX_HOME`，目录需要已经存在。改动后，原来的登录状态和会话历史不会自动迁移。
 
-- **多实例部署**：同一台机器上跑多个 Codex 实例，每个用不同的 `CODEX_HOME`
-- **容器化**：挂载一个持久卷作为 `CODEX_HOME`，容器重建后配置不丢
-- **便携部署**：把 `CODEX_HOME` 指向 U 盘或网络存储
-
-```bash
-# Docker 中持久化配置
-docker run -v /data/codex-home:/codex-home \
-  -e CODEX_HOME=/codex-home \
-  -e CODEX_API_KEY="sk-proj-xxx" \
-  codex-image
-```
-
-**注意**：改了 `CODEX_HOME` 之后，之前的登录状态、会话历史、记忆文件都不会自动迁移。需要手动把旧目录的内容复制过去，或者重新登录。
-
-### 2.4 CODEX_AUTH_CREDENTIALS_STORE
+### CODEX_SQLITE_HOME
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_AUTH_CREDENTIALS_STORE` |
-| 类型 | string（枚举） |
-| 默认值 | `keyring`（macOS/Windows）、`file`（Linux 无 keyring 时） |
-| 引入版本 | v0.60.0 |
-| 敏感 | 否 |
+| --- | --- |
+| 默认值 | 跟随 `CODEX_HOME` |
+| 适用范围 | CLI、app-server state |
+| 作用 | 设置 SQLite 状态存储目录 |
 
-控制认证凭据的存储方式。对应 config.toml 中的 `cli_auth_credentials_store`。
-
-| 值 | 行为 |
-|------|------|
-| `keyring` | 使用操作系统密钥链（macOS Keychain、Windows Credential Manager、Linux Secret Service） |
-| `file` | 存在 `${CODEX_HOME}/auth.json` 文件里，权限 0600 |
+`CODEX_SQLITE_HOME` 用于把 SQLite-backed state 放到不同位置。`sqlite_home` 配置项优先级高于这个环境变量；相对路径会从当前工作目录解析。
 
 ```bash
-# CI 环境没有 keyring，用文件存储
-export CODEX_AUTH_CREDENTIALS_STORE=file
-```
-
-Linux 服务器环境通常没有桌面密钥链服务（gnome-keyring 或 kwallet），Codex 会自动回退到 `file`。但如果你装了 keyring 但它坏了（比如 DBus 连不上），手动设成 `file` 可以跳过 keyring。
-
-### 2.5 CODEX_FORCED_LOGIN_METHOD
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_FORCED_LOGIN_METHOD` |
-| 类型 | string（枚举） |
-| 默认值 | 无（不强制） |
-| 引入版本 | v0.65.0 |
-| 敏感 | 否 |
-
-强制使用特定的登录方式。对应 config.toml 中的 `forced_login_method`。
-
-| 值 | 行为 |
-|------|------|
-| `chatgpt` | 只允许 ChatGPT OAuth 登录 |
-| `api-key` | 只允许 API Key 登录 |
-| `device-code` | 只允许设备码登录 |
-
-```bash
-# 企业环境强制 API Key 登录
-export CODEX_FORCED_LOGIN_METHOD=api-key
-```
-
-企业管理员可以在 system requirements.toml 里设这个值，防止员工用个人 ChatGPT 账号登录公司 Codex 实例。
-
----
-
-## 3. 模型相关
-
-### 3.1 CODEX_MODEL
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_MODEL` |
-| 类型 | string |
-| 默认值 | `gpt-5.4` |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-控制 Codex 默认使用的模型。对应 config.toml 中的 `model`。
-
-```bash
-export CODEX_MODEL=gpt-5.5
-codex "重构这个模块"
-```
-
-CLI 参数 `-m` 的优先级更高：
-
-```bash
-# 环境变量说 gpt-5.5，但 -m 覆盖了
-CODEX_MODEL=gpt-5.5 codex -m o4-mini "快速检查"
-```
-
-CI/CD 中的常见模式——不同任务用不同模型：
-
-```yaml
-# .github/workflows/codex.yml
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    env:
-      CODEX_MODEL: o4-mini       # 审查用推理模型
-    steps:
-      - run: codex exec "审查 PR"
-
-  fix:
-    runs-on: ubuntu-latest
-    env:
-      CODEX_MODEL: gpt-5.4-mini  # 修复用快速模型
-    steps:
-      - run: codex exec "修复 lint 错误"
-```
-
-### 3.2 CODEX_MODEL_PROVIDER
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_MODEL_PROVIDER` |
-| 类型 | string |
-| 默认值 | `openai` |
-| 引入版本 | v0.50.0 |
-| 敏感 | 否 |
-
-选择模型提供方。对应 config.toml 中的 `model_provider`。内置 Provider 有四个：
-
-| 值 | 说明 |
-|------|------|
-| `openai` | OpenAI 官方 API（默认） |
-| `ollama` | Ollama 本地模型 |
-| `lmstudio` | LM Studio 本地模型 |
-| `amazon-bedrock` | AWS Bedrock 托管模型 |
-
-```bash
-# 切换到 Ollama 本地模型
-export CODEX_MODEL_PROVIDER=ollama
-export CODEX_MODEL=qwen3-235b
-codex "解释这段代码"
-```
-
-如果你在 config.toml 的 `[model_providers]` 里定义了自定义 Provider（比如连到 Azure OpenAI），也通过这个变量选择。
-
-### 3.3 CODEX_MODEL_REASONING_EFFORT
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_MODEL_REASONING_EFFORT` |
-| 类型 | string（枚举） |
-| 默认值 | `medium` |
-| 引入版本 | v0.55.0 |
-| 敏感 | 否 |
-
-控制模型在推理上花多少算力。对应 config.toml 中的 `model_reasoning_effort`。
-
-| 值 | 效果 | Token 消耗 | 适用场景 |
-|------|------|------|------|
-| `low` | 快速回答，少推理 | 低 | 简单查询、格式化 |
-| `medium` | 平衡 | 中（默认） | 日常开发 |
-| `high` | 深度推理 | 高 | 复杂架构、调试 |
-
-```bash
-# 做复杂调试时拉高推理强度
-export CODEX_MODEL_REASONING_EFFORT=high
-codex "排查这个并发 bug"
-```
-
-这个变量直接映射到 OpenAI Responses API 的 `reasoning.effort` 参数。用推理模型（o4-mini 等）时效果最明显，用普通模型（gpt-5.4 等）时影响较小。
-
-### 3.4 CODEX_REVIEW_MODEL
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_REVIEW_MODEL` |
-| 类型 | string |
-| 默认值 | 跟随 `CODEX_MODEL` |
-| 引入版本 | v0.58.0 |
-| 敏感 | 否 |
-
-指定 `/review` 命令使用的专用模型。对应 config.toml 中的 `review_model`。
-
-```bash
-export CODEX_MODEL=gpt-5.4           # 日常编码用 GPT-5.4
-export CODEX_REVIEW_MODEL=o4-mini    # 审查用推理模型
+mkdir -p /data/codex-sqlite
+export CODEX_SQLITE_HOME=/data/codex-sqlite
 codex
 ```
 
----
+## 3. 安装器变量
 
-## 4. 沙箱相关
+这些变量用于官方 standalone 安装脚本：
 
-沙箱的环境变量主要在 CI/CD 和容器化场景下使用。本地交互式使用一般通过 config.toml 配置就够了。
+- `https://chatgpt.com/codex/install.sh`
+- `https://chatgpt.com/codex/install.ps1`
 
-### 4.1 CODEX_SANDBOX_MODE
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_SANDBOX_MODE` |
-| 类型 | string（枚举） |
-| 默认值 | `workspace-write` |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-控制沙箱的隔离级别。对应 config.toml 中的 `sandbox_mode`。详见第 29 篇沙箱全解析。
-
-| 值 | 行为 |
-|------|------|
-| `read-only` | 只读，不能写任何文件 |
-| `workspace-write` | 只能写工作区内的文件 |
-| `danger-full-access` | 完全放开，无限制 |
-
-```bash
-# CI 中用最严格的沙箱
-export CODEX_SANDBOX_MODE=read-only
-codex exec "审查代码安全"
-
-# 本地调试时放开（谨慎使用）
-export CODEX_SANDBOX_MODE=danger-full-access
-codex "帮我跑 npm install"
-```
-
-### 4.2 CODEX_SANDBOX_WORKSPACE_WRITE
+### CODEX_NON_INTERACTIVE
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_SANDBOX_WORKSPACE_WRITE` |
-| 类型 | string |
-| 默认值 | 无 |
-| 引入版本 | v0.45.0 |
-| 敏感 | 否 |
-
-当 `CODEX_SANDBOX_MODE=read-only` 时，通过这个变量额外放通某些目录的写入权限。值是逗号分隔的路径列表。
-
-```bash
-export CODEX_SANDBOX_MODE=read-only
-export CODEX_SANDBOX_WORKSPACE_WRITE="/tmp/codex-build,./coverage"
-codex exec "跑测试并生成覆盖率报告"
-```
-
-对应 config.toml 中的 `sandbox_workspace_write`。
-
-### 4.3 CODEX_SANDBOX_NETWORK_ACCESS
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_SANDBOX_NETWORK_ACCESS` |
-| 类型 | string（枚举） |
-| 默认值 | `deny` |
-| 引入版本 | v0.40.0 |
-| 敏感 | 否 |
-
-控制沙箱内进程的网络访问权限。
-
-| 值 | 行为 |
-|------|------|
-| `deny` | 禁止所有出站网络（默认） |
-| `allow` | 允许所有出站网络 |
-
-```bash
-# 需要 npm install 或 pip install 时放通网络
-export CODEX_SANDBOX_NETWORK_ACCESS=allow
-codex "安装依赖并跑测试"
-```
-
-**注意**：设成 `allow` 后，Codex 执行的任何命令都能访问外部网络。配合 `workspace-write` 沙箱使用时，要确保你信任工作区里的所有代码。
-
-### 4.4 CODEX_SANDBOX_WRITABLE_ROOTS
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_SANDBOX_WRITABLE_ROOTS` |
-| 类型 | string（逗号分隔路径） |
-| 默认值 | 无 |
-| 引入版本 | v0.48.0 |
-| 敏感 | 否 |
-
-在 `workspace-write` 模式下，除了工作区外额外允许写入的目录。和 `CODEX_SANDBOX_WORKSPACE_WRITE` 类似，但作用于 `workspace-write` 而不是 `read-only` 模式。
-
-```bash
-# 允许写入工作区 + 全局 node_modules
-export CODEX_SANDBOX_WRITABLE_ROOTS="/usr/local/lib/node_modules"
-codex "全局安装 TypeScript 并检查版本"
-```
-
----
-
-## 5. 网络代理
-
-Codex 使用 OpenAI 的 Rust SDK，底层是 reqwest HTTP 客户端。这些代理变量是 HTTP 客户端层的标准配置，不是 Codex 独有的。
-
-### 5.1 HTTP_PROXY / HTTPS_PROXY
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `HTTP_PROXY` / `HTTPS_PROXY` |
-| 类型 | string（URL） |
-| 默认值 | 无 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 可能（如果代理需要认证） |
-
-控制 Codex 发出的 HTTP/HTTPS 请求走哪个代理。企业网络环境常用。
-
-```bash
-export HTTPS_PROXY="http://proxy.corp.example.com:8080"
-codex "hello"
-```
-
-小写的 `http_proxy` / `https_proxy` 也支持，但大写优先级更高。
-
-如果代理需要认证：
-
-```bash
-export HTTPS_PROXY="http://user:password@proxy.corp.example.com:8080"
-```
-
-**注意**：认证信息会出现在进程环境变量里，用 `ps eww <pid>` 能看到。在生产环境中建议使用不需要认证的代理，或者用 `ALL_PROXY` 配合 netrc 文件。
-
-### 5.2 ALL_PROXY
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `ALL_PROXY` |
-| 类型 | string（URL） |
-| 默认值 | 无 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 可能 |
-
-同时设置 HTTP 和 HTTPS 代理的快捷方式。`HTTP_PROXY` 和 `HTTPS_PROXY` 优先级更高——如果同时设了 `ALL_PROXY` 和 `HTTPS_PROXY`，HTTPS 请求走 `HTTPS_PROXY`。
-
-```bash
-export ALL_PROXY="socks5://proxy.example.com:1080"
-codex "hello"
-```
-
-支持 HTTP 和 SOCKS5 两种协议。
-
-### 5.3 NO_PROXY
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `NO_PROXY` |
-| 类型 | string（逗号分隔域名） |
-| 默认值 | `localhost,127.0.0.1` |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-不走代理的域名列表。通常用于企业内网服务。
-
-```bash
-export HTTPS_PROXY="http://proxy.corp.example.com:8080"
-export NO_PROXY="localhost,127.0.0.1,internal.corp.example.com"
-```
-
-小写 `no_proxy` 也支持。
-
-### 5.4 CODEX_OPENAI_BASE_URL
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_OPENAI_BASE_URL` |
-| 类型 | string（URL） |
-| 默认值 | `https://api.openai.com/v1` |
-| 引入版本 | v0.30.0 |
-| 敏感 | 否 |
-
-覆盖 OpenAI Provider 的 API 地址。用于连接 OpenAI 的 Azure 部署、自建代理、或兼容 OpenAI API 格式的第三方服务。对应 config.toml 中的 `openai_base_url`。
-
-```bash
-# 连接 Azure OpenAI
-export CODEX_OPENAI_BASE_URL="https://my-resource.openai.azure.com/openai/deployments/my-deployment"
-export CODEX_API_KEY="azure-api-key"
-
-# 连接自建代理
-export CODEX_OPENAI_BASE_URL="https://ai-gateway.corp.example.com/v1"
-```
-
-**注意**：这个变量只影响 OpenAI Provider。如果你切到了 Ollama 或 Bedrock Provider，这个变量无效。
-
----
-
-## 6. 执行模式
-
-这些环境变量控制 `codex exec`（非交互模式）的行为。详见第 48 篇 exec 模式和第 50 篇 CI/CD 集成。
-
-### 6.1 CODEX_EXEC_APPROVAL_POLICY
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_EXEC_APPROVAL_POLICY` |
-| 类型 | string（枚举） |
-| 默认值 | `full-auto` |
-| 引入版本 | v0.20.0 |
-| 敏感 | 否 |
-
-控制 exec 模式下的审批策略。非交互模式没有人在终端前审批，这个变量决定了 Codex 自动执行时的权限边界。
-
-| 值 | 行为 |
-|------|------|
-| `full-auto` | 自动执行所有操作（受沙箱约束） |
-| `on-request` | 需要审批（非交互模式下会拒绝并报错） |
-
-在 CI 中几乎总是用 `full-auto`。如果你设成 `on-request`，exec 模式会因为没人审批而失败。
-
-```bash
-export CODEX_EXEC_APPROVAL_POLICY=full-auto
-codex exec "修复所有 lint 错误"
-```
-
-### 6.2 CODEX_EXEC_SANDBOX
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_EXEC_SANDBOX` |
-| 类型 | string（枚举） |
-| 默认值 | 跟随 `CODEX_SANDBOX_MODE` |
-| 引入版本 | v0.20.0 |
-| 敏感 | 否 |
-
-专门给 exec 模式用的沙箱覆盖。如果同时设了 `CODEX_SANDBOX_MODE` 和 `CODEX_EXEC_SANDBOX`，exec 模式用后者。
-
-```bash
-# TUI 模式用 workspace-write，exec 模式用 read-only
-export CODEX_SANDBOX_MODE=workspace-write
-export CODEX_EXEC_SANDBOX=read-only
-```
-
-### 6.3 CODEX_EXEC_TIMEOUT
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_EXEC_TIMEOUT` |
-| 类型 | int（秒） |
-| 默认值 | 600（10 分钟） |
-| 引入版本 | v0.35.0 |
-| 敏感 | 否 |
-
-exec 模式的超时时间。超过这个时间 Codex 会强制终止并退出。CI 流水线中特别有用——防止 Codex 陷入死循环消耗所有 CI 资源。
-
-```bash
-# 给 Codex 5 分钟做修复
-export CODEX_EXEC_TIMEOUT=300
-codex exec "修复构建错误"
-```
-
-### 6.4 CODEX_EXEC_MAX_TURNS
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_EXEC_MAX_TURNS` |
-| 类型 | int |
-| 默认值 | 30 |
-| 引入版本 | v0.40.0 |
-| 敏感 | 否 |
-
-exec 模式的最大对话轮数。一轮是指一次"用户输入 → 模型回复 → 工具调用 → 工具结果"的完整循环。超过限制后 Codex 停止执行。
-
-```bash
-# 简单任务限制 10 轮就够了
-export CODEX_EXEC_MAX_TURNS=10
-codex exec "给这个文件加 type hints"
-```
-
-控制轮数是控制 token 消耗的有效手段。复杂任务需要多轮探索和修改，简单任务几轮就够。
-
----
-
-## 7. 日志和调试
-
-### 7.1 CODEX_LOG_LEVEL
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_LOG_LEVEL` |
-| 类型 | string（枚举） |
-| 默认值 | `warn` |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-控制 Codex CLI 自身的日志级别。不是模型的输出级别，是 Codex 程序本身的日志。
-
-| 值 | 输出内容 |
-|------|------|
-| `off` | 不输出日志 |
-| `error` | 只输出错误 |
-| `warn` | 警告和错误（默认） |
-| `info` | 一般信息、警告、错误 |
-| `debug` | 调试信息（大量输出） |
-| `trace` | 最详细，包含所有内部调用 |
-
-```bash
-# 排查问题时开 debug
-export CODEX_LOG_LEVEL=debug
-codex "hello" 2>codex-debug.log
-```
-
-日常使用保持 `warn` 就好。开 `debug` 或 `trace` 后日志量会非常大，每次 API 调用、文件操作、工具调用都会记录。
-
-### 7.2 RUST_LOG
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `RUST_LOG` |
-| 类型 | string |
-| 默认值 | 无 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-Rust 生态的标准日志变量。Codex 用 `tracing` crate 做日志，`RUST_LOG` 可以做更精细的控制——按模块设置不同的级别。
-
-```bash
-# 只看沙箱模块的 debug 日志
-export RUST_LOG="codex_sandbox=debug"
-
-# 只看配置加载的 trace 日志
-export RUST_LOG="codex_config=trace"
-
-# 多个模块
-export RUST_LOG="codex_sandbox=debug,codex_config=info"
-```
-
-`RUST_LOG` 和 `CODEX_LOG_LEVEL` 同时设时，`RUST_LOG` 的优先级更高（因为它在更底层的 tracing subscriber 上）。
-
-### 7.3 CODEX_LOG_DIR
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_LOG_DIR` |
-| 类型 | path |
-| 默认值 | `${CODEX_HOME}/logs` |
-| 引入版本 | v0.55.0 |
-| 敏感 | 否 |
-
-日志文件的输出目录。Codex 会在后台把日志写到文件，不只是在终端输出。
-
-```bash
-export CODEX_LOG_DIR="/var/log/codex"
-```
-
-企业环境中可以把日志目录挂到集中式日志收集系统（比如 ELK、Loki）扫描的路径下。
-
----
-
-## 8. MCP 相关
-
-MCP（Model Context Protocol）服务器的配置也可以通过环境变量控制。详见第 36 篇 MCP 接入和第 37 篇 MCP 开发。
-
-### 8.1 CODEX_MCP_SERVERS_DIR
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_MCP_SERVERS_DIR` |
-| 类型 | path |
-| 默认值 | `${CODEX_HOME}/mcp-servers` |
-| 引入版本 | v0.50.0 |
-| 敏感 | 否 |
-
-MCP 服务器配置文件的搜索目录。Codex 会在这个目录下查找 `.json` 文件作为 MCP 服务器定义。
-
-```bash
-export CODEX_MCP_SERVERS_DIR="/opt/codex/mcp-configs"
-codex "hello"
-```
-
-如果你有多个团队共用一套 MCP 服务器配置，可以把配置集中放在一个网络目录，然后通过这个变量指向它。
-
-### 8.2 CODEX_MCP_DISABLED
-
-| 属性 | 值 |
-|------|------|
-| 名称 | `CODEX_MCP_DISABLED` |
-| 类型 | bool |
+| --- | --- |
 | 默认值 | `false` |
-| 引入版本 | v0.55.0 |
-| 敏感 | 否 |
+| 取值 | `1`、`true`、`yes` 可视为启用 |
+| 作用 | 跳过安装器交互提示 |
 
-禁用所有 MCP 服务器连接。设为 `true` 或 `1` 时，Codex 启动时不加载任何 MCP 服务器。
-
-```bash
-# 排查 MCP 问题时临时禁用
-export CODEX_MCP_DISABLED=true
-codex "hello"
-```
-
-### 8.3 MCP 服务器特定的环境变量
-
-每个 MCP 服务器在配置 JSON 中可以声明需要的环境变量。这些不是 `CODEX_` 前缀的——它们是 MCP 服务器自己定义的。
-
-比如一个数据库 MCP 服务器可能需要：
+用于脚本化安装或升级。它会采用安装器默认回答，因此适合 unattended install，不适合第一次交互式排错。
 
 ```bash
-export DATABASE_URL="postgres://user:pass@localhost/mydb"
+curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 ```
 
-Codex 会把这些环境变量传递给 MCP 服务器的子进程。这个传递机制受 `shell_environment_policy` 控制（详见第 26 篇 Shell 配置）。
+PowerShell：
 
----
+```powershell
+$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex
+```
 
-## 9. TUI 相关
-
-终端 UI 的行为也可以通过环境变量控制。
-
-### 9.1 NO_COLOR
+### CODEX_INSTALL_DIR
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `NO_COLOR` |
-| 类型 | bool |
-| 默认值 | 无（彩色输出） |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
-
-禁用彩色输出。设为任意值（即使是空字符串）都会禁用颜色。这是 [no-color.org](https://no-color.org) 标准的通用环境变量，不是 Codex 独有的。
+| --- | --- |
+| macOS/Linux 默认值 | `~/.local/bin` |
+| Windows 默认值 | `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` |
+| 作用 | 改变可执行的 `codex` 命令安装位置 |
 
 ```bash
-export NO_COLOR=1
-codex "hello"
+export CODEX_INSTALL_DIR="$HOME/bin"
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
 ```
 
-在日志收集、重定向到文件、或色盲用户场景下有用。
+standalone package cache 仍然位于 `CODEX_HOME/packages/standalone`。
 
-### 9.2 TERM
+## 4. 认证与网络
+
+### CODEX_API_KEY
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `TERM` |
-| 类型 | string |
-| 默认值 | 系统自动设置 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
+| --- | --- |
+| 适用范围 | `codex exec` |
+| 敏感 | 是 |
+| 作用 | 为一次非交互运行提供 API Key |
 
-终端类型。影响 TUI 的渲染方式。Codex 使用 Ratatui 做 TUI 渲染，依赖 terminfo 数据库来知道终端支持哪些特性。
+`CODEX_API_KEY` 只支持 `codex exec`。不要把它设成 job 级环境变量后再运行仓库里的构建脚本、测试或依赖生命周期脚本，因为这些脚本可能读取环境变量。
 
-常见值：
-
-| 值 | 说明 |
-|------|------|
-| `xterm-256color` | 大多数现代终端（推荐） |
-| `screen-256color` | tmux 里 |
-| `xterm-kitty` | Kitty 终端 |
-| `dumb` | 无终端能力（CI 环境） |
-
-CI/CD 环境中 `TERM` 可能是 `dumb` 或未设置。Codex 的 exec 模式不依赖 TUI，所以不影响。但如果你在 CI 中跑 TUI 模式（不推荐），需要设一下：
+推荐做法是只在单次命令内注入：
 
 ```bash
-export TERM=xterm-256color
+CODEX_API_KEY="$OPENAI_API_KEY" codex exec --json "检查这个 PR 的风险点"
 ```
 
-### 9.3 COLORTERM
+在 GitHub Actions 里，优先使用官方 `openai/codex-action`，而不是自己安装 CLI 并把 API Key 暴露给整个 job。
+
+### CODEX_ACCESS_TOKEN
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `COLORTERM` |
-| 类型 | string |
-| 默认值 | 系统自动设置 |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
+| --- | --- |
+| 适用范围 | CLI、app-server、受信任自动化 |
+| 敏感 | 是 |
+| 作用 | 提供 ChatGPT 或 Codex access token |
 
-指示终端是否支持真彩色。`truecolor` 或 `24bit` 表示支持。Codex 用它来决定用 256 色还是真彩色渲染。
+如果要持久化登录，把 token 通过管道传给登录命令：
 
-### 9.4 EDITOR / VISUAL
+```bash
+printf '%s' "$CODEX_ACCESS_TOKEN" | codex login --with-access-token
+```
+
+如果不想把凭据写入机器上的认证存储，可以只在受信任自动化环境中临时设置 `CODEX_ACCESS_TOKEN`。
+
+### CODEX_CA_CERTIFICATE
 
 | 属性 | 值 |
-|------|------|
-| 名称 | `EDITOR` / `VISUAL` |
-| 类型 | string |
-| 默认值 | `vi` |
-| 引入版本 | v0.1.0 |
-| 敏感 | 否 |
+| --- | --- |
+| 适用范围 | HTTPS、登录、WebSocket clients |
+| 作用 | 指向 PEM 格式 CA bundle |
+| 优先级 | 高于 `SSL_CERT_FILE` |
 
-当 Codex 需要打开一个外部编辑器（比如编辑 AGENTS.md、编辑 prompt）时，使用这个变量指定的编辑器。
+企业网络有 TLS inspection 或私有根证书时使用：
 
 ```bash
-export EDITOR="code --wait"   # VS Code
-export EDITOR="vim"           # Vim
-export EDITOR="nano"          # Nano
+export CODEX_CA_CERTIFICATE=/path/to/corporate-root-ca.pem
+codex login
 ```
 
-`VISUAL` 的优先级高于 `EDITOR`。两个都不设时默认用 `vi`。
+### SSL_CERT_FILE
 
----
-
-## 10. 容器化场景的环境变量配置
-
-在 Docker 和 Kubernetes 中，环境变量是配置应用的标准方式。Codex 的环境变量设计天然适合容器化部署。
-
-### 10.1 Docker 场景
-
-一个完整的 Codex Docker 配置示例：
-
-```dockerfile
-FROM node:20-slim
-
-# 安装 Codex
-RUN npm install -g @openai/codex
-
-# 创建配置目录
-RUN mkdir -p /codex-home
-ENV CODEX_HOME=/codex-home
-
-# 非交互模式配置
-ENV CODEX_SANDBOX_MODE=workspace-write
-ENV CODEX_EXEC_APPROVAL_POLICY=full-auto
-ENV CODEX_EXEC_TIMEOUT=300
-ENV CODEX_LOG_LEVEL=info
-
-WORKDIR /workspace
-ENTRYPOINT ["codex", "exec"]
-```
-
-运行时注入敏感信息：
+| 属性 | 值 |
+| --- | --- |
+| 适用范围 | HTTPS、登录、WebSocket clients |
+| 作用 | `CODEX_CA_CERTIFICATE` 未设置时的备用 PEM CA bundle |
 
 ```bash
-docker run \
-  -e CODEX_API_KEY="sk-proj-xxx" \
-  -v $(pwd):/workspace \
-  codex-image \
-  "检查这个项目的代码质量"
+export SSL_CERT_FILE=/path/to/ca-bundle.pem
+codex login
 ```
 
-使用 env-file 管理非敏感配置：
+## 5. 诊断变量
+
+### RUST_LOG
+
+| 属性 | 值 |
+| --- | --- |
+| 适用范围 | CLI、app-server |
+| 常见取值 | `error`、`warn`、`info`、`debug`、`trace` |
+| 作用 | 控制 Rust 日志过滤和详细程度 |
+
+交互式 CLI 默认不会写明文 TUI 日志。需要排错时，显式设置 `log_dir`：
 
 ```bash
-# codex.env
-CODEX_MODEL=gpt-5.4-mini
-CODEX_SANDBOX_MODE=read-only
-CODEX_EXEC_TIMEOUT=300
-CODEX_LOG_LEVEL=info
-CODEX_EXEC_MAX_TURNS=15
+RUST_LOG=debug codex -c log_dir=./.codex-log
+tail -F ./.codex-log/codex-tui.log
 ```
+
+也可以使用更细的 Rust logging filter：
 
 ```bash
-docker run \
-  --env-file codex.env \
-  -e CODEX_API_KEY="${CODEX_API_KEY}" \
-  -v $(pwd):/workspace \
-  codex-image \
-  "生成测试用例"
+RUST_LOG=codex_core=debug,codex_tui=debug codex -c log_dir=./.codex-log
 ```
 
-### 10.2 Kubernetes 场景
+`codex exec` 非交互模式会把消息内联打印，而不是写单独的 TUI log 文件。
 
-ConfigMap 管理非敏感配置：
+## 6. 常见误区
 
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: codex-config
-data:
-  CODEX_MODEL: "gpt-5.4-mini"
-  CODEX_SANDBOX_MODE: "read-only"
-  CODEX_EXEC_TIMEOUT: "600"
-  CODEX_LOG_LEVEL: "info"
-  CODEX_EXEC_MAX_TURNS: "30"
-  CODEX_HOME: "/codex-home"
-```
+### 误区一：用环境变量切模型
 
-Secret 管理敏感信息：
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: codex-secrets
-type: Opaque
-stringData:
-  CODEX_API_KEY: "sk-proj-xxxxxxxxxxxxxxxx"
-```
-
-Pod 配置：
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: codex-job
-spec:
-  containers:
-  - name: codex
-    image: codex-image:latest
-    envFrom:
-    - configMapRef:
-        name: codex-config
-    - secretRef:
-        name: codex-secrets
-    volumeMounts:
-    - name: workspace
-      mountPath: /workspace
-    - name: codex-home
-      mountPath: /codex-home
-  volumes:
-  - name: workspace
-    persistentVolumeClaim:
-      claimName: workspace-pvc
-  - name: codex-home
-    emptyDir: {}
-```
-
-### 10.3 Docker Compose 场景
-
-```yaml
-version: "3.8"
-services:
-  codex:
-    image: codex-image:latest
-    environment:
-      - CODEX_MODEL=gpt-5.4-mini
-      - CODEX_SANDBOX_MODE=workspace-write
-      - CODEX_EXEC_TIMEOUT=600
-      - CODEX_LOG_LEVEL=info
-      - CODEX_HOME=/codex-home
-    env_file:
-      - .codex-secrets  # 不提交到 git
-    volumes:
-      - ./workspace:/workspace
-      - codex-home:/codex-home
-
-volumes:
-  codex-home:
-```
-
----
-
-## 11. 安全注意事项
-
-环境变量是把双刃剑——用起来方便，但也容易泄露敏感信息。
-
-### 11.1 哪些变量包含敏感信息
-
-| 变量 | 敏感级别 | 泄露后果 |
-|------|------|------|
-| `CODEX_API_KEY` | 高 | 攻击者可以用你的 API 额度调用 OpenAI |
-| `OPENAI_API_KEY` | 高 | 同上 |
-| `HTTPS_PROXY`（含认证） | 中 | 攻击者可以用你的代理 |
-| 代理 URL 中的密码 | 高 | 攻击者可以访问代理服务器 |
-
-`CODEX_MODEL`、`CODEX_SANDBOX_MODE`、`CODEX_LOG_LEVEL` 这些不是敏感的，泄露了无所谓。
-
-### 11.2 CI/CD 中的安全管理
-
-原则：敏感变量只通过平台的 secrets 机制注入，永远不要出现在代码仓库里。
-
-**GitHub Actions**：
-
-```yaml
-# 正确：用 secrets
-- env:
-    CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
-  run: codex exec "do something"
-
-# 错误：硬编码
-- env:
-    CODEX_API_KEY: "sk-proj-xxx"  # 不要这样！
-  run: codex exec "do something"
-```
-
-**GitLab CI**：
-
-```yaml
-# 在 Settings > CI/CD > Variables 中设 CODEX_API_KEY（勾选 Masked）
-codex-job:
-  script:
-    - codex exec "do something"
-  variables:
-    CODEX_MODEL: "gpt-5.4-mini"  # 非敏感，可以写在这里
-```
-
-**Kubernetes**：
+不要依赖未公开稳定的 `CODEX_MODEL` 之类变量。用 CLI 参数或配置文件：
 
 ```bash
-# 用 kubectl 创建 secret
-kubectl create secret generic codex-secrets \
-  --from-literal=CODEX_API_KEY='sk-proj-xxx'
-
-# 不要把 secret 写在 YAML 文件里提交到 git
+codex -m gpt-5.5 "修复这个 bug"
+codex exec -m gpt-5.4-mini "总结测试失败原因"
 ```
 
-### 11.3 环境变量泄漏的常见途径
+```toml
+model = "gpt-5.5"
+```
 
-| 途径 | 防护方法 |
-|------|------|
-| 进程列表（`ps eww`） | 使用 keyring 而不是环境变量存 API Key |
-| Docker inspect | 用 Docker secrets 或 Kubernetes Secrets |
-| 日志输出 | 确保日志级别不是 `debug` 或 `trace` 时输出环境变量 |
-| 错误报告 | Codex 的错误报告会自动过滤已知敏感变量 |
-| 子进程继承 | 配置 `shell_environment_policy` 过滤敏感变量 |
-| `.env` 文件提交到 git | 把 `.env` 加入 `.gitignore` |
+### 误区二：用环境变量切沙箱或审批策略
 
-### 11.4 环境变量 vs config.toml 的安全对比
+不要依赖 `CODEX_SANDBOX_MODE`、`CODEX_EXEC_APPROVAL_POLICY` 这类未在官方稳定环境变量列表中记录的变量。用明确参数：
 
-| 维度 | 环境变量 | config.toml |
-|------|------|------|
-| 文件系统可见性 | `ps eww` 可见 | 文件权限 0600 保护 |
-| 版本控制 | 不在 git 里 | 可能误提交 |
-| 容器场景 | Docker/K8s 原生支持 | 需要挂载卷 |
-| 多用户 | 每个用户/容器独立 | 共享文件系统可能冲突 |
-| 审计 | 平台 secrets 有审计日志 | 文件访问有文件系统审计 |
+```bash
+codex --sandbox workspace-write --ask-for-approval on-request
+codex exec --sandbox workspace-write "运行测试并修复失败项"
+```
 
-没有绝对的安全，只有适合场景的选择。CI/CD 用环境变量 + 平台 secrets，本地用 config.toml + 文件权限，两者配合使用。
+`codex exec --full-auto` 仍作为兼容参数存在，但官方已标为 deprecated；新脚本应显式设置 `--sandbox workspace-write` 或更严格的权限。
 
----
+### 误区三：把 CODEX_API_KEY 放进整个 CI job
 
-## 12. 环境变量完整速查表
+不建议这样做：
 
-按功能分组，所有环境变量一览。
+```yaml
+env:
+  CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+steps:
+  - run: npm test
+  - run: codex exec "修复测试"
+```
 
-### 认证
+仓库代码、测试脚本、依赖安装脚本都可能读取 job 环境变量。更好的方式是只在 `codex exec` 那一步注入，或使用 `openai/codex-action`。
 
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_API_KEY` | string | 无 | 是 | OpenAI API Key |
-| `OPENAI_API_KEY` | string | 无 | 是 | 备用 API Key |
-| `CODEX_HOME` | path | `~/.codex` | 否 | 配置主目录 |
-| `CODEX_AUTH_CREDENTIALS_STORE` | enum | `keyring` | 否 | 凭据存储方式 |
-| `CODEX_FORCED_LOGIN_METHOD` | enum | 无 | 否 | 强制登录方式 |
+### 误区四：把 Provider 自定义 Key 当成固定 CODEX_ 变量
 
-### 模型
+自定义 Provider 的密钥变量名由 `env_key` 决定，不是固定的 Codex 环境变量：
 
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_MODEL` | string | `gpt-5.4` | 否 | 默认模型 |
-| `CODEX_MODEL_PROVIDER` | string | `openai` | 否 | 模型提供方 |
-| `CODEX_MODEL_REASONING_EFFORT` | enum | `medium` | 否 | 推理强度 |
-| `CODEX_REVIEW_MODEL` | string | 跟随 model | 否 | 审查专用模型 |
-| `CODEX_OPENAI_BASE_URL` | url | OpenAI 默认 | 否 | OpenAI API 地址 |
+```toml
+[model_providers.my_gateway]
+name = "my-gateway"
+base_url = "https://gateway.example.com/v1"
+env_key = "MY_GATEWAY_API_KEY"
+```
 
-### 沙箱
+然后在 shell 中设置：
 
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_SANDBOX_MODE` | enum | `workspace-write` | 否 | 沙箱级别 |
-| `CODEX_SANDBOX_WORKSPACE_WRITE` | paths | 无 | 否 | read-only 下的额外写入目录 |
-| `CODEX_SANDBOX_NETWORK_ACCESS` | enum | `deny` | 否 | 网络访问 |
-| `CODEX_SANDBOX_WRITABLE_ROOTS` | paths | 无 | 否 | workspace-write 下的额外写入目录 |
+```bash
+export MY_GATEWAY_API_KEY="..."
+```
 
-### 代理
+## 7. 速查表
 
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `HTTP_PROXY` | url | 无 | 可能 | HTTP 代理 |
-| `HTTPS_PROXY` | url | 无 | 可能 | HTTPS 代理 |
-| `ALL_PROXY` | url | 无 | 可能 | 通用代理 |
-| `NO_PROXY` | domains | localhost | 否 | 不走代理的域名 |
-
-### 执行模式
-
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_EXEC_APPROVAL_POLICY` | enum | `full-auto` | 否 | exec 审批策略 |
-| `CODEX_EXEC_SANDBOX` | enum | 跟随全局 | 否 | exec 沙箱覆盖 |
-| `CODEX_EXEC_TIMEOUT` | int(秒) | 600 | 否 | exec 超时 |
-| `CODEX_EXEC_MAX_TURNS` | int | 30 | 否 | exec 最大轮数 |
-
-### 日志
-
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_LOG_LEVEL` | enum | `warn` | 否 | 日志级别 |
-| `RUST_LOG` | string | 无 | 否 | Rust 模块级日志 |
-| `CODEX_LOG_DIR` | path | `${CODEX_HOME}/logs` | 否 | 日志文件目录 |
-
-### MCP
-
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `CODEX_MCP_SERVERS_DIR` | path | `${CODEX_HOME}/mcp-servers` | 否 | MCP 服务器配置目录 |
-| `CODEX_MCP_DISABLED` | bool | `false` | 否 | 禁用 MCP |
-
-### TUI
-
-| 变量 | 类型 | 默认值 | 敏感 | 说明 |
-|------|------|------|------|------|
-| `NO_COLOR` | bool | 无 | 否 | 禁用彩色 |
-| `TERM` | string | 系统 | 否 | 终端类型 |
-| `COLORTERM` | string | 系统 | 否 | 真彩色支持 |
-| `EDITOR` | string | `vi` | 否 | 默认编辑器 |
-| `VISUAL` | string | 无 | 否 | 编辑器（优先于 EDITOR） |
-
----
+| 变量 | 用途 | 敏感 | 推荐场景 |
+| --- | --- | --- | --- |
+| `CODEX_HOME` | Codex 状态根目录 | 否 | 多实例、容器、隔离配置 |
+| `CODEX_SQLITE_HOME` | SQLite 状态目录 | 否 | 状态存储分离 |
+| `CODEX_NON_INTERACTIVE` | 安装器跳过提示 | 否 | unattended install |
+| `CODEX_INSTALL_DIR` | 改变 `codex` 命令安装目录 | 否 | 自定义 PATH 布局 |
+| `CODEX_API_KEY` | 单次 `codex exec` API Key | 是 | CI 或脚本化非交互运行 |
+| `CODEX_ACCESS_TOKEN` | ChatGPT/Codex access token | 是 | 受信任自动化、企业身份 |
+| `CODEX_CA_CERTIFICATE` | 自定义 CA bundle | 否 | 企业 TLS inspection |
+| `SSL_CERT_FILE` | 备用 CA bundle | 否 | 通用 TLS 配置 |
+| `RUST_LOG` | Rust 日志级别 | 否 | 排错和诊断 |
 
 ## 延伸阅读
 
-- **第 22 篇（配置体系总览）**：环境变量在四层优先级中的位置，以及与 config.toml 的关系
-- **第 23 篇（基础配置项）**：model、sandbox、approval 等核心配置项的详细说明
-- **第 24 篇（模型与 Provider）**：`CODEX_OPENAI_BASE_URL`、`CODEX_MODEL_PROVIDER` 对应的 TOML 配置
-- **第 26 篇（Shell 与沙箱配置）**：沙箱环境变量的底层机制和 shell 环境变量策略
-- **第 29 篇（沙箱全解析）**：`CODEX_SANDBOX_MODE`、`CODEX_SANDBOX_NETWORK_ACCESS` 的深入讲解
-- **第 48 篇（exec 非交互模式）**：`CODEX_EXEC_*` 系列变量的使用场景
-- **第 50 篇（CI/CD 集成）**：环境变量在 GitHub Actions 和 Docker 中的实际配置方法
-- **第 55 篇（企业认证）**：`CODEX_API_KEY` 和 `CODEX_FORCED_LOGIN_METHOD` 在企业场景下的管理策略
-- **第 36 篇（MCP 服务器接入）**：MCP 相关环境变量的使用
-- **第 66 篇（config.toml 完整参考）**：所有环境变量对应的 TOML 配置项对照
+- [Codex 官方文档：Environment variables](https://developers.openai.com/codex/environment-variables) — 稳定公开环境变量列表
+- [Codex 官方文档：Non-interactive mode](https://developers.openai.com/codex/noninteractive) — `codex exec`、API Key 注入和 CI 安全建议
+- [Codex 官方文档：Config basics](https://developers.openai.com/codex/config-basic) — `config.toml` 基础配置
+- [Codex 官方文档：Agent approvals & security](https://developers.openai.com/codex/agent-approvals-security) — 沙箱、审批和网络安全
+- [第 48 篇：exec 非交互模式](./48-exec-mode.md)
+- [第 66 篇：config.toml 完整参考](./66-config-reference.md)
+
+*本文以 OpenAI Codex 官方 Environment variables 与 Non-interactive mode 文档为基准。Codex 更新频繁，新增变量时应优先回到官方稳定列表确认。*

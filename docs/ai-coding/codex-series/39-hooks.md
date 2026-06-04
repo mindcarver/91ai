@@ -184,26 +184,19 @@ exit 0
 
 ### 4.2 PostToolUse 事件数据
 
-`PostToolUse` 钩子额外收到工具执行的返回结果：
+`PostToolUse` 钩子会收到工具执行的上下文和返回结果。不同版本的 payload 可能调整，脚本里不要假设固定环境变量名，优先先把收到的输入记录下来再解析。
 
 ```bash
-CODEX_HOOK_EVENT=PostToolUse
-CODEX_TOOL_NAME=shell
-CODEX_TOOL_INPUT='{"command":"ls -la"}'
-CODEX_TOOL_OUTPUT='{"content":[...]}'
-CODEX_TOOL_IS_ERROR=false
+# 示例：先在 hook 脚本里记录当前输入和环境，确认字段形状
+env | sort > /tmp/codex-hook-env.log
+cat > /tmp/codex-hook-payload.json
 ```
 
 可以用来做结果校验——比如检查 shell 命令的退出码是否为 0，如果不是则记录告警。
 
 ### 4.3 SessionStart 事件数据
 
-```bash
-CODEX_HOOK_EVENT=SessionStart
-CODEX_SESSION_ID=abc123
-CODEX_CWD=/path/to/project
-CODEX_MODEL=gpt-5.4-mini
-```
+`SessionStart` 的 matcher 常见值包括 `startup`、`resume`、`clear` 和 `compact`。如果你需要在脚本里读取会话路径、模型或其他上下文，先按当前版本实际传入的 payload 做解析，不要依赖未公开稳定的 `CODEX_MODEL` 这类变量。
 
 可以用来在会话开始时初始化环境、启动后台监控进程、记录会话开始时间。
 

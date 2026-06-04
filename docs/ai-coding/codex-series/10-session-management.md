@@ -107,7 +107,7 @@
 
 - **模型选择**：如果你在之前的对话里用 `/model` 切换到了 o4-mini，新线程继续用 o4-mini
 - **推理力度**：`reasoning_effort` 设置也会被继承
-- **审批策略**：之前设的 `suggest` / `auto-edit` / `full-auto` 保持不变
+- **审批策略**：之前设的 `untrusted` / `on-request` / `never` 等策略保持不变
 - **沙箱模式**：`read-only` / `workspace-write` / `danger-full-access` 不受影响
 
 不会继承的是对话历史本身——新线程从空白状态开始。

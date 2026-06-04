@@ -51,7 +51,7 @@ Codex 会输出当前会话的关键信息。
 输出通常包含以下几个字段：
 
 - **Model**：当前使用的模型名称（比如 `gpt-5.4`、`o4-mini`）
-- **Approval policy**：当前审批策略（`suggest`、`auto-edit`、`full-auto`）
+- **Approval policy**：当前审批策略（`untrusted`、`on-request`、`never` 或 `granular`）
 - **Writable roots**：可写的根目录列表（沙箱允许写入的路径）
 - **Token usage**：当前 token 消耗 / 上下文窗口上限（百分比）
 - **Session ID**：当前线程的唯一标识符
@@ -415,7 +415,7 @@ Final: model = "o4-mini" (source: project config)
 
 ```
 你：/status
-# 看到 Approval policy: auto-edit, Writable roots: /Users/you/project
+# 看到 Approval policy: on-request, Writable roots: /Users/you/project
 # 说明当前不是 read-only 模式
 
 你：/debug-config

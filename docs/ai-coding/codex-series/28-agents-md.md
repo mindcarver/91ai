@@ -394,7 +394,7 @@ nickname_candidates = ["Sherlock", "Poirot"]
 # agents/researcher.toml
 
 model = "o4-mini"
-approval_policy = "on-failure"
+approval_policy = "on-request"
 sandbox = "read-only"
 
 [agents.researcher]

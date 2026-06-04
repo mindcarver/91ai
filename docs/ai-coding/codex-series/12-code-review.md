@@ -437,7 +437,7 @@ approval_policy = "never"
 # CI 中不需要审批，但沙箱仍然提供保护
 ```
 
-`codex exec` 模式默认就是 `never`，所以 CI 中通常不需要额外配置。
+`codex exec` 默认在只读沙箱中运行。CI 中如果需要 Codex 直接修改文件，要显式设置最小可用权限，例如 `--sandbox workspace-write`；不要依赖已废弃的 `--full-auto` 兼容参数。
 
 ---
 

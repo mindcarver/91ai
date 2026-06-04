@@ -70,13 +70,13 @@ Action 只有一个输出：
 `codex-args` 接受两种格式。JSON 数组格式：
 
 ```yaml
-codex-args: '["--effort", "high", "--approval-mode", "auto-edit"]'
+codex-args: '["--effort", "high", "--ask-for-approval", "on-request"]'
 ```
 
 Shell 风格字符串格式：
 
 ```yaml
-codex-args: '--effort high --approval-mode auto-edit'
+codex-args: '--effort high --ask-for-approval on-request'
 ```
 
 如果值以 `[` 开头，Action 会按 JSON 数组解析，否则按 shell 字符串解析。

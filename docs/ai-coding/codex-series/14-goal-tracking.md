@@ -480,11 +480,11 @@ max_depth = 1      # agent 嵌套深度，默认 1
 
 ### 与 exec 非交互模式的配合
 
-在 CI/CD 场景下，你可能用 `codex exec` 模式运行 Codex 命令。exec 模式不支持交互式的斜杠命令，但你可以通过 `--full-auto` 模式和 prompt 中内联目标来实现类似效果：
+在 CI/CD 场景下，你可能用 `codex exec` 模式运行 Codex 命令。exec 模式不支持交互式的斜杠命令，但你可以通过显式沙箱参数和 prompt 中内联目标来实现类似效果：
 
 ```bash
 # 在 exec 模式中通过 prompt 指定目标
-codex exec --full-auto "目标：将 src/api/ 下所有 REST 端点迁移到 tRPC。完成后运行 pnpm test 确认通过。"
+codex exec --sandbox workspace-write "目标：将 src/api/ 下所有 REST 端点迁移到 tRPC。完成后运行 pnpm test 确认通过。"
 ```
 
 exec 模式的"目标"不是通过 `/goal` 命令设置的，而是直接写在 prompt 里。它的效果类似但不完全相同——prompt 中的目标只在第一轮可见，不会像 `/goal` 那样每轮注入。对于短任务（能在一两轮内完成的）这够用了，但对于长任务，还是推荐用交互式的 `/goal`。
