@@ -125,6 +125,18 @@
 
 判断：进阶方向按兴趣选择。RL 是大模型对齐（RLHF）的基础，扩散模型是生成式 AI 的核心。
 
+### Stage 9: 自进化 AI 方法论
+
+| 资源 | 为什么收录 | 适合阶段 |
+| --- | --- | --- |
+| [A Survey of Self-Evolving Agents (arxiv 2507.21046)](https://arxiv.org/abs/2507.21046) | 自进化 agent 最新综述，提供统一分类框架 | 9 |
+| [Darwin Gödel Machine (Sakana AI)](https://arxiv.org/abs/2505.22954) | 自改写代码 agent 的代表作，代码层自进化 | 9 |
+| [AlphaZero (Science)](https://www.science.org/doi/10.1126/science.aar6404) | self-play 的里程碑，策略层自进化经典 | 9 |
+| [DSPy GEPA Optimization](https://dspy.ai/getting-started/gepa-optimization/) | 自动 prompt 优化的工程化实现，prompt 层自进化 | 9 |
+| [Awesome Self-Evolving Agents](https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents) | 自进化方向的论文/项目聚合，追踪前沿 | 9 |
+
+判断：自进化是"系统用自己的输出当信号改进自己"，覆盖参数、结构、策略、prompt 到代码五个层级。理解它的前提是先掌握 RL（Stage 8）和 LLM 训练（Stage 5）。
+
 ## 中文学习资源
 
 | 资源 | 内容 | 适合阶段 |
@@ -148,6 +160,7 @@
 | 6 | 训练工程 | [5 篇](./stage6-training-eng/) | 能管理数据、调试训练、做实验跟踪 |
 | 7 | MLOps 与生产化 | [4 篇](./stage7-mlops/) | 能部署模型、监控漂移、优化推理 |
 | 8 | 进阶方向 | [4 篇](./stage8-advanced/) | 能选择 RL/扩散模型/多模态等方向深入学习 |
+| 9 | 自进化 AI 方法论 | [8 篇](./stage9-self-evolution/) | 能理解系统如何用自身信号迭代，从自博弈到自改写代码 |
 
 ## 系列文章
 
@@ -240,6 +253,19 @@
 | 8.3 | [多模态学习](./stage8-advanced/03-multimodal-learning.md) | 视觉-语言模型/CLIP/多模态 Agent |
 | 8.4 | [图神经网络](./stage8-advanced/04-graph-neural-networks.md) | 节点分类/图分类/GAT/GCN，非欧几里得数据怎么学 |
 
+### Stage 9：自进化 AI 方法论
+
+| # | 文章 | 核心问题 |
+| --- | --- | --- |
+| 9.1 | [自进化到底是什么](./stage9-self-evolution/01-what-is-self-evolution.md) | 自进化定义、五层级模型（参数/结构/策略/prompt/代码）、统一四步循环 |
+| 9.2 | [自博弈](./stage9-self-evolution/02-self-play.md) | 为什么自己和自己下棋能变强，TD-Gammon → AlphaGo → AlphaZero |
+| 9.3 | [进化算法与神经进化](./stage9-self-evolution/03-neuroevolution.md) | 不靠梯度也能优化，NEAT/ES/NAS，无梯度改结构 |
+| 9.4 | [元学习](./stage9-self-evolution/04-meta-learning.md) | 学会如何学习，MAML 双层循环、少样本、meta-RL |
+| 9.5 | [自动 prompt 优化](./stage9-self-evolution/05-automatic-prompt-optimization.md) | 让模型优化自己的 prompt，OPRO/DSPy/TextGrad |
+| 9.6 | [自进化的大模型](./stage9-self-evolution/06-self-evolving-llm.md) | STaR/self-rewarding/合成数据回流，宪法 AI 自我对齐 |
+| 9.7 | [自进化 Agent 与 Gödel 之梦](./stage9-self-evolution/07-self-evolving-agent.md) | 代码层自进化，Gödel Machine、Darwin Gödel、AI Scientist |
+| 9.8 | [自进化的边界与风险](./stage9-self-evolution/08-limits-and-risks.md) | reward hacking、model collapse、真实进展 vs 炒作 |
+
 ## 推荐学习路径
 
 ### 路径 A：实用工程师（偏应用）
@@ -325,3 +351,4 @@ Stage 0 (CS229) → Stage 2 (Goodfellow) → Stage 3 (CS231n)
 6. 训练工程（Stage 6）
 7. MLOps（Stage 7）
 8. 进阶方向（Stage 8，按兴趣选择）
+9. 自进化 AI 方法论（Stage 9，进阶，需先掌握 RL 和 LLM 训练）

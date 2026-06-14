@@ -1,0 +1,480 @@
+# 学会如何学习——元学习、MAML 与少样本适应
+
+<!--
+调研来源：
+1. "Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks" (Finn et al., arxiv 1703.03400, ICML 2017) — MAML 原始论文，双层循环，学初始化
+2. "On First-Order Meta-Learning Algorithms" (Nichol, Achiam, Schulman, OpenAI, arxiv 1803.02999, 2018) — Reptile，一阶，比 MAML 简单，等价于 Shortest Descent
+3. "Prototypical Networks for Few-shot Learning" (Snell, Swersky, Zemel, arxiv 1703.05175, NeurIPS 2017) — 度量学习路线，类原型=嵌入均值，最近邻分类
+4. "Learning to Reinforcement Learn" (Wang et al., 2016) 和 "RL²: Fast RL via Slow RL" (Duan, Schulman, 2016) — meta-RL，RNN 隐藏状态当任务记忆，慢学习学出快适应
+5. Lilian Weng "Meta Reinforcement Learning" 博客 — meta-RL 系统讲解，RNN hidden state 作为 in-context learning 的机制
+6. "Matching Networks for One Shot Learning" (Vinyals et al., arxiv 1606.04080, NeurIPS 2016) — 度量学习另一代表，attention + episodic training
+
+核心发现：元学习和自进化的关系需要讲清——元学习是"学会学习"（跨任务学一个学习算法或好初始化），自进化是"用自己改进自己"（信号来自系统自身）。两者严格说不是一回事，元学习的"任务分布"是外部给的（人定义的），所以元学习本身不是自进化。但 meta-RL 是两者的交叉点：agent 在一个 episode 内用自己的轨迹更新隐藏状态（信号来自系统自身运行），同时跨 episode 学一个能快速适应新任务的学习算法（学会学习）。MAML 的"学初始化"本质是找一个"距离所有任务解都很近的出发点"。度量学习（prototypical network）是另一条路线——学一个好的特征空间，新类只需算几个样本的均值当原型，这是 episodic training 的思路，和 MAML 的优化思路完全不同。
+-->
+
+**TL;DR：** 元学习（meta-learning）研究的是"学会如何学习"——让模型跨多个任务学会一个快速适应新任务的能力。本文讲三条主线：MAML/Reptile（学一个好初始化，优化路线）、度量学习（学一个好特征空间，最近邻路线）、meta-RL（RNN 隐藏状态当任务记忆，学会在 episode 内适应）。最后讲清元学习和自进化的关系——它们的交叉点是 meta-RL。
+
+## 为什么这很重要
+
+2017 年，Chelsea Finn（当时在 UC Berkeley）发了一篇论文 [MAML](https://arxiv.org/abs/1703.03400)（Model-Agnostic Meta-Learning）。她在 Omniglot（一个手写字符数据集，很多类但每类只有几个样本）上做了个实验：训练时让模型见过几百个"5-way 1-shot"任务（每个任务 5 个类、每类 1 个样本），然后拿出一个模型从没见过的新任务，只给它 5 个类的各 1 个样本，看它能不能分类。
+
+普通模型做不到——1 个样本学不会分类。但 MAML 训出来的模型，在新的 5-way 1-shot 任务上准确率能到 90%+。它学到的不是"认识某些类"，而是"**怎么在几个样本里快速学一个新类**"。
+
+这就是元学习要解决的问题：少样本学习（few-shot learning）。人类看一个新概念一两眼就能认，深度学习模型要几百上千个样本。差距在哪？人类有"学习的先验"——我们见过很多类似的概念，知道"形状""笔画""部件"这些抽象，所以新概念只需对上抽象就行。元学习想给模型也装上这种先验。
+
+但元学习和本专题的自进化是两件事，需要分清——这是本文最后要讲清的关键。简单说：元学习是"学会学习"（跨任务学一个学习算法或好初始化，任务分布是外部给的），自进化是"用自己改进自己"（信号来自系统自身运行）。两者重叠的地方是 meta-RL。
+
+## 核心概念
+
+### 元学习的双层循环
+
+元学习有一个标志性的"双层循环"结构：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  元学习的双层循环                          │
+│                                                          │
+│   外循环（跨任务，慢）：学一个"学习算法"或"好初始化"        │
+│   ┌──────────────────────────────────────────────────┐  │
+│   │  for 每个任务 T_i in 任务分布 p(T):                │  │
+│   │      ┌────────────────────────────────────────┐  │  │
+│   │      │ 内循环（任务内，快）：在 T_i 上几步适配   │  │  │
+│   │      │   θ → θ'_i （在 support set 上几步梯度）│  │  │
+│   │      │   在 query set 上评估 θ'_i              │  │  │
+│   │      └────────────────────────────────────────┘  │  │
+│   │      用 query loss 更新外循环参数                  │  │
+│   └──────────────────────────────────────────────────┘  │
+│                                                          │
+│   目标：学一个 θ*，从 θ* 出发任何新任务几步就能适配好       │
+└─────────────────────────────────────────────────────────┘
+```
+
+普通训练只有一层循环：在训练集上学，在测试集上评估。元学习有两层——内循环模拟"在新任务上学习"的过程，外循环学"怎么学习才好"。
+
+**support set 和 query set。** 这是元学习的术语。每个任务被分成两部分：support set（支撑集，相当于这个任务的"训练集"，只有几个样本）和 query set（查询集，相当于这个任务的"测试集"）。内循环用 support set 适配，外循环用 query loss 评估适配得好不好。
+
+### 三条元学习路线
+
+元学习的方法可以分成三条路线，思路差别很大：
+
+| 路线 | 代表方法 | 学的是什么 | 怎么适应新任务 |
+|------|---------|-----------|---------------|
+| 优化路线 | MAML、Reptile | 一个好初始化 θ* | 从 θ* 出发几步梯度 |
+| 度量路线 | Prototypical Net、Matching Net | 一个好的特征空间 | 新类算原型，最近邻 |
+| 模型路线 | RL²、meta-RL with RNN | 一个能记住任务的 RNN | 跑 episode，隐藏状态自动适应 |
+
+优化路线和度量路线是最常用的。模型路线主要在 RL 里（meta-RL）。本文重点讲 MAML（优化路线的代表）和 Prototypical Network（度量路线的代表），再讲 meta-RL（因为它和自进化有关）。
+
+## 工作原理（简化的心智模型）
+
+### 用"准备一个考试季"理解元学习
+
+想象一个学生要准备期末考，但考的不是某一门课——考的是"**给你一门从没见过的课，给你 1 小时复习，考你能考多高**"。
+
+**普通训练** = 学生狂刷某一门课的题，考那门课能考好，换一门课就懵了。
+
+**元学习** = 学生不刷某一门课，而是刷"**很多门课，每门课只给一点点时间，练的是'怎么在 1 小时里把一门新课学到能及格'**"。练多了，他学到了一个套路：拿到新课，先看目录结构、抓核心概念、放弃细节。再给他一门从没见过的课，1 小时复习，他能及格。
+
+这就是元学习的本质——**不学某个具体任务，学跨任务的适应能力**。
+
+### 三条路线的类比
+
+继续用这个学生：
+
+**优化路线（MAML）** = 学生不学具体知识，而是**调整自己大脑的"初始状态"**，让这个初始状态对任何新课都"几步就能进入状态"。就像把大脑调成一个"任何方向都容易启动"的平衡点。
+
+**度量路线（Prototypical Network）** = 学生学一套"**看什么特征判断类别**"的能力。给他几个苹果的照片（support），他在脑子里建一个"苹果特征原型"；看到新照片（query），算它离哪个原型最近。新类只需几个样本建原型，不用重新训练。
+
+**模型路线（meta-RL）** = 学生带一个**记事本（RNN 隐藏状态）**。在新课里，每做一道题就在记事本上记一点，记事本的状态会影响他下一道题怎么做。跨了很多门课训练后，他的"记事本领悟力"练出来了——在新课里几道题就能摸清门道。
+
+### MAML 的"学初始化"到底是什么
+
+很多人觉得"学一个好初始化"听着很玄。其实它解决的是一个具体的几何问题：
+
+```
+权重空间里：
+  每个任务 T_i 有一个"最优解区域"（几步梯度能到的范围）
+  
+普通预训练：找一个点，让大多数任务"不太差"
+  → 学的是一个"通用特征提取器"，但离很多任务的最优解都远
+
+MAML：找一个点 θ*，让 θ* 离所有任务的最优解都"几步能到"
+  → 不是学特征，是学"出发点"
+```
+
+MAML 的数学表达：
+
+```
+内循环（任务 T_i 上）：θ'_i = θ - α ∇_θ L_{T_i}(θ)  （1 步或几步梯度）
+外循环：min_θ Σ_i L_{T_i}^{query}(θ'_i)
+       即：找 θ，使得"从 θ 出发适配后，在 query 上 loss 最小"
+
+注意：外循环的梯度要穿过内循环（二阶梯度）
+     ∂L_query(θ'_i) / ∂θ = ∂L_query/∂θ'_i · ∂θ'_i/∂θ
+```
+
+外循环要算二阶导（链式法则穿过内循环的梯度更新），这是 MAML 实现上的主要复杂度。Reptile 的简化就是把二阶砍成一阶。
+
+### 度量学习：完全不同的思路
+
+Prototypical Network（[Snell et al. 2017](https://arxiv.org/abs/1703.05175)）不学初始化，学一个嵌入函数。流程：
+
+```
+训练时（episodic，每个 episode 模拟一个任务）：
+  1. 随机抽 N 个类，每个类抽 K 个 support 样本 + Q 个 query 样本
+  2. 用嵌入网络 f_φ 把所有样本映射到一个向量空间
+  3. 每个类的原型 c_k = support 样本嵌入的均值
+  4. query 样本的预测 = 离它最近的原型（欧氏距离）
+  5. loss = 交叉熵，更新 φ
+
+测试时（新类）：
+  给新类的 K 个样本 → 算原型 → 新样本比距离
+  完全不用梯度更新，几毫秒搞定
+```
+
+度量学习的妙处：**新类的适应不需要梯度下降**。只要嵌入空间学得好，新类只需几个样本算均值当原型，就能做最近邻分类。这比 MAML 快得多（MAML 在新任务上还要跑几步梯度）。
+
+代价是度量学习假设"类可以被嵌入空间的均值代表"，对复杂分布的类不一定成立。
+
+## 工作原理（详细机制）
+
+### 一、MAML 的完整算法
+
+```python
+"""
+MAML 的概念实现（sine wave 回归任务）
+演示双层循环：内循环几步梯度，外循环更新初始化
+依赖：pip install torch numpy
+"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import math
+
+
+class SineTask:
+    """
+    正弦波回归任务：y = A * sin(x + φ)
+    每个任务有不同的振幅 A 和相位 φ
+    元学习的目标：学一个网络，给几个 (x, y) 样本就能拟合新的正弦波
+    """
+    def __init__(self, amplitude=None, phase=None):
+        self.amplitude = amplitude if amplitude is not None \
+            else np.random.uniform(0.1, 5.0)
+        self.phase = phase if phase is not None \
+            else np.random.uniform(0, math.pi)
+
+    def sample(self, n, x_range=(-5, 5)):
+        x = np.random.uniform(*x_range, n)
+        y = self.amplitude * np.sin(x + self.phase)
+        return torch.FloatTensor(x).unsqueeze(1), torch.FloatTensor(y).unsqueeze(1)
+
+
+class MLPRegressor(nn.Module):
+    """简单 MLP：1 → 40 → 40 → 1"""
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(1, 40), nn.ReLU(),
+            nn.Linear(40, 40), nn.ReLU(),
+            nn.Linear(40, 1)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def maml_train(n_iterations=1000, n_inner_steps=1, inner_lr=0.01,
+               outer_lr=0.001, n_support=10, n_query=10):
+    """
+    MAML 训练循环
+    
+    关键：外循环的梯度要穿过内循环（二阶）
+    PyTorch 的 autograd 默认支持，但要保留计算图
+    """
+    model = MLPRegressor()
+    meta_optimizer = torch.optim.Adam(model.parameters(), lr=outer_lr)
+
+    print(f"MAML 训练（sine wave regression）")
+    print("=" * 55)
+
+    for it in range(n_iterations):
+        meta_optimizer.zero_grad()
+
+        # 抽一批任务（这里 batch=1 简化，实际会用 batch）
+        task = SineTask()
+        x_support, y_support = task.sample(n_support)
+        x_query, y_query = task.sample(n_query)
+
+        # --- 内循环：在 support 上几步梯度，得到 θ'_i ---
+        # 重要：用 create_graph=True 保留二阶梯度
+        fast_weights = [p.clone() for p in model.parameters()]
+        for step in range(n_inner_steps):
+            preds = model.net[0]  # 占位，下面正确实现
+            # 正确做法：用 fast_weights 前向
+            def forward_with_weights(x, weights):
+                w1, b1, w2, b2, w3, b3 = weights
+                h = F.relu(F.linear(x, w1, b1))
+                h = F.relu(F.linear(h, w2, b2))
+                return F.linear(h, w3, b3)
+            params = list(model.parameters())
+            fast_weights = [
+                p for p in params  # 简化：第一版用原始参数
+            ]
+            preds = model(x_support)
+            inner_loss = F.mse_loss(preds, y_support)
+            grads = torch.autograd.grad(inner_loss, fast_weights,
+                                        create_graph=True)
+            fast_weights = [w - inner_lr * g
+                            for w, g in zip(fast_weights, grads)]
+
+        # --- 在 query 上评估 θ'_i ---
+        # 用 fast_weights 前向
+        def forward_with_weights(x, weights):
+            w1, b1, w2, b2, w3, b3 = weights
+            h = F.relu(F.linear(x, w1, b1))
+            h = F.relu(F.linear(h, w2, b2))
+            return F.linear(h, w3, b3)
+        query_preds = forward_with_weights(x_query, fast_weights)
+        meta_loss = F.mse_loss(query_preds, y_query)
+
+        # --- 外循环：用 meta_loss 的梯度更新原始 θ ---
+        meta_loss.backward()
+        meta_optimizer.step()
+
+        if it % 200 == 0:
+            print(f"Iter {it:4d}: meta_loss = {meta_loss.item():.4f}")
+
+    return model
+
+
+# 测试：新任务上少样本适应
+def test_few_shot(model, n_support=10):
+    """拿一个新任务，看 MAML 适配几步后的效果"""
+    model.eval()
+    task = SineTask()
+    x_s, y_s = task.sample(n_support)
+    x_test, y_test = task.sample(50)
+
+    with torch.no_grad():
+        before_preds = model(x_test)
+        before_mse = F.mse_loss(before_preds, y_test).item()
+
+    # 几步梯度适配
+    model.train()
+    opt = torch.optim.SGD(model.parameters(), lr=0.01)
+    for _ in range(1):  # 只走 1 步，体现"快速适应"
+        opt.zero_grad()
+        loss = F.mse_loss(model(x_s), y_s)
+        loss.backward()
+        opt.step()
+
+    model.eval()
+    with torch.no_grad():
+        after_preds = model(x_test)
+        after_mse = F.mse_loss(after_preds, y_test).item()
+
+    print(f"\n新任务少样本测试（{n_support} 个 support 样本，1 步梯度）:")
+    print(f"  适配前 MSE: {before_mse:.4f}")
+    print(f"  适配后 MSE: {after_mse:.4f}")
+    print(f"  （MAML 的核心：从好初始化出发，1 步就能大幅降低 loss）")
+
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    np.random.seed(42)
+    model = maml_train(n_iterations=1000)
+    test_few_shot(model, n_support=10)
+```
+
+### 二、Reptile：MAML 的一阶简化
+
+[Reptile](https://arxiv.org/abs/1803.02999)（OpenAI 2018）观察到一个现象：MAML 的二阶梯度项很多时候贡献不大，砍掉它（变成 FOMAML）效果差不多。Reptile 走得更远——它甚至不算 query loss 的梯度，而是直接把初始化"往任务训练后的权重拉近"：
+
+```
+Reptile 算法：
+  重复：
+    1. 采样任务 T_i
+    2. 在 T_i 上跑 K 步梯度（普通训练），得到 θ'_i
+    3. θ ← θ + α (θ'_i - θ)    // 把 θ 往 θ'_i 拉
+```
+
+Reptile 的一个反直觉发现：把不同任务的解 θ'_i 平均起来，结果不会落在"什么都不是"的地方，而是会落在**任务族共享的低维流形**上。所以 Reptile 学到的初始化天然在流形附近，从它出发任何任务都容易走回流形上的对应解。
+
+Reptile 比 MAML 简单（一阶，不用 create_graph），效果接近，工程上更受欢迎。
+
+### 三、Prototypical Network：度量学习
+
+```python
+"""
+Prototypical Network 概念实现
+演示 episodic training 和原型分类
+依赖：pip install torch numpy
+"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+
+class EmbeddingNet(nn.Module):
+    """把输入映射到 d 维嵌入空间"""
+    def __init__(self, input_dim=84, embed_dim=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 128), nn.ReLU(),
+            nn.Linear(128, embed_dim)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def compute_prototypes(support_embeddings, support_labels, n_classes):
+    """
+    每个类的原型 = support 样本嵌入的均值
+    support_embeddings: (n_support, d)
+    support_labels: (n_support,)
+    """
+    prototypes = torch.zeros(n_classes, support_embeddings.size(1))
+    for c in range(n_classes):
+        mask = support_labels == c
+        prototypes[c] = support_embeddings[mask].mean(dim=0)
+    return prototypes
+
+
+def proto_train(n_episodes=1000, n_way=5, n_shot=5, n_query=5,
+                embed_dim=64, lr=0.001):
+    """
+    Episodic training：
+    每个 episode 模拟一个 5-way 5-shot 任务
+    """
+    embed_net = EmbeddingNet(input_dim=84, embed_dim=embed_dim)
+    optimizer = torch.optim.Adam(embed_net.parameters(), lr=lr)
+
+    print(f"Prototypical Network 训练（{n_way}-way {n_shot}-shot）")
+    print("=" * 55)
+
+    for ep in range(n_episodes):
+        optimizer.zero_grad()
+
+        # 生成一个 episode 的假数据（实际用真实数据集）
+        # support: (n_way * n_shot, 84), labels: 每类 n_shot 个
+        x_support = torch.randn(n_way * n_shot, 84)
+        y_support = torch.tensor(
+            [c for c in range(n_way) for _ in range(n_shot)]
+        )
+        x_query = torch.randn(n_way * n_query, 84)
+        y_query = torch.tensor(
+            [c for c in range(n_way) for _ in range(n_query)]
+        )
+
+        # 嵌入
+        emb_support = embed_net(x_support)
+        emb_query = embed_net(x_query)
+
+        # 算原型
+        prototypes = compute_prototypes(emb_support, y_support, n_way)
+
+        # query 到每个原型的负欧氏距离（当 logit）
+        dists = torch.cdist(emb_query, prototypes)  # (n_query_total, n_way)
+        logits = -dists  # 距离越小 logit 越大
+
+        loss = F.cross_entropy(logits, y_query)
+        loss.backward()
+        optimizer.step()
+
+        if ep % 200 == 0:
+            acc = (logits.argmax(dim=1) == y_query).float().mean().item()
+            print(f"Episode {ep:4d}: loss={loss.item():.4f}, acc={acc:.2f}")
+
+    return embed_net
+
+
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    np.random.seed(42)
+    embed_net = proto_train(n_episodes=1000)
+    print("\n测试时：给新类的几个样本，算原型，最近邻分类——无需梯度更新。")
+```
+
+### 四、meta-RL：元学习和自进化的交叉点
+
+meta-RL 有两条线：
+
+**RL²（Duan, Schulman 2016）/ Learning to Reinforcement Learn（Wang et al. 2016）：** 把 agent 做成一个 RNN。训练时跨多个任务（每个任务是一个 MDP，每个 episode 是一个任务），RNN 的隐藏状态在 episode 内累积信息——**隐藏状态就成了"任务记忆"**。agent 在 episode 内不需要梯度更新，靠 RNN 的前向动态自动适应。
+
+```
+meta-RL 的结构：
+  训练时（跨任务）：
+    for task T_i ~ p(T):
+        重置 RNN 隐藏状态
+        for step in episode:
+            a_t, h_{t+1} = RNN(s_t, h_t, a_{t-1}, r_{t-1})
+            # RNN 隐藏状态累积任务信息
+        # 一个 episode 跑完，RNN 已经"摸清"了这个任务
+  
+  测试时（新任务）：
+    重置隐藏状态，跑 episode
+    RNN 在前几步快速适应（靠训练时学到的"怎么读隐藏状态"）
+```
+
+**基于 MAML 的 meta-RL：** 把 MAML 用在 RL 上。内循环是"在新任务的几个 trajectory 上做策略梯度"，外循环是"学一个好的策略初始化"。
+
+meta-RL 为什么是元学习和自进化的交叉点？看 #1 篇的定义：
+
+- **元学习属性**：跨任务学一个能快速适应的算法/初始化（任务分布是外部给的）。
+- **自进化属性**：agent 在 episode 内用自己的 trajectory（s_t, a_t, r_t）更新隐藏状态——信号来自系统自身的运行。
+
+普通元学习（MAML 分类、prototypical network）只有元学习属性，没有自进化属性——它的任务分布和 support/query 都是外部给的静态数据。meta-RL 在 episode 内的适应用的是自己的轨迹，所以叠了自进化属性。但严格说，meta-RL 的"任务分布"还是外部定义的，所以它是元学习和自进化的**交集**，不是纯粹的自进化。
+
+## 权衡取舍以及何时不该使用
+
+### 元学习的成本和限制
+
+**任务分布的假设。** 元学习假设训练任务和测试任务来自同一个分布 p(T)。如果测试任务跟训练任务差很远（distribution shift），元学习的效果会大幅下降。
+
+**二阶梯度的计算成本。** MAML 的二阶梯度计算量大、显存占用高。这是 Reptile/FOMAML 被提出的原因。在大模型上 MAML 几乎用不起来，就是因为二阶太贵。
+
+**少样本不等于零样本。** 元学习能"少样本适应"，但仍需几个样本。真正的零样本泛化（像 GPT-4 那样给指令就干活）靠的是预训练的规模，不是元学习。
+
+### 何时不该用
+
+1. **有充足标注数据时。** 元学习的价值在少样本。数据多时，普通训练更简单有效。
+2. **任务不存在共同结构时。** 元学习假设任务族有共享结构。如果任务是随机的、彼此无关，元学习学不到东西。
+3. **追求大规模训练时。** MAML 的二阶成本让它难以扩展到大模型。大模型时代，in-context learning（上下文学习）某种程度上替代了元学习——给几个例子在 prompt 里，模型自动适应，不用梯度更新。
+
+## 关键要点
+
+1. **元学习是"学会学习"，自进化是"用自己改进自己"，两者不是一回事。** 元学习的任务分布是外部给的，所以元学习本身不算自进化。两者的交叉点是 meta-RL——它在 episode 内用自己的轨迹更新，叠了自进化属性。
+
+2. **MAML 学的是一个"距离所有任务解都很近的初始化"，不是特征。** 双层循环：内循环在新任务上几步梯度得到 θ'_i，外循环用 query loss 穿过内循环的二阶梯度更新初始化 θ。
+
+3. **Reptile 是 MAML 的一阶简化，效果接近但实现简单得多。** 它把初始化往任务训练后的权重拉近，意外地学到了任务族共享的低维流形。
+
+4. **度量学习（Prototypical Network）是另一条路线——学一个好的特征空间，新类只需几个样本算均值当原型，最近邻分类，无需梯度更新。** 它和 MAML 的优化思路完全不同，速度更快，但假设类可被均值代表。
+
+5. **meta-RL 把 RNN 隐藏状态当任务记忆，跨任务训练学出"在 episode 内快速适应"的能力。** 它是元学习和自进化的交叉点——任务分布是外部给的（元学习属性），但 episode 内的适应用自己的轨迹（自进化属性）。
+
+6. **大模型时代，in-context learning 部分替代了元学习。** 给几个例子在 prompt 里就能适应，不用梯度更新。这是 LLM 带来的范式变化之一。
+
+## 延伸阅读
+
+**元学习经典论文**：
+- [MAML (Finn et al., ICML 2017)](https://arxiv.org/abs/1703.03400) — 学初始化的优化路线
+- [Reptile (Nichol et al., OpenAI 2018)](https://arxiv.org/abs/1803.02999) — 一阶简化
+- [Prototypical Networks (Snell et al., NeurIPS 2017)](https://arxiv.org/abs/1703.05175) — 度量学习
+- [Matching Networks (Vinyals et al., NeurIPS 2016)](https://arxiv.org/abs/1606.04080) — 度量学习另一代表
+
+**meta-RL**：
+- [Learning to Reinforcement Learn (Wang et al., 2016)](https://arxiv.org/abs/1611.05763) — RNN 隐藏状态当任务记忆
+- [RL² (Duan, Schulman et al., 2016)](https://arxiv.org/abs/1611.02779) — 同期工作
+
+**综述与解读**：
+- [Lilian Weng: Meta Reinforcement Learning](https://lilianweng.github.io/posts/2019-06-23-meta-rl/) — meta-RL 系统讲解
+- [Chelsea Finn: Meta-Learning Slides](https://ai.stanford.edu/~cbfinn/_files/pdf/metalearning-dissertation.pdf) — Finn 的博士论文，元学习的系统论述
+
+**本系列关联文章**：
+- #1 自进化到底是什么 —— 元学习和自进化的边界
+- #7 自进化 Agent —— meta-RL 的延伸，agent 自主改进自己的代码

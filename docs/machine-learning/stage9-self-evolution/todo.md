@@ -1,0 +1,99 @@
+# 自进化 AI 方法论 · 写作清单 (stage9-self-evolution)
+
+本文件确定这个专题**写哪些文章**。每写完一篇把 `[ ]` 改成 `[x]`。
+
+---
+
+## 专题定位
+
+- **目录**:`docs/machine-learning/stage9-self-evolution/`
+- **定位**:ML 系列 stage9,自进化方法论专题
+- **主线**:自进化 = 系统用自己的输出/行为作信号,迭代自身的某个部分(参数→结构→策略→prompt→代码)
+- **规则**(`machine-learning.md`,stage5+):章节可调,但「为什么重要 / 工作原理 / 代码示例 / 关键要点」四节不可省;代码用 ` ```python ` 闭合;文件名 `NN-topic-name.md`;目录不需要 README
+
+## 全系列:四部分 × 8 篇
+
+```
+第一部分 基础与框架
+  └─ #1 定义与五层级
+        ↓
+第二部分 经典自进化方法(三篇可并行)
+  ├─ #2 自博弈
+  ├─ #3 进化算法/神经进化
+  └─ #4 元学习
+        ↓
+第三部分 LLM 时代的自进化
+  ├─ #5 自动 prompt 优化 ─► #6 自进化的大模型
+        ↓
+第四部分 前沿与反思
+  ├─ #7 自进化 Agent / Gödel
+  └─ #8 边界与风险
+```
+
+### 第一部分:基础与框架
+
+- [x] **01 自进化到底是什么** — `01-what-is-self-evolution.md`
+  定义自进化 + 五层级模型(参数/结构/策略/prompt/代码)+ 统一框架 | 依赖:无
+
+### 第二部分:经典自进化方法
+
+- [x] **02 自博弈:为什么自己和自己下棋能变强** — `02-self-play.md`
+  self-play 机制,AlphaGo → AlphaZero,LLM debate 作为延伸 | 依赖:1
+- [x] **03 不靠梯度也能进化:进化算法与神经进化** — `03-neuroevolution.md`
+  NEAT / 进化策略,无梯度优化结构;**AutoML/NAS 并入此篇** | 依赖:1
+- [x] **04 学会如何学习:元学习** — `04-meta-learning.md`
+  MAML 双层循环,少样本学习 | 依赖:1
+
+### 第三部分:LLM 时代的自进化
+
+- [x] **05 让模型优化自己的 prompt** — `05-automatic-prompt-optimization.md`
+  OPRO / DSPy / TextGrad 三条路线,最易上手可跑 | 依赖:1
+- [x] **06 自进化的大模型** — `06-self-evolving-llm.md`
+  STaR / self-rewarding / 合成数据回流;**宪法 AI、LLM 自我对齐并入此篇** | 依赖:1、5
+
+### 第四部分:前沿与反思
+
+- [x] **07 自进化 Agent 与 Gödel 之梦** — `07-self-evolving-agent.md`
+  Gödel → Darwin Gödel 范式转移,DGM/SICA;**AI Scientist、Open-Ended Evolution 并入此篇** | 依赖:1、6
+- [x] **08 自进化的边界与风险** — `08-limits-and-risks.md`
+  reward hacking、自我欺骗、真实进展 vs 炒作 | 依赖:7
+
+## 为什么是 8 篇(番外不单列)
+
+下列候选主题**不单独成篇**,作为对应篇的小节/延伸阅读处理,避免凑数:
+
+| 候选 | 并入 |
+|---|---|
+| AutoML / NAS | #3 |
+| LLM debate / 自我博弈推理 | #2 |
+| 好奇驱动 / 内在奖励 | #2 |
+| 宪法 AI / 自我对齐 | #6 |
+| 合成数据回流(Phi/Synthia) | #6 |
+| AI Scientist(自动科研) | #7 |
+| Open-Ended Evolution / POET | #7 |
+
+**将来若想做成大部头**:把第一/二部分拆成 `stage9-classic/`,第三/四部分拆成 `stage9-llm-agent/` 两个子系列。当前先按 8 篇主干执行。
+
+## 超出 stage9 范畴(若要写,另立门户)
+
+- 自进化 RAG / 自更新知识库 → `docs/agent/` 或 RAG 专题
+- 具身 / 机器人自我迭代 → 独立方向
+- self-debugging / 自修复代码 → `docs/agent/`
+
+## 索引同步(8 篇都写完后)
+
+- [x] `docs/machine-learning/README.md` — 加 stage9 章节 + 更新总篇数
+- [x] `docs/README.md` — "Machine Learning Path" 篇数(现写 51,含 1 个 todo.md 规划文件)
+- [ ] `docs/knowledge-map.md` — 补自进化入口(可选,跳过:该文件不含 ML stage 导航维度)
+- [x] 项目根 `README.md` badge — `./scripts/check.sh badges`
+- [x] `./scripts/check.sh all` — 本次新增/修改的文件全部通过(badges/links/lint);仓库另存 14 个 lint 错误(openspec/02-core-concepts.md 代码块未闭合+标题缺空行、.wos-skills/.../EXTEND.md 文件名非 kebab-case),与本专题无关,未改动
+
+## 关键参考来源
+
+- Darwin Gödel Machine — https://sakana.ai/dgm/ ｜ 论文 https://arxiv.org/abs/2505.22954
+- A Survey of Self-Evolving Agents — https://arxiv.org/abs/2507.21046
+- Awesome Self-Evolving Agents — https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents
+- OpenAI Self-Evolving Agents Cookbook — https://developers.openai.com/cookbook/examples/partners/self_evolving_agents/autonomous_agent_retraining
+- Yohei Nakajima — Better Ways to Build Self-Improving AI Agents — https://yoheinakajima.com/better-ways-to-build-self-improving-ai-agents/
+- DSPy GEPA Optimization — https://dspy.ai/getting-started/gepa-optimization/
+- AlphaZero (Science) — https://www.science.org/doi/10.1126/science.aar6404

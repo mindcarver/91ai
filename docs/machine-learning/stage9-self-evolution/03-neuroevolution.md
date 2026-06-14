@@ -1,0 +1,500 @@
+# 不靠梯度也能进化——进化算法、神经进化与 NAS
+
+<!--
+调研来源：
+1. "Evolving Neural Networks through Augmenting Topologies" (Stanley & Miikkulainen, Evolutionary Computation 2002) — NEAT 原始论文，三大创新：从最小拓扑开始 complexify、innovation number 历史标记、物种形成 speciation
+2. "Evolution Strategies as a Scalable Alternative to Reinforcement Learning" (Salimans et al., OpenAI, arxiv 1703.03864, 2017) — ES 作为 RL 替代，NES 框架，高斯扰动估梯度，embarrassingly parallel
+3. "Neural Architecture Search with Reinforcement Learning" (Zoph & Le, arxiv 1611.01578, 2017) — NAS 用 RL 当搜索引擎，NASNet 的基础
+4. "Learning Transferable Architectures for Large-Scale Image Recognition" (Zoph et al., CVPR 2018) — NASNet，在 CIFAR 上搜索结构迁移到 ImageNet
+5. "Regularized Evolution for Image Classifier Architecture Search" (Real et al., AAAI 2019) — AmoebaNet，用进化替代 RL 做架构搜索
+6. MarI/O (SethBling, 2015) — NEAT 通关超级马里奥，无训练数据，纯进化
+7. Lilian Weng "Evolution Strategies" 博客 — NES 数学原理系统讲解
+8. Lilian Weng "Neural Architecture Search" 博客 — NAS 方法分类综述
+
+核心发现：梯度下降的根本限制不是"慢"或"不能用在不光滑目标上"，而是"只能改权重不能改结构"——必须先固定网络架构才能算梯度。神经进化的独特价值正是"结构也进化"，NEAT 把拓扑和权重一起放进基因里。NAS（神经网络架构搜索）和神经进化同源——都是"搜索网络长什么样"，NAS 早期用 RL 当搜索算法（NASNet），后来发现用进化（AmoebaNet/Regularized Evolution）搜索效率更高。ES（进化策略）和经典遗传算法不同：ES 是无性繁殖+高斯扰动，embarrassingly parallel 可上千 CPU 并行。
+-->
+
+**TL;DR：** 进化算法和神经进化是结构层自进化的代表。本文从进化算法的基础（选择、交叉、变异、适应度）讲到 NEAT（拓扑也进化）、OpenAI ES（无梯度并行优化）、NAS（架构搜索）。核心论点：梯度方法的根本限制是改不了"网络长什么样"，进化方法填补了这个空白。
+
+## 为什么这很重要
+
+2017 年，OpenAI 发了一篇让很多人意外的论文——[Evolution Strategies as a Scalable Alternative to Reinforcement Learning](https://arxiv.org/abs/1703.03864)。他们用一种几十年前就有的优化技术（进化策略，Evolution Strategies），在 MuJoCo 和 Atari 上训练 RL agent，效果跟主流 RL（A3C、TRPO）差不多，但可以轻松并行到上千个 CPU 上跑。
+
+这件事让很多人重新审视一个被深度学习时代冷落的方向：**不靠梯度，能不能训练神经网络？**
+
+但更早之前，2002 年，Kenneth Stanley 和 Risto Miikkulainen 就已经给出了一个更激进的答案。他们的 [NEAT](https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf)（NeuroEvolution of Augmenting Topologies）不只是用进化优化权重——**它让网络结构本身也进化**。从一个没有隐藏层的极简网络开始，通过变异逐渐长出新的节点和连接，直到能解决任务。
+
+这就是神经进化相对梯度方法的独特价值所在。梯度下降必须先固定一个网络架构，才能反向传播算梯度。它**改不了网络长什么样**，只能改权重。如果你想搜索"什么架构最好"，梯度方法本身帮不了你——你得手动试（ResNet、Transformer 都是人工设计的）。
+
+神经进化把架构本身也当成可优化的对象。这在工程上的价值是：自动找到比人工设计更好的网络结构。这就是后来 NAS（Neural Architecture Search）做的事——Google 的 [NASNet](https://arxiv.org/abs/1707.07012) 和 [AmoebaNet](https://arxiv.org/abs/1802.01548) 都是这个方向，前者用 RL 当搜索引擎，后者直接用进化。
+
+这是结构层自进化的代表（参考 #1 篇的五层级模型）。在这一层，系统修改的是"网络架构"——节点、连接、拓扑。
+
+## 核心概念
+
+### 进化算法的基本框架
+
+进化算法是受生物进化启发的通用优化框架。核心循环：
+
+```
+┌─────────────────────────────────────────────────────┐
+│              进化算法基本循环                          │
+│                                                      │
+│   1. 初始化种群：随机生成 N 个个体（候选解）            │
+│                                                      │
+│   ┌──────────────────────────────────┐               │
+│   │ 2. 评估适应度                      │               │
+│   │    每个个体在任务上跑一遍，打分     │               │
+│   └──────────────┬───────────────────┘               │
+│                  ▼                                   │
+│   ┌──────────────────────────────────┐               │
+│   │ 3. 选择                           │               │
+│   │    适应度高的更可能被选为"父母"     │               │
+│   └──────────────┬───────────────────┘               │
+│                  ▼                                   │
+│   ┌──────────────────────────────────┐               │
+│   │ 4. 变异（+ 交叉）                  │               │
+│   │    复制父母，随机改动（+ 交换基因）│               │
+│   └──────────────┬───────────────────┘               │
+│                  ▼                                   │
+│   5. 形成新一代种群，回到第 2 步                       │
+│                                                      │
+│   退出条件：达到目标适应度 / 迭代次数上限               │
+└─────────────────────────────────────────────────────┘
+```
+
+这正好对应 #1 篇的统一四步循环：
+
+- **采集**：每个个体在任务上跑（产生行为/输出）
+- **变异**：复制 + 随机改动（+ 交叉）
+- **选择**：用适应度函数筛选
+- **回写**：选中的个体成为新一代
+
+进化算法的关键不在某一步多巧妙，而在**整个循环的频率**。生物进化花了几亿年才长出人类，是因为每一代的变异和选择都很慢。算法进化把每一代压缩到几秒钟，可以跑成千上万代。
+
+### 进化算法 vs 神经进化 vs NAS
+
+这三个概念经常被混用，需要分清：
+
+| 概念 | 优化对象 | 关系 |
+|------|---------|------|
+| 进化算法 | 任何参数（数字、字符串、结构） | 通用框架 |
+| 神经进化 | 神经网络的权重 + 拓扑 | 进化算法用在 NN 上的特例 |
+| NAS | 神经网络的架构（层数、连接方式） | 神经进化的子集，但搜索算法可以用 RL/贝叶斯等 |
+
+神经进化是进化算法的特例——优化对象是神经网络。NAS 是一个更大的概念——搜索神经网络架构，搜索引擎可以是进化算法（AmoebaNet），也可以是 RL（NASNet），还可以是梯度（DARTS）。NAS 用进化算法时，它就是神经进化的一种应用。
+
+### 进化策略（ES）：一种特殊的进化算法
+
+OpenAI 用的 ES（Evolution Strategies）和经典遗传算法不同。经典遗传算法有显式的"选择父母 + 交叉 + 变异"，ES 更简单：
+
+```
+经典遗传算法：
+  种群 → 选择父母 → 交叉 → 变异 → 新一代
+
+进化策略（OpenAI 版）：
+  当前参数 θ
+  → 生成 N 个高斯扰动副本 θ + ε_i·σ （ε_i 是标准正态随机向量）
+  → 每个副本在任务上跑一遍，得到适应度 F(θ + ε_i·σ)
+  → 估计梯度方向 ≈ (1/N) Σ F_i · ε_i
+  → θ ← θ + α · 估计的梯度方向
+```
+
+ES 的巧妙之处：它表面上是"无梯度优化"，实际上是在**用随机扰动估计梯度**。当扰动足够多时，(1/N) Σ F_i · ε_i 会收敛到真实梯度的方向。这让它可以享受梯度下降的收敛性，又不需要显式算梯度（反向传播）。
+
+ES 的另一个优势是 **embarrassingly parallel**——每个扰动副本完全独立，可以分发到上千个 CPU 上跑，几乎没有通信开销。RL 的并行要复杂得多（worker 之间要同步梯度）。
+
+## 工作原理（简化的心智模型）
+
+### 用"育种"理解进化算法
+
+想象一个育种家要培育跑得更快的狗。
+
+**监督学习/梯度下降** = 他已经有一群狗，但只能通过"让每只狗跑一遍，看谁快，然后微调每只狗的训练方案"来改进。狗的品种（基因/结构）是固定的，他只能改训练。这是梯度的限制——结构改不了。
+
+**神经进化** = 他不只能改训练，还能让跑得快的狗互相交配，生出基因重组的小狗，偶尔让基因突变。几代之后，可能长出腿更长、肺活量更大的新品种。结构变了。
+
+**NEAT 特殊的地方** = 不从"已有的大品种"开始，而是从最小的"原始狗"开始，每一代可能长出新器官（新节点/新连接），逐渐 complexify。这避免了"一开始就设计错大结构"的问题。
+
+**ES 的育种方式** = 不是两只狗交配，而是从一只狗克隆出 N 份，每份随机微调一点基因（高斯扰动），看哪份跑得快，然后把"朝快的那份方向"的基因变化累积起来。无性繁殖，但靠群体统计找方向。
+
+### 梯度为什么改不了结构
+
+这是本篇要讲透的核心。梯度下降的工作机制是：
+
+```
+1. 固定网络结构（层数、每层神经元数、连接方式）
+2. 定义损失函数 L(权重)
+3. 算 ∂L/∂权重
+4. 权重 ← 权重 - α · ∂L/∂权重
+```
+
+第 1 步——"固定网络结构"——是前提条件。没有固定结构，你算不出 ∂L/∂权重（因为权重数量都不确定）。所以梯度方法**永远在一个给定的结构空间里找最优权重**，它不会告诉你"是不是该加一层"或者"这个连接是不是该删掉"。
+
+进化方法没有这个限制。基因可以编码"加一个节点""删一个连接"这种结构变化。变异算子可以直接操作结构。这就是为什么 NEAT 能让网络从简单长到复杂——它的变异包括结构变异。
+
+这条限制的工程后果：**所有人工设计的架构（ResNet、Transformer、U-Net）都是人在用梯度方法之外，靠经验/直觉/试错找出来的**。NAS 的目标就是把这个搜索过程自动化。
+
+## 工作原理（详细机制）
+
+### 一、经典遗传算法优化神经网络权重
+
+最简单的神经进化：固定网络结构，用遗传算法优化权重。
+
+```python
+"""
+用遗传算法优化一个简单网络的权重
+任务：拟合一个目标函数（演示无梯度优化）
+"""
+import numpy as np
+
+# 任务：拟合 y = sin(x)，输入 x，输出 y
+# 网络：1 输入 → 10 隐藏（tanh）→ 1 输出，共 10+10+10+1 = 31 个权重
+def target(x):
+    return np.sin(x)
+
+def network(weights, x):
+    """极简前向网络：1→10→1"""
+    w1 = weights[:10].reshape(10, 1)
+    b1 = weights[10:20]
+    w2 = weights[20:30].reshape(1, 10)
+    b2 = weights[30:31]
+    h = np.tanh(w1 @ x + b1.reshape(10, 1))  # (10, N)
+    out = w2 @ h + b2  # (1, N)
+    return out.flatten()
+
+def fitness(weights, n_samples=50):
+    """适应度 = 负 MSE（越大越好）"""
+    x = np.linspace(-np.pi, np.pi, n_samples)
+    y_pred = network(weights, x)
+    y_true = target(x)
+    mse = np.mean((y_pred - y_true) ** 2)
+    return -mse
+
+def genetic_algorithm(n_generations=200, pop_size=50, mutation_rate=0.1,
+                     mutation_std=0.3):
+    n_weights = 31
+    # 初始化种群
+    population = [np.random.randn(n_weights) * 0.5 for _ in range(pop_size)]
+    best_history = []
+
+    for gen in range(n_generations):
+        # 评估
+        scores = [fitness(ind) for ind in population]
+
+        # 选择：锦标赛选择（每次随机抽 3 个，选最好的）
+        new_pop = []
+        elite = population[np.argmax(scores)]  # 精英保留
+        new_pop.append(elite.copy())
+
+        while len(new_pop) < pop_size:
+            # 锦标赛选两个父母
+            tournament = np.random.choice(pop_size, 3, replace=False)
+            parent1 = population[tournament[np.argmax([scores[i] for i in tournament])]]
+            tournament = np.random.choice(pop_size, 3, replace=False)
+            parent2 = population[tournament[np.argmax([scores[i] for i in tournament])]]
+
+            # 交叉：均匀交叉
+            mask = np.random.rand(n_weights) < 0.5
+            child = np.where(mask, parent1, parent2)
+
+            # 变异
+            mutate_mask = np.random.rand(n_weights) < mutation_rate
+            child[mutate_mask] += np.random.randn(mutate_mask.sum()) * mutation_std
+            new_pop.append(child)
+
+        population = new_pop
+        best = max(scores)
+        best_history.append(best)
+        if gen % 40 == 0:
+            print(f"Gen {gen:3d}: best fitness = {best:.4f} (MSE = {-best:.4f})")
+
+    return population[np.argmax([fitness(ind) for ind in population])], best_history
+
+# 跑一下
+np.random.seed(42)
+best_w, history = genetic_algorithm()
+print(f"\n最终 MSE: {-fitness(best_w):.4f}")
+print("对比：纯梯度下降在这个任务上会更快收敛，")
+print("但这个例子演示了'完全不用梯度'也能拟合。")
+```
+
+### 二、NEAT：结构也进化
+
+NEAT 的三大创新（[Stanley & Miikkulainen 2002](https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf)）：
+
+**创新 1：从最小拓扑开始，逐渐复杂化（complexification）。**
+
+不做反向——从没有隐藏层的极简网络开始。变异可以"加节点"（把一个连接拆成两个连接+一个新节点）或"加连接"（在两个没连的节点间加连接）。每一代网络可能变大。这样搜索空间从"所有可能结构"变成"从简单到复杂的渐进路径"，搜索效率高很多。
+
+```
+第 1 代：输入 → 输出（直接连接）
+第 5 代：输入 → [新节点 A] → 输出
+第 10 代：输入 → [新节点 A, B] → 输出，A 和 B 之间也连了
+...
+```
+
+**创新 2：历史标记（innovation number）解决交叉问题。**
+
+不同拓扑的两个网络怎么交叉？如果直接对应权重交叉，结构不一样对不上。NEAT 给每个新结构变化分配一个全局递增的"创新编号"，记录"这个连接是什么时候第一次出现的"。交叉时，相同创新编号的基因对齐，不同的基因随机选一个父母的。
+
+```
+父母 A 的基因：[连接1, 连接3, 连接5]
+父母 B 的基因：[连接1, 连接2, 连接5]
+                ↓ 交叉 ↓
+后代：       [连接1, (连接2 或 3), 连接5]
+```
+
+**创新 3：物种形成（speciation）保护创新。**
+
+新变异出来的结构通常一开始表现差（新加的节点还没训好），会被普通选择淘汰。NEAT 把拓扑相似的个体归为同一"物种"，物种内竞争，避免新结构刚出现就被老结构压死。这模拟了生物界"地理隔离形成新物种"的机制。
+
+NEAT 的代表应用是 [MarI/O](https://www.youtube.com/watch?v=qv6UVOQ0F44)（SethBling 2015）——用 NEAT 进化一个神经网络通关超级马里奥第一关。没有任何训练数据，纯靠"走得越远适应度越高"进化，几十代后网络学会了跳跃、躲避敌人。
+
+### 三、OpenAI ES：可并行的无梯度优化
+
+OpenAI 的 [ES](https://arxiv.org/abs/1703.03864) 用了一种叫 Natural Evolution Strategies（NES）的变体。数学骨架：
+
+```
+目标：最大化 F(θ)（F 是策略 θ 在环境里的期望回报）
+
+ES 的做法：
+  1. 当前参数 θ
+  2. 采样 N 个标准正态随机向量 ε_1, ..., ε_N
+  3. 评估每个扰动参数 F(θ + σ·ε_i) （σ 是扰动步长）
+  4. 估计梯度：∇F ≈ (1 / Nσ) Σ F(θ + σ·ε_i) · ε_i
+  5. 更新：θ ← θ + α · ∇F_estimate
+```
+
+第 4 步为什么成立？直觉是这样：如果某个 ε_i 方向上的扰动让 F 变大，那么 θ 应该往这个方向走。把所有扰动按 F 加权平均，就得到一个"哪个方向整体更好"的估计。当 N 足够大时，这个估计收敛到真实梯度。
+
+ES 的工程优势：
+
+- **embarrassingly parallel**：每个 F(θ + σ·ε_i) 完全独立，分发到 N 个 worker 跑，几乎没有通信开销（只传 ε_i 和标量 F_i）。OpenAI 用 1440 个 CPU 并行，一小时训完 Atari。
+- **不需要反向传播**：不用维护计算图，不用算梯度，对不可微目标（比如离散决策）也能用。
+- **对动作频率/延迟回报不变**：RL 对"每多少步更新一次"很敏感，ES 不敏感（它只看整局回报）。
+
+代价是**样本效率低**——RL 一个 episode 的每一步都能更新梯度，ES 一整个 episode 只算一个标量 F。所以 ES 需要的样本总量比 RL 多得多，靠并行补回来。
+
+### 四、NAS：把"搜索网络架构"自动化
+
+NAS 的核心问题：**给定一个架构搜索空间，用什么算法搜索最好的架构？**
+
+[早期的 NAS](https://arxiv.org/abs/1611.01578)（Zoph & Le 2017）用一个 RNN 当"控制器"，控制器输出一个网络架构描述，把这个架构真正训出来在验证集上评估，用准确率当奖励训控制器（RL）。每一轮搜索要训很多个候选架构，极其昂贵（NASNet 搜索花了 2000 GPU-天）。
+
+[AmoebaNet](https://arxiv.org/abs/1802.01548)（Real et al. 2019）把搜索算法从 RL 换成进化（他们叫 Regularized Evolution），效果跟 NASNet 差不多甚至更好，搜索成本更低。这印证了一个观察：**在 NAS 这个任务上，进化算法经常比 RL 更高效**。
+
+NAS 和神经进化的关系：
+
+- NAS 是更大的概念，搜索算法可以是 RL、进化、贝叶斯优化、梯度（DARTS）
+- 用进化算法的 NAS（AmoebaNet、Regularized Evolution、Large-Scale Evolution）就是神经进化的一种应用
+- 区别只是历史命名——NAS 来自 AutoML 社区，神经进化来自进化计算社区，搜索对象相同
+
+NAS 的工程价值：自动找到比人工设计更好的架构。EfficientNet、PNASNet 都有 NAS 的影子。但 NAS 的搜索成本极高（动辄几百几千 GPU-天），这是它落地的主要障碍。
+
+## 代码示例（完整可运行的 Python）
+
+下面实现一个最简进化策略（ES），对比"用 ES 优化权重"和"用梯度优化权重"，体现 ES 不需要梯度也能工作。
+
+```python
+"""
+最简进化策略（ES）vs 梯度下降
+任务：用 ES 优化一个 MLP 拟合 sin(x)，对比梯度下降
+依赖：pip install numpy
+（不依赖 PyTorch，纯 numpy 演示核心思想）
+
+注意：这个例子不是为了证明 ES 更好——
+在这个可微任务上梯度会更快收敛。
+它的价值是展示'完全不用梯度'也能优化，
+以及在不可微/难并行任务上 ES 的优势在哪里。
+"""
+import numpy as np
+
+
+# --- 任务和网络 ---
+def make_network(weights, x):
+    """1→8→1 MLP，共 8+8+8+1=25 个参数"""
+    w1 = weights[:8].reshape(8, 1)
+    b1 = weights[8:16]
+    w2 = weights[16:24].reshape(1, 8)
+    b2 = weights[24:25]
+    h = np.tanh(w1 @ x + b1.reshape(8, 1))
+    return (w2 @ h + b2).flatten()
+
+
+def mse_loss(weights, x, y_true):
+    y_pred = make_network(weights, x)
+    return np.mean((y_pred - y_true) ** 2)
+
+
+def fitness(weights, x, y_true):
+    """适应度 = 负 MSE"""
+    return -mse_loss(weights, x, y_true)
+
+
+# --- 进化策略（OpenAI ES 简化版）---
+def evolution_strategies(x, y_true, n_iters=200, pop_size=50,
+                         sigma=0.1, lr=0.05, seed=0):
+    """
+    OpenAI ES 简化实现
+    - sigma: 扰动步长
+    - pop_size: 并行扰动数 N
+    - lr: 学习率
+    """
+    rng = np.random.default_rng(seed)
+    n_params = 25
+    theta = rng.standard_normal(n_params) * 0.3  # 初始化
+    history = []
+
+    for it in range(n_iters):
+        # 采样 N 个扰动
+        epsilons = rng.standard_normal((pop_size, n_params))
+        # 评估每个扰动（这里串行，真实场景可并行）
+        fits = np.array([
+            fitness(theta + sigma * epsilons[i], x, y_true)
+            for i in range(pop_size)
+        ])
+        # 估计梯度方向
+        # ∇F ≈ (1 / Nσ) Σ F_i · ε_i
+        grad_estimate = (fits @ epsilons) / (pop_size * sigma)
+        # 更新
+        theta = theta + lr * grad_estimate
+
+        if it % 40 == 0:
+            cur_loss = mse_loss(theta, x, y_true)
+            history.append(cur_loss)
+            print(f"ES Iter {it:3d}: MSE = {cur_loss:.4f}")
+
+    return theta, history
+
+
+# --- 梯度下降（对比基线）---
+def gradient_descent(x, y_true, n_iters=500, lr=0.05, seed=0):
+    """
+    标准梯度下降对比
+    手动算梯度（数值梯度，简化实现）
+    """
+    rng = np.random.default_rng(seed)
+    n_params = 25
+    theta = rng.standard_normal(n_params) * 0.3
+    eps = 1e-5
+
+    for it in range(n_iters):
+        # 数值梯度（简化，真实实现会用 autograd）
+        grad = np.zeros(n_params)
+        cur_loss = mse_loss(theta, x, y_true)
+        for i in range(n_params):
+            theta_perturb = theta.copy()
+            theta_perturb[i] += eps
+            grad[i] = (mse_loss(theta_perturb, x, y_true) - cur_loss) / eps
+        theta = theta - lr * grad
+
+        if it % 100 == 0:
+            print(f"GD Iter {it:3d}: MSE = {mse_loss(theta, x, y_true):.4f}")
+
+    return theta
+
+
+# --- 运行 ---
+if __name__ == "__main__":
+    np.random.seed(42)
+    # 生成数据
+    x_train = np.linspace(-np.pi, np.pi, 50).reshape(1, -1)
+    y_train = np.sin(x_train).flatten()
+
+    print("=" * 55)
+    print("进化策略（ES）—— 完全不用梯度")
+    print("=" * 55)
+    theta_es, _ = evolution_strategies(x_train, y_train,
+                                       n_iters=200, pop_size=50)
+
+    print("\n" + "=" * 55)
+    print("梯度下降（对比）")
+    print("=" * 55)
+    theta_gd = gradient_descent(x_train, y_train, n_iters=500)
+
+    print("\n" + "=" * 55)
+    print("对比结论：")
+    print(f"  ES 最终 MSE:   {mse_loss(theta_es, x_train, y_train):.4f}")
+    print(f"  GD 最终 MSE:   {mse_loss(theta_gd, x_train, y_train):.4f}")
+    print("\n关键观察：")
+    print("1. 这个任务是可微的，所以 GD 收敛更快")
+    print("2. ES 完全没用梯度，但也能拟合——演示了无梯度优化可行")
+    print("3. ES 的真实优势在：")
+    print("   - 可以并行（每个扰动独立，上千 CPU 无压力）")
+    print("   - 可以用在不可微目标（离散决策、环境奖励）")
+    print("   - 可以优化结构（NEAT 的做法，梯度改不了结构）")
+```
+
+## 真实案例
+
+### 案例 1：NEAT 进化通关超级马里奥（MarI/O）
+
+[SethBling 的 MarI/O](https://www.youtube.com/watch?v=qv6UVOQ0F44)（2015）用 NEAT 进化一个神经网络玩超级马里奥世界。输入是屏幕的网格化表示（哪些格子有敌人、有障碍），输出是手柄按键。适应度 = Mario 走的距离 + 时间奖励。从随机网络开始，几十代后学会了跳跃、躲敌人、吃金币。
+
+关键点：**完全没有训练数据**。没有人类玩家的录像，没有强化学习的奖励工程，纯靠适应度进化。这是结构层自进化的纯粹演示——网络拓扑和权重都在进化。
+
+### 案例 2：OpenAI ES 训练 Atari
+
+[Salimans et al. 2017](https://arxiv.org/abs/1703.03864) 用 ES 在多个 Atari 游戏上训练 agent，效果跟 A3C、TRPO 等主流 RL 相当。他们用 1440 个 CPU 并行，一小时训完一个游戏。这是 ES 作为 RL 替代的代表性工作，证明了"无梯度 + 大规模并行"在 RL 任务上的可行性。
+
+### 案例 3：AmoebaNet —— 用进化做架构搜索
+
+[Real et al. 2019](https://arxiv.org/abs/1802.01548) 的 AmoebaNet 用 Regularized Evolution 搜索 ImageNet 分类架构，在当时达到了 state-of-the-art。它跟 RL 版的 NASNet 效果相当或更好，搜索成本更低。这是一个工程观察的实证：**在 NAS 这个特定任务上，进化算法经常比 RL 更高效**。
+
+## 权衡取舍以及何时不该使用
+
+### 进化方法的固有成本
+
+**样本效率低。** 进化方法每代要评估大量个体，每个个体都要完整跑一遍任务。RL 一局棋每一步都能算梯度，进化一局棋只产生一个适应度标量。所以在样本效率上，进化通常远低于梯度方法。
+
+**计算成本高。** NEAT、NAS 都要跑成千上万代，每代评估整个种群。NASNet 搜索花了 2000 GPU-天，这是它难以普及的主要原因。
+
+**收敛慢。** 进化方法的收敛速度通常比梯度方法慢一个数量级。在可微任务上，能用梯度就别用进化。
+
+### 进化方法的独特价值
+
+**能优化结构。** 这是梯度方法做不到的。如果你想搜索"什么网络架构最好"，进化（或 NAS）是主要工具。
+
+**能用在不光滑/不可微目标上。** 离散决策、组合优化、不可微奖励，梯度方法用不了，进化可以。
+
+**易并行。** ES 的每个扰动完全独立，embarrassingly parallel。RL 的并行要复杂得多。
+
+### 何时不该用
+
+1. **任务可微且有充足计算资源时。** 梯度方法通常更快更准。
+2. **追求样本效率时。** 进化方法的样本效率远低于 RL 和监督学习。
+3. **搜索空间巨大且无结构时。** 进化在"结构清晰的搜索空间"（如 NAS 的 cell-based 搜索）上有效，在完全无结构的空间上会退化成随机搜索。
+
+## 关键要点
+
+1. **梯度方法的根本限制是改不了"网络长什么样"。** 梯度下降必须先固定网络架构才能算梯度，它只能在给定结构里找最优权重。神经进化和 NAS 填补了这个空白——让结构本身成为可优化的对象。
+
+2. **NEAT 的三大创新：从最小拓扑开始 complexify、innovation number 解决交叉、speciation 保护新结构。** MarI/O 是它的代表应用——纯进化通关超级马里奥，无训练数据。
+
+3. **OpenAI ES 用高斯扰动估计梯度方向，embarrassingly parallel。** 它表面是无梯度优化，实际是用随机扰动估计梯度，能享受梯度下降的收敛性又不需要反向传播。代价是样本效率低。
+
+4. **NAS 和神经进化同源。** NAS 是更大的概念（搜索网络架构），搜索算法可以是 RL（NASNet）、进化（AmoebaNet）、贝叶斯或梯度（DARTS）。用进化的 NAS 就是神经进化的应用。在 NAS 任务上，进化经常比 RL 更高效。
+
+5. **进化方法落在结构层自进化。** 它修改的对象是网络架构本身——节点、连接、拓扑。这跟参数层（改权重）、策略层（改行为）、prompt 层（改指令）、代码层（改实现）是不同层级。
+
+6. **能优化结构是进化方法的独特价值，但样本效率低是它的硬伤。** 在可微任务上梯度方法更快，进化的价值在不可微目标和结构搜索。
+
+## 延伸阅读
+
+**进化算法基础**：
+- [Evolving Neural Networks through Augmenting Topologies (Stanley & Miikkulainen, 2002)](https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf) — NEAT 原始论文
+- [Evolution Strategies as a Scalable Alternative to RL (Salimans et al., 2017)](https://arxiv.org/abs/1703.03864) — OpenAI ES
+
+**NAS**：
+- [Neural Architecture Search with RL (Zoph & Le, 2017)](https://arxiv.org/abs/1611.01578) — NAS 的开山之作
+- [Learning Transferable Architectures (NASNet, Zoph et al., CVPR 2018)](https://arxiv.org/abs/1707.07012)
+- [Regularized Evolution for Image Classifier Architecture Search (AmoebaNet, Real et al., AAAI 2019)](https://arxiv.org/abs/1802.01548)
+
+**综述与解读**：
+- [Lilian Weng: Evolution Strategies](https://lilianweng.github.io/posts/2019-09-05-evolution-strategies/) — ES 数学原理系统讲解
+- [Lilian Weng: Neural Architecture Search](https://lilianweng.github.io/posts/2020-08-06-nas/) — NAS 方法分类综述
+
+**本系列关联文章**：
+- #1 自进化到底是什么 —— 进化方法落在结构层的统一四步循环
+- #7 自进化 Agent —— Darwin Gödel Machine 把进化思想用到代码层

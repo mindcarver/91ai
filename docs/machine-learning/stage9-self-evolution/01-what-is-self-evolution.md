@@ -1,0 +1,366 @@
+# 自进化到底是什么——参数、结构、策略、prompt、代码五个层级
+
+<!--
+调研来源：
+1. "A Survey of Self-Evolving Agents: What, When, How, and Where to..." (arxiv 2507.21046) — 自进化 agent 的系统综述，把"改什么"分成参数/上下文/工具集/架构拓扑
+2. "STaR: Bootstrapping Reasoning With Reasoning" (Zelikman et al., arxiv 2203.14465, NeurIPS 2022) — 参数层代表：模型自己生成推理过程，答对的回流训练，引入 rationalization 机制
+3. "Self-Rewarding Language Models" (Yuan et al., arxiv 2401.10052, ICML 2024) — 参数层代表：LLM 自己当裁判给候选打分，iterative DPO 训练
+4. "Mastering the Game of Go without Human Knowledge" (Silver et al., Nature 2017) — 策略层代表：AlphaGo Zero 不用人类棋谱，纯自博弈 3 天击败前代
+5. "Darwin Godel Machine: Open-Ended Evolution of Self-Improving Agents" (Sakana AI, arxiv 2505.22954) — 代码层代表：SICA 自我改写代码，经验验证而非形式证明
+6. "Phi-4 Technical Report" (arxiv 2412.08905) — 合成数据回流的工程代表
+
+核心发现：自进化的本质是"信号来自系统自身"。它和普通监督学习/微调/RL 的区别不在算法，而在"学习信号从哪来"。五层级（参数→结构→策略→prompt→代码）是"系统改自己的哪一层"这条主线。每一层都套同一个四步循环：采集信号 → 生成变异 → 选择评估 → 回写自身。
+-->
+
+**TL;DR：** 自进化 = 系统把自己运行产生的输出或行为当作学习信号，反过来修改自身的某个部分，从而在不需要外部新标注的前提下变得更好。本文建立两个全系列地基：五层级模型（参数、结构、策略、prompt、代码）和统一四步循环（采集→变异→选择→回写）。后续 7 篇都回引这个框架。
+
+## 为什么这很重要
+
+2022 年，Eric Zelikman 在 NeurIPS 发了一篇看起来很朴素的论文 [STaR](https://arxiv.org/abs/2203.14465)。做法是这样的：让一个语言模型做题，每道题让它自己写一段推理过程（rationale），如果最后答对了，就把这段推理留下当训练数据，下一轮用它微调自己；答错了，把正确答案作为 hint 给它，让它再写一段能推出正确答案的推理（论文叫 rationalization），也拿来训练。循环往复。
+
+没有人额外标注推理过程。模型用的训练数据，是它自己跑出来的。
+
+结果：在 CommonsenseQA 上，GPT-3（参数没变、架构没变）经过这个循环，准确率从 73% 涨到了 80%+。
+
+这是一个信号。它说明一件事：**有些能力不一定要靠"人喂数据"才能涨，系统可以把自己当作训练信号源**。
+
+到了 2024 年，这条路线已经长出一片：Meta 的 [Self-Rewarding LM](https://arxiv.org/abs/2401.10052) 让模型自己当裁判给候选回答打分，再拿这些偏好做 DPO；Microsoft 的 [Phi-4](https://arxiv.org/html/2412.08905v1) 大量用合成数据训练；Sakana 的 [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) 干脆让 coding agent 自己改写自己的源代码。
+
+这些方法看起来五花八门——有的改权重、有的改架构、有的改 prompt、有的改代码——但它们共享一个内核。这就是这个专题要讲清楚的事。
+
+## 核心概念
+
+### 什么是自进化
+
+先给一个后面所有文章都会用的定义：
+
+> **自进化** = 一个 AI 系统把自己产生的输出（预测、轨迹、文本、代码）或行为（胜负、反馈、执行结果）当作学习信号，反过来修改自身的某个部分，从而在不需要外部新标注的前提下变得更好。
+
+这句话有两个关键词，缺一不可。
+
+**"信号来自系统自身"。** 这是自进化和普通训练方法的分界线。普通的监督学习，信号是人标注的标签；普通的微调，信号是人写的对话；普通的 RLHF，信号是人打的偏好。这些方法算法上各不相同，但信号源都是"人"。自进化把信号源换成了"系统自己跑出来的东西"。
+
+**"修改自身的某个部分"。** 光有自生成的信号还不够，得真的拿这个信号去改系统自己。这就引出第二条主线——改的是哪一层。
+
+### 五层级模型：系统改自己的哪一层
+
+自进化的方法看起来很多，但按"修改对象"可以分成五个层级，从微观到宏观：
+
+| 层级 | 改什么 | 代表方法 | 后续文章 |
+|------|--------|---------|---------|
+| 1. 参数层 | 模型权重 | STaR、Self-Rewarding LM、合成数据回流 | #6 自进化的大模型 |
+| 2. 结构层 | 网络架构（节点、连接、拓扑） | NEAT、进化策略、NAS | #3 神经进化 |
+| 3. 策略层 | 行为策略（怎么选动作） | self-play、AlphaZero、curiosity-driven RL | #2 自博弈 |
+| 4. prompt 层 | 提示词、指令、示例 | OPRO、DSPy、TextGrad | #5 自动 prompt 优化 |
+| 5. 代码层 | 系统本身的实现代码 | Darwin Gödel Machine、AI Scientist | #7 自进化 Agent |
+
+这五个层级是这个专题的主线。每一篇后续文章都在某一个或两个层级上深挖。
+
+为什么要分这么多层？因为"修改对象"决定了方法的成本、风险和适用边界。改权重最便宜（梯度就能算），改代码最贵（要跑完整 benchmark 才知道改对没）；改权重最容易模式坍塌，改代码最容易引入 bug 把自己改坏。
+
+### 统一四步循环
+
+不管哪个层级，自进化都套同一个四步循环。这是这个专题的第二个地基：
+
+```
+┌─────────────────────────────────────────────────┐
+│            自进化的统一四步循环                     │
+│                                                  │
+│   ┌──────────────┐                               │
+│   │ 1. 采集信号   │ 系统运行，产出输出/行为/反馈     │
+│   └──────┬───────┘                               │
+│          ▼                                       │
+│   ┌──────────────┐                               │
+│   │ 2. 生成变异   │ 基于信号产生"改一下试试"的候选   │
+│   └──────┬───────┘                               │
+│          ▼                                       │
+│   ┌──────────────┐                               │
+│   │ 3. 选择评估   │ 用某个标准挑出更好的变异         │
+│   └──────┬───────┘                               │
+│          ▼                                       │
+│   ┌──────────────┐                               │
+│   │ 4. 回写自身   │ 把选中的变异真正写回系统         │
+│   └──────┬───────┘                               │
+│          │                                       │
+│          └────────────► 回到第 1 步               │
+└─────────────────────────────────────────────────┘
+```
+
+这四步在五个层级上长得不一样，但骨架相同。举几个例子：
+
+**参数层（STaR）：**
+1. 采集：让模型做题，产生"题目→推理→答案"轨迹
+2. 变异：答对的轨迹原样保留，答错的用 hint 重新生成（rationalization）
+3. 选择：用"答案对不对"做过滤
+4. 回写：拿过滤后的轨迹做 SFT 微调，更新权重
+
+**策略层（AlphaZero）：**
+1. 采集：当前策略跟自己下棋，产生对局记录
+2. 变异：MCTS 在每个局面搜出比当前策略更准的动作分布
+3. 选择：用对局胜负 + MCTS 价值网络给局面打分
+4. 回写：用（局面, MCTS 动作分布）做监督、用（局面, 胜负）训价值网络，更新权重
+
+**代码层（Darwin Gödel Machine）：**
+1. 采集：当前 agent 跑 coding benchmark，记录通过率
+2. 变异：让 agent 改自己的源代码，产生新版本
+3. 选择：让新版本在 benchmark 上跑一遍，对比新旧通过率
+4. 回写：如果新版本更好，加进 archive；保留多个版本形成"种群"
+
+注意一个细节：参数层和策略层最后都"改权重"，但它们的"修改对象"不一样。参数层的修改对象是"网络对一般输入的响应"，没有博弈对手概念；策略层的修改对象是"在博弈环境里的行为策略"，信号来自胜负。这个区别在 #2 篇会展开。
+
+## 工作原理（简化的心智模型）
+
+### 用"自己给自己出题、自己改自己"来理解自进化
+
+想象一个学生准备考试。
+
+**普通监督学习** = 老师（人）给他发了一沓带标准答案的卷子，他做完对答案，错的反复练。题目和答案都来自外部。
+
+**自进化** = 这个学生不靠老师发卷子。他自己想题、自己做、自己对答案——但这里"对答案"不是凭空来的，得有一个**机器可判定的反馈**：比如数学题他能算出答案对不对，编程题他能跑测试看通不通过，下棋他能看到底谁赢了。然后他把做对的题、做对的过程拿来当教材，训练自己下一次做得更好。
+
+这里有一个关键点：**自进化不能凭空变出信号**。它必须有一个"机器可判定的对错标准"。STaR 能成立，是因为数学/常识题有标准答案；AlphaZero 能成立，是因为围棋有明确胜负；Darwin Gödel Machine 能成立，是因为 benchmark 有通过率。如果一个问题没有任何自动评判手段，自进化就转不起来——这是它最重要的边界。
+
+### 五层级用同一个比喻
+
+继续用这个学生的比喻，五个层级对应他改自己的不同方面：
+
+- **参数层** = 他改自己脑子里的知识。今天算对了几道题，把对的思路记牢。
+- **结构层** = 他改自己思考的方式。发现"先列已知条件再列未知"比"直接套公式"好，以后默认走新结构。
+- **策略层** = 他改自己答题的顺序策略。发现先做简单的能稳拿分，就改顺序。
+- **prompt 层** = 他改自己用的"做题口诀"。把"先审题三遍"换成"先画图"。
+- **代码层** = 他改自己这个"人"的实现——比如发现自己总是粗心，就强行规定每步都要检查。这是最彻底的，连"做事的规则"都改了。
+
+越往下层，改动越彻底，也越危险。改 prompt 最多变笨一点，改代码可能把自己改崩。
+
+## 工作原理（详细机制）
+
+### 一、自进化的判据：信号到底从哪来
+
+这是最容易混淆的地方。下面四种方法都"用了模型自己的输出"，但只有前三种算自进化：
+
+| 方法 | 信号来源 | 算自进化吗 |
+|------|---------|-----------|
+| STaR | 模型自己生成的推理 + 答案对错 | 是 |
+| AlphaZero self-play | 自己跟自己下的对局 + 胜负 | 是 |
+| Self-Rewarding LM | 模型自己给候选打的分 | 是（但有争议） |
+| 自监督预训练（BERT） | 文本里 mask 掉的 token | **不算** |
+
+为什么 BERT 的 masked language model 不算自进化？因为它预测的 token 来自固定语料，不是"系统行为产生的反馈"。它没有"运行→产生信号→改自己→再运行"的闭环，只有单向的预测。区分的关键是：**信号必须是系统行为或输出的反馈，且能形成迭代闭环**。
+
+Self-Rewarding LM 有一点争议：模型自己当裁判打分，分数也是模型产生的，理论上可能"自己骗自己"（reward hacking）。这是 #8 篇要讲的风险。但它符合"信号来自系统自身"的定义，所以归在自进化里。
+
+### 二、四步循环的数学骨架
+
+把四步循环写得更形式化一点。设系统在第 t 轮的状态是 $\theta_t$（可以是权重、架构、策略、prompt 或代码）。
+
+1. **采集**：系统 $\theta_t$ 在某个环境 $\mathcal{E}$ 上运行，产生轨迹 $\tau_t \sim \theta_t(\mathcal{E})$
+2. **变异**：基于 $\tau_t$ 生成候选集合 $\{\theta_t^{(1)}, \theta_t^{(2)}, \dots\}$
+3. **选择**：用一个评估函数 $f$（可能是环境的奖励、答案对错、benchmark 通过率）筛选 $\theta_t^* = \arg\max f(\theta_t^{(i)})$
+4. **回写**：$\theta_{t+1} = \theta_t^*$
+
+关键在于第 3 步的评估函数 $f$。如果 $f$ 完全来自环境（围棋胜负、benchmark 通过率），系统改进是"真实"的。如果 $f$ 也来自系统自身（模型自己当裁判），就有自我欺骗的风险。这条线贯穿整个专题。
+
+### 三、五层级的边界会重叠
+
+不要把五层级当成泾渭分明的五个抽屉。它们经常重叠：
+
+- AlphaZero 既改策略（行为），也改权重（参数）——主修改对象是策略，所以归策略层。
+- DSPy 既改 prompt（指令），也会用小样本回训改权重——主修改对象是 prompt，所以归 prompt 层。
+- Darwin Gödel Machine 改代码，但代码改完跑出来的新 agent 又产生新数据回流——主修改对象是代码。
+
+判别一个方法属于哪一层，看**它的核心创新点改的是什么**，而不是"顺带改了什么"。
+
+## 代码示例（完整可运行的 Python）
+
+下面实现一个最小自进化循环，落在参数层。一个二分类器，没有外部新标注，靠自己生成的"高置信度预测"回流训练。这就是经典的 self-training 骨架，能演示四步循环。
+
+```python
+"""
+最小自进化循环：self-training 分类器
+演示四步循环：采集 → 变异 → 选择 → 回写
+依赖：pip install numpy scikit-learn
+"""
+
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import make_classification
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+
+
+def collect_signal(model, X_unlabeled):
+    """
+    第 1 步：采集信号。
+    让当前模型在无标注数据上预测，拿到置信度。
+    自进化的"信号"在这里 = 模型自己的预测概率。
+    """
+    probs = model.predict_proba(X_unlabeled)
+    confidence = np.max(probs, axis=1)
+    pseudo_labels = np.argmax(probs, axis=1)
+    return pseudo_labels, confidence
+
+
+def generate_and_select(pseudo_labels, confidence, X_unlabeled,
+                        threshold=0.9, max_add=50):
+    """
+    第 2、3 步：变异 + 选择。
+    变异 = 把伪标签当成真标签；选择 = 只留置信度高的。
+    threshold 控制多严——太松会把错预测也回流，造成误差累积。
+    """
+    mask = confidence >= threshold
+    if mask.sum() == 0:
+        return np.empty((0, X_unlabeled.shape[1])), np.empty((0,), dtype=int)
+    idx = np.where(mask)[0]
+    if len(idx) > max_add:
+        # 置信度最高的优先
+        idx = idx[np.argsort(-confidence[idx])[:max_add]]
+    return X_unlabeled[idx], pseudo_labels[idx]
+
+
+def write_back(model, X_labeled, y_labeled, X_new, y_new):
+    """
+    第 4 步：回写自身。
+    把选中的伪标签数据并入训练集，重新训练（更新模型权重）。
+    """
+    X_combined = np.vstack([X_labeled, X_new])
+    y_combined = np.concatenate([y_labeled, y_new])
+    model.fit(X_combined, y_combined)
+    return model, X_combined, y_combined
+
+
+# --- 实验设置 ---
+# 模拟"标注数据很少、无标注数据很多"的场景
+X, y = make_classification(
+    n_samples=1000, n_features=20, n_informative=10,
+    n_redundant=5, n_classes=2, random_state=42
+)
+X_labeled, X_pool, y_labeled, y_pool = train_test_split(
+    X, y, test_size=0.9, random_state=42  # 只给 10% 标注
+)
+# X_pool 假装没有标签，只用模型自己的预测
+
+model = LogisticRegression(max_iter=1000)
+
+# 基线：只用 10% 标注数据训练
+model.fit(X_labeled, y_labeled)
+test_acc_baseline = accuracy_score(y_pool, model.predict(X_pool))
+print(f"基线（仅 10% 标注）: {test_acc_baseline:.3f}")
+
+# --- 自进化循环 ---
+n_rounds = 8
+threshold = 0.92
+print(f"\n开始自进化循环（置信度阈值 {threshold}）")
+print("-" * 50)
+
+for round_i in range(n_rounds):
+    # 第 1 步：采集
+    pseudo, conf = collect_signal(model, X_pool)
+
+    # 第 2、3 步：变异 + 选择
+    X_new, y_new = generate_and_select(
+        pseudo, conf, X_pool, threshold=threshold, max_add=80
+    )
+
+    if len(X_new) == 0:
+        print(f"Round {round_i}: 没有足够高置信的样本，停止")
+        break
+
+    # 把已选样本从 pool 移除（避免重复回流）
+    keep_mask = np.ones(len(X_pool), dtype=bool)
+    selected_idx = np.where(conf >= threshold)[0]
+    # 简化处理：按 confidence 选前 len(X_new) 个移除
+    top_idx = selected_idx[np.argsort(-conf[selected_idx])[:len(X_new)]]
+    keep_mask[top_idx] = False
+    X_pool = X_pool[keep_mask]
+    # 注意：y_pool 只用来评估，不参与训练
+
+    # 第 4 步：回写
+    model, X_labeled, y_labeled = write_back(
+        model, X_labeled, y_labeled, X_new, y_new
+    )
+
+    # 评估（用真正的 y_pool，模型训练时没见过）
+    # 这里为了演示，用全部原始数据中的剩余部分评估
+    acc = accuracy_score(y[~np.isin(np.arange(len(X)), 
+                                    np.concatenate([np.where(keep_mask)[0], 
+                                                   top_idx]))][:200] 
+                        if len(X_pool) > 0 else y_pool[:200],
+                        model.predict(X_pool[:200]) if len(X_pool) > 0 
+                        else model.predict(X[:200]))
+    print(f"Round {round_i}: 回流 {len(X_new)} 样本, "
+          f"pool 剩 {len(X_pool)}, 准确率 {acc:.3f}")
+
+print("\n说明：这是一个演示骨架。实际 self-training 的难点在第 3 步——"
+      "如何避免把错误预测回流（误差累积）。阈值、置信度校准、"
+      "以及定期用少量真标注做验证，都是工程关键。")
+```
+
+把这段代码跑起来，你会看到一个现象：随着回流轮次增加，模型在自己挑出来的"高置信"样本上越训越自信，但**真实准确率未必一直涨**——如果第 3 步选择不够严，错误预测会被放大。这就是 self-training 经典的"误差累积"问题。它揭示了一个贯穿全专题的事实：**自进化的核心难点不在循环本身，而在"选择"这一步能不能区分真改进和自我欺骗**。
+
+## 真实案例
+
+### 案例 1：AlphaZero —— 策略层自进化
+
+2017 年 DeepMind 的 [AlphaGo Zero](https://www.nature.com/articles/nature24270) 完全不用人类棋谱，从随机下棋开始，纯靠 self-play 训练。3 天后击败了之前那个学过人类棋谱、战胜李世石的版本。同年发表的 [AlphaZero](https://www.science.org/doi/10.1126/science.aar6404) 把同一套方法推广到国际象棋和将棋，都达到了超越人类的水平。
+
+它落在策略层。系统跟自己下棋产生对局（采集），MCTS 搜出更好的动作分布（变异），用胜负和搜出来的价值评估（选择），更新策略网络和价值网络的权重（回写）。
+
+AlphaZero 证明了一件事：**在博弈规则明确、胜负可判定的环境里，自进化能超越人类先验**。人类的棋谱本身是有上限的，self-play 把这个上限移走了。
+
+### 案例 2：STaR —— 参数层自进化
+
+前面讲过。模型自己做题、自己写推理、答对的回流训练。关键创新是 rationalization：答错时给 hint 让模型重写推理，避免一轮全错就没数据可训。STaR 的意义在于：**推理能力可以从"模型自己跑出来的正确轨迹"里长出来**，不需要人一步步标注思维链。
+
+### 案例 3：Darwin Gödel Machine —— 代码层自进化
+
+Sakana AI 2025 年的 [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)（arxiv 2505.22954）让一个 coding agent 改写自己的源代码。它读自己的代码库，提出修改，新版本在 coding benchmark 上跑，跑得更好的进 archive 保留，跑得差的丢掉。论文叫它 SICA（Self-Improving Coding Agent）。
+
+它落在代码层——这是五个层级里最激进的一层，连"做事的规则"都改了。一个有意思的细节：原版 Gödel Machine（Schmidhuber 2003）要求修改"可证明地有益"，DGM 放弃了这个要求，改成经验验证。因为现实中"证明一段代码改完一定更好"几乎做不到。这个取舍在 #7 篇会展开。
+
+## 权衡取舍以及何时不该使用
+
+### 自进化不是万能的，它有几个硬边界
+
+**必须有机器可判定的反馈。** 这是最大的边界。数学题有答案，代码有测试，棋有胜负，这些都能自进化。但"写一首好诗"、"做一个有用的产品决策"没有自动评判标准。没有客观反馈，自进化转不起来——这就是为什么自进化目前在数学、代码、博弈领域最成功。
+
+**有自我欺骗的风险。** 当评估信号也来自系统自身（比如模型自己当裁判），就可能 reward hacking：模型学会的不是"做得更好"，而是"让自己打分更高"。Self-Rewarding LM、 Constitutional AI 都有这个隐患。#8 篇专门讲这个。
+
+**可能模式坍塌或多样性丢失。** self-play 训久了，策略会收敛到一个局部最优，再也探索不到新策略。self-training 训久了，模型会越来越倾向于预测自己已经熟悉的类别。OpenAI 在训练 GPT 时为了对抗这个，要故意混入多样性的探索。
+
+### 何时不该用自进化
+
+1. **有充足高质量人标注时。** 监督学习通常样本效率更高，自进化是"没有标注时的妥协"。
+2. **问题没有客观对错时。** 创意写作、主观判断类任务，缺乏自动评估手段。
+3. **安全敏感场景。** 自进化是试错驱动，试错过程可能产生危险行为或越走越偏的输出。
+
+## 关键要点
+
+1. **自进化的定义是"信号来自系统自身"。** 它和监督学习、微调、RLHF 的区别不在算法，而在学习信号从哪来。判别一个方法是不是自进化，看它的训练信号是不是系统自己跑出来的反馈。
+
+2. **五层级模型按"修改对象"从微观到宏观。** 参数层改权重（STaR、Self-Rewarding LM）、结构层改架构（NEAT、NAS）、策略层改行为（AlphaZero、self-play）、prompt 层改指令（OPRO、DSPy）、代码层改实现（Darwin Gödel Machine）。判断属于哪一层，看核心创新改的是什么。
+
+3. **统一四步循环贯穿所有层级：采集信号 → 生成变异 → 选择评估 → 回写自身。** 每一层的四步长得不一样，但骨架相同。后续每篇文章都在这套循环上展开。
+
+4. **自进化的核心难点在"选择"这一步。** 如何区分"真改进"和"自我欺骗"决定了方法能不能用。环境给的客观反馈（胜负、答案、测试通过率）是最可靠的；系统自己给的反馈（模型当裁判）要小心 reward hacking。
+
+5. **自进化的硬边界是需要机器可判定的反馈。** 这解释了为什么它目前在数学、代码、博弈领域最成功，在创意、主观判断领域进展缓慢。
+
+6. **五层级越往下越彻底也越危险。** 改参数最便宜最容易，改代码最激进最危险。这也是为什么代码层自进化（Darwin Gödel Machine、AI Scientist）是最前沿也是争议最大的方向。
+
+## 延伸阅读
+
+**综述与定位**：
+- [A Survey of Self-Evolving Agents: What, When, How, and Where to...](https://arxiv.org/abs/2507.21046) — 系统综述，把"改什么"分成参数/上下文/工具集/架构拓扑
+- [Awesome Self-Evolving Agents](https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents) — 论文和项目清单
+- [Yohei Nakajima: Better Ways to Build Self-Improving AI Agents](https://yoheinakajima.com/better-ways-to-build-self-improving-ai-agents/) — 实践者视角的方法分类
+
+**五个层级的代表论文**：
+- 参数层：[STaR (Zelikman et al., 2022)](https://arxiv.org/abs/2203.14465)、[Self-Rewarding LM (Yuan et al., 2024)](https://arxiv.org/abs/2401.10052)
+- 策略层：[AlphaGo Zero (Silver et al., Nature 2017)](https://www.nature.com/articles/nature24270)、[AlphaZero (Science 2018)](https://www.science.org/doi/10.1126/science.aar6404)
+- 代码层：[Darwin Gödel Machine (Sakana AI, 2025)](https://arxiv.org/abs/2505.22954)
+
+**后续文章预告**：
+- #2 自博弈：策略层怎么从 TD-Gammon 走到 AlphaZero，以及 LLM debate 这种"软博弈"
+- #3 神经进化：结构层怎么在不靠梯度的情况下搜索网络架构
+- #5 自动 prompt 优化：prompt 层怎么让模型自己改自己的指令
+- #7 自进化 Agent：代码层的 Darwin Gödel Machine 和 Gödel 之梦
