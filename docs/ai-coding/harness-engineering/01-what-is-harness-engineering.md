@@ -1,0 +1,114 @@
+# Harness Engineering 是什么
+
+> 如果你只能从整个专题带走一句话，带走这句：Agent = Model + Harness。
+> 这一篇把 harness 到底是什么、它有哪几条主线、为什么"接口设计"和"上下文管理"是它的核心，一次讲清楚。
+
+## 一个最朴素的定义
+
+Harness（字面"挽具"）是围绕大模型构建的全部工程层。一个裸的 LLM 只会做一件事：给它一段文本，它续写下一段。它不会读文件、不会跑代码、不会记住三步之前发生了什么、不会自己判断"任务做完了没有"。
+
+让它能做这些事的，全是 harness 加的。把这件事拆开看，harness 至少包含这些子系统：
+
+- **工具调用循环**：让模型决定"下一步调用哪个工具"，执行后把结果塞回去，再让它决定下一步
+- **上下文管理**：决定每一步模型实际看到哪些 token（系统提示、历史消息、工具结果、检索内容）
+- **沙箱执行**：模型生成的代码在哪里跑、怎么隔离、跑了怎么把结果拿回来
+- **状态持久化**：长任务怎么存档、怎么恢复、怎么回滚
+- **评分函数**：怎么判断产出是对是错
+
+Firecrawl 的入门文给的定义更工程化：[agent harness 是"环绕 LLM 的软件基础设施，管理工具执行、记忆、状态持久化与验证"](https://www.firecrawl.dev/blog/what-is-an-agent-harness)。Avi Chawla 把它画成一张 anatomy 图，把"raw LLM 不是 agent"这件事讲得很直观——[编排循环、工具、记忆、上下文管理、状态持久化缺一不可](https://blog.dailydoseofds.com/p/the-anatomy-of-an-agent-harness)。
+
+所以："harness engineering"不是某个具体框架的名字，而是**把这些子系统设计好、组合好、让它可靠地放大模型能力**的工程实践。Claude Code 是一个 harness，Aider 是一个 harness，SWE-bench 是另一种 harness（评测用的）。
+
+## Agent = Model + Harness
+
+这是整个领域最快建立、也最重要的心智模型。最精炼的表述来自 Lee Hanchung（Han, Not Solo）的博客：
+
+> "Agent = Model + Harness；如果你不是模型，那你就是 harness。"
+> —— [Hidden Technical Debt of AI Systems: Agent Harness](https://leehanchung.github.io/blogs/2026/05/08/hidden-technical-debt-agent-harness/)
+
+模型是 CPU，harness 是操作系统。你买再好的 CPU，装个烂系统也跑不动。这句话之所以重要，是因为它纠正了一个常见误区：很多人以为"换个更强的模型就能解决问题"，但一线经验反复证明——**瓶颈往往在 harness，不在模型**。
+
+最有力的量化证据来自 SWE-agent 的 ACI 论文：[同一个模型，换一套接口设计，SWE-bench 分数天差地别](https://arxiv.org/abs/2405.15793)。mini-swe-agent 用约 100 行 Python 就在 SWE-bench Verified 上拿到 74%+，逼近那些几万行的系统——这不是模型更聪明，是 harness 设计得更干净。
+
+理解了这一点，你才能解释下面这些"反直觉"的现象：
+
+- 为什么 Claude Code 要你写 CLAUDE.md、配 skills、设 hooks——它不是在为难你，是在让你调 harness
+- 为什么同一个 GPT-4，套在 Aider 里和套在某个玩具 agent 里表现差很多
+- 为什么"改个 prompt 就涨点"经常其实是改了 context engineering（见下文）
+
+## 两条主线：agent harness 与 eval harness
+
+harness 工程有两条几乎对称的主线，很多人会把它们混为一谈，但它们解决的问题完全不同。
+
+### Agent harness（让 agent 干活）
+
+把 LLM 包装成能自主完成任务的系统。代表：Claude Code、OpenHands、Aider、Cline、SWE-agent。它的核心问题是：**怎么让模型在多步任务里保持可靠**——循环怎么设计、上下文怎么不爆炸、工具怎么好用、状态怎么持久化。
+
+Cline 团队的拆解很清晰：[一个 coding agent 就是 model + tools + instructions 三件套在 harness 里协同](https://cline.bot/blog/what-makes-a-coding-agent)。这三者怎么编排，就是 agent harness 的全部手艺。
+
+### Eval harness（给 agent 打分）
+
+给模型出题、跑、打分、做基准的框架。代表：SWE-bench、lm-evaluation-harness、OpenCompass、Inspect AI。它的核心问题是：**怎么客观、可复现、抗作弊地衡量能力**——题目怎么出、评分函数怎么写、怎么防污染。
+
+这两条线是镜像关系：agent harness 生产能力，eval harness 衡量能力；agent harness 产出的 trajectory，反过来是 eval harness 的数据来源（trace → dataset → eval 闭环）。本专题 02 篇盘点项目时按这条线分类，03 篇专门深入 eval harness。
+
+## Inner harness 与 outer harness
+
+一个更细的、来自软件工程界视角的切分，来自 Martin Fowler 站点 Birgitta Böckeler 的文章：[harness 分 inner 与 outer 两层](https://martinfowler.com/articles/harness-engineering.html)。
+
+- **Inner harness**：模型厂商内置的、你改不了的部分。Claude Code 的 agent loop、工具签名、context 压缩策略——这些是 Anthropic 写死的。你升级一个版本，inner harness 可能整个变了。
+- **Outer harness**：你和团队自建的部分。CLAUDE.md、skills、hooks、CI 脚本、评测集、工作流约定——这些你能完全控制。
+
+这个区分的实用价值在于：**它告诉你力气该往哪使**。inner harness 你只能等厂商更新（或换工具），outer harness 是你的主场。Lee Hanchung 的警示正好落在这里——harness 中大量代码是 agent 运行时可自己编辑的，而且 inner harness 是"最容易被下一次模型发布淘汰"的部分（Opus 4.6 让一整层"sprint"脚手架变得多余）。换句话说：**把赌注押在 outer harness 上，少押在试图手工补 inner harness 的窟窿上**。
+
+## Context engineering：harness 的核心子学科
+
+如果说 harness 有一个"最值钱"的子能力，2025 年的共识是 context engineering。被引用最广的定义来自 Philipp Schmid：
+
+> "Context engineering 是在正确的时间、以正确的格式，提供正确的信息与工具。"
+> —— [The New Skill in AI is Not Prompting, It's Context Engineering](https://www.philschmid.de/context-engineering)
+
+注意它和 prompt engineering 的区别：prompt engineering 是写好一段文案（system prompt 怎么措辞），context engineering 是**系统设计**——在推理的每一步，模型实际看到的 token 集合是怎么动态组装出来的。系统提示、用户输入、工具调用结果、检索到的文档、被压缩的历史……这些都进 context，而 context window 是有限的，所以"留什么、删什么、压什么"是个持续的工程决策。
+
+Anthropic 把它官方化了：[在推理过程中策展与维护最优 token 集合](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)，覆盖记忆、压缩（compaction）、工具清理（tool clearing）等子系统——这基本是 Claude Code 内部 harness 设计的官方表述。LangChain 也给了工程化拆解：[把 context 按来源（系统 prompt / 用户输入 / 工具反馈 / 检索内容）拆开，在 agent loop 各阶段动态组装](https://www.langchain.com/blog/context-engineering-for-agents)。
+
+为什么这是核心？因为 agent 的每一步决策都只基于当前 context。context 里有噪音、有过期信息、有重复，模型就会犯错。context engineering 做得好，同一个模型表现能上一个台阶。这也是为什么很多人感受到"Claude Code 用着比裸调 API 强很多"——强在它替你做了大量 context engineering。
+
+## ACI：接口即 harness
+
+这是 harness 区别于普通后端开发最关键的一条认知，由 SWE-agent 的 ACI（Agent-Computer Interface）论文确立。
+
+传统软件工程为人设计接口（HCI）：bash、git、文件系统，这些是给人用的，对人不友好就改 UI。但 agent harness 里，"用户"是 LLM，而[为人类设计的接口，对 LLM 不一定好用](https://arxiv.org/abs/2405.15793)。SWE-agent 的核心贡献就是证明：专门为 LLM 量身定做的文件查看 / 编辑 / 搜索命令，能让同一个模型在 SWE-bench 上显著涨分。
+
+举个直觉例子：让 agent 改文件，你是给它一个 `cat` + `sed`（人类 CLI），还是给它一个结构化的 `view(lines=range)` + `edit(old_str, new_str)`？后者明显更适合 LLM——它能精确指定行范围、能定位唯一替换串。ACI 论文给的就是这种"接口为 LLM 重设计"的实证。
+
+这条认知的推论很重要：**你给 agent 配的工具签名，本身就是 harness 工程**。Cline 的 MCP 工具调用、Pydantic AI 的类型化工具签名、lm-eval-harness 的 task 抽象——这些项目的核心贡献不是"跑得快"，而是"给 LLM 设计了什么样的接口"。工具集设计 = harness 设计的一半（05 篇的实战会带你亲手体会）。
+
+## Simple-first：复杂度按需增加
+
+最后一条贯穿全系列的工程直觉，来自 Anthropic 被引用最多的奠基文《Building Effective Agents》：
+
+> "先找最简单的可行方案，确有必要时才增加复杂度。"
+> —— [Building Effective Agents](https://www.anthropic.com/research/building-effective-agents)
+
+这篇文章区分了 workflow（预定义代码路径编排 LLM 调用）与 agent（LLM 动态主导自己的流程），给出五种工作流模式：prompt chaining、routing、parallelization、orchestrator-workers、evaluator-optimizer。核心原则就是别一上来就堆 agent、堆多 agent、堆复杂状态机——很多任务一个带工具的 while 循环就解决了。
+
+mini-swe-agent 是这条原则的活广告：100 行、一个 bash 工具、线性 history，打爆一堆复杂系统。Cognition（Devin 团队）的"Don't Build Multi-Agents"也是同一个调子：[context 碎片化会严重损害可靠性](https://cognition.ai/blog/dont-build-multi-agents)，单线程线性架构往往更稳（这条争议 04 篇细讲）。
+
+Simon Willison 给了最干脆的 agent 定义，也暗合这个极简主义：["An LLM agent runs tools in a loop to achieve a goal."](https://simonwillison.net/2025/Sep/18/agents/) 一个循环，一套工具，一个目标。harness engineering 的起点，往往就是这么朴素。
+
+## 这门学科的现状
+
+把上面几条串起来：harness engineering 在 2026 年中已被普遍承认为一门独立工程学科，核心方法论共识（harness 决定上限、简单优先、context 为王、ACI、评测必须工程化）基本成型。但它仍是一门**快速演化的过渡性学科**——模型变强后，很多手工 harness 会被淘汰（这点 04 篇展开）。当下最好的策略是：理解原理，用最简单可靠的方案，把可掌控的 outer harness 做扎实，并随时准备在模型跃迁时重写。
+
+## 延伸阅读
+
+- [Building Effective Agents — Anthropic](https://www.anthropic.com/research/building-effective-agents) — 概念圈的奠基文，"simple first" 哲学源头
+- [Effective harnesses for long-running agents — Anthropic](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) — 长程 agent harness 的权威工程文
+- [Effective Context Engineering for AI Agents — Anthropic](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) — Claude Code 内部 harness 的官方表述
+- [Harness engineering: leveraging Codex in an agent-first world — OpenAI](https://openai.com/index/harness-engineering/) — 让术语正式出圈的文章
+- [Harness engineering for coding agent users — Martin Fowler / Birgitta Böckeler](https://martinfowler.com/articles/harness-engineering.html) — 面向工程师的 inner/outer harness 视角
+- [SWE-agent: Agent-Computer Interfaces — Princeton NLP](https://arxiv.org/abs/2405.15793) — ACI 思想的奠基论文
+- [What Is an Agent Harness? — Firecrawl](https://www.firecrawl.dev/blog/what-is-an-agent-harness) / [The Anatomy of an Agent Harness — Avi Chawla](https://blog.dailydoseofds.com/p/the-anatomy-of-an-agent-harness) — 两篇结构化入门综述
+
+下一篇：[02 开源项目全景](./02-open-source-landscape.md) 看这些理念在真实项目里长什么样。

@@ -1,0 +1,89 @@
+# 评测 Harness 与 SWE-bench 的三连争议
+
+> 上一篇把 eval harness 当作一类项目盘点。这一篇往里看一层：评分函数到底怎么设计、contamination（数据污染）为什么是评测的慢性病、以及为什么 2025-2026 年一连三篇论文/文章把 SWE-bench 排行榜的可信度按在地上摩擦。
+> 核心结论先说：你不能全信任何公开 benchmark，但你可以——也应该——造自己的 eval。
+
+## 评分函数：eval harness 的心脏
+
+eval harness 的全部价值，最终都坍缩到一个东西上：**评分函数**——把模型的产出映射成一个可比的数字。评分函数烂，整套 benchmark 就烂。
+
+大体分三类，各有适用场景：
+
+- **Code-based（确定性评分）**：跑测试、跑断言、对字符串。最客观、最可复现，但只能测"有标准答案"的能力（能不能通过单测、能不能算对）。
+- **LLM-as-judge（模型当裁判）**：用一个（通常更强的）模型给产出打分。能测主观质量（文档写得好不好、回答有没有帮助），但本身也是模型，会带偏见、会被忽悠。
+- **人工评估**：最准，但最贵、最慢、不可规模化。
+
+Hamel Husain 给了一条非常实用的二分（也是他整个 eval 体系的基石）：[code-based evals 测确定性失败，LLM-as-judge 测主观质量](https://hamel.dev/blog/posts/evals-faq/)。能 code-based 就别上 judge，judge 测的是 code-based 测不到的那部分。
+
+设计评分函数为什么难？因为它要同时满足三个互相拉扯的要求：**客观**（不同人跑出同一个数）、**可执行**（能自动化、能进 CI）、**抗作弊**（模型不能靠"刷榜技巧"而非真能力拿分）。这三者经常冲突——越客观的指标往往越容易被针对性优化（teach to the test），越能反映真实质量的指标往往越难自动化。SWE-bench 之所以被奉为标杆，正是因为它在三者上平衡得相对好，但也正因为如此，它成为争议的焦点。
+
+## SWE-bench 的设计：为什么它曾是黄金标准
+
+回顾一下 SWE-bench 的评分设计，才能理解后面的争议为什么致命。它做对了一件关键的事：**把"修 bug"这个模糊任务，转成了"patch 能否通过仓库自带的测试"这个确定性判断**。
+
+具体说，每个任务是一个真实 GitHub issue + 对应的 PR。agent 产出 patch 后，harness 在 Docker 化 checkout 的仓库里跑两类测试：
+
+- **FAIL_TO_PASS**：issue 修复前会失败、修复后应该通过的测试（验证"真的修好了"）
+- **PASS_TO_PASS**：修复前后都应该通过的测试（验证"没改坏别的"）
+
+这套设计的妙处在于：评分标准来自仓库本身（不是人造的），可执行（跑测试就行），而且看起来抗作弊（你得真改对代码才能让测试过）。很长一段时间，SWE-bench Verified 是衡量 coding agent 的最权威标尺。
+
+然后，三连打击来了。
+
+## 三连争议之一：SWE-bench 的"记忆"
+
+2025 年的论文 [The SWE-Bench Illusion](https://arxiv.org/html/2506.12286v1) 给了实证：SWE-bench Verified 上的性能提升，有相当一部分来自模型的"记忆"（memorization），而不是真正的问题解决能力。换言之，这些 issue 和它们的解法，很可能已经泄漏进了主流模型的训练集——模型不是在"修 bug"，是在"背诵见过的答案"。
+
+这直接指向 contamination（数据污染）这个评测的慢性病：当一个 benchmark 公开且被广泛使用，它的题目就会逐渐进入下一代模型的训练数据，分数随之虚高，benchmark 失去区分度。SWE-bench 用的是真实开源仓库的历史 issue，这些内容天然会出现在代码训练语料里——这是它设计上很难根治的软肋。
+
+## 三连争议之二：被错判的 patch
+
+如果说"记忆"质疑的是输入端，[UTBoost](https://aclanthology.org/2025.acl-long.189.pdf)（ACL 2025）质疑的是评分端：它发现 SWE-bench Lite 中有 176 个、SWE-bench Verified 中有 169 个 patch，被 SWE-bench 的评分机制**错误地判定为"通过"**——也就是说，这些 patch 其实没真正修好问题，但 harness 误判它们通过了。
+
+这意味着 SWE-bench 排行榜上相当一部分"成功"，可能是评分函数本身的 bug 造成的假阳性。一个 eval harness 的可信度，取决于它评分函数的正确性——而 UTBoost 证明，连 SWE-bench 这个标杆，评分函数都是有洞的。
+
+## 三连争议之三：闭源 eval 就是营销
+
+Nathan Lambert（Interconnects）早在 2023 年就打响了第一枪：[Big Tech's LLM evals are just marketing](https://www.interconnects.ai/p/evals-are-marketing)。论点很直接：完全闭源模型的 eval 分数不应被信任——厂商可以在背后做任何手脚，包括针对性优化 harness、cherry-pick、甚至隐性的数据污染。他断言 2023 年是"还能信 eval 数字"的最后一年。
+
+后续的 [Building on evaluation quicksand](https://www.interconnects.ai/p/building-on-evaluation-quicksand) 把批评推进到工程层面：既然公开 eval 不可信，研究者和产品团队该怎么在"流沙"上构建？他的方向是**动态、私有、不断更新的 eval 集**——让 benchmark 像流水一样无法被背诵。
+
+## 把三连争议拼起来
+
+这三方视角合起来，构成了对公开 benchmark 的系统性怀疑：
+
+| 质疑 | 来源 | 打击的环节 |
+|------|------|-----------|
+| 分数来自记忆，非能力 | SWE-Bench Illusion | 输入端（题目被背诵） |
+| 评分函数本身误判 | UTBoost | 评分端（假阳性） |
+| 闭源 eval 不可信 | Interconnects | 治理端（厂商可操纵） |
+
+结论不是"SWE-bench 毫无价值"——它仍是最接近真实软件工程任务的公开基准。结论是：**别把它的排行榜数字当绝对真理，尤其别拿闭源模型厂商自报的分数做关键决策**。一个 coding agent 在 SWE-bench Verified 上从 50% 涨到 60%，可能是真的变强了，也可能是它更会刷 FAIL_TO_PASS、或是评分假阳性、或是模型见过这题。
+
+## Hamel 的实用主义路线
+
+面对这套怀疑论，最容易的反应是虚无主义（"反正都不准，别评测了"）。Hamel Husain 给出的是反方向：[正因为通用 benchmark 不可信，eval 才是你必须自己做的事](https://hamel.dev/blog/posts/evals/)。
+
+他的核心论点只有一句，但分量很重：**eval 的目的是让你快速迭代，而不是产出一个好看的数字。** 据此推演出几条实操：
+
+- **把 70-80% 时间花在 error analysis，而不是写 test。** 拉一批失败 case 出来逐个人工看，比堆 1000 条自动化用例更能发现问题。
+- **自己造领域 eval，别照搬通用 benchmark。** 你的业务场景没有现成 benchmark 可用，通用 benchmark 的分数和你的真实表现可能毫无关系。[AI Evals for Engineers & PMs 课程](https://maven.com/parlance-labs/evals)和 [Anthropic 的 agent eval 方法论](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)都强调这点。
+- **code-based 与 LLM-as-judge 组合用。** 能跑测试的跑测试，测不到的用 judge + rubric。
+- **eval 是活的，要随产品迭代更新。** 静态 eval 集会贬值（污染 + 模型进化），动态私有 eval 才有持续价值。
+
+## 在线 vs 离线：把 eval 当单元测试
+
+Datadog 的工程视角补了一块：[把离线 eval 当成 agent 的"单元测试"](https://www.datadoghq.com/blog/offline-llm-evaluations/)——上线前用已知测试集验证每次改动，像回归测试一样。在线 eval（真实流量 + 监控）测的是线上表现，离线 eval 测的是"这次改动有没有退化"。两者互补，缺一不可。
+
+这和第 7 条设计模式（评测即测试、进 CI）是同一件事的不同切面：当 eval harness 的产出能进 CI、能阻塞一次糟糕的发布，它就从"研究工具"升级成了"工程基础设施"。这也是 Langfuse / Phoenix / Braintrust 这类工具存在的意义——它们让 trace → dataset → eval → CI 这条闭环变得可操作。
+
+## 小结
+
+eval harness 的工程，本质是在"客观、可执行、抗作弊"这个不可能三角里做取舍。SWE-bench 是迄今平衡得最好的公开尝试，但三连争议证明它远非无懈可击。务实的工程态度是：
+
+1. **公开 benchmark 当参考，不当裁判。** 看趋势、看相对位次，别迷信绝对分数和厂商自报。
+2. **造自己的领域 eval。** 这是别人替代不了你的工程投入。
+3. **评分函数要自己审计。** 别假设上游 harness 的打分是对的（UTBoost 的教训）。
+4. **eval 进 CI，做成回归测试。** 让它真正参与工程决策，而不是写完就束之高阁。
+
+下一篇：[04 趋势与争议](./04-trends-and-debates.md)，看多 agent vs 单 agent、bitter lesson 与 harness 寿命这些更"哲学"但影响选型的论战。
