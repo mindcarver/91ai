@@ -5,7 +5,7 @@
 
 本系列面向在真实项目中使用 Claude Code 的工程师和技术负责人。目标读者已经具备基本的 Claude Code 使用经验，需要解决的核心问题是：如何把一次性的 prompt 交互变成可复用、可验证、可治理的工程系统。
 
-系列配套学习路径参见 [Claude Code 工程化学习路径](../claude-code-engineering-learning-path.md)，该文从费曼学习方法出发，逐层拆解 Claude Code 各机制的设计意图与组合方式。建议先通读学习路径建立全景认知，再按需查阅以下各篇。
+系列配套学习路径参见 [Claude Code 工程化学习路径](../claude-code-engineering-learning-path.md)。建议先通读学习路径建立全景认知，再按需查阅以下各篇。
 
 ---
 
@@ -393,7 +393,7 @@ Never suggest direct file edits. Return findings only.
 
 ## 延伸阅读
 
-- [Claude Code 工程化学习路径](../claude-code-engineering-learning-path.md)——费曼方法拆解各机制的设计意图与组合方式，建议在本系列之前阅读
+- [Claude Code 工程化学习路径](../claude-code-engineering-learning-path.md)——系统梳理各机制的设计意图与组合方式，建议在本系列之前阅读
 - [Claude Code 资料与项目索引](../claude-code.md)——官方文档、工程文章、生态项目和评测研究的完整索引
 - [Claude Code 官方文档](https://docs.anthropic.com/en/docs/claude-code/overview)——Anthropic 官方维护的 Claude Code 使用指南
 - [Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices)——Anthropic 工程团队总结的使用建议
