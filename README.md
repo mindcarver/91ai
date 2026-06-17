@@ -20,9 +20,7 @@
   <a href="./docs/">内容地图</a> &nbsp;·&nbsp;
   <a href="./docs/paths/">角色路线</a> &nbsp;·&nbsp;
   <a href="#ai-coding">AI Coding</a> &nbsp;·&nbsp;
-  <a href="./docs/project-collections/">项目收藏</a> &nbsp;·&nbsp;
-  <a href="#技术雷达">技术雷达</a> &nbsp;·&nbsp;
-  <a href="#原则">原则</a>
+  <a href="./docs/project-collections/">项目收藏</a>
 </p>
 
 ---
@@ -146,44 +144,6 @@
   <td align="center"><a href="./docs/ai-coding/gemini-cli.md">查看</a></td>
 </tr>
 </table>
-
-## 技术雷达
-
-<table>
-<tr>
-  <td align="center"><strong>🟢 值得投入</strong></td>
-  <td align="center"><strong>🟡 持续观察</strong></td>
-  <td align="center"><strong>🔴 谨慎使用</strong></td>
-</tr>
-<tr>
-  <td>AI Coding</td>
-  <td>多 Agent 协作</td>
-  <td>无评测闭环的 Agent Demo</td>
-</tr>
-<tr>
-  <td>Agentic Workflow</td>
-  <td>AI 浏览器</td>
-  <td>只靠 Prompt 维护复杂业务流程</td>
-</tr>
-<tr>
-  <td>RAG 评测</td>
-  <td>端侧模型</td>
-  <td>没有权限模型的企业知识库</td>
-</tr>
-<tr>
-  <td>MCP</td>
-  <td>多模态 Agent</td>
-  <td>无日志、无回滚的自动化 Agent</td>
-</tr>
-</table>
-
-## 原则
-
-- 资料要全，但不只追求数量。
-- 评测要明确，不写模糊的万能推荐。
-- 优先真实使用体验，谨慎引用营销话术。
-- 关注工程落地、长期维护、安全边界和成本。
-- 过时、低质量或失效资料会被移除或标记。
 
 ---
 
