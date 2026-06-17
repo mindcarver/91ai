@@ -52,9 +52,9 @@
 
 ### 联系方式卡片
 
-每篇内容文章（`docs/` 下非 `README.md` 的 `.md`）末尾必须有联系方式卡片。详见 `.claude/rules/contact-card.md`。
+每篇内容文章（`docs/` 下非 `README.md` 的 `.md`）开头（文件最顶部）必须有联系方式卡片。详见 `.claude/rules/contact-card.md`。
 
 - 单一真实源：`docs/_snippets/contact.html`——改联系方式只改这里
-- 注入脚本：`./scripts/inject-contact.sh`（幂等：有占位符原地更新，无则末尾追加）
+- 注入脚本：`./scripts/inject-contact.sh`（幂等：先剥旧块，再在文件开头插入）
 - 占位符：`<!-- CONTACT-START --> … <!-- CONTACT-END -->`，**不要手改其中内容**
 - 各级 `README.md` 不加卡片（脚本自动排除）

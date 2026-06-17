@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # inject-contact.sh — 联系方式卡片注入器（单一真实源）
 #
-# 把 docs/_snippets/contact.html 的内容注入到文章占位符中。
+# 把 docs/_snippets/contact.html 的内容注入到每篇文章开头（占位符包裹）。
 # 占位符: <!-- CONTACT-START --> ... <!-- CONTACT-END -->
-# 可重入(幂等): 已有占位符则原地替换中间内容; 没有占位符则在文件末尾追加。
+# 可重入(幂等): 先剥除文件中任意位置的旧占位符块, 再在文件开头插入新块。
+#   - 老文件(块在末尾): 一次性迁移到开头。
+#   - 新文件(无块): 首次在开头插入。
+#   - 重复运行: 先剥后插, 结果完全一致, 不会堆叠。
 # 改联系方式只需改 docs/_snippets/contact.html, 再跑本脚本即可全量同步。
 #
 # Usage:
@@ -32,41 +35,35 @@ else
     done < <(find docs -name '*.md' -type f ! -name 'README.md' -print0)
 fi
 
-injected=0
-updated=0
+processed=0
+reset=0
 
 for f in "${FILES[@]}"; do
     [ -f "$f" ] || { echo "WARN: not a file: $f"; continue; }
 
-    if grep -qF "$START" "$f"; then
-        # 原地替换占位符块内容(保留卡片在文件中的位置)
-        tmp="$(mktemp)"
-        awk -v START="$START" -v ENDMARK="$END" -v NOTE="$NOTE" -v SNIPPET="$SNIPPET" '
-            BEGIN { skip=0 }
-            $0==START {
-                print START; print NOTE
-                while ((getline line < SNIPPET) > 0) print line
-                close(SNIPPET)
-                print ENDMARK
-                skip=1; next
-            }
-            $0==ENDMARK { skip=0; next }
-            skip { next }
-            { print }
-        ' "$f" > "$tmp"
-        mv "$tmp" "$f"
-        updated=$((updated+1))
-    else
-        # 文件末尾追加新块(先补空行分隔)
-        {
-            printf '\n%s\n' "$START"
-            printf '%s\n' "$NOTE"
-            cat "$SNIPPET"
-            printf '%s\n' "$END"
-        } >> "$f"
-        injected=$((injected+1))
-    fi
+    if grep -qF "$START" "$f"; then had_block=1; else had_block=0; fi
+
+    # Step 1: 剥除任意位置的旧占位符块(START..END, 含两端标记行)
+    body="$(awk -v START="$START" -v ENDMARK="$END" '
+        BEGIN { skip=0 }
+        $0==START { skip=1; next }
+        $0==ENDMARK { skip=0; next }
+        skip { next }
+        { print }
+    ' "$f")"
+
+    # Step 2: 在文件开头插入新块; 正文去掉首尾多余空行(保证卡片与正文之间恰好一个空行、文件以单个换行结尾)
+    {
+        printf '%s\n' "$START"
+        printf '%s\n' "$NOTE"
+        cat "$SNIPPET"
+        printf '%s\n\n' "$END"
+        printf '%s' "$body" | awk '{ a[NR]=$0 } END { s=1; while (s<=NR && a[s]~/^[ \t]*$/) s++; e=NR; while (e>=s && a[e]~/^[ \t]*$/) e--; for (i=s;i<=e;i++) print a[i] }'
+    } > "$f"
+
+    processed=$((processed+1))
+    [ "$had_block" = 1 ] && reset=$((reset+1))
 done
 
-echo "✅ contact 注入完成: 新增 ${injected}, 更新 ${updated} (共处理 ${#FILES[@]} 个文件)"
+echo "✅ contact 注入完成: 卡片已置于文章开头 (其中 ${reset} 篇重置旧块, 共处理 ${processed} 个文件)"
 echo "   改联系方式请编辑: ${SNIPPET}  →  再跑: ./scripts/inject-contact.sh"

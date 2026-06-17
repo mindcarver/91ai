@@ -54,8 +54,15 @@ for file in "${FILES[@]}"; do
     fi
 
     awk_output=$(awk -v skip_h1="$has_html_h1" '
-    BEGIN { prev_level=0; in_code=0; prev_blank=1; trailing=0; errs=0; wrns=0 }
-    /^```/ { in_code=1-in_code; prev_blank=0; next }
+    BEGIN { prev_level=0; in_code=0; fence_n=0; prev_blank=1; trailing=0; errs=0; wrns=0 }
+    # CommonMark fence nesting: a fence of N backticks only opens/closes at N+ backticks,
+    # so a ``` (3) inside a ```` (4) block is content, not a toggle. Tracks fence_n.
+    /^```/ {
+        match($0, /^`+/); n=RLENGTH
+        if (!in_code) { in_code=1; fence_n=n }
+        else if (n >= fence_n) { in_code=0; fence_n=0 }
+        prev_blank=0; next
+    }
     in_code { prev_blank=0; next }
     /^#{1,4} [^#]/ {
         if (!first_seen) {
