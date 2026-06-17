@@ -9,3 +9,8 @@
 
 # Stray app artifacts
 未命名.base
+
+# 本地凭证（含微信 AppSecret 等，严禁提交）
+.env
+.env.*
+.carver-skills/
