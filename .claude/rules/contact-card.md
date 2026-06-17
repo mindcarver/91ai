@@ -22,10 +22,11 @@
 ## 操作规则
 
 - **新增文章后**：运行 `./scripts/inject-contact.sh`（全量，幂等）或 `./scripts/inject-contact.sh <新文件>`（单文件），自动在开头插入卡片。
-- **改联系方式后**：编辑 `docs/_snippets/contact.html` → 运行 `./scripts/inject-contact.sh` → 全量更新（重置到开头）。
-- **脚本幂等**：先剥除任意位置的旧占位符块，再在文件开头插入新块。重复运行结果一致，不会堆叠。
-- **各级 `README.md` 不加卡片**——注入脚本已自动排除 `README.md`，导航/索引页保持干净。
-- 卡片位置约定在文章**最顶部**（文件第一行，位于 `# 标题` 及任何注释之前）。
+- **改联系方式后**：编辑 `docs/_snippets/contact.html` → 运行 `./scripts/inject-contact.sh` → 全量原地更新（保留各文件中卡片的位置）。根 `README.md` 需额外显式运行 `./scripts/inject-contact.sh README.md`。
+- **脚本幂等**：已有占位符→原地替换块内容（保留卡片位置）；无占位符→在文件开头插入。重复运行结果一致，不会堆叠。
+- **子目录 `README.md` 不加卡片**——注入脚本的全量模式只处理 `docs/` 下非 `README.md` 的文章，导航/索引页保持干净。
+- **根 `README.md` 例外**：在 banner 之后放了一张卡片（占位符标记）。脚本对已有占位符做原地替换，不会把卡片移到顶部 banner 之前。
+- 内容文章的卡片位置约定在**最顶部**（文件第一行，位于 `# 标题` 及任何注释之前）；根 `README.md` 的卡片例外，放在 banner 之后。
 
 ## 校验
 

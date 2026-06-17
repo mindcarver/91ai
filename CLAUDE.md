@@ -55,6 +55,6 @@
 每篇内容文章（`docs/` 下非 `README.md` 的 `.md`）开头（文件最顶部）必须有联系方式卡片。详见 `.claude/rules/contact-card.md`。
 
 - 单一真实源：`docs/_snippets/contact.html`——改联系方式只改这里
-- 注入脚本：`./scripts/inject-contact.sh`（幂等：先剥旧块，再在文件开头插入）
+- 注入脚本：`./scripts/inject-contact.sh`（幂等：已有占位符原地替换，无则开头插入）
 - 占位符：`<!-- CONTACT-START --> … <!-- CONTACT-END -->`，**不要手改其中内容**
-- 各级 `README.md` 不加卡片（脚本自动排除）
+- 子目录 `README.md` 不加卡片（脚本全量模式自动排除）；根 `README.md` 在 banner 之后有一张卡片，改联系方式后需额外运行 `./scripts/inject-contact.sh README.md`

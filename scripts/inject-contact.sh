@@ -3,10 +3,12 @@
 #
 # 把 docs/_snippets/contact.html 的内容注入到每篇文章开头（占位符包裹）。
 # 占位符: <!-- CONTACT-START --> ... <!-- CONTACT-END -->
-# 可重入(幂等): 先剥除文件中任意位置的旧占位符块, 再在文件开头插入新块。
-#   - 老文件(块在末尾): 一次性迁移到开头。
-#   - 新文件(无块): 首次在开头插入。
-#   - 重复运行: 先剥后插, 结果完全一致, 不会堆叠。
+# 可重入(幂等):
+#   - 已有占位符: 原地替换块内容(保留卡片在文件中的位置)。
+#   - 无占位符: 在文件开头插入新块。
+#   - 重复运行: 结果完全一致, 不会堆叠。
+# 根 README.md 的卡片放在 banner 之后(非顶部), 用占位符标记;
+# 显式对该文件运行脚本会原地更新, 不会移动位置。
 # 改联系方式只需改 docs/_snippets/contact.html, 再跑本脚本即可全量同步。
 #
 # Usage:
@@ -35,35 +37,49 @@ else
     done < <(find docs -name '*.md' -type f ! -name 'README.md' -print0)
 fi
 
-processed=0
-reset=0
+injected=0
+updated=0
 
 for f in "${FILES[@]}"; do
     [ -f "$f" ] || { echo "WARN: not a file: $f"; continue; }
 
-    if grep -qF "$START" "$f"; then had_block=1; else had_block=0; fi
-
-    # Step 1: 剥除任意位置的旧占位符块(START..END, 含两端标记行)
-    body="$(awk -v START="$START" -v ENDMARK="$END" '
-        BEGIN { skip=0 }
-        $0==START { skip=1; next }
-        $0==ENDMARK { skip=0; next }
-        skip { next }
-        { print }
-    ' "$f")"
-
-    # Step 2: 在文件开头插入新块; 正文去掉首尾多余空行(保证卡片与正文之间恰好一个空行、文件以单个换行结尾)
-    {
-        printf '%s\n' "$START"
-        printf '%s\n' "$NOTE"
-        cat "$SNIPPET"
-        printf '%s\n\n' "$END"
-        printf '%s' "$body" | awk '{ a[NR]=$0 } END { s=1; while (s<=NR && a[s]~/^[ \t]*$/) s++; e=NR; while (e>=s && a[e]~/^[ \t]*$/) e--; for (i=s;i<=e;i++) print a[i] }'
-    } > "$f"
-
-    processed=$((processed+1))
-    [ "$had_block" = 1 ] && reset=$((reset+1))
+    if grep -qF "$START" "$f"; then
+        # 已有占位符: 原地替换块内容(保留卡片在文件中的位置)
+        tmp="$(mktemp)"
+        awk -v START="$START" -v ENDMARK="$END" -v NOTE="$NOTE" -v SNIPPET="$SNIPPET" '
+            BEGIN { skip=0 }
+            $0==START {
+                print START; print NOTE
+                while ((getline line < SNIPPET) > 0) print line
+                close(SNIPPET)
+                print ENDMARK
+                skip=1; next
+            }
+            $0==ENDMARK { skip=0; next }
+            skip { next }
+            { print }
+        ' "$f" > "$tmp"
+        mv "$tmp" "$f"
+        updated=$((updated+1))
+    else
+        # 无占位符: 在文件开头插入新块(正文去首尾多余空行)
+        body="$(awk -v START="$START" -v ENDMARK="$END" '
+            BEGIN { skip=0 }
+            $0==START { skip=1; next }
+            $0==ENDMARK { skip=0; next }
+            skip { next }
+            { print }
+        ' "$f")"
+        {
+            printf '%s\n' "$START"
+            printf '%s\n' "$NOTE"
+            cat "$SNIPPET"
+            printf '%s\n\n' "$END"
+            printf '%s' "$body" | awk '{ a[NR]=$0 } END { s=1; while (s<=NR && a[s]~/^[ \t]*$/) s++; e=NR; while (e>=s && a[e]~/^[ \t]*$/) e--; for (i=s;i<=e;i++) print a[i] }'
+        } > "$f"
+        injected=$((injected+1))
+    fi
 done
 
-echo "✅ contact 注入完成: 卡片已置于文章开头 (其中 ${reset} 篇重置旧块, 共处理 ${processed} 个文件)"
+echo "✅ contact 注入完成: 新增 ${injected}, 更新 ${updated} (共处理 ${#FILES[@]} 个文件)"
 echo "   改联系方式请编辑: ${SNIPPET}  →  再跑: ./scripts/inject-contact.sh"
