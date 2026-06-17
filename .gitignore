@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Editor configs
+.obsidian/
+
+# Local tool caches
+.wos-skills/
