@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# Everyday User Path
+# 普通人学习路径
 
 面向非专业开发者、内容创作者、运营、研究人员和普通 AI 工具用户。
 
@@ -40,14 +40,14 @@
 
 ## 先看这些专题
 
-- [AI Knowledge Map](../knowledge-map.md)
+- [AI 知识地图](../knowledge-map.md)
 - [AI 工具与应用](../project-collections/ai-tools.md)
 - [教程与学习资源](../project-collections/tutorial.md)
 - [生产力工具](../project-collections/productivity.md)
 
 ## 第一个项目
 
-做一个 **Personal Knowledge Workflow**。
+做一个 **个人知识工作流**。
 
 它应该包含：
 

@@ -24,7 +24,7 @@
 
 > 更新日期：2026/06
 
-## TL;DR
+## 一句话总结
 
 OpenSpec 默认的 `spec-driven` schema 包含四个 artifact（proposal → specs + design → tasks），覆盖大多数场景。但你的团队可能需要更轻量的流程（跳过 design），或更严格的流程（加 review 步骤），或完全不同的工作方式。OpenSpec 提供三层定制体系：Project Config（config.yaml 中的 context 和 rules）调整 AI 生成行为；Custom Schemas（schema.yaml + templates/）定义不同的 artifact 组合和依赖关系；Global Overrides（~/.local/share/openspec/schemas/）跨项目共享自定义 schema。本文逐层拆解每种定制方式，给出三个完整的实战 Schema 示例，并介绍社区 Schema 的使用方式。
 

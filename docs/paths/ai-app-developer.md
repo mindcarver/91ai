@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# AI App Developer Path
+# AI 应用开发者学习路径
 
 面向正在构建 AI 应用、Agent、自动化工作流或内部工具的开发者。
 
@@ -30,25 +30,25 @@
 
 | 阶段 | 学什么 | 产出 |
 | --- | --- | --- |
-| 1 | Prompt / Context | 可复用 prompt 模板和失败案例记录 |
-| 2 | Structured Output | 稳定输出 JSON、表格或任务计划 |
-| 3 | Tool Calling | 调用搜索、数据库、文件、HTTP API |
-| 4 | Workflow | 固定流程、人工确认、状态管理 |
-| 5 | Agent Loop | observe -> plan -> act -> evaluate |
-| 6 | Memory / RAG | 区分上下文、记忆、知识库和工作状态 |
-| 7 | Evaluation | 任务成功率、工具调用质量、成本和失败恢复 |
-| 8 | Safety | 权限表、高风险操作确认、审计日志 |
+| 1 | 提示词 / 上下文 | 可复用 prompt 模板和失败案例记录 |
+| 2 | 结构化输出 | 稳定输出 JSON、表格或任务计划 |
+| 3 | 工具调用 | 调用搜索、数据库、文件、HTTP API |
+| 4 | 工作流 | 固定流程、人工确认、状态管理 |
+| 5 | Agent 循环 | observe -> plan -> act -> evaluate |
+| 6 | 记忆 / RAG | 区分上下文、记忆、知识库和工作状态 |
+| 7 | 评测 | 任务成功率、工具调用质量、成本和失败恢复 |
+| 8 | 安全 | 权限表、高风险操作确认、审计日志 |
 
 ## 先看这些专题
 
-- [Agent Learning Path](../agent/)
-- [Project Collections](../project-collections/)
+- [Agent 学习路径](../agent/)
+- [项目收藏](../project-collections/)
 - [工作流与自动化](../project-collections/workflow.md)
 - [集成与 MCP](../project-collections/integrations.md)
 
 ## 第一个项目
 
-做一个 **GitHub Issue Triage Agent**。
+做一个 **GitHub Issue 分诊 Agent**。
 
 它应该能：
 

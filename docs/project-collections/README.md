@@ -1,4 +1,4 @@
-# Project Collections
+# 项目收藏
 
 这里收集 AI 工具、Agent 项目、开发者工具、MCP 集成、工作流、文档处理、模型推理和垂直应用项目。
 

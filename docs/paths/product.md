@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# Product Path
+# 产品学习路径
 
 面向产品经理、业务负责人、创业者、增长和运营角色。
 
@@ -40,14 +40,14 @@
 
 ## 先看这些专题
 
-- [AI Knowledge Map](../knowledge-map.md)
-- [Agent Learning Path](../agent/)
+- [AI 知识地图](../knowledge-map.md)
+- [Agent 学习路径](../agent/)
 - [AI 工具与应用](../project-collections/ai-tools.md)
-- [Project Collections](../project-collections/)
+- [项目收藏](../project-collections/)
 
 ## 第一个项目
 
-做一个 **AI Feature Evaluation Sheet**。
+做一个 **AI 功能评测表**。
 
 它应该包含：
 

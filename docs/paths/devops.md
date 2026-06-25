@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# DevOps Path
+# DevOps 学习路径
 
 面向 DevOps、SRE、平台工程师、基础设施工程师。
 
@@ -30,25 +30,25 @@
 
 | 阶段 | 学什么 | 产出 |
 | --- | --- | --- |
-| 1 | AI Coding for Ops | 用 AI 辅助脚本、配置、CI、IaC review |
-| 2 | Log / Incident Summary | 日志摘要、告警归因、事件时间线 |
-| 3 | Workflow Automation | 带人工确认的部署、回滚、巡检流程 |
-| 4 | Tool Permissions | 只读、写操作、高风险操作分级 |
-| 5 | Sandbox | 限制 shell、网络、文件、云账号权限 |
-| 6 | Observability | trace、audit log、成本、延迟、失败回放 |
-| 7 | Security Review | prompt injection、secret 泄露、供应链风险 |
+| 1 | AI 运维编码 | 用 AI 辅助脚本、配置、CI、IaC review |
+| 2 | 日志 / 事故摘要 | 日志摘要、告警归因、事件时间线 |
+| 3 | 工作流自动化 | 带人工确认的部署、回滚、巡检流程 |
+| 4 | 工具权限 | 只读、写操作、高风险操作分级 |
+| 5 | 沙箱 | 限制 shell、网络、文件、云账号权限 |
+| 6 | 可观测性 | trace、audit log、成本、延迟、失败回放 |
+| 7 | 安全审查 | prompt injection、secret 泄露、供应链风险 |
 
 ## 先看这些专题
 
-- [AI Coding](../ai-coding/)
-- [Agent Learning Path](../agent/)
+- [AI 编程](../ai-coding/)
+- [Agent 学习路径](../agent/)
 - [DevOps 与基础设施](../project-collections/devops.md)
 - [安全工具](../project-collections/security.md)
 - [配置与环境](../project-collections/configuration.md)
 
 ## 第一个项目
 
-做一个 **Incident Report Summarizer**。
+做一个 **事故报告摘要器**。
 
 它应该包含：
 

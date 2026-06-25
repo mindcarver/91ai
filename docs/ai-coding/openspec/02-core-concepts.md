@@ -24,7 +24,7 @@
 
 > 更新日期：2026/06
 
-## TL;DR
+## 一句话总结
 
 OpenSpec 是一个面向 AI 编码助手（Claude Code、Cursor、GitHub Copilot 等）的规范驱动开发（Spec-Driven Development, SDD）框架。它的核心思路是：在 AI 写代码之前，先用结构化的 Markdown 文档把"做什么"和"怎么做"写清楚。项目状态分成两块——`specs/` 记录系统当前行为（真相源），`changes/` 记录拟议的变更（每个变更一个文件夹）。变更用 Delta Spec 描述差异（ADDED/MODIFIED/REMOVED），完成后归档时自动合并到主 spec。四大哲学原则（流动不僵化、迭代不瀑布、简单不复杂、棕地优先）贯穿整个设计。
 

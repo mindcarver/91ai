@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# AI Knowledge Map
+# AI 知识地图
 
 这张知识地图把 Awesome AI Guide 的内容从“目录”转成“学习导航”。
 
@@ -41,13 +41,13 @@
 
 | 图谱 | 解决的问题 | 当前入口 |
 | --- | --- | --- |
-| 身份路线图 | 我是谁，我应该先学什么 | [Role Learning Paths](./paths/) |
-| AI Coding 图谱 | 哪些工具能进入真实开发流程 | [AI Coding](./ai-coding/) |
-| Agent 学习图谱 | 如何从 API 走到可上线 Agent | [Agent Learning Path](./agent/) |
+| 身份路线图 | 我是谁，我应该先学什么 | [角色学习路径](./paths/) |
+| AI 编程图谱 | 哪些工具能进入真实开发流程 | [AI 编程](./ai-coding/) |
+| Agent 学习图谱 | 如何从 API 走到可上线 Agent | [Agent 学习路径](./agent/) |
 | 架构决策图谱 | 面对需求该选 RAG / Fine-tune / Agent / Workflow | [AI 架构决策指南](./ai-architecture-decisions.md) |
-| 项目生态图谱 | 有哪些可研究、可试用、可二次整理的项目 | [Project Collections](./project-collections/) |
-| 评测图谱 | 如何判断工具和方案是否真的可用 | [Evaluation System](./README.md#evaluation-system) |
-| 技术雷达 | 哪些方向值得投入、观察或谨慎使用 | [Technology Radar](./README.md#technology-radar) |
+| 项目生态图谱 | 有哪些可研究、可试用、可二次整理的项目 | [项目收藏](./project-collections/) |
+| 评测图谱 | 如何判断工具和方案是否真的可用 | [评测体系](./README.md#评测体系) |
+| 技术雷达 | 哪些方向值得投入、观察或谨慎使用 | [技术雷达](./README.md#技术雷达) |
 
 ## 身份到能力
 

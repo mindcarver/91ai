@@ -24,7 +24,7 @@
 
 > 更新日期：2025/06
 
-## TL;DR
+## 一句话总结
 
 Claude Code 有六种认证方式，按优先级从高到低：云厂商代理（Bedrock/Vertex）→ `ANTHROPIC_AUTH_TOKEN` → `ANTHROPIC_API_KEY` → `apiKeyHelper` → `CLAUDE_CODE_OAUTH_TOKEN` → 订阅 OAuth。大多数开发者用 `claude` 登录 Claude 账号即可；企业用户走 Bedrock 或 Vertex；CI/CD 管道用 `claude setup-token` 生成长期 token。
 

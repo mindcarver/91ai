@@ -19,7 +19,7 @@
   <a href="#你想做什么">快速入口</a> &nbsp;·&nbsp;
   <a href="./docs/">内容地图</a> &nbsp;·&nbsp;
   <a href="./docs/paths/">角色路线</a> &nbsp;·&nbsp;
-  <a href="#ai-coding">AI Coding</a> &nbsp;·&nbsp;
+  <a href="#ai-编程工具">AI 编程</a> &nbsp;·&nbsp;
   <a href="./docs/project-collections/">项目收藏</a>
 </p>
 
@@ -84,7 +84,7 @@
 </tr>
 </table>
 
-## AI Coding
+## AI 编程工具
 
 <table>
 <tr>

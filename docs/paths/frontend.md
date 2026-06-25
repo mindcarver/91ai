@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# Frontend Path
+# 前端学习路径
 
 面向前端工程师、全栈偏前端开发者、设计工程师。
 
@@ -30,24 +30,24 @@
 
 | 阶段 | 学什么 | 产出 |
 | --- | --- | --- |
-| 1 | AI Coding | 用 Cursor、Claude Code、Codex 或 Cline 完成真实前端改动 |
-| 2 | AI UI | 聊天、命令面板、内联编辑、生成式表单、AI 辅助状态 |
-| 3 | Streaming UX | 流式输出、取消、重试、部分失败、加载状态 |
-| 4 | Structured Output | 把模型输出约束成 JSON、表单状态或 UI patch |
-| 5 | Tool Calling | 让 AI 调用搜索、文件、设计系统、后端 API |
+| 1 | AI 编程 | 用 Cursor、Claude Code、Codex 或 Cline 完成真实前端改动 |
+| 2 | AI 交互界面 | 聊天、命令面板、内联编辑、生成式表单、AI 辅助状态 |
+| 3 | 流式体验 | 流式输出、取消、重试、部分失败、加载状态 |
+| 4 | 结构化输出 | 把模型输出约束成 JSON、表单状态或 UI patch |
+| 5 | 工具调用 | 让 AI 调用搜索、文件、设计系统、后端 API |
 | 6 | 多模态 | 图片理解、截图分析、设计稿到代码 |
-| 7 | Evaluation | 对生成结果做可用性、准确性、回归和人工修正量评估 |
+| 7 | 评测 | 对生成结果做可用性、准确性、回归和人工修正量评估 |
 
 ## 先看这些专题
 
-- [AI Coding](../ai-coding/)
-- [Agent Learning Path](../agent/)
+- [AI 编程](../ai-coding/)
+- [Agent 学习路径](../agent/)
 - [设计与可视化工具](../project-collections/design-tools.md)
 - [开发者工具与 AI Coding](../project-collections/developer-tools.md)
 
 ## 第一个项目
 
-做一个 **Streaming AI UI Demo**。
+做一个 **流式 AI 界面 Demo**。
 
 它应该包含：
 

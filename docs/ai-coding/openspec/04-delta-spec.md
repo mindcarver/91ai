@@ -24,7 +24,7 @@
 
 > 更新日期：2026/06
 
-## TL;DR
+## 一句话总结
 
 Delta Spec 是 OpenSpec 最核心的机制。它不是重写整个规范文件，而是用三个标记（ADDED / MODIFIED / REMOVED）描述"什么变了"。归档时，合并引擎解析 Markdown 结构，按 Requirement 名称匹配，执行结构化的增删改操作。并行变更修改同一个 spec 文件的不同 Requirement 时不冲突；修改同一个 Requirement 时，bulk-archive 让 AI 检查实际代码来裁决。本文拆解 Delta Spec 的写法规范、合并算法的内部逻辑、并行变更的无冲突原理，以及三个完整的实战示例。读完本文，你应该能写出不触发合并错误的 Delta Spec，并理解多个变更并行时会发生什么。
 

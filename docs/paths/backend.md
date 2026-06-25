@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# Backend Path
+# 后端学习路径
 
 面向后端工程师、平台工程师、全栈偏后端开发者。
 
@@ -30,26 +30,26 @@
 
 | 阶段 | 学什么 | 产出 |
 | --- | --- | --- |
-| 1 | Model API | 统一模型调用、超时、重试、错误处理、成本日志 |
-| 2 | Structured Output | JSON schema、校验、降级和失败处理 |
-| 3 | Tool Calling | 工具 schema、参数校验、幂等性、权限 |
+| 1 | 模型 API | 统一模型调用、超时、重试、错误处理、成本日志 |
+| 2 | 结构化输出 | JSON schema、校验、降级和失败处理 |
+| 3 | 工具调用 | 工具 schema、参数校验、幂等性、权限 |
 | 4 | RAG | 文档切分、embedding、检索、rerank、引用 |
-| 5 | Workflow | 多步骤流程、人工确认、状态机、回滚 |
+| 5 | 工作流 | 多步骤流程、人工确认、状态机、回滚 |
 | 6 | Agent | 受控 agent loop、最大步数、最大成本、停止条件 |
-| 7 | Evaluation | 用例集、trace、回归评测、失败分类 |
-| 8 | Productionization | tracing、replay、监控、限流、fallback |
+| 7 | 评测 | 用例集、trace、回归评测、失败分类 |
+| 8 | 生产化 | tracing、replay、监控、限流、fallback |
 
 ## 先看这些专题
 
-- [Agent Learning Path](../agent/)
-- [AI Coding](../ai-coding/)
+- [Agent 学习路径](../agent/)
+- [AI 编程](../ai-coding/)
 - [Agent 与多智能体](../project-collections/agents.md)
 - [集成与 MCP](../project-collections/integrations.md)
 - [数据工具](../project-collections/data.md)
 
 ## 第一个项目
 
-做一个 **文档 RAG API**。
+做一个 **文档 RAG 服务**。
 
 它应该包含：
 

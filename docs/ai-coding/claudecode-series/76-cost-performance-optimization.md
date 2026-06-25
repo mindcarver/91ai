@@ -24,7 +24,7 @@
 
 > 更新日期：2025/06
 
-## TL;DR
+## 一句话总结
 
 Claude Code 按 token 计费。输入便宜，输出贵，thinking token 按输出价算。省钱的优先级：选对模型 > 管好上下文 > 调 effort 级别 > 开 fast mode。一条命令看开销：`/usage`。
 
