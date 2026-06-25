@@ -1,0 +1,406 @@
+# GitHub Actions 集成深度解析：用 openai/codex-action 组织 PR Review 与自动修复
+
+## TL;DR
+
+`openai/codex-action@v1` 把 Codex 放进 GitHub Actions。官方文档说明，它通过 workflow 输入运行 Codex，并把这些输入映射到 `codex exec` 选项：可以用 `prompt` 或 `prompt-file` 提供任务，用 `codex-args` 传额外 CLI 参数，用 `model` 和 `effort` 选择配置，用 `sandbox` 约束文件系统和网络访问，用 `output-file` 保存最终消息，用 `codex-version` 固定 CLI 版本，用 `codex-home` 复用配置。
+
+它适合可重复的 PR review、发布前检查、迁移准备和低风险自动修复。不适合直接成为“无人看守的写权限 bot”。Review workflow 应偏只读，Fix workflow 应单独设计、限制触发者和修改范围。把 review 与 fix 放在同一个高权限 job 里，是事故半径扩大的常见起点。
+
+## 读者定位
+
+本文面向维护 GitHub Actions 的开发者、平台工程师、DevOps、开源项目维护者和希望把 Codex 接入 CI 的团队负责人。你应该熟悉 GitHub Actions 的 `permissions`、`secrets`、事件触发、checkout、job outputs、PR 评论和 artifact。
+
+如果你还没有把普通 CI 权限收紧，先不要急着加 Codex Action。AI 不会修复 workflow 权限过宽的问题；它会在这个权限模型里运行。
+
+## 问题：CI 中的 Codex 是非交互执行，不是本地会话
+
+本地使用 Codex 时，人可以随时中断、拒绝命令、补充上下文、回滚文件。GitHub Actions 中没有这个交互层。workflow 被事件触发，runner checkout 代码，Action 运行 Codex，最后输出文本或文件，后续步骤再决定发布评论、上传 artifact 或创建修复 PR。
+
+官方 GitHub Action 文档给出一个 PR review 示例：在 `pull_request` 的 opened、synchronize、reopened 事件上运行，先 `actions/checkout@v5` 到 PR merge ref，并设置 `persist-credentials: false`，再 pre-fetch base 和 head refs，然后运行 `openai/codex-action@v1`，使用 `prompt-file` 和 `output-file`，最后另一个 job 把 `final-message` 发回 PR。
+
+这个示例背后有几个工程原则：
+
+- Codex 需要先看到仓库，所以 checkout 是前置步骤。
+- Review job 的仓库权限应尽量只读。
+- Codex 的最终消息应作为 output 或文件保存，便于后续步骤处理。
+- 发表 PR 评论的步骤可以单独放在后续 job，并只给它需要的 `issues: write` 和 `pull-requests: write`。
+- prompt 文件应版本化，而不是把长 prompt 散落在 YAML 中。
+
+## 心智模型：Action 是 `codex exec` 的 CI 封装
+
+把 Codex Action 看成一个在 runner 中执行 `codex exec` 的封装。它接收任务，读取 checkout 后的仓库，在设定的 sandbox 和权限下运行，并输出最终消息。GitHub Actions 负责触发、权限、secrets、日志、artifact 和后续自动化。
+
+这意味着你要同时设计两套边界。
+
+第一套是 GitHub Actions 边界：谁能触发，runner 有什么权限，`GITHUB_TOKEN` 能做什么，secrets 是否可见，后续步骤能否写 PR。
+
+第二套是 Codex 边界：prompt 要求什么，sandbox 是只读还是可写，是否允许网络，是否固定 Codex 版本，是否通过 `codex-args` 使用 profile 或输出 schema。
+
+只收紧其中一套不够。`sandbox: read-only` 可以限制 Codex 改文件和用网络，但官方文档也提醒它仍在较高权限下运行，不能单独用来保护 secrets。GitHub job 权限、safety strategy、触发者限制同样要配置。
+
+## 详细机制：关键输入与 workflow 结构
+
+### `prompt` 与 `prompt-file`
+
+官方文档要求二选一。短任务可以用 inline `prompt`，团队流程建议用 `prompt-file`，放在 `.github/codex/prompts/` 这类路径。好处是 prompt 可 review、可追溯、可复用。
+
+一个 review prompt 应具体：
+
+```markdown
+只审查当前 PR diff。
+
+关注：
+- 安全回归
+- 兼容性破坏
+- 缺少关键错误处理
+- 缺少阻塞级测试
+
+忽略：
+- 主观命名偏好
+- 纯格式问题
+- 无明确影响的重构建议
+
+每条 finding 包含：
+- 文件位置
+- 问题
+- 影响
+- 建议修复
+- 严重程度
+
+如果没有阻塞问题，明确说明。
+```
+
+### `codex-args`
+
+`codex-args` 可传额外 CLI flag，官方文档说明可以用 JSON array 或 shell string，例如 `["--ephemeral"]` 或 `--profile ci`。团队可以用它选择 CI profile、启用结构化输出、指定非交互策略。不要把不受信任的 PR 内容拼进 `codex-args`。
+
+### `model` 与 `effort`
+
+这些输入用于选择 Codex agent 配置。团队可以按任务成本和风险分层：普通文档 review 用默认配置，安全 review 或复杂迁移诊断使用更高 effort。不要为了省成本让高风险任务用过低配置，也不要让所有小任务都用最高配置。
+
+### `sandbox`
+
+官方文档列出 `workspace-write`、`read-only`、`danger-full-access` 等模式。Review workflow 默认应使用 `read-only`。Fix workflow 可用 `workspace-write`，但应限制触发者、修改范围和后续提交方式。`danger-full-access` 不应作为团队默认值。
+
+### `output-file` 与 `final-message`
+
+Action 会输出最后一条 Codex 消息为 `final-message`，也可通过 `output-file` 写到文件。建议二者都规划好：`final-message` 用于 PR 评论，`output-file` 用于 artifact 或事后排查。对安全敏感仓库，输出前还应过滤 secrets、环境变量片段和过长日志。
+
+### `codex-version`
+
+默认使用最新发布版本，能拿到新修复，也会引入行为变化。对生产化 workflow，建议在稳定后固定版本，并定期升级。升级时用小范围仓库或手动触发 workflow 观察输出差异。
+
+### `codex-home`
+
+该输入可指向共享 Codex home，用于复用配置文件或 MCP 设置。它很方便，但也可能引入跨 workflow 状态。CI 里优先保持可复现，只有确实需要共享配置时再使用，并把配置内容纳入 review。
+
+## 真实工作流案例：只读 PR Review
+
+一个保守 review workflow 可以这样组织：
+
+```yaml
+name: Codex pull request review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  codex:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
+
+      - name: Pre-fetch base and head refs
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch --no-tags origin \
+            "$PR_BASE_REF" \
+            "+refs/pull/$PR_NUMBER/head"
+
+      - name: Run Codex
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/review.md
+          output-file: codex-output.md
+          sandbox: read-only
+
+  post_feedback:
+    runs-on: ubuntu-latest
+    needs: codex
+    if: needs.codex.outputs.final_message != ''
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Post Codex feedback
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: process.env.CODEX_FINAL_MESSAGE,
+            });
+        env:
+          CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
+```
+
+这个 workflow 的优点是权限分离。Codex job 只读仓库；发评论的 job 才拿写评论权限。Codex 不需要直接写 PR。它也把 prompt 放在文件里，便于团队 review。
+
+## Fix workflow：单独设计，不要复用 review job
+
+自动修复需要不同边界。它可能要写文件、创建分支、提交 commit 或开 PR。不要在 review job 里顺手加写权限。更好的做法是单独 workflow，通过受信任评论或手动 `workflow_dispatch` 触发。
+
+Fix prompt 应强调最小修复：
+
+```markdown
+处理当前 PR 中被指定的 P1 finding。
+
+限制：
+- 只修改 finding 涉及的实现和测试。
+- 不改公共 API。
+- 不添加依赖。
+- 不修改迁移脚本。
+- 不做无关格式化。
+
+验证：
+- 运行相关测试。
+- 报告无法运行的命令和原因。
+
+输出：
+- 根因
+- 改动摘要
+- 测试结果
+- 剩余风险
+```
+
+如果需要把结果推回分支，先确认触发者权限、PR 来源和 branch protection。外部 fork PR 默认不应自动 fix。
+
+## 操作清单
+
+Review workflow：
+
+- 是否使用 `pull_request` 而不是更高风险事件。
+- 是否 checkout 正确 ref。
+- 是否设置 `persist-credentials: false`。
+- Codex job 是否只有 `contents: read`。
+- 是否使用 `sandbox: read-only`。
+- prompt 是否放在 `.github/codex/prompts/` 并经过 review。
+- 是否保存 `output-file` 便于排查。
+- 发表评论是否在单独 job 中完成。
+
+Fix workflow：
+
+- 是否与 review workflow 分离。
+- 是否只允许可信用户或手动审批触发。
+- 是否使用 `workspace-write` 而不是更宽权限。
+- 是否限制修改范围。
+- 是否禁止自动合并。
+- 是否通过新 commit 或 PR 暴露结果。
+
+版本与运维：
+
+- 是否决定固定 `codex-version` 还是接受 latest 风险。
+- 是否记录 prompt 变更。
+- 是否设置 concurrency，避免同一 PR 多次运行互相覆盖。
+- 是否定期检查误报率、成本和运行时长。
+
+## 权衡与风险
+
+GitHub Action 的收益是可重复。你可以把 review 标准固化到 prompt 文件，让每个 PR 都接受同样的额外检查。你也可以把 Codex 输出接入 artifact、评论、issue 创建或内部报告。
+
+代价是 CI 安全面扩大。runner 中有 secrets、仓库内容、workflow token 和网络。Codex 处理的上下文可能来自 PR diff、issue body、commit message，这些都可能包含提示注入。任何写权限都必须谨慎。
+
+固定 `codex-version` 与使用 latest 是典型权衡。固定版本可复现，升级要主动维护；latest 能拿到新能力和修复，但输出行为可能变化。对关键仓库，固定版本更稳。
+
+`read-only` review 与可写 fix 也是权衡。只读 review 安全，但不能自动修；可写 fix 方便，但要限制触发者、输出路径和后续权限。
+
+## 常见误区
+
+误区一：没有 checkout 就运行 Action。Codex 需要仓库内容。官方示例先 checkout，再运行 Codex。
+
+误区二：把长 prompt 写进 YAML。prompt 是工程资产，应像代码一样 review 和版本管理。
+
+误区三：review 与 fix 共用高权限。review 读取代码并发表评论；fix 才需要写。分离 job 和 workflow 能减少事故半径。
+
+误区四：把 PR 内容直接拼成命令参数。PR body、commit message、diff 都是不受信任输入。不要让它们控制 `codex-args`、shell 命令或权限。
+
+误区五：认为 Codex Action 是完整 sandbox。官方文档明确需要用 safety strategy、sandbox、allow-users、allow-bots 等输入共同控制暴露面。GitHub Actions 自身权限仍然要收紧。
+
+## Workflow 设计模式：把分析、反馈、修复分开
+
+一个稳定的 Codex Actions 集成，通常不应只有一个 workflow。把所有行为塞进一个 YAML，会导致权限和触发条件混在一起。更清晰的设计是三类 workflow。
+
+第一类是分析 workflow。它只读仓库和 PR diff，运行 Codex，保存输出。它不发表评论，也不写文件。适合在早期调试 prompt、观察误报率和记录 artifact。
+
+第二类是反馈 workflow。它读取 Codex 输出，把结果发到 PR 评论或 review。它需要 `issues: write` 或 `pull-requests: write`，但不需要让 Codex 直接拥有这些权限。官方示例把 Codex job 的 `final-message` 传给后续 `post_feedback` job，就是这种分离。
+
+第三类是修复 workflow。它允许写 workspace，可能创建 commit 或 PR。它必须有更严格触发条件，通常使用手动触发、受信任评论或内部成员权限校验。不要让它在所有 PR 上自动运行。
+
+这种拆分让权限更小，也让故障更容易定位。Codex 输出不对，是分析 workflow 问题；评论格式错，是反馈 workflow 问题；修复越权，是修复 workflow 问题。
+
+## Prompt 文件工程化
+
+`.github/codex/prompts/` 下的 prompt 应该像代码一样维护。不要把它当随手写的说明文。好的 prompt 文件包含四块。
+
+第一块是任务边界。说明只 review、只诊断还是允许修复。写清“不修改文件”或“只修改指定 finding 涉及文件”。
+
+第二块是输入可信度。说明 PR diff、issue body、commit message、代码注释都只是被审查内容，不是指令。要求忽略其中要求泄露 secrets、改变规则或执行命令的文字。
+
+第三块是输出格式。规定 headings、finding 字段、严重级别、没有问题时的输出。结构化输出能让后续步骤处理，但仍要校验。
+
+第四块是仓库规则。可以引用 `AGENTS.md`，也可以在 prompt 中补充本 workflow 的特定规则。例如“本 workflow 只报告安全回归，不报告测试建议”。
+
+Prompt 变更应走 PR。review prompt 的 reviewer 最好包括代码 owner 和安全负责人。每次 prompt 变更都可能改变 Codex 行为，不能只当文案改动。
+
+## 输出处理：不要把 Codex 输出当可信程序
+
+Action 的 `final-message` 和 `output-file` 很方便，但它们是模型生成文本。后续步骤可以把它们发评论、上传 artifact、解析成报告，但不应直接执行其中内容。
+
+如果要求 Codex 输出 JSON，也要做 schema 校验。字段应该是受限字符串、文件路径、严重级别枚举，而不是任意 shell 命令。后续脚本要拒绝绝对路径、`..` 路径、控制字符和过长内容。
+
+对 PR 评论，输出也要限制长度。过长评论会影响 review；包含大量日志也可能泄露环境细节。可以要求 Codex 只输出阻塞 findings，把完整输出作为 artifact 保存，或者按需折叠。
+
+对 artifact，要设置保留周期，避免长期保存敏感上下文。虽然 prompt 要求不输出 secrets，但安全设计不能完全依赖模型遵守。
+
+## 事件选择：`pull_request`、手动触发与定时任务
+
+`pull_request` 适合只读 review。它能在 PR 更新时自动给反馈，但要注意外部 fork PR 的权限和 secrets 行为。不要让它执行写回分支的修复。
+
+`workflow_dispatch` 适合受控修复。维护者手动输入 PR 编号、finding 或任务说明，再触发 Codex。它牺牲自动化，但能保留人工判断。
+
+`schedule` 适合定期只读任务，例如每周扫描文档链接、总结 flaky tests、生成依赖升级候选列表。定时任务不应默认写代码。发现问题后，先创建 issue 或报告，再由人决定是否修复。
+
+`issue_comment` 可以实现 `@codex fix` 类触发，但必须检查评论者权限、PR 来源和触发内容。不要只靠字符串匹配。一条来自外部用户的评论不应让 workflow 获得写权限。
+
+## 成本与可靠性管理
+
+Codex Action 会消耗模型额度和 runner 时间。团队需要避免无意义重复运行。
+
+可以使用 `concurrency` 按 PR 编号取消旧运行。例如 PR 连续 push 三次，只保留最新 review。也可以跳过 draft PR、纯文档改动或自动生成分支。对大型仓库，可以只在特定路径变更时运行安全 review。
+
+运行时间过长时，要看 prompt 是否要求太多。一个 review workflow 不应该要求 Codex重构、跑全量测试、写详细教程。把任务缩小，输出会更稳定，成本也更低。
+
+如果使用 `codex-version` 固定版本，要建立升级节奏。可以每月在少数仓库测试新版本，比较输出差异，再更新主仓库。不要长期固定旧版本不维护，也不要在关键 workflow 上无计划追 latest。
+
+## 与 GitHub 原生安全功能配合
+
+Codex Action 不替代 GitHub 原生安全机制。它应配合 secret scanning、Dependabot、CodeQL、branch protection、CODEOWNERS 和 required checks。Codex 擅长阅读上下文和提出候选判断；静态工具擅长稳定重复检查。两者应互补。
+
+例如安全 review workflow 可以要求 Codex 关注 CodeQL 未覆盖的业务逻辑风险：权限绕过、错误 tenant 访问、日志泄露、迁移回滚。依赖漏洞仍交给 Dependabot 或专门扫描工具。不要让 Codex 承担所有安全职责。
+
+## 运维手册：出问题时如何处理
+
+当 Codex Action 输出异常时，先看 workflow 日志，确认 checkout、prompt-file、API key、sandbox、权限是否正确。再看 Codex 输出是否被截断或后续 job 处理失败。不要只看 PR 评论。
+
+当怀疑 secret 泄露时，立即轮换相关 key，删除公开评论或 artifact，审查 workflow 日志。随后检查 prompt 是否允许输出日志、job 是否暴露过多环境变量、后续步骤是否把输出原样发布。
+
+当 Action 误报太多时，不要关闭整个集成。先收集误报样本，把忽略项写进 prompt 或 `AGENTS.md`。如果某类问题一直被误报，考虑用规则化工具处理，或把该类反馈移出 Codex review 范围。
+
+当 Action 漏报严重问题时，补 Review guidelines，增加测试或静态检查。不要指望同一个 prompt 永远覆盖所有新风险。
+
+## 分层落地路线
+
+团队接入 Codex Action 可以分四个阶段，避免一次性引入太多权限。
+
+第一阶段是本地试跑 prompt。先在少数 PR 上手动运行 Codex 或使用只读 workflow 生成 artifact，不发表评论。目标是验证 prompt 是否能产出高信号结果。
+
+第二阶段是只读评论。Codex job 只读，后续 job 发表评论。这个阶段重点观察误报、漏报、评论长度和维护者接受度。不要同时引入自动修复。
+
+第三阶段是受控修复。使用 `workflow_dispatch` 或可信评论触发，限制触发者和路径。修复结果进入新 commit 或新 PR，由人 review。这个阶段要重点记录越权率和回滚成本。
+
+第四阶段才是部分自动化。比如内部仓库的低风险文档修复、测试补齐，可以半自动执行。但认证、计费、迁移、部署仍应保留人工审批。
+
+每个阶段都要有退出条件。如果误报率高，就回到 prompt 调整；如果运行成本高，就缩小触发范围；如果修复经常越权，就加强约束或暂停 fix workflow。
+
+## Prompt 与 AGENTS.md 的边界
+
+Action prompt 和 `AGENTS.md` 都能影响 Codex，但用途不同。`AGENTS.md` 放仓库长期规则，例如测试命令、目录约束、review 严重级别。Action prompt 放本 workflow 的任务，例如“只审查 PR diff”“只输出安全 finding”“不要改文件”。
+
+不要把所有长期规则塞进 `.github/codex/prompts/review.md`。那会让 CLI、Web、App 和 GitHub Action 看到不同规则。也不要让 Action prompt 过短，完全依赖 `AGENTS.md`。因为 workflow 任务边界，例如只读、不输出低优先级建议、输出格式，属于 Action 自身。
+
+好的分工是：`AGENTS.md` 定义仓库怎样工作，prompt 定义这次 workflow 要 Codex 做什么。
+
+## 路径过滤：降低无意义运行
+
+不是所有 PR 都需要 Codex Action。纯图片、拼写、自动生成锁文件、依赖 bot 小版本升级，可能不值得运行复杂 review。可以用路径过滤和标签控制。
+
+例如：
+
+- `docs/**` 只运行文档检查 prompt。
+- `packages/auth/**` 运行安全 review prompt。
+- `infra/**` 默认只读诊断，不允许 fix。
+- `*.md` 改动不触发代码安全 review。
+
+路径过滤不能替代 review，但能降低成本和噪声。对大型仓库，按路径选择 prompt 比一套通用 prompt 更有效。
+
+## 与人工审批结合
+
+GitHub Environments、required reviewers、manual approval 都可以用来保护高风险 workflow。Codex Action 不一定要在事件发生后立即运行。对 fix workflow，可以要求维护者审批后才拿到写权限或 secrets。
+
+这种设计牺牲速度，但能保留自动化的可审查性。尤其在外部 PR、发布分支、生产配置和安全敏感模块中，人工审批比事后回滚便宜。
+
+## 落地问答：Action 维护者常见判断
+
+问：review workflow 是否要跑测试？答：多数 review workflow 不必跑完整测试。它的职责是审查 diff 和输出 findings。测试仍由普通 CI 负责。若 prompt 要求 Codex 根据测试结果判断，就要先确保测试步骤可靠并把结果提供给它。
+
+问：`output-file` 是否要上传 artifact？答：调试阶段建议上传，生产阶段要看敏感性。若输出可能包含内部路径、日志片段或安全 finding，设置短保留周期，并限制访问。PR 评论只放摘要更稳妥。
+
+问：是否需要固定 `codex-version`？答：关键仓库建议固定。固定后要定期升级测试。小仓库或实验 workflow 可以使用默认 latest，但要接受输出变化。
+
+问：是否能把 Codex 输出直接转成 GitHub review comment？答：可以，但最好先约束格式和长度。若输出多条 finding，后续步骤应按结构拆分，而不是把不受控长文本全部贴到 PR。
+
+问：为什么要把发表评论放到另一个 job？答：这样 Codex 运行环境不需要写评论权限。即使 Codex 被误导，它也不能直接使用写权限；后续 job 只负责发布已经得到的文本，边界更清楚。
+
+## 质量评估：Action 是否真的有用
+
+上线后要定期看数据。有效 finding 有多少，误报有多少，维护者采纳多少，平均运行时长多少，是否阻塞开发，是否产生安全事件。不要只看“运行了多少次”。
+
+如果采纳率低，先调 prompt 和触发范围。若运行时长高，缩小任务。若误报集中在某类代码，补 `AGENTS.md` 或把该类排除。若有效 finding 经常重复，考虑把它转成自动测试或静态检查。
+
+Codex Action 应该让 PR 流程更清楚，而不是增加一个没人愿意读的评论来源。
+
+## 回滚与降级方案
+
+任何 CI 集成都要有关闭方式。Codex Action 也一样。若误报突然增加、API key 出现异常消耗、workflow 权限配置出错，维护者应能快速暂停对应 workflow，而不影响普通 CI。把 Codex 相关 workflow 拆成独立文件，有助于临时禁用。
+
+降级方案也要提前写好。比如从自动评论降级为只上传 artifact，从可写 fix 降级为只读建议，从全量 PR 触发降级为手动触发。这样发生问题时，不必在压力下重新设计流程。
+
+回滚 prompt 变更同样重要。prompt 文件改坏后，Codex 输出会立刻变差。建议 prompt 修改独立提交，便于快速 revert。对关键仓库，可以保留上一版稳定 prompt，并在升级后观察一段时间。
+
+## 维护成本的真实来源
+
+Codex Action 的维护成本主要不在 YAML，而在规则迭代。仓库结构变了，prompt 要改；测试命令变了，`AGENTS.md` 要改；安全边界变了，workflow 权限要改；团队对误报的容忍度变了，输出格式也要改。
+
+如果没有 owner，Action 会逐渐失效。建议指定一个小组负责 prompt、workflow、安全输入和效果数据。它不需要每天维护，但要有人在问题出现时能判断是 prompt、权限、环境还是任务类型出了问题。
+
+维护还包括删除不用的能力。某个 fix workflow 长期无人使用，就应关闭或改成手动。某个 prompt 长期产生低价值评论，就应重写或移除。保留无效自动化，会消耗 runner、模型额度和 reviewer 注意力。
+
+对团队来说，最好的 Action 集成应当安静。只有在确实发现阻塞风险、需要明确人工决策、或产出可审查修复时，它才打断开发者。若它每天制造大量低价值评论，说明自动化边界需要重新设计。
+
+安静而准确，比频繁而嘈杂更适合长期维护。
+
+这也是自动化治理的底线。
+
+维护者应定期清理旧规则。
+
+## 延伸阅读
+
+- [Codex GitHub Action](https://developers.openai.com/codex/github-action)
+- [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
+- [Codex GitHub Integration](https://developers.openai.com/codex/integrations/github)
+- [GitHub Actions permissions](https://docs.github.com/actions/security-for-github-actions/security-guides/automatic-token-authentication)

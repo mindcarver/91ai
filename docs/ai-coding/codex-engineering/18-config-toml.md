@@ -1,0 +1,262 @@
+# config.toml 深度解析：把 Codex 默认行为写成可审计的工程契约
+
+## TL;DR
+
+`config.toml` 不是偏好设置文件，而是 Codex 本地客户端的行为契约。它决定默认模型、审批策略、沙箱边界、web search 模式、环境变量转发、日志、hooks、MCP、权限 profiles 等。官方文档给出的优先级是：CLI flags 和 `--config` 覆盖最高，其次是受信任项目里的 `.codex/config.toml`，再是 `--profile` 选中的 profile 文件，然后是用户级 `~/.codex/config.toml`、系统级配置和内置默认值。团队使用 Codex 时，应把用户级配置用于个人默认，把项目配置用于仓库约定，把 profile 用于场景切换，把 managed requirements 用于组织约束。
+
+## 读者定位
+
+本文面向已经在本地、IDE 或 CLI 中使用 Codex 的中高级开发者，也面向负责落地团队规范的技术负责人。你需要理解 TOML、shell 权限、配置分层和开发工作流。本文不覆盖所有配置键，而是解释哪些键会改变工程风险，怎样组织配置层，怎样避免把一次性便利配置变成长期隐患。
+
+## 问题：默认值会悄悄变成团队制度
+
+很多团队第一次使用 Codex 时只关注“能不能跑起来”。模型、审批、沙箱、web search、hooks 都沿用默认值。等到 Codex 进入日常开发，默认值就会变成事实制度：谁能改文件，能不能联网，是否能自动跑命令，是否记录日志，是否加载项目规则，是否允许 hooks 执行。没有显式配置，团队就很难解释一次 agent 行为为什么发生。
+
+配置混乱还会造成调试成本。一个开发者通过 CLI flag 开了 `--sandbox danger-full-access`，另一个在项目 `.codex/config.toml` 里设置了 `sandbox_mode = "workspace-write"`，第三个人用 profile 覆盖了模型和审批策略。三个人看到的 Codex 行为不同，任务复现就会失败。技术负责人需要把“本地随手改配置”提升为“分层、可审计、可解释的配置体系”。
+
+官方 config basics 文档明确说明，Codex 会从多个位置读取配置；项目 `.codex/` 层只有在信任项目时才会加载；CLI 和 IDE 扩展共享配置层；组织管理环境还能通过 `requirements.toml` 强制约束，例如不允许 `approval_policy = "never"` 或 `sandbox_mode = "danger-full-access"`。这说明配置不是个人小工具细节，而是安全边界的一部分。
+
+## 心智模型：三类配置，四个问题
+
+可以把 Codex 配置拆成三类：
+
+```text
+身份与模型：model、model_provider、reasoning、verbosity
+执行边界：approval_policy、sandbox_mode、default_permissions、web_search、shell_environment_policy
+扩展与治理：hooks、rules、MCP、apps、logs、managed requirements
+```
+
+每次修改配置前，先回答四个问题：
+
+1. 这个配置是个人偏好、仓库约定，还是组织强制策略？
+2. 它会不会改变文件系统、网络、审批或凭据暴露边界？
+3. 它应该被所有任务继承，还是只属于某个 profile？
+4. 出问题时，团队能不能从配置层级和命令行覆盖中复现当时行为？
+
+这个模型能避免两类常见失败。第一，把高风险配置写进用户默认值，例如长期使用 `danger-full-access`。第二，把临时任务配置写进项目文件，例如为了某次依赖安装永久开启网络。配置应该体现稳定约定，临时例外应该用 CLI flag、单独 profile 或审批请求表达。
+
+## 详细机制：配置层级怎样生效
+
+### 配置读取位置和优先级
+
+官方文档给出的优先级从高到低是：
+
+1. CLI flags 和 `--config` 覆盖。
+2. 受信任项目中的 `.codex/config.toml`，从项目根到当前目录，越靠近当前目录优先级越高。
+3. 通过 `--profile profile-name` 选中的 `$CODEX_HOME/profile-name.config.toml`。
+4. 用户级 `~/.codex/config.toml`。
+5. Unix 上的系统级 `/etc/codex/config.toml`。
+6. 内置默认值。
+
+这套顺序有两个工程含义。第一，命令行覆盖适合一次性实验，但不适合作为团队约定。第二，项目配置不是自动可信的；如果项目被标记为 untrusted，Codex 会跳过项目 `.codex/` 层，包括项目配置、hooks 和 rules。团队不能把安全策略只写在项目层，然后假设所有机器都会加载。
+
+### 常见基础键
+
+一个保守的用户级默认配置可以像这样：
+
+```toml
+model = "gpt-5.5"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[shell_environment_policy]
+include_only = ["PATH", "HOME", "USER", "TMPDIR"]
+
+[features]
+hooks = true
+shell_tool = true
+shell_snapshot = true
+```
+
+这里的重点不是某个模型名，而是边界。`approval_policy = "on-request"` 表示 Codex 在沙箱内工作，越界时请求批准。`sandbox_mode = "workspace-write"` 允许在工作区内完成常规开发。`web_search = "cached"` 使用 OpenAI 维护的 web search cache；官方文档说明 `--search` 会把 web search 设为 live。`shell_environment_policy` 限制转发给派生命令的环境变量，减少密钥被命令读取的机会。
+
+### `sandbox_mode` 和 permission profiles 不要混写
+
+新版 Codex 支持 beta permission profiles。官方 permissions 文档说得很清楚：permission profiles 不和旧 sandbox settings 组合使用。要么配置 `default_permissions` 和 `[permissions]`，要么配置 `sandbox_mode` / `sandbox_workspace_write`，不要两套都写。如果任何已加载配置文件里出现 `sandbox_mode`，或者命令行传了 `--sandbox`，Codex 会使用旧沙箱设置，而不是 `default_permissions`。
+
+这点很容易踩坑。下面是旧沙箱风格：
+
+```toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+```
+
+下面是 permission profile 风格：
+
+```toml
+approval_policy = "on-request"
+default_permissions = "project-edit"
+
+[permissions.project-edit.filesystem]
+":minimal" = "read"
+
+[permissions.project-edit.filesystem.":workspace_roots"]
+"." = "write"
+"**/*.env" = "deny"
+
+[permissions.project-edit.network]
+enabled = false
+```
+
+这两种不要放在同一套默认配置中。团队如果要迁移到 profiles，应先清理旧键，明确客户端版本，再通过管理配置限制可选 profile。混写会让读者误以为文件系统和网络规则同时生效，实际行为可能完全不同。
+
+### web search 配置不是网络权限
+
+官方 config basics 文档说明，本地任务的 web search 默认启用并使用 cached 结果；`web_search = "live"` 或 CLI `--search` 会获取最新数据；`web_search = "disabled"` 关闭 web search 工具。这个配置控制的是模型查资料的能力，不等同于 shell 命令联网权限。shell 的网络边界由沙箱或 permission profile 控制。
+
+这一区分很重要。一个任务可以允许 Codex 用 cached web search 查官方文档，同时禁止本地 shell 访问网络。反过来，也可能允许命令访问包仓库安装依赖，但禁止模型读取任意网页。对安全敏感项目，建议把文档查询和命令联网分别审批，不要用“能不能上网”一刀切描述。
+
+### 环境变量和日志配置
+
+`shell_environment_policy` 控制 Codex 转发哪些环境变量给派生命令。对企业开发环境，这个配置比很多人想象得更关键，因为本地 shell 往往带着云凭据、包仓库 token、数据库地址和私有代理配置。默认允许太多变量，会让普通测试命令也具备访问外部系统的能力。
+
+`log_dir` 可以改变本地日志目录。官方文档提到，显式设置 `log_dir` 也会启用 opt-in plaintext TUI log。团队需要明确日志目录是否会被备份、是否包含提示词、是否可能记录私有代码片段。日志对排障有用，但它也是数据面的一部分。
+
+## 真实工作流案例：为团队建立三层配置
+
+假设一个 40 人团队要在前端 monorepo 推广 Codex。可以用三层策略。
+
+第一层是组织约束，管理员通过 managed requirements 禁止最危险组合，例如不允许 `approval_policy = "never"` 和 `sandbox_mode = "danger-full-access"` 作为普通默认值。这样个人配置再怎么改，也不能突破组织底线。
+
+第二层是用户级默认，写在 `~/.codex/config.toml`。目标是日常工作低摩擦但有边界：
+
+```toml
+model = "gpt-5.5"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[shell_environment_policy]
+include_only = ["PATH", "HOME", "USER", "TMPDIR", "TEMP"]
+
+[features]
+hooks = true
+shell_snapshot = true
+```
+
+第三层是项目约定，写在仓库 `.codex/config.toml`。它不负责放宽权限，而负责告诉 Codex 本仓库的工作方式，例如默认说明文件、项目 hooks 或局部模型设置。项目层只有在仓库受信任时加载，所以它适合表达仓库习惯，不适合表达组织安全底线。
+
+如果有特定任务需要更严格或更宽的边界，用 profile：
+
+```toml
+# ~/.codex/audit.config.toml
+approval_policy = "on-request"
+sandbox_mode = "read-only"
+web_search = "disabled"
+```
+
+运行时：
+
+```sh
+codex --profile audit
+```
+
+这个 profile 适合只读审计和代码解释。需要安装依赖或跑生成命令时，不要修改 audit profile，而是切换到另一个受控 profile 或在单次任务里请求审批。
+
+## 操作清单：审查 `config.toml` 时看什么
+
+- 是否能解释每个配置层的职责：系统层管底线，用户层管个人默认，项目层管仓库约定，profile 管场景切换。
+- 是否存在高风险默认值：`approval_policy = "never"`、`sandbox_mode = "danger-full-access"`、`web_search = "live"` 长期开启、过宽环境变量转发。
+- 是否混写了 `sandbox_mode` 和 `default_permissions` / `[permissions]`。
+- 是否把临时网络需求写成长期默认配置。
+- 是否明确 `web_search` 与 shell 网络权限是两件事。
+- 是否限制了派生命令可见的环境变量。
+- 是否知道项目 `.codex/` 只有在受信任时加载。
+- 是否有 profile 用于只读审计、日常编辑、高风险维护等不同场景。
+- 是否记录了团队推荐启动命令，例如 `codex --profile audit` 或 `codex --sandbox workspace-write --ask-for-approval on-request`。
+- 是否有文档说明哪些配置由组织管理，开发者不应绕过。
+
+## 权衡与风险
+
+配置越集中，团队越容易治理，但个人场景的弹性会降低。配置越自由，个人效率更高，但排障和审计成本会上升。比较稳的做法是把安全底线集中管理，把日常偏好留给用户，把任务差异放进 profile，而不是在一个巨大 `config.toml` 里塞满所有情况。
+
+另一个权衡是新旧配置迁移。旧 `sandbox_mode` 简单直观，permission profiles 更细，可以描述文件系统和网络规则，但仍处于 beta，官方说明可能变化。团队可以先在少数仓库试点 profiles，再推广。推广前要确认所有开发者的 Codex 客户端版本，并准备回退策略。
+
+web search 也有取舍。cached 模式减少直接接触任意实时网页的风险，但资料可能不够新；live 模式更新，但暴露给 prompt injection 的机会更多。对工具能力、价格、安全行为这类高时效信息，最好要求 Codex 查官方来源并列出链接；对内部代码和私有错误，不要把片段放进搜索查询。
+
+## 常见误区
+
+误区一：把 `config.toml` 当成个人偏好文件。它会改变命令执行边界，是安全配置的一部分。
+
+误区二：认为项目配置一定会加载。未信任项目会跳过项目 `.codex/` 层，用户和系统配置仍会加载。
+
+误区三：混用 `sandbox_mode` 和 permission profiles。官方文档明确不建议组合，两者应择一。
+
+误区四：把 `web_search = "disabled"` 理解成 shell 不能联网。web search 和命令网络权限是不同控制面。
+
+误区五：把 `--config` 覆盖写进团队教程却不记录原因。命令行覆盖优先级最高，适合一次性任务；长期使用应该进入 profile 或正式配置。
+
+误区六：环境变量默认全给。很多安全事故不是 Codex 主动读密钥，而是被派生命令、脚本或测试框架读到了过宽环境。
+
+## 团队落地：配置评审不是一次性动作
+
+`config.toml` 最容易出现的治理问题是“先能用，再也没人看”。一开始大家为了完成任务快速添加配置，几周后默认权限、profile、hooks、MCP 和环境变量策略已经变成一团。配置评审应和代码评审一样，有固定关注点和周期。每次升级 Codex 客户端、引入新 profile、调整网络权限、启用 hooks 或接入 MCP，都应该重新审查配置层级。
+
+评审第一项是来源。这个配置来自系统层、用户层、项目层还是 CLI 覆盖？如果一个行为只能通过某个人的用户配置复现，它就不是团队流程。项目约定应写进项目 `.codex/config.toml` 或 `AGENTS.md`，组织底线应写进 managed requirements 或系统配置，个人偏好才留在用户级。来源不清楚时，排障会变成“你机器上怎么配的”。
+
+评审第二项是边界。任何涉及 `approval_policy`、`sandbox_mode`、`default_permissions`、`web_search`、`shell_environment_policy`、`hooks`、`mcp_servers` 的改动，都应被视为行为边界变更。它们不只是影响体验，也会影响数据外泄、文件写入、网络访问和远端副作用。普通文档改动不需要安全负责人，但边界配置改动需要有人明确看过。
+
+评审第三项是过期配置。Codex 官方文档仍在演进，旧键、新 beta 能力、permission profiles、hooks 和 rules 的行为都可能更新。配置文件里如果保留了已废弃写法或混合写法，团队成员会误学。建议在配置旁写短注释：为什么使用这一层、为什么不使用另一套机制、最后核对日期。注释不要解释 TOML 语法，而要解释工程决策。
+
+## Profile 设计的层次感
+
+很多团队会把 profile 当成“临时开关集合”，最后得到十几个名字相似的文件：`dev`、`dev2`、`dev-net`、`dev-full`、`test-new`。这比没有 profile 还难维护。更好的办法是按风险层级命名，而不是按当时任务命名。
+
+第一层是只读类，例如 `audit`、`explain`、`review`。它们默认关闭写入和网络，适合解释代码、审查 PR、阅读日志摘要。第二层是工作区编辑类，例如 `dev`。它们允许写当前仓库，越界请求审批。第三层是维护类，例如 `deps`、`migration-dry-run`。它们可能允许包仓库或特定工具，但要更严格限制凭据和远端写入。第四层是隔离自动化类，只在临时 runner 使用，不能在开发者主机上作为默认值。
+
+每个 profile 应该有一句用途说明、允许的典型命令、禁止的动作和推荐退出检查。比如 `deps` profile 允许查询包版本、修改 lockfile、跑测试；禁止发布包、推送分支、改生产配置。这样开发者看到 profile 名称时，不只是知道配置值，还知道使用场景。
+
+## 环境变量策略的现实细节
+
+很多本地开发环境把大量凭据放在 shell 环境里：云账号、GitHub token、包仓库 token、数据库 URL、代理地址、内部 API key。Codex 派生命令继承过宽环境后，即使模型没有主动读取，脚本也可能读取。例如测试框架自动加载 `DATABASE_URL`，包管理器读取 npm token，云 SDK 读取默认 profile，浏览器自动化读取代理设置。
+
+因此，`shell_environment_policy` 不应等出事后才配置。日常默认可以只传 PATH、HOME、USER、TMPDIR、TEMP 这些运行命令必要变量，再按项目添加明确需要的工具变量。需要访问私有包仓库时，优先使用临时凭据或本地代理，而不是把所有密钥传给 Codex 命令环境。
+
+还要区分“命令需要环境变量”和“模型需要看到环境变量”。前者可以通过受限环境运行，后者通常不成立。Codex 不应该打印完整环境变量来诊断问题。若必须确认某个变量是否存在，可以让命令只输出布尔值或变量名，不输出值。对 token 类变量，输出前几位也没有必要，因为日志会长期存在。
+
+## 配置漂移排查方法
+
+当团队成员报告“同一个任务在我这里行为不一样”时，可以按顺序排查。先看启动命令有没有 CLI flags，尤其是 `--sandbox`、`--ask-for-approval`、`--profile`、`--search` 和 `--config`。再看当前目录是否处在受信任项目中，项目 `.codex/config.toml` 是否加载。接着看 profile 文件和用户级配置。最后看系统层和 managed requirements。
+
+排查时不要让 Codex 直接打印所有配置和环境。应先读取相关配置文件的非敏感片段，必要时让开发者人工确认用户级配置。对团队共享问题，最好把最小复现命令写成不依赖个人用户配置的形式，例如明确传 `--profile audit` 或在项目文档中列出推荐命令。
+
+配置漂移本质上是工程组织问题。Codex 只是把它暴露得更明显。团队越依赖 agent 自动执行，越需要知道“默认行为从哪里来”。一个可审计的配置体系，会让新人更容易上手，也会让安全例外更少扩散。
+
+## 配置基线：给团队一个可复制起点
+
+团队推广 Codex 时，最好先给出一个基线，而不是让每个人从网上复制片段。基线不需要复杂，重点是表达默认安全态度：工作区内可编辑，越界要审批，web search 使用 cached，环境变量最小转发，hooks 默认只做轻量检查，危险模式不写进常用命令。这个基线应放在内部文档中，说明哪些配置可以个人调整，哪些不能改。
+
+基线还应区分“推荐值”和“强制值”。推荐值可以让开发者按项目调整，例如模型、verbosity、profile 名称。强制值涉及安全底线，例如不允许长期 `danger-full-access`，不允许默认 `approval_policy = "never"`，不允许把生产凭据转发给派生命令。强制值最好通过 managed requirements 或系统配置表达，而不是只写在文档里。
+
+对项目配置，基线应保守。项目 `.codex/config.toml` 会随仓库传播，里面不应包含个人路径、个人 token、临时网络例外和本机工具位置。项目层适合写仓库通用 hooks、局部说明和推荐 profile 名称。个人路径应留在用户层，组织底线应留在系统层。分层清楚后，仓库复制、开源和外包协作都更安全。
+
+配置基线还要配套诊断命令。比如让开发者知道如何查看当前 profile、如何确认项目是否受信任、如何判断 web search 模式、如何解释沙箱错误。没有诊断手册，配置再漂亮也会在第一轮故障时被绕过。团队应鼓励先诊断，再放宽，而不是直接改成 full access。
+
+## 变更记录：配置为什么变
+
+每次配置变更都应有理由。新增网络域名是因为哪个任务？开启 hook 是为了防止哪类错误？调整环境变量策略是为了兼容哪个工具？如果理由写不清，配置很可能只是临时绕路。变更记录可以很短，但要可追踪。
+
+配置理由还要有失效条件。比如“允许 registry.npmjs.org 用于依赖升级 profile”，失效条件是项目改用内部镜像源；“开启 Markdown hook 防止标题跳级”，失效条件是迁移到新的文档 lint 工具。写清失效条件，后续审计才能删除旧配置。否则配置文件只会越来越宽。
+
+对安全相关配置，变更记录应包含官方来源链接或内部安全决策编号。Codex 官方文档变化较快，几年后读者需要知道当时为什么这么写。没有来源的配置容易变成传统，传统最难审计。
+
+## 最低通过标准：配置要能被复现
+
+一个合格的 Codex 配置体系，至少要让另一个开发者复现同样行为。复现不只是拿到同一个仓库，还要知道启动命令、profile、项目是否受信任、用户配置是否参与、系统策略是否覆盖、当前 web search 模式和沙箱边界。如果这些信息只能靠口头询问，就说明配置还没有工程化。
+
+复现标准可以写成任务模板。开始任务时，记录使用的 profile 和关键边界；遇到权限失败时，记录失败命令和当前沙箱；结束任务时，记录是否使用过 CLI 覆盖。这样下一次同类任务不需要重新猜。配置的价值不是让某个人跑通，而是让团队能在相同边界下重复完成工作。
+
+配置审查还应关注“静默放宽”。比如为了临时修复，把 `web_search` 从 cached 改成 live，把网络从 false 改成 true，把环境变量白名单扩大，却没有改回。静默放宽最危险，因为它不会在下一次任务中提醒任何人。团队可以定期比对基线配置，发现偏离后要求说明。
+
+还有一个实用要求：任何配置例外都要有恢复路径。临时打开网络，要写明何时关闭；临时提高审批自治度，要写明任务结束后回到哪个 profile；临时转发环境变量，要写明变量用途和删除时间。没有恢复路径的例外会慢慢变成默认值。配置治理的核心不是禁止变化，而是让每次变化都有边界、有理由、有回收点。
+
+如果只能记住一条原则，就是不要让临时便利进入默认配置。默认配置服务的是每天重复发生的安全工作流，例外配置服务的是一次具体任务。两者混在一起，团队会逐渐失去对 Codex 行为的共同预期。
+
+## 延伸阅读
+
+- [Codex config basics](https://developers.openai.com/codex/config-basic)
+- [Codex configuration reference](https://developers.openai.com/codex/config-reference)
+- [Codex permissions](https://developers.openai.com/codex/permissions)
+- [Codex CLI reference](https://developers.openai.com/codex/cli/reference)
+- [Codex sandboxing](https://developers.openai.com/codex/concepts/sandboxing)

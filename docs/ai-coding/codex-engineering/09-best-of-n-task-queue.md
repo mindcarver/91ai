@@ -1,0 +1,352 @@
+# Best-of-N 与任务队列：把 Codex 从单次对话变成可比较的工程产线
+
+## TL;DR
+
+Best-of-N 不是“多点几次生成”。工程上可用的 Best-of-N 要满足四个条件：同一输入、同一基线、同一隔离环境、同一验证标准。Codex Cloud 官方支持通过 `--attempts` 请求 1 到 4 次候选尝试；本地也可以用分支或 worktree 手工组织多候选。任务队列则解决另一类问题：把大量小任务拆成可记录、可重试、可跳过、可审查的单元。两者结合后，Codex 不再只是一次性助手，而是能进入研发流程的候选方案生成器和批处理执行器。
+
+## 读者定位
+
+这篇适合维护中大型仓库的技术负责人、平台工程师、研发效能团队，以及正在把 Codex 接入批量修复、PR 审查、文档同步、依赖升级和迁移工作的开发者。你需要熟悉 Git 分支、worktree、CI、issue 管理和基本脚本化流程。本文不会建议你把所有任务并行扔给模型；重点是怎样让并行和批量工作可控。
+
+## 问题：单次结果不稳定，批量任务又容易失控
+
+Codex 的单次执行有随机性，也有上下文敏感性。同一个 bug，它可能第一次做最小修复，第二次补了测试，第三次发现根因在调用方。对低风险小任务，这种波动可以接受；对关键路径改动，只拿一次结果直接合并，风险偏高。Best-of-N 的价值在于用多个候选暴露方案空间，再用统一标准筛选，而不是迷信第一次输出。
+
+批量任务的问题相反。你可能有 40 个 lint 修复、20 个文档链接更新、12 个小型测试补齐、8 个弃用 API 替换。逐个打开交互式 Codex 会浪费大量启动和沟通成本；把所有任务塞进一个长会话，又会让上下文混乱，前一个任务留下的文件状态影响后一个任务。任务队列的目的，是把这些小任务拆成可独立执行的卡片，每张卡片有范围、约束、验证命令和失败处理。
+
+Best-of-N 和任务队列都在处理一个核心矛盾：Codex 的能力来自探索，但工程交付需要可比较、可复现、可审查。没有隔离的多候选只是混乱；没有状态记录的批量处理只是放大错误。
+
+## 心智模型：候选方案池与可消费队列
+
+Best-of-N 像让几名工程师从同一张 issue 卡出发，各自在独立分支里实现，然后用同一套检查选一个。关键是“同一”。同一 commit、同一 prompt、同一允许修改范围、同一验证命令、同一评分标准。只要其中一个变量变了，比较就不干净。
+
+任务队列像一块看板。每个任务不是一句话，而是一张工程卡：
+
+```text
+Title: 修复 users API 分页边界
+Base: main@abc1234
+Scope: src/api/users.ts, src/api/users.test.ts
+Constraints: 不改变公开响应结构
+Verify: pnpm test -- users && pnpm typecheck
+Failure: 同一命令失败两轮后标记 blocked
+Output: diff 摘要、命令结果、剩余风险
+```
+
+Best-of-N 关注“同一任务生成多个候选”，任务队列关注“多个任务稳定消费”。两者可以组合，但不要混用概念。一个队列任务可以配置 Best-of-3；一个批量队列也可以只跑单候选。关键是先定义任务粒度，再决定是否多候选。
+
+## 官方能力边界与工程实践边界
+
+截至 2026-06-22，官方 Codex CLI reference 中，`codex cloud` 属于实验性命令，可从终端浏览或提交 Codex Cloud 任务；`codex cloud exec` 支持 `--attempts`，取值 1 到 4，用于请求 Codex Cloud 运行多个 assistant attempts，也就是官方层面的 Best-of-N。`codex apply` 是稳定命令，用来把 Codex Cloud 任务生成的最新 diff 应用到本地工作区。
+
+本地 CLI 没有一个通用的 `best-of-n` 顶层命令。你可以用脚本、分支、worktree、`codex exec` 和统一验证命令自己组织候选。这里要写清楚：本地 Best-of-N 是工程工作流，不是官方单一命令。官方支持的相关能力包括非交互执行、会话恢复、fork、worktree、Cloud attempts、JSONL 输出、沙箱和审批控制。
+
+任务队列同样不是 Codex CLI 的一个固定命令。你可以用 GitHub Issues、Linear、Markdown 文件、CSV、CI matrix 或内部平台承载任务。Codex 负责消费任务描述并执行；队列系统负责调度、状态、重试、隔离和审计。不要把“任务队列”说成 Codex 原生队列，除非你指的是具体表面，例如 Codex App 的并行线程或 Cloud 任务列表。
+
+## 详细机制：怎样做一个可比较的 Best-of-N
+
+第一步，冻结基线。多候选必须从同一个 commit 出发。最稳的方式是为每个候选创建 worktree：
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only
+
+git worktree add .worktrees/pagination-a -b codex/pagination-a
+git worktree add .worktrees/pagination-b -b codex/pagination-b
+git worktree add .worktrees/pagination-c -b codex/pagination-c
+```
+
+第二步，冻结 prompt。不要让第一轮失败后悄悄改 prompt，再把第二轮拿来比较。可以把任务写进文件：
+
+```markdown
+# task-pagination.md
+
+Fix the pagination boundary bug in `src/api/users.ts`.
+
+Constraints:
+- Do not change public response shape.
+- Add or update focused tests.
+- Do not modify unrelated modules.
+
+Verify:
+- pnpm test -- users
+- pnpm typecheck
+
+Report:
+- changed files
+- verification result
+- remaining risks
+```
+
+第三步，分别执行：
+
+```bash
+(cd .worktrees/pagination-a && codex exec --sandbox workspace-write "$(Get-Content -Raw ..\task-pagination.md)")
+(cd .worktrees/pagination-b && codex exec --sandbox workspace-write "$(Get-Content -Raw ..\task-pagination.md)")
+(cd .worktrees/pagination-c && codex exec --sandbox workspace-write "$(Get-Content -Raw ..\task-pagination.md)")
+```
+
+上面的 PowerShell 示例只是表达思路，实际脚本要按团队 shell 环境调整。重点是每个候选的工作区隔离。
+
+第四步，统一筛选。不要只看 Codex 自己的总结。至少重新跑一次机器检查：
+
+```bash
+git -C .worktrees/pagination-a diff --stat
+git -C .worktrees/pagination-b diff --stat
+git -C .worktrees/pagination-c diff --stat
+
+pnpm --dir .worktrees/pagination-a test -- users
+pnpm --dir .worktrees/pagination-b test -- users
+pnpm --dir .worktrees/pagination-c test -- users
+```
+
+第五步，人工审查排名。建议评分顺序是：验证通过、改动范围小、测试覆盖清楚、不削弱类型和规则、不引入新依赖、符合现有代码风格、解释能对上 diff。Best-of-N 的目标不是自动合并最高分，而是把 reviewer 的注意力集中到最可能合格的候选。
+
+## 详细机制：怎样设计任务队列
+
+一个可消费的 Codex 队列项至少需要七个字段：
+
+```yaml
+id: lint-utils-001
+title: Fix ESLint errors in date utils
+base: origin/main
+scope:
+  - src/utils/date.ts
+  - src/utils/date.test.ts
+forbidden:
+  - package.json
+  - pnpm-lock.yaml
+verify:
+  - pnpm lint -- src/utils/date.ts
+  - pnpm test -- date
+retry: 2
+done_when:
+  - no lint errors in scoped files
+  - related tests pass
+```
+
+字段越少，批量执行时越容易跑偏。`scope` 限制改动边界；`forbidden` 防止 Codex 顺手改配置；`verify` 给出完成证据；`retry` 决定什么时候停止；`done_when` 让自然语言目标和命令结果对齐。
+
+队列粒度要小。一个好任务通常改 1 到 3 个文件，能在 10 到 20 分钟内验证。下面这种任务不适合直接进队列：
+
+```text
+重构整个支付模块，提高可维护性。
+```
+
+更合适的拆法是：
+
+```text
+1. 梳理支付模块公开入口，输出调用图，不改代码。
+2. 为 retry policy 添加缺失测试，只改测试文件。
+3. 抽取 retry policy，不改外部 API。
+4. 替换两个调用点，跑支付相关测试。
+```
+
+批量执行时，状态比速度更重要。每个任务都要能进入 `pending`、`running`、`passed`、`failed`、`blocked`、`needs-review`。不要把失败任务自动塞回队尾无限重试。失败原因要分类：需求不清、环境缺失、验证命令失败、冲突、超出范围、Codex 输出不可用。
+
+## 真实工作流案例：30 个文档链接修复
+
+假设仓库有 30 个内部链接失效。你可以先用脚本生成队列：
+
+```markdown
+# codex-doc-link-queue.md
+
+- [ ] docs-link-001
+  - Scope: docs/setup.md
+  - Goal: fix broken relative links reported by `./scripts/check.sh links`
+  - Verify: ./scripts/check.sh links
+  - Forbidden: do not rewrite unrelated paragraphs
+
+- [ ] docs-link-002
+  - Scope: docs/api/auth.md
+  - Goal: fix broken relative links reported by `./scripts/check.sh links`
+  - Verify: ./scripts/check.sh links
+  - Forbidden: do not introduce external links unless the target is official documentation
+```
+
+再让 Codex 一次只处理一个任务：
+
+```bash
+codex exec --sandbox workspace-write \
+  "Process only docs-link-001 from codex-doc-link-queue.md. Modify only listed scope. Run ./scripts/check.sh links. Report result."
+```
+
+如果想并行，可以按文件不重叠分组，每组一个 worktree。不要让多个 Codex 实例同时改同一个 Markdown 文件；即使 Git 能合并，语义也会互相覆盖。
+
+## 操作清单
+
+- Best-of-N 前先固定 base commit。
+- 每个候选使用独立分支或 worktree。
+- 多候选使用同一个 prompt 文件和同一套验证命令。
+- 候选评估先看机器检查，再看人工 diff。
+- `codex cloud exec --attempts` 适合 Cloud 环境里的候选尝试，本地多候选要自己组织隔离。
+- 队列任务必须写清范围、禁止项、验证命令和失败处理。
+- 队列任务要小到可以独立审查。
+- 失败任务要记录失败原因，不要无限重试。
+- 多任务并行前先检查文件重叠和依赖顺序。
+- 合并时只接受一个候选方案，其余 worktree 清理或保留为参考，不要混合拼接。
+
+## 权衡与风险
+
+Best-of-N 的成本接近 N 倍。N=2 或 N=3 对复杂 bug、关键重构、安全修复有价值；N=5 以上通常只适合高价值、高风险且评分标准很清楚的任务。候选越多，review 成本越高，方案之间的差异也越难解释。
+
+任务队列会放大规则错误。如果 `AGENTS.md` 里的验证命令写错，几十个任务都会按错规则执行。如果 prompt 模板允许改锁文件，批量任务可能生成大量无关 diff。因此队列上线前应先跑 3 到 5 个样本，人工看输出，再扩大。
+
+并行写代码有合并成本。Codex App 和 Git worktree 能帮助隔离并行线程，但不能消除业务冲突。两个任务都改 `src/auth/session.ts`，即使用不同 worktree，也要有人决定最终语义。
+
+Best-of-N 还可能制造选择幻觉。三个候选都通过测试，不代表三个都好；也可能三个都错，只是测试没有覆盖。评分表只能辅助审查，不能替代设计判断。
+
+## 常见误区
+
+误区一：把“多跑几次”当 Best-of-N。没有同一基线、同一验证和候选隔离，只是连续试错。
+
+误区二：让 Codex 自己决定哪个候选最好。Codex 可以总结差异，但最终选择应由统一测试和人工 review 决定。
+
+误区三：队列任务太大。大任务会让 Codex 频繁越界，失败后也难复用中间成果。
+
+误区四：并行任务共享工作区。共享工作区会污染 diff，失败时无法判断哪个任务改了什么。
+
+误区五：只保存最终文件，不保存任务来源。几天后出问题时，你需要知道 base commit、任务描述、候选编号、验证结果和 reviewer。
+
+## 队列治理：不要让吞吐量掩盖质量
+
+任务队列一旦跑起来，最容易被误用成“更多任务同时丢给 Codex”。这会把短期吞吐做高，也会把 review、冲突和失败调查推到后面。团队需要给队列设几条硬规则。
+
+第一，队列要有进入标准。一个任务只有在目标明确、范围明确、验证命令明确、失败处理明确时才能进入自动消费。需求讨论、架构方向、跨团队协调、线上事故判断不应直接进入执行队列；它们应先进入只读分析队列，产出方案或问题清单。
+
+第二，队列要有容量限制。并行数不是越高越好。一个中型仓库如果同时开十几个写任务，reviewer 会被 diff 淹没，CI 也会被重复构建占满。更实用的做法是限制每个子系统同时只有一到两个写任务，读任务可以多一些。队列调度应该看文件重叠、模块依赖和 reviewer 容量，而不是只看机器空闲。
+
+第三，队列要有失败分类。所有失败都重试是很差的策略。可以分成：
+
+| 失败类型 | 处理方式 |
+|---|---|
+| 验证命令临时失败 | 重试一次并记录日志 |
+| 依赖缺失或环境不可用 | 标记 blocked，交给平台或仓库维护者 |
+| 需求不清 | 标记 needs-clarification |
+| 冲突或基线过旧 | rebase 或重新生成任务 |
+| Codex 越界修改 | 丢弃候选，收紧 prompt 或 `AGENTS.md` |
+| 测试覆盖不足 | 转成补测试任务，不直接合并 |
+
+第四，队列要有审查预算。每个任务完成后都要消耗 reviewer 时间。一个队列如果每天产出 30 个 PR，但团队只能认真看 8 个，剩下 22 个会变成堆积风险。Codex 的执行速度不能替代人的合并责任。
+
+## Best-of-N 评分表
+
+多候选比较时，建议把评分写成明确表格。分数不是为了自动合并，而是为了让讨论更少依赖主观印象。
+
+| 维度 | 权重 | 评分问题 |
+|---|---:|---|
+| 验证结果 | 30 | lint、typecheck、定向测试是否通过，未运行项是否可接受 |
+| 范围控制 | 20 | 是否只改任务相关文件，是否避免配置和依赖漂移 |
+| 语义正确性 | 20 | 是否解决根因，是否覆盖失败路径和边界输入 |
+| 测试质量 | 15 | 是否补了有效回归测试，是否避免脆弱快照 |
+| 可维护性 | 10 | 是否贴合现有抽象，是否减少临时分支和重复逻辑 |
+| 解释质量 | 5 | 报告是否能对应 diff 和验证证据 |
+
+一个候选如果验证失败，通常不应进入最终比较，除非其他候选也失败且它提供了最清晰的根因线索。一个候选如果验证通过但范围严重越界，也不应因为“能跑”就被选中。Best-of-N 的真正价值是暴露多个可选方向，然后让工程标准筛掉坏方向。
+
+## 批量任务的分批策略
+
+实际落地时，不要从 100 个任务开始。推荐分三批。
+
+第一批是校准批，3 到 5 个任务，覆盖不同类型。目的不是完成多少，而是验证 prompt 模板、`AGENTS.md`、验证命令和报告格式。每个任务都要人工细看。
+
+第二批是稳定批，10 到 20 个低风险任务。可以开始使用脚本和 worktree，但仍要限制并行度。重点观察失败分类、平均耗时、范围外改动、CI 红灯率。
+
+第三批才是规模批。只有当前两批证明规则足够稳，才把任务量扩大。规模批也要保留抽样复核机制。即使任务都是文档链接修复，也要抽看几个 diff，确认没有改语义或引入错误链接。
+
+## 与 Codex Cloud、App 和本地 CLI 的分工
+
+Cloud 适合异步、并行、从远程环境处理的任务，尤其是仓库已经配置好环境时。Cloud 的 `--attempts` 能在同一任务上请求多个候选，适合 Best-of-N。缺点是环境与本地不同，最终 diff 仍要回到本地或 PR 流程验证。
+
+Codex App 适合人同时管理多个线程、查看 worktree、做并行探索和审查。它更像工作台，适合技术负责人同时观察多个候选方向。
+
+本地 CLI 适合离代码最近的任务：读本地未提交改动、跑本地依赖、做小范围修复、接入脚本。`codex exec` 适合队列消费，但队列状态、任务分配和失败记录最好由外部系统管理。
+
+这三者不是互相替代。一个成熟流程可能是：Cloud 生成候选，本地 `codex apply` 拉回，CLI 跑验证，App 或 PR 做审查。关键是每一步职责清楚。
+
+## 复盘机制
+
+每一轮批量任务结束后，做一次短复盘，关注四个问题：哪些任务被 Codex 做得很好，哪些任务越界，哪些验证命令漏了，哪些失败其实来自任务描述不清。把复盘结果写回模板。不要把所有失败归因于模型；很多失败来自队列项写得太宽、基线不一致或验证命令不可用。
+
+当同类失败出现两次，就该更新队列模板或 `AGENTS.md`。例如 Codex 总是顺手改测试期望，就在模板里加“除非任务明确要求改变行为，不要修改既有测试期望来迎合当前实现”；如果总是漏跑 typecheck，就把 typecheck 放入该任务类型的强制验证。
+
+## 队列项的最小数据结构
+
+任务队列要稳定运行，不能只保存一句 prompt。建议每个队列项至少包含这些字段：任务编号、基线提交、目标文件或模块、允许修改范围、禁止修改范围、验证命令、输出格式、失败处理、reviewer、截止时间。字段看起来多，但每一项都对应一个真实风险。
+
+基线提交用于复现。没有基线，几天后就无法知道 Codex 当时面对的是哪个代码状态。目标文件和允许范围用于防止 diff 漂移。禁止范围用于保护依赖、配置、生成文件和生产脚本。验证命令让候选之间可比。失败处理决定是否重试、停止、缩小范围或转人工。
+
+一个队列项可以写成 Markdown，也可以写进 Linear、GitHub issue 或内部任务系统。格式不重要，关键是机器和人都能读。Codex 读取任务时不应再问“我要改哪里”；reviewer 审查结果时也不应再猜“它原本被允许做什么”。
+
+示例：
+
+```markdown
+Task: DOC-CODEX-017
+Base: main@abc1234
+Goal: 重写 parallel tool calls 文档，解释适用场景和风险。
+Allowed files:
+- docs/ai-coding/codex-engineering/17-parallel-tool-calls.md
+Forbidden:
+- scripts/**
+- package files
+- other docs unless link check requires
+Verification:
+- ./scripts/check.sh lint
+- ./scripts/check.sh links
+Failure policy:
+- 链接失败可修本文件链接。
+- 脚本环境失败只报告，不改脚本。
+Reviewer:
+- docs owner
+```
+
+这个结构能让批量任务不靠口头约定。队列越大，越需要这种明确性。
+
+## 候选隔离的工程实现
+
+Best-of-N 的前提是候选互不污染。最直接的做法是每个候选一个 worktree 或一个临时分支。不要让多个候选在同一个目录里连续修改，因为第二个候选会继承第一个候选留下的文件、缓存和错误。比较时也会失去公平性。
+
+候选目录可以按任务编号和候选编号命名：
+
+```text
+worktrees/
+  doc-codex-017-a/
+  doc-codex-017-b/
+  doc-codex-017-c/
+```
+
+每个候选从同一基线创建，运行同一验证命令，生成同一报告模板。主线程只负责比较结果，不在候选目录里继续即兴修改。选中候选后，再从干净基线应用最终 patch 并跑完整验证。这样即使候选生成过程混乱，最终合并路径仍然干净。
+
+如果仓库很大，创建多个 worktree 有成本。可以限制候选数量，或只对高风险任务使用 Best-of-N。低风险机械任务不一定需要多候选，直接队列执行加抽样审查就够。Best-of-N 是解决不确定性的工具，不是所有任务的默认仪式。
+
+## 失败样本如何反哺模板
+
+批量任务最容易暴露模板缺陷。比如一批文档改写里，多个候选都把“官方文档”写成泛泛链接，说明任务模板缺少来源质量要求。多个候选都改了目录页但没同步标题，说明模板缺少导航一致性检查。多个候选都因脚本换行失败，说明仓库检查命令和运行环境没有写清楚。
+
+每轮队列结束后，抽取失败样本做小复盘。复盘不是重写所有文章，而是找出下一轮应该改的规则。一个高质量复盘通常能产出三类改动：任务模板新增字段，`AGENTS.md` 新增仓库规则，检查脚本或文档结构调整。
+
+不要把失败全部归因于模型。模型确实会犯错，但队列系统里的很多错误来自输入不清、验证缺失、并行过度和 review 不足。把这些问题修掉，候选质量会明显上升。
+
+## 队列停止条件
+
+队列需要停止条件。没有停止条件，自动化会在错误方向上持续消耗成本。建议设置几类硬停：同一任务连续两次范围越界；同一验证命令连续三次因环境失败；候选修改禁止文件；候选引入新依赖；候选无法解释关键设计取舍；reviewer 队列超过容量上限。
+
+停止不是失败，而是保护系统。停止后可以转成只读分析，让 Codex 总结失败原因和下一步建议。很多时候，停止后得到的诊断比继续生成 patch 更有价值。
+
+队列还应有人工暂停开关。遇到主分支大改、测试系统不稳定、依赖仓库故障、发布冻结或安全事件时，应暂停写任务，只保留读任务和诊断任务。自动化系统必须尊重团队节奏。
+
+## 发布前复核
+
+队列文章最容易写成“多开几个任务就能提速”。发布前应检查两点：是否强调了 reviewer 容量，是否写清候选隔离。如果文章只讲吞吐，不讲合并责任和失败停止条件，会误导团队把 Codex 当成无成本并发执行器。真正可用的队列系统必须让每个任务可追踪、可丢弃、可复盘。
+
+## 检查口径
+
+这篇文章的检查口径很明确：如果读者看完后只记住“多跑几个候选”，文章就失败了；如果读者记住“同一基线、隔离候选、统一验证、人工选择、失败可丢弃”，文章才算达标。Best-of-N 的核心是降低单次生成的不确定性，不是把不确定性批量放大。
+
+## 延伸阅读
+
+- [Codex 官方文档](https://developers.openai.com/codex)
+- [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
+- [Codex Non-interactive Mode](https://developers.openai.com/codex/noninteractive)
+- [Codex Worktrees](https://developers.openai.com/codex)
+- [Git worktree 文档](https://git-scm.com/docs/git-worktree)

@@ -1,0 +1,308 @@
+# Codex Worktrees 深度解析：多 Agent 并行开发如何不互相污染
+
+## TL;DR
+
+Worktree 是 Codex App 并行开发的隔离层。官方 Worktrees 文档把 Local 描述为前台，把 Worktree 描述为后台；Codex 可以在 worktree 中运行线程，也可以通过 Handoff 在线程的 Local 与 Worktree 之间移动。Codex-managed worktree 默认创建在 `$CODEX_HOME/worktrees`，通常服务一个线程，起点是启动线程时所选分支的 `HEAD` commit；如果选择的分支有本地未提交改动，这些改动也会应用到 worktree。该 worktree 不会作为分支 checkout，而是处于 detached HEAD 状态，直到你决定创建分支。
+
+Worktree 解决的是工作区隔离，不是合并决策。它能让多个 Codex 线程在同一仓库的不同副本中工作，减少互相覆盖文件的风险；但它不会自动证明多个结果可以合并，也不会替你处理公共文件冲突。用好它的关键是：一个任务一个隔离区，公共层改动串行，合并前只保留可验证 diff。
+
+## 读者定位
+
+本文面向在同一仓库里同时跑多个 Codex 任务的开发者、维护 monorepo 的 Tech Lead、开源维护者和平台工程师。你应该理解 Git 分支、checkout、detached HEAD、PR review 和测试验证。本文会把 Git worktree 的约束与 Codex App 的工作流放在一起讲。
+
+如果你还没有清晰任务边界，不要先上 worktree。worktree 会隔离文件状态，但不会把模糊目标变成好任务。
+
+## 问题：多个 Agent 共用一个 checkout 会发生什么
+
+在同一个工作目录里同时推进多个修改，会遇到三个问题。
+
+第一，文件状态互相覆盖。一个线程正在修改 `src/auth/session.ts`，另一个线程也改它。谁的结果先落地，后者就可能基于过时状态继续生成 diff。
+
+第二，验证结果不可信。线程 A 改了测试工具，线程 B 的测试突然通过或失败，你很难判断原因。工作目录越脏，测试信号越弱。
+
+第三，结果归属不清。一天结束时，`git diff` 里混着三个任务的改动。你不知道哪几行属于哪个假设，也不知道该保留哪部分。
+
+Git 分支可以记录历史，但同一个 checkout 不能同时承载多个独立的未完成状态。Git worktree 的意义是为同一仓库创建多个工作目录，每个目录有自己的工作区和索引，共享同一套对象数据库。Codex App 在这个基础上提供线程管理、Handoff、分支创建和清理能力。
+
+## 心智模型：Local 是前台，Worktree 是后台实验台
+
+把 Local 当作你主要工作的前台桌面，把 worktree 当作后台实验台。前台适合你正在审查、调试、运行本地服务的任务。后台适合让 Codex 独立尝试一个候选修复。
+
+一个 worktree 只放一个候选方案。候选方案成功，就把它转成分支、提交、推送、开 PR；候选方案失败，就归档或丢弃。不要让一个 worktree 长期承载多个互不相关的任务。那会把隔离区重新变成混合工作目录。
+
+Handoff 是前后台之间的交接。官方文档说明，当你想在常用 IDE 里检查改动、运行已有 dev server、或只能启动一个应用实例时，可以把线程从 Worktree hand off 到 Local。反过来，如果你已经在 Local 开始一个任务，但想释放前台，也可以 hand off 到 worktree，让 Codex 在后台继续。
+
+## 详细机制：Codex 如何管理 worktree
+
+### 起点与 detached HEAD
+
+官方 Worktrees 文档说明，Codex 会在 `$CODEX_HOME/worktrees` 创建 worktree。起点是你启动线程时选择的分支的 `HEAD` commit。如果选择的分支有本地未提交改动，这些改动也会应用到 worktree。worktree 不会 checkout 成一个分支，而是处于 detached HEAD 状态。
+
+detached HEAD 对 Codex 并行很有用。它让多个线程可以从同一分支起点创建候选状态，而不污染分支名。只有当你决定保留结果时，才需要在该 worktree 上创建分支。
+
+### 分支限制
+
+Git 不允许同一个分支同时在多个 worktree 中 checkout。官方文档给出的错误类似：
+
+```text
+fatal: 'feature/a' is already used by worktree at '<WORKTREE_PATH>'
+```
+
+原因是分支引用只能由一个 worktree 的操作推进。如果两个 worktree 同时 commit、reset、rebase 同一分支，引用更新会产生歧义。Codex 默认用 detached HEAD，正是为了减少这种分支污染。
+
+### Handoff
+
+Handoff 用于在线程的 Local 和 Worktree 之间移动。官方文档说明，Codex 会处理移动线程所需的 Git 操作。每个线程会保持同一个关联 worktree；如果之后再把线程交回 worktree，Codex 会回到同一个后台环境继续。
+
+Handoff 不会移动 `.gitignore` 忽略的文件，除非它们被 Codex 复制到本地 managed worktree。需要复制忽略文件时，官方文档提供 `.worktreeinclude`：在仓库根目录列出忽略路径或类似 `.gitignore` 的 pattern，Codex 创建 managed worktree 时会复制这些文件。
+
+### managed 与 permanent worktree
+
+Codex-managed worktree 默认轻量、可丢弃，通常专属于一个线程。归档线程或超过配置限制时，Codex 可能删除旧 managed worktree；删除前会保存快照，之后打开会话时可恢复。
+
+Permanent worktree 适合长生命周期环境。官方文档说明，可以从项目菜单创建 permanent worktree，它会成为自己的 project，不会自动删除，也可以从同一个 worktree 启动多个线程。代价是状态会积累，需要像本地 checkout 一样维护。
+
+### 本地忽略文件
+
+worktree 来自 Git checkout，tracked files 会存在；被 `.gitignore` 忽略的本地文件不会天然出现。`.env.test`、本地证书、模拟数据、IDE 配置都可能缺失。不要把真实 secret 放入 `.worktreeinclude`。如果测试需要环境文件，优先提交非敏感模板，例如 `.env.test.example`，或写清如何生成。
+
+## 真实工作流案例：三个候选修复，只有一个进 PR
+
+假设 Issue #342 报告 Safari 登录按钮 loading 不结束。你想同时试两种修复策略，并让第三个线程只做 review。
+
+线程 A：
+
+```markdown
+在 Worktree 中处理 Issue #342。
+
+策略：只调整表单提交状态机，不改请求层。
+
+允许修改：
+- `src/components/login/`
+- 对应测试文件
+
+禁止修改：
+- `src/auth/api.ts`
+- `package.json`
+- `pnpm-lock.yaml`
+
+验证：
+- 运行 login component tests。
+- 说明 Safari 行为无法自动覆盖的部分。
+```
+
+线程 B：
+
+```markdown
+在 Worktree 中处理 Issue #342。
+
+策略：只检查 auth request 的重复提交与取消逻辑，不改 UI 文案。
+
+允许修改：
+- `src/auth/`
+- `src/components/login/` 中调用层的最小改动
+
+禁止修改：
+- API 协议
+- 依赖
+- 路由结构
+
+验证：
+- 运行 auth tests 和 typecheck。
+```
+
+线程 C：
+
+```markdown
+只审查 A 和 B 的候选 diff，不修改文件。
+
+比较：
+- 是否符合任务约束
+- 是否有回归风险
+- 测试是否覆盖根因
+- 哪个方案更容易维护
+```
+
+执行结束后，你不应该把 A、B 都合并。先看每个 worktree 的 diff 与测试输出。如果 A 的方案只修 UI 状态但没有覆盖请求竞态，B 的方案改动更小且测试更直接，就在 B 的 worktree 上创建分支，提交并开 PR。A 可以归档。C 的 review 作为人工判断参考。
+
+## 操作清单
+
+创建 worktree 前：
+
+- 任务是否足够小，能独立验收。
+- 起始分支是否正确。
+- 是否需要带入当前本地未提交改动；如果不需要，先清理或从干净分支开始。
+- 是否列出允许和禁止修改路径。
+- 是否识别公共文件，避免多线程同时修改。
+- 是否需要 `.worktreeinclude`，其中是否只包含非敏感文件。
+
+worktree 内执行时：
+
+- 每个线程是否对应一个候选方案。
+- 是否能在 worktree 内完成验证。
+- 如果需要 Local 的 IDE、浏览器或 dev server，是否应 hand off。
+- 是否记录测试命令和失败原因。
+
+保留结果时：
+
+- 是否在 worktree 上创建分支。
+- 是否提交、推送并通过 PR 审查。
+- 是否确认该分支没有被另一个 worktree checkout。
+- 是否删除或归档失败候选，避免误用。
+
+## 权衡与风险
+
+Worktree 最大收益是隔离未完成状态。它让你敢于尝试，因为失败结果可以丢弃，不会污染前台 checkout。它也适合 best-of-N：不同策略在不同 worktree 中运行，最后比较。
+
+代价是环境维护。每个 worktree 都是一个工作目录，依赖安装、生成文件、测试缓存、忽略文件都可能缺失或变旧。Codex-managed worktree 轻量，但每次准备可能有成本；permanent worktree 省准备时间，但会积累状态。
+
+另一个风险是合并冲突。worktree 不是冲突消除器。多个线程同时改公共层，最终仍要在 Git 合并时解决冲突。对 schema、shared types、依赖升级、格式化全仓库这类改动，应串行推进。
+
+还有一个安全风险来自 `.worktreeinclude`。它很方便，但也可能把 `.env.local`、本地 token、证书复制到后台环境。团队应把 `.worktreeinclude` 当作代码审查对象，只允许非敏感、测试必须的文件。
+
+## 常见误区
+
+误区一：把 worktree 当成普通目录复制。它有 Git 语义。分支 checkout、detached HEAD、引用更新、Handoff 都受 Git 约束。不了解这些约束，会在保留结果时踩坑。
+
+误区二：在多个 worktree 中 checkout 同一分支。Git 会阻止这件事，因为同一分支引用不能被多个工作区同时推进。保留候选结果时，在对应 worktree 上创建新分支。
+
+误区三：认为 Handoff 会搬运所有本地文件。被 `.gitignore` 忽略的文件不会自动跟着移动。需要复制时用 `.worktreeinclude`，但不要复制 secret。
+
+误区四：永久 worktree 越多越好。永久环境适合长期任务，但也会积累旧依赖和本地状态。临时候选用 managed worktree 更干净。
+
+误区五：用 worktree 并行公共层重构。公共层改动的冲突成本通常高于并行收益。先做基础 PR，再让其他任务基于新基础继续。
+
+## 生命周期管理：创建、使用、保留、清理
+
+Worktree 的生命周期应该和任务生命周期绑定。创建时要知道它为哪个任务服务；使用时只承载该任务；保留时转成分支和 PR；失败时归档或删除。最危险的状态是“这个 worktree 之前做过很多东西，现在也许还能用”。这种状态会让 Codex 和人都误判上下文。
+
+创建阶段要检查起点。你选择的是 `main`、某个 feature branch，还是带有本地未提交改动的分支。官方文档说明，如果所选分支有本地未提交改动，这些改动会应用到 worktree。这对“把当前工作交给后台继续”很有用，但对“从干净基线试一个方案”可能是风险。想要干净实验，就先从干净分支开始。
+
+使用阶段要保持单一目标。不要在一个 worktree 中先修登录 bug，再补文档，再试依赖升级。每增加一个目标，diff 的归因都会变差。Codex-managed worktree 本来就是轻量可丢弃的，没必要把它当长期工作目录使用。
+
+保留阶段要及时创建分支。detached HEAD 适合实验，不适合长期保存。结果通过审查后，在该 worktree 上创建分支、提交、推送并开 PR。创建分支后要记住 Git 的限制：同一分支不能同时在另一个 worktree 或本地 checkout 中使用。
+
+清理阶段要果断。失败候选、过期实验、已被替代的方案应归档。官方文档说明 Codex-managed worktree 在归档线程或超过配置限制时可能自动删除，并在删除前保存快照。即便有快照，也不要把它当长期存储。真正要保留的结果应该进入 Git 分支。
+
+## 冲突处理：worktree 只推迟冲突，不消灭冲突
+
+Worktree 让多个任务在不同目录中运行，避免它们实时覆盖同一个工作区。但最终合并时，如果它们改了同一文件或同一语义区域，冲突仍然会出现。
+
+冲突有三种。
+
+第一种是文本冲突。两个 worktree 改同一行或相邻区域。Git 能提示，但人要判断保留哪种实现。
+
+第二种是语义冲突。两个 worktree 改不同文件，但假设互相矛盾。例如一个线程把权限检查提前到 middleware，另一个线程在 handler 中补权限测试。文本上可能能合并，行为上可能重复或冲突。
+
+第三种是验证冲突。每个 worktree 的测试在各自环境中通过，合并后全量测试失败。常见于 shared types、配置、依赖和生成文件。
+
+处理策略是先合并低层基础改动，再基于新基础重跑其他 worktree。不要让多个候选同时推进公共层。对必须并行探索的公共层问题，先要求每个线程只输出方案和风险，不写代码；人选择方案后再实现。
+
+## `.worktreeinclude` 的使用边界
+
+`.worktreeinclude` 解决的是 managed worktree 缺少忽略文件的问题。比如测试需要 `.env.test.example`、本地 mock 数据、浏览器配置模板。它不应该成为复制个人环境的工具。
+
+判断一个文件能否加入 `.worktreeinclude`，可以问四个问题。
+
+第一，它是否包含 secret、token、cookie、证书、私有 URL、客户数据。包含就不能加。
+
+第二，它是否是测试可复现所必需。只是为了个人方便的 IDE 设置，不应加。
+
+第三，它是否能提交一个非敏感模板替代。能提交模板时，优先提交模板。
+
+第四，复制后是否会改变 Codex 的权限边界。例如复制本地云凭据会让后台线程获得不该有的外部访问。
+
+`.worktreeinclude` 应进入代码审查。不要让每个开发者私下添加。一个错误 pattern 可能把整类敏感文件带入 worktree。
+
+## 与本地开发的配合
+
+很多任务在 worktree 中可以完成，但有些任务需要 Local。比如你只能启动一个本地应用实例，或者需要常用 IDE 的调试配置，或者需要浏览器中已经登录的测试账号。此时 Handoff 更合适。
+
+把线程 hand off 到 Local 前，先确认本地工作区状态。若 Local 有未提交改动，交接后可能混入当前任务。理想情况是 Local 干净，或者你清楚哪些本地改动应保留。
+
+从 Local hand off 到 worktree 时，要确认哪些忽略文件会缺失。比如本地 `.env.test` 不会自动出现，除非通过 `.worktreeinclude` 或其他安全方式准备。不要因为 worktree 缺配置，就把真实 `.env.local` 复制过去。
+
+Handoff 后仍要看 Git 状态。Codex 会处理必要 Git 操作，但它不能替你判断当前工作区是否适合接收任务。对高风险改动，交接前后各看一次 diff。
+
+## 团队规则：worktree 并行的约定
+
+团队使用 worktree 时，可以建立几条简单规则。
+
+第一，一条线程一个 worktree，一个 worktree 一个目标。例外需要写明。
+
+第二，默认禁止改公共文件。公共文件包括 lockfile、根配置、shared types、schema、迁移、路由、权限策略。需要改时单独开串行任务。
+
+第三，候选结果必须通过 PR 保存。不要把重要结果长期留在 detached HEAD 或 App 快照中。
+
+第四，worktree 需要的本地文件必须非敏感，并通过受审查的 `.worktreeinclude` 或模板提供。
+
+第五，超过一定时间未处理的 worktree 应归档。过期候选会基于旧代码，继续使用成本高。
+
+这些规则看起来朴素，但能避免多数并行污染问题。worktree 的技术能力只有在团队约束下才真正变成生产力。
+
+## 故障排查：worktree 出问题时看什么
+
+如果 worktree 任务失败，先看它是否从正确分支创建。错误基线会导致 Codex 修不存在的问题，或漏掉最新改动。
+
+再看缺失文件。很多失败来自 `.gitignore` 忽略的测试配置不存在。不要立即复制真实配置，先问是否能用模板或 mock。
+
+再看依赖状态。managed worktree 可能没有本地依赖缓存。需要明确安装命令，或使用 local environment setup script。
+
+再看分支占用。如果创建分支或 checkout 报错，检查该分支是否已经被其他 worktree 使用。Git 的限制是设计选择，不是 Codex bug。
+
+最后看任务边界。若 worktree 中的 diff 太大，通常是任务太泛，而不是 worktree 管理失败。重新拆小任务比继续修补更快。
+
+## 分支策略：从实验到可合并历史
+
+Worktree 中的候选结果要进入团队历史，最终仍要变成普通 Git 分支和 PR。分支命名应能表达任务来源和范围，例如 `codex/fix-login-safari-loading`、`codex/test-date-range-boundaries`。不要用 `tmp`、`try1` 这类无法追踪的名字。
+
+提交信息也要写清楚。Codex 生成的改动应由维护者审查后再提交，提交说明包含问题、修复方式和验证。不要把冗长对话复制进提交信息，也不要只写“codex changes”。好的历史能让后续回滚和审计更容易。
+
+如果一个 worktree 产出多个不相关修改，不要强行放进一个 PR。先拆分，或退回重新执行。PR 边界应和任务边界一致。一个 worktree 的便利不能成为混合提交的理由。
+
+## 长期 worktree 的卫生
+
+Permanent worktree 适合长期后台环境，但需要维护卫生。定期更新基线分支，清理旧依赖，删除无用分支，检查本地未提交文件。长期 worktree 越像普通开发目录，越要像普通开发目录一样管理。
+
+不要让 permanent worktree 成为“没人敢删的黑箱”。如果它承载某个长期实验，应有 owner、用途、创建时间和清理条件。超过期限未推进，就归档或转正式分支。否则它会积累旧状态，后续 Codex 基于它工作时，结果会偏离主线。
+
+Codex-managed worktree 则相反，应该保持轻量。它适合短期候选，不适合存放长期上下文。需要长期上下文时，转 permanent worktree 或正式分支。
+
+## Worktree 与测试成本
+
+并行 worktree 会增加测试成本。每个工作区可能都要安装依赖、生成代码、跑测试。对大型仓库，重复成本不低。可以通过三种方式控制。
+
+第一，任务只跑匹配范围的 targeted validation。不要让每个小改动都跑全量测试。
+
+第二，把公共准备步骤写进 local environment setup script，减少手工差异。
+
+第三，合并候选前再跑一次主线全量验证。单个 worktree 中通过的测试不能证明多个候选合并后仍通过。
+
+测试成本不能省到没有信号。若 worktree 只产出 diff，没有任何验证，reviewer 会承担全部风险。更合理的做法是小任务跑小验证，大任务串行并跑完整验证。
+
+## 何时不用 worktree
+
+并非所有任务都需要 worktree。只读讨论、架构解释、文档调研、PR 风险归类，可以用 chat 或普通线程。极小修改也可以直接在 Local 完成，尤其当你马上要手工调试时。
+
+Worktree 适合后台候选和并行实验。如果任务必须立刻在当前 IDE 中调试、依赖当前未提交状态、或只能在一个本地服务实例中验证，Local 更合适。工具选择要服务任务，不要为了使用 worktree 而增加流程。
+
+## 落地问答：Worktree 的边界判断
+
+问：可以把本地未提交改动带进 worktree 吗？答：可以，但要有意识。官方文档说明选择的分支若有本地未提交改动，会应用到 worktree。若你的目标是让 Codex 继续当前工作，这很有用；若目标是干净实验，这会污染基线。
+
+问：worktree 中测试通过，为什么合并后还失败？答：因为每个 worktree 只验证自己的候选状态。多个候选合并后，公共类型、配置、依赖或行为假设可能冲突。合并前要在目标分支上重新验证。
+
+问：是否要给每个 worktree 安装完整依赖？答：取决于任务。只读分析不一定需要完整依赖；写代码并跑测试通常需要。可以用 local environment setup script 减少重复，但不要因为省时间放弃必要验证。
+
+问：`.worktreeinclude` 能否包含 `.env.test`？答：只有在它不含 secret 且确实为测试所需时才可以。更好的方式是提交 `.env.test.example` 或生成脚本。真实本地凭据不应被复制。
+
+问：一个 permanent worktree 可以跑多个线程吗？答：官方文档说明可以，但团队要谨慎。它适合长期环境，不适合无边界混合任务。多个线程共享 permanent worktree 时，更要看 Git 状态和任务归属。
+
+补充一点：worktree 相关问题最好在 PR 中说明来源。若某个分支来自后台 worktree，PR 描述应写清起始分支、任务目标、验证命令和是否经过 Handoff。这样 reviewer 不需要猜这份 diff 的上下文。
+
+## 延伸阅读
+
+- [Codex App Worktrees](https://developers.openai.com/codex/app/worktrees)
+- [Codex App Features](https://developers.openai.com/codex/app/features)
+- [Codex Local Environments](https://developers.openai.com/codex/app/local-environments)
+- [Git Worktree 文档](https://git-scm.com/docs/git-worktree)

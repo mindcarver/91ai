@@ -1,0 +1,235 @@
+# 沙箱与内核隔离：Codex 命令自治的真实边界
+
+## TL;DR
+
+Codex 的沙箱不是“模型承诺不乱来”，而是本地命令执行时的技术边界。官方 sandbox 文档说明，沙箱会约束 Codex 派生出来的命令，包括 `git`、包管理器、测试运行器等；macOS 使用系统内置 Seatbelt，Windows PowerShell 使用原生 Windows sandbox，WSL2 和 Linux 使用 Linux 沙箱实现并依赖 `bubblewrap` 或可用的 user namespace。常见模式包括 `read-only`、`workspace-write`、`danger-full-access`，审批策略负责决定越界时是否停下来问人。工程上要把沙箱当成“最小可行动边界”，不是业务安全、凭据治理或人工审查的替代品。
+
+## 读者定位
+
+本文面向在本地或团队环境中给 Codex 授权执行命令的中高级开发者、平台工程师、安全负责人和技术负责人。你需要理解文件系统权限、shell 命令、网络访问、CI/本地差异和基础操作系统隔离。本文不会讲内核实现细节，而是解释 Codex 沙箱在工程流程中的作用、边界、配置方式和风险评估方法。
+
+## 问题：agent 能执行命令以后，安全模型变了
+
+传统代码助手主要给建议，开发者复制、审查、运行。Codex 这类 agent 能直接读文件、改文件、跑命令、调用工具。能力提升后，风险也换了形态。一个错误命令不再只是错误建议，它可能真的删除文件、改 lockfile、访问网络、读取环境变量、触发远端 API。没有边界时，agent 的每个推理错误都可能变成本地系统状态变化。
+
+人工审批能拦住一部分风险，但不能承担全部压力。如果每个 `rg`、`npm test`、`git diff` 都弹窗，开发者会疲劳；如果全部放行，风险太大。沙箱的作用是在中间建立默认安全区：Codex 可以在工作区内完成常规低风险任务，越过边界时再触发审批。这样既保留效率，也让高风险动作有停顿点。
+
+很多团队对沙箱的误解来自“能不能写文件”。事实上，沙箱还关系到网络、工作目录、可写根、派生命令、平台能力和审批触发。尤其在 Windows、WSL2、Linux、macOS 混合团队里，同一份配置背后的实现路径不同。如果不理解这些差异，排障时很容易把环境问题误判为代码问题。
+
+## 心智模型：沙箱定义边界，审批处理越界
+
+官方文档把沙箱和审批分成两个控制面：
+
+```text
+沙箱：命令能在哪里读写、能不能联网、能访问哪些资源
+审批：当命令要越界时，Codex 是否停下来请求确认
+```
+
+沙箱是技术边界。`read-only` 下，Codex 能查看文件，但不能直接编辑或运行命令而不请求批准。`workspace-write` 下，Codex 能在当前工作区内读写并运行常规本地命令，超出工作区或需要网络时请求批准。`danger-full-access` 移除文件系统和网络边界，只应在你明确希望 Codex 拥有完整访问时使用。
+
+审批是流程边界。`untrusted` 对不在 trusted set 的命令提问；`on-request` 让 Codex 在沙箱内自主行动，越界时问人；`never` 不弹审批。官方文档把低风险本地自动化建议为 `workspace-write + on-request`，把 full access 描述为 `danger-full-access + never`。后者不是普通开发默认值，而是特定场景下的明确选择。
+
+这个模型有一个实用结论：不要用审批弥补过宽沙箱，也不要用过窄沙箱迫使所有事情都审批。日常仓库应该有一个能完成常规开发的工作区边界；高风险动作用审批、rules、hooks 和人工流程处理。
+
+## 详细机制：平台、模式、可写根和网络
+
+### 沙箱约束派生命令
+
+官方文档明确说，沙箱不只约束 Codex 内置文件操作，也约束 Codex 运行的本地命令。`git`、包管理器、测试运行器、构建脚本都继承同样边界。这一点经常被低估。开发者可能以为“我只让 Codex 跑测试”，但测试脚本本身可能写缓存、启动服务、访问网络、读取环境变量。沙箱会影响这些派生命令。
+
+出现命令失败时，要先区分三类原因：代码真的失败，命令被沙箱拦住，命令需要审批但没有获批。例如包管理器访问网络失败，可能不是 registry 问题，而是当前沙箱禁止网络。测试写入临时目录失败，可能是可写根没包含该目录。排障时先看权限边界，再看业务错误。
+
+### 平台实现不同，目标一致
+
+官方 sandbox 文档说明，Codex 使用各平台原生机制。macOS 上使用内置 Seatbelt。Windows PowerShell 下使用原生 Windows sandbox。WSL2 和 Linux 使用 Linux 沙箱实现；Linux/WSL2 上建议安装 `bubblewrap`，Codex 会使用 PATH 上第一个 `bwrap`。如果没有 `bwrap`，Codex 会回退到 bundled helper，但这个 helper 需要 unprivileged user namespace 支持。
+
+Ubuntu 上还可能遇到 AppArmor 限制。官方文档提到，Ubuntu 25.04 的仓库包通常不需要额外设置；Ubuntu 24.04 可能需要安装 `apparmor-profiles`、加载 `bwrap-userns-restrict` profile。只有在 profile 不可用或不能解决问题时，才考虑调整 `kernel.apparmor_restrict_unprivileged_userns`。这类内核级设置影响不只 Codex，不能为了让一个任务跑通就随手关闭。
+
+跨平台团队应把这些差异写进开发环境文档。macOS 开箱即用不代表 Linux 也一样；WSL2 的行为也不同于原生 Windows PowerShell。遇到 “sandbox unavailable” 或启动警告时，先按官方平台说明修环境，不要直接切到 full access。
+
+### 工作区写入和 writable roots
+
+`workspace-write` 是日常开发常用边界。它允许 Codex 在当前工作区内编辑，适合改代码、更新文档、跑常规测试。但很多项目会跨多个目录：前端仓库引用本地设计系统，后端仓库引用 sibling shared library，文档仓库生成产物到外部目录。这时不要直接改成 `danger-full-access`，优先用 `sandbox_workspace_write.writable_roots` 或 permission profiles 的 workspace roots 显式扩展可写目录。
+
+旧沙箱风格示例：
+
+```toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+writable_roots = ["/Users/team/project", "/Users/team/shared-lib"]
+```
+
+permission profile 风格示例：
+
+```toml
+approval_policy = "on-request"
+default_permissions = "multi-root-dev"
+
+[permissions.multi-root-dev.filesystem]
+":minimal" = "read"
+
+[permissions.multi-root-dev.filesystem.":workspace_roots"]
+"/Users/team/project" = "write"
+"/Users/team/shared-lib" = "write"
+"**/*.env" = "deny"
+
+[permissions.multi-root-dev.network]
+enabled = false
+```
+
+这两种风格不要混写。选择其中一种，并把可写根写清楚。可写根是工程边界，不应该用模糊通配把整个 home 目录放进去。
+
+### 网络不只是“能 curl”
+
+沙箱网络边界影响包管理器、测试、构建、云 CLI、浏览器驱动、下载脚本和任何会访问外部服务的命令。`workspace-write + on-request` 下，默认低风险本地工作顺畅，但使用互联网或越过工作区会请求批准。permission profiles 可以细化网络开关和域名规则，适合组织把包仓库、GitHub API、内部镜像源分开治理。
+
+网络要按任务开放。修前端样式通常不需要网络；升级依赖可能需要访问 npm registry；查官方文档可以用 web search，但不一定需要 shell 联网；调用内部 API 则需要更严格审批。把所有网络都打开，会放大 prompt injection、数据外泄和供应链风险。
+
+## 真实工作流案例：在 monorepo 中安全跑生成命令
+
+假设一个 monorepo 有 `apps/web`、`packages/schema` 和 `generated/`。Codex 需要修改 GraphQL schema，然后运行代码生成。生成命令会写 `apps/web/src/generated` 和 `packages/schema/generated`，不会联网。
+
+差的做法是为了避免权限问题直接启动：
+
+```sh
+codex --sandbox danger-full-access --ask-for-approval never
+```
+
+这让 Codex 对整个机器拥有完整访问，和任务需求不匹配。更好的做法是把可写范围限定到仓库：
+
+```toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+```
+
+任务提示写清楚：
+
+```text
+只修改 schema 和生成产物。不要安装依赖，不要联网。
+如果 codegen 因为写入仓库外目录失败，先报告路径，不要切换到 full access。
+```
+
+Codex 应先读取生成脚本：
+
+```sh
+rg -n "codegen|graphql" package.json apps packages
+```
+
+再运行聚焦命令：
+
+```sh
+npm run codegen --workspace apps/web
+```
+
+如果失败信息显示要写 sibling 目录，再由人判断是否把该目录加入 writable roots，而不是让 Codex 自动提升到 full access。任务结束后，用 `git status --short` 和相关测试确认只改了预期文件。这个流程的核心是：权限随证据扩大，不随猜测扩大。
+
+## 操作清单：团队沙箱策略
+
+- 日常默认使用 `workspace-write + on-request`，除非任务明确只读或需要更严格模式。
+- 只读审计使用 `read-only` profile，不让解释类任务顺手改文件。
+- `danger-full-access + never` 只用于短期、明确、可回滚的任务，不作为默认配置。
+- Linux/WSL2 环境按官方说明安装和验证 `bubblewrap`，不要用 full access 掩盖环境问题。
+- 跨目录写入优先配置 writable roots，不要把 home 目录或磁盘根目录放进可写范围。
+- 网络按任务开放。包仓库、GitHub、内部 API、任意公网应分开审批。
+- 高风险命令用 rules 和人工审批约束，沙箱不能理解业务语义。
+- 在任务结束时检查 `git status --short`，确认只产生预期变更。
+- 对生成命令、测试缓存、构建产物约定输出目录，避免写到沙箱外。
+- 把团队默认 profile、writable roots 和网络策略写入文档。
+
+## 权衡与风险
+
+沙箱越窄，越安全，但任务越容易被权限打断。沙箱越宽，体验越顺，误操作和外泄风险越高。工程上没有单一答案。对大多数代码修改，`workspace-write + on-request` 是合理折中；对只读审查，`read-only` 更合适；对需要管理外部系统的任务，应该转入单独流程，而不是靠放宽本地沙箱解决。
+
+沙箱也不能替代业务访问控制。即使文件系统受限，如果工作区里有生产凭据，Codex 仍可能通过允许的命令读取它们；如果允许网络，命令可能把数据发出去；如果本地测试会调用真实服务，沙箱无法判断这是不是业务上危险。凭据隔离、测试环境、网络 allowlist 和人工审批仍然需要。
+
+平台实现差异也会带来维护成本。一个在 macOS 正常的 workflow，可能在 Linux 上因为 `bubblewrap` 或 AppArmor 失败；一个在 Windows PowerShell 下运行的命令，可能在 WSL2 下路径语义不同。团队应记录推荐运行环境，并把平台问题和代码问题分开处理。
+
+## 常见误区
+
+误区一：沙箱是模型行为承诺。沙箱是技术边界，约束的是命令能力，不是模型意图。
+
+误区二：审批等于沙箱。沙箱定义能做什么，审批决定越界时是否问人。两者配合使用。
+
+误区三：full access 是高级模式。full access 是无沙箱模式，适合极少数明确任务，不代表更专业。
+
+误区四：网络失败就是外网故障。先检查当前沙箱或 permission profile 是否允许网络。
+
+误区五：可写根越多越省事。可写范围越大，误改范围越大。跨目录需求应逐个列出。
+
+误区六：Windows、WSL2、Linux、macOS 行为完全一样。官方明确说实现不同，团队要为平台差异留出排障路径。
+
+## 团队落地：权限需求从任务反推
+
+设计沙箱策略时，不要从“Codex 最大能做什么”出发，而要从任务需要什么反推。解释代码通常读文件就够。修改文档需要写指定文档目录。修 bug 需要写工作区、运行测试、也许写缓存。依赖升级需要包仓库网络和 lockfile 写入。发布需要远端写入、签名、凭据和回滚方案。每上升一层，审批和隔离都应该更严格。
+
+可以把任务分成五级。一级是只读理解，使用 `read-only`。二级是局部编辑，使用 `workspace-write + on-request`。三级是生成和构建，需要明确可写产物目录。四级是联网维护，使用受限网络 profile。五级是远端状态变更，例如部署、发布、迁移、推送，默认不交给 Codex 自动执行，最多让 Codex 生成计划和检查清单。
+
+这个分级能帮助团队拒绝“为了方便开 full access”。如果一个任务只有二级权限需求，却要求五级权限，说明流程设计有问题。权限扩大应该有证据：命令失败显示需要写哪个目录，依赖安装需要访问哪个域名，测试需要哪个本地端口。没有证据，不提升边界。
+
+## 沙箱失败的诊断顺序
+
+当命令在 Codex 中失败，而手动终端成功时，先不要立刻改代码。按顺序看四件事。第一，当前沙箱模式是什么，是否只读。第二，命令是否写了工作区外路径，例如全局缓存、home 目录、系统临时目录或 sibling 仓库。第三，命令是否访问网络。第四，命令是否依赖没有转发的环境变量。
+
+很多测试失败其实是权限失败。比如 Playwright 下载浏览器、Rust 编译写全局 cargo cache、Python 测试写 home 下配置、Node 工具写用户级 cache。这些都可能被沙箱拦住。正确处理方式不是直接 full access，而是把缓存目录重定向到工作区、预装依赖、配置 writable roots，或单独请求审批。
+
+沙箱错误还可能被工具吞掉。某些脚本会把权限错误包装成普通失败，例如“cannot find module”“network timeout”“database unavailable”。Codex 应读取完整错误上下文，确认是缺文件、无权限、网络被禁还是业务断言失败。只有把故障类型分清，后续修复才不会走偏。
+
+## 与凭据隔离的关系
+
+沙箱限制文件和网络，但它不是凭据管理系统。如果工作区本身包含 `.env`、私钥、服务账号 JSON 或生产配置，`workspace-write` 下的命令可能仍能读到。permission profiles 可以对敏感文件做 deny，但最稳的做法是开发工作区不要放生产凭据。Codex 参与的仓库应使用测试凭据、最小权限 token 或本地假服务。
+
+环境变量是另一个通道。即使文件系统限制严，派生命令也可能通过环境变量拿到云凭据。`shell_environment_policy` 应和沙箱一起设计。只限制文件，不限制环境，等于留下后门。尤其在 CI 或开发者主机上，默认环境可能包含部署 token、包发布 token、数据库 URL。Codex 任务不需要这些时，就不应转发。
+
+网络权限和凭据结合时风险最大。有凭据但没网络，影响范围有限；有网络但没凭据，风险主要是公开外发；有网络又有凭据，agent 或脚本就可能调用真实系统。团队应避免让这两者在普通开发 profile 中同时出现。需要真实系统访问时，使用单独环境、单独审批和短期凭据。
+
+## 沙箱与生成产物
+
+生成代码、文档、类型、API 客户端时，沙箱策略要特别清楚。生成器常常写多个目录，也可能读取 schema、模板、缓存和远端数据。任务开始前应列出预期产物路径，运行后用 `git status --short` 核对。如果出现预期外路径，先停下分析，不要继续跑更宽命令。
+
+生成产物还会制造大量 diff。Codex 在沙箱内能写这些文件，不代表它应该无审查地写。团队可以要求生成任务分两步：先修改源 schema 或模板，再运行生成命令；最终报告中分别列出手写文件和生成文件。这样 review 时能把业务决策和机械产物分开。
+
+对会写缓存的生成器，优先把缓存放进工作区忽略目录，而不是开放 home 目录。比如设置工具环境变量让 cache 指向 `.codex-tmp/cache` 或项目 `.cache/`。这比把整个用户目录加入 writable roots 更安全，也更容易清理。
+
+## 组织策略：默认安全与例外记录
+
+一个成熟团队不会只写“默认用 workspace-write”。还会写例外流程：谁可以批准 full access，什么任务可以加 writable roots，哪些目录永远不能加入，网络如何申请，审批记录放在哪里。例外没有记录，就会变成口头传统；口头传统会在新人和自动化中失效。
+
+对受监管或高价值代码库，建议把沙箱策略纳入 onboarding。新人第一次使用 Codex 时，不只教命令，还要解释为什么不能把生产凭据放在仓库，为什么不能默认 full access，为什么网络要按域名开。这样可以减少为了“让它跑起来”而破坏边界的情况。
+
+沙箱策略也要定期验证。升级操作系统、Codex CLI、WSL2、Linux 内核或安全策略后，原本可用的沙箱可能失效。团队可以准备一组诊断命令：读工作区文件、写工作区临时文件、尝试写工作区外文件、尝试访问网络。每次环境升级后跑一遍，确认边界仍符合预期。
+
+## 沙箱评审问题
+
+审查一个 Codex 任务时，可以先问：当前沙箱是否比任务需要更宽？如果只是阅读代码，却使用 workspace-write，已经偏宽；如果只是修改仓库，却使用 full access，风险更高。权限不需要追求最窄到无法工作，但要能解释为什么给到当前级别。
+
+第二个问题是：失败是否被正确归因。命令失败后，Codex 是否检查过沙箱限制、工作目录、网络和环境变量，还是直接修改业务代码？如果一个依赖下载失败被解释成代码错误，后续会走错方向。好的任务记录会说明“失败来自网络被阻断”或“失败来自写入工作区外缓存”，而不是含糊地说“命令失败”。
+
+第三个问题是：可写范围是否可审计。任务结束后，`git status` 只能看到仓库内变化，看不到工作区外变化。如果沙箱允许写外部目录，最终报告应列出这些目录以及是否产生文件。没有这个记录，reviewer 无法确认副作用范围。
+
+第四个问题是：凭据和网络是否同时出现。一个 profile 如果既允许网络，又转发云凭据，就应被视为高风险。普通开发任务应避免这种组合。需要真实系统访问时，使用测试凭据、短期 token 和明确审批。
+
+## 与 CI 和本地开发的差异
+
+很多团队希望本地 Codex 和 CI 行为一致，但沙箱会让二者天然不同。CI 通常在干净环境里，有固定凭据和网络策略；本地开发者机器有缓存、全局工具、个人密钥和不同操作系统。Codex 本地沙箱能减少差异，但不能消除。任务说明应避免依赖本机偶然状态，例如全局安装的 CLI、home 目录缓存、个人 npm token。
+
+如果某个验证只能在 CI 中可靠运行，Codex 应在本地做局部检查，然后提示需要 CI 确认。不要为了让本地验证通过而放宽沙箱到不可审计。反过来，CI 中运行 Codex 也不能因为环境隔离就默认 full access；CI 往往有发布凭据，风险可能比本地更高。
+
+团队可以建立“本地可做”和“必须 CI 做”的清单。本地适合代码修改、单元测试、静态检查、生成产物。CI 适合集成测试、跨平台测试、发布前扫描和部署验证。沙箱策略围绕这个清单设计，会比按个人习惯设置更稳。
+
+## 最低通过标准：边界要能解释给审批人
+
+一个可接受的沙箱配置，必须能用一句话解释给审批人：Codex 可以读什么、写什么、是否能联网、越界时谁确认。解释不了的配置通常过于复杂或过于宽泛。比如“它能写仓库和 sibling shared-lib，不能联网，访问其它目录要审批”是清楚的；“它应该没问题，因为我一直这样用”不是工程解释。
+
+审批人还应能看到证据。任务结束时，Codex 应报告实际修改路径和验证命令。如果沙箱被临时放宽，要报告原因和恢复方式。边界不是配置文件里的静态文字，而是任务执行过程中的可追踪事实。
+
+沙箱策略还应覆盖“失败时怎么办”。当权限不足时，Codex 不应自行要求最高权限，而应先说明缺少哪类访问、哪个命令触发、有没有更小替代方案。审批人看到的是具体缺口，而不是笼统的“需要更多权限”。这种报告方式能把权限提升从情绪化操作变成工程决策。
+
+## 延伸阅读
+
+- [Codex sandboxing](https://developers.openai.com/codex/concepts/sandboxing)
+- [Codex permissions](https://developers.openai.com/codex/permissions)
+- [Codex config basics](https://developers.openai.com/codex/config-basic)
+- [Codex CLI reference](https://developers.openai.com/codex/cli/reference)
+- [Codex rules](https://developers.openai.com/codex/rules)

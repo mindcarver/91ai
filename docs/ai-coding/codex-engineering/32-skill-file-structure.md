@@ -1,0 +1,317 @@
+# Skill 文件结构深度解析：触发描述、执行主线和资源组织
+
+## TL;DR
+
+一个可维护的 Skill 至少要回答三件事：Codex 什么时候应该打开它，打开后按什么顺序执行，执行中需要哪些外部资源。官方要求 `SKILL.md` 必须包含 `name` 和 `description`；Skill 目录可以包含 `scripts/`、`references/`、`assets/`，也可以包含 `agents/openai.yaml` 用于 app 展示元数据、调用策略和工具依赖。文件结构不是形式问题，而是 Codex 渐进披露机制的直接后果：初始路由靠 `name` 和 `description`，执行质量靠 `SKILL.md` 正文，复杂背景靠被按需读取的参考资料，确定性动作靠脚本。
+
+写 Skill 时不要追求“一个文件讲完全部知识”。更好的结构是：frontmatter 负责路由，正文负责任务主线，参考文件负责长规则，脚本负责可重复动作，资产负责输出模板。这样 Codex 既能在正确场景触发，也能在触发后保持上下文干净。
+
+## 读者定位
+
+本文面向已经决定维护团队 Skill 库的开发者、平台工程师和技术负责人。你可能已经读过 [Skills 入门](./31-skills-introduction.md)，知道 Skill 的定位，但还不确定一个 `SKILL.md` 应该写到什么粒度、目录怎样组织、描述怎样避免误触发、脚本和参考资料怎样放置。本文重点讲结构设计，不讨论团队推广、自动化和 SDK 集成。
+
+如果你只是想保存个人常用 prompt，没必要上来就设计完整目录。先把 prompt 放到个人笔记里更轻。Skill 文件结构的价值出现在多人复用、长期维护、需要脚本和参考资料、需要评测触发行为的场景。
+
+## 问题：为什么很多 Skill 写完后不好用
+
+失败的 Skill 往往不是因为内容少，而是因为结构混乱。常见情况有四类。
+
+第一类是路由描述太宽。`description: Helps developers write better code` 看起来友好，但 Codex 很难判断它适合 PR review、重构计划、测试补齐、文档更新还是安全扫描。结果是该触发时不一定触发，不该触发时却加载一大套流程。
+
+第二类是正文像知识库。作者把团队所有 review 规则、架构背景、示例报告、命令说明、故障排查和长列表全塞进 `SKILL.md`。Codex 一旦选中这个 Skill，就要背完整大文档。初期看似“信息充分”，后期会拖慢阅读、增加噪声，并让模型在关键步骤前消耗上下文。
+
+第三类是脚本边界不清。`scripts/check.sh` 存在，但没有说明输入、输出、依赖、退出码、会不会写文件、失败时怎样处理。Codex 可能在不合适的目录运行它，也可能把脚本失败误解为任务失败。
+
+第四类是资源路径靠猜。正文说“参考我们的安全规范”，却没有相对路径；说“使用模板输出”，却没说明模板在哪里；说“运行检查脚本”，但脚本需要未声明的环境变量。Skill 是给 agent 执行的，不是给熟悉项目的人类读者执行的。人类可以靠记忆补全，Codex 需要明确路径和条件。
+
+## 心智模型：三层结构加一层元数据
+
+可以把 Skill 文件结构拆成“路由卡、执行主线、资源库、元数据”四个部分。
+
+路由卡是 `SKILL.md` frontmatter 里的 `name` 和 `description`。它决定 Codex 是否会选择这个 Skill。`name` 要短、稳定、可显式调用；`description` 要写触发条件、排除条件和预期产出。它不需要写完整步骤，也不应该包含太多背景。
+
+执行主线是 `SKILL.md` 正文。它像 runbook：先确认输入，再收集上下文，再执行检查或生成，再验证，再输出。正文要告诉 Codex“下一步做什么”，而不是把所有知识平铺成说明书。好的执行主线会包含失败处理和降级路径。
+
+资源库是 `references/`、`scripts/`、`assets/`。长规则放参考文件，确定性动作放脚本，报告模板和可复用素材放资产。正文通过相对路径引用它们，并说明何时读取或运行。
+
+元数据是可选的 `agents/openai.yaml`。官方文档给出的用法包括 app 中的显示名、短描述、图标、品牌色、默认提示、隐式调用策略和工具依赖声明。比如 `policy.allow_implicit_invocation: false` 可以禁止 Codex 仅凭用户 prompt 隐式调用该 Skill，但显式 `$skill` 调用仍可用。这个选项适合高风险、边界窄或容易误触发的 Skill。
+
+## 最小目录结构
+
+官方 Skills 文档给出的结构大致是：
+
+```text
+my-skill/
+  SKILL.md
+  scripts/
+  references/
+  assets/
+  agents/
+    openai.yaml
+```
+
+最小可用版本只有 `SKILL.md`：
+
+```markdown
+---
+name: pr-risk-review
+description: Use when reviewing a pull request for correctness, security, compatibility, and missing tests. Do not use for general code explanation, refactoring advice, or tutorial writing.
+---
+
+# PR Risk Review
+
+## When To Use
+
+Use this skill when the user asks to review a pull request, inspect a diff before merge, or identify risks in code changes.
+
+## Steps
+
+1. Identify the changed files and the intended behavior.
+2. Read the diff and nearby code needed to verify assumptions.
+3. Check correctness, security, compatibility, test coverage, and migration risk.
+4. Run available read-only or project-approved checks when useful.
+5. Output findings by severity with file references, evidence, and suggested next action.
+
+## Failure Handling
+
+If the diff cannot be found, ask for the branch, PR number, or patch. If tests cannot run, report the command and failure reason instead of claiming verification.
+```
+
+这个结构已经能用，但它只适合简单流程。只要规则开始变长，就应该拆目录。
+
+## `name`：短、稳定、可显式调用
+
+`name` 是用户和 Codex 都会看到的技能标识。它应该使用小写、短横线、领域加动作的组合，比如 `pr-risk-review`、`release-readiness`、`ci-failure-triage`、`docs-link-audit`。不要用宽泛名字，比如 `developer-helper`、`quality-checker`、`team-workflow`。宽泛名字会让技能库难以浏览，也会让显式调用变得含糊。
+
+名字还要考虑长期兼容。团队成员可能在 prompt、Automation 或文档里写 `$release-readiness`。如果频繁改名，会破坏显式调用。可以在正文里写版本和变更记录，但不要随便改 `name`。如果一个 Skill 的职责大变，通常应该新建名字，并废弃旧 Skill，而不是让旧名字承载完全不同流程。
+
+## `description`：路由质量的关键
+
+`description` 是 Skill 最容易写坏的字段。它需要同时包含正向触发和反向排除。推荐结构是：
+
+```text
+Use when <用户任务和场景>. Do not use for <相邻但不适用的场景>. Output <交付物形态>.
+```
+
+例如：
+
+```text
+Use when triaging a failing CI job from logs, build output, or GitHub Actions status. Do not use for broad architecture review or writing new tests from scratch. Output likely root cause, evidence, and next commands.
+```
+
+这个描述包含三件事。第一，真实触发语境：CI failure、logs、build output、GitHub Actions status。第二，排除边界：架构 review、从零写测试。第三，产出：根因、证据、下一步命令。Codex 可以据此把它和 PR review、测试生成、发布检查区分开。
+
+不要把描述写成内部口号。比如“帮助团队更可靠地交付软件”无法路由。也不要把描述写成完整流程。描述过长会占用初始技能列表预算；官方文档明确提到技能列表预算有限，技能多时会先缩短描述，甚至省略部分技能。描述应该像索引卡，不是正文。
+
+## 正文：写操作顺序，不写百科
+
+`SKILL.md` 正文应该围绕任务主线组织。推荐章节包括：
+
+- `When To Use`：再次说明适用场景和边界。
+- `Inputs`：需要用户、仓库或工具提供什么。
+- `Workflow`：按顺序写动作。
+- `Verification`：怎样确认结果可靠。
+- `Output Format`：最终输出结构。
+- `Failure Handling`：权限、脚本、网络、路径、信息不足时怎样处理。
+- `References`：列出按需读取的相对路径。
+
+正文里的句子要用命令式，不要写长篇解释。例如“Read `references/review-rubric.md` only when classifying finding severity” 比“我们的团队非常重视 review 严重程度分类，因此这里提供了一份规范”更适合 agent 执行。
+
+正文还要明确“不要做什么”。PR review Skill 可以写“Do not edit files unless the user explicitly asks for fixes.” 发布检查 Skill 可以写“Do not assume a migration is reversible; verify rollback notes or mark as unconfirmed.” 这些边界能减少 agent 把检查任务误做成修改任务。
+
+## `references/`：长规则和领域背景的停放区
+
+参考资料适合放三类内容。
+
+第一类是 rubric。比如安全严重程度、PR review 维度、发布风险等级、文档质量标准。rubric 通常较长，不需要每次都完整读。正文可以写“当需要判断严重程度时读取 `references/severity-rubric.md`”。
+
+第二类是领域背景。比如内部平台架构、术语表、服务拓扑、常见故障模式。不要把这些背景复制到 `SKILL.md`。背景越长，越应该单独成文件。
+
+第三类是示例。比如好的报告、坏的报告、典型输入、边界案例。示例能提高输出稳定性，但也很占上下文。把它们放在 `references/examples.md`，正文写清“只有当输出格式不确定时读取”。
+
+参考文件的路径应相对 Skill 目录。不要写绝对路径，也不要依赖作者本机目录。Skill 被打包成 plugin 或复制到另一台机器时，绝对路径会失效。
+
+## `scripts/`：确定性动作，而不是隐藏逻辑
+
+脚本适合做确定性、可复现、比自然语言更可靠的动作，比如收集 diff、解析日志、运行静态检查、生成报告骨架、验证链接。脚本不适合承载大量未说明的业务判断。如果关键判断藏在脚本里，Codex 和维护者都难以审查。
+
+每个脚本至少要在 `SKILL.md` 或脚本头部说明：
+
+- 运行命令。
+- 必需参数。
+- 工作目录假设。
+- 会读取哪些文件。
+- 是否会写文件。
+- 是否需要网络或凭据。
+- 退出码含义。
+- 失败时的人工降级方式。
+
+例如：
+
+```markdown
+Run `scripts/collect-pr-context.sh <base-ref> <head-ref>` from the repository root to collect changed files and diff stats. The script reads Git metadata and writes no files. If it fails, use `git diff --stat` and `git diff --name-only` manually and report the failure.
+```
+
+这段说明比“运行收集脚本”可靠。Codex 在沙箱或审批受限环境里工作时，脚本是否写文件、是否需要网络、是否可能访问凭据，都会影响能否执行。
+
+## `assets/`：模板和素材
+
+`assets/` 适合放输出模板、报告骨架、示例表格、固定片段。比如 `assets/release-report-template.md` 可以规定发布检查报告的栏目。正文可以要求 Codex 读取模板后填充，而不是每次凭记忆生成格式。
+
+不要把会变化的事实放进模板。比如“当前负责人是某某”“当前生产版本是某某”不应该写死在 assets 里。模板应提供结构，事实应从当前仓库、用户输入或授权系统读取。
+
+如果模板要被自动化下游消费，尽量保持字段稳定。比如报告固定包含 `scope`、`commands_run`、`blocking_findings`、`non_blocking_risks`、`manual_checks`、`next_actions`。字段稳定后，Automation 或 SDK 更容易解析结果。
+
+## `agents/openai.yaml`：展示、调用策略和依赖声明
+
+官方文档给出的 `agents/openai.yaml` 可以包含 `interface`、`policy` 和 `dependencies`。`interface` 用于 Codex app 展示，比如显示名、短描述、图标、品牌色、默认 prompt。`policy.allow_implicit_invocation` 默认是 `true`；设为 `false` 后，Codex 不会仅凭用户 prompt 隐式调用该 Skill，但用户仍可显式写 `$skill-name`。`dependencies.tools` 可以声明 MCP 等工具依赖。
+
+这个文件不要滥用。多数早期团队 Skill 用 `SKILL.md` 就够。当 Skill 要在 app 里给用户展示、需要禁止隐式调用、或需要声明工具依赖时，再加 `agents/openai.yaml`。尤其是高风险 Skill，比如会提交 PR、处理安全扫描、接触生产配置，建议关闭隐式调用，让用户显式触发。
+
+示例：
+
+```yaml
+interface:
+  display_name: "Release Readiness"
+  short_description: "Check release risk, rollback, tests, and docs"
+  default_prompt: "Use $release-readiness to check this branch before release."
+policy:
+  allow_implicit_invocation: false
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "github"
+      description: "GitHub repository and pull request access"
+```
+
+依赖声明不是授权本身。连接器、MCP、沙箱和审批策略仍要单独配置。把依赖写清楚的价值是让用户和维护者知道这个 Skill 需要哪些能力，方便排障。
+
+## 真实工作流案例：CI 失败诊断 Skill
+
+一个 `ci-failure-triage` Skill 可以这样组织：
+
+```text
+ci-failure-triage/
+  SKILL.md
+  references/
+    failure-taxonomy.md
+    flaky-test-policy.md
+  scripts/
+    extract-github-actions-log.sh
+    summarize-test-output.py
+  assets/
+    triage-report-template.md
+```
+
+`description`：
+
+```text
+Use when diagnosing failed CI, build logs, test output, or GitHub Actions failures. Do not use for broad refactoring, feature implementation, or release approval. Output root cause candidates, evidence, and next commands.
+```
+
+`SKILL.md` 正文主线：
+
+1. 确认日志来源、失败 job、分支和最近变更。
+2. 如果有 GitHub Actions 访问能力，收集失败 job 日志；否则让用户提供日志。
+3. 先分类：依赖安装、编译、单元测试、集成测试、lint、环境配置、网络、凭据、超时、疑似 flaky。
+4. 读取 `references/failure-taxonomy.md` 辅助分类。
+5. 只在需要判断 flaky 时读取 `references/flaky-test-policy.md`。
+6. 输出根因候选、证据行、建议命令、需要人工确认的问题。
+7. 如果用户要求修复，再进入修改流程；诊断 Skill 默认不改文件。
+
+这个结构有几个好处。路由足够明确，不会被普通“帮我写测试”触发；正文默认只诊断，不修改文件；参考资料按需读；脚本的输入来自日志或 job id；输出模板能被 Slack、PR comment 或工单系统复用。
+
+## 操作清单
+
+1. 给 Skill 起一个窄名字，使用小写 kebab-case。
+2. 在 `description` 里写正向触发、排除场景和输出形态。
+3. 正文使用命令式步骤，按输入、流程、验证、输出、失败处理组织。
+4. 把超过一屏的长规则移到 `references/`。
+5. 每个脚本写清输入、输出、权限、工作目录和失败处理。
+6. 模板放 `assets/`，事实不要写死在模板里。
+7. 高风险或窄边界 Skill 考虑在 `agents/openai.yaml` 里关闭隐式调用。
+8. 所有路径使用相对路径。
+9. 建立正例和反例，验证 `description` 不会欠触发或误触发。
+10. 每次改结构后跑一次真实任务，确认 Codex 能找到资源并按预期降级。
+
+## 权衡与风险
+
+结构越细，维护成本越高。一个只有十行步骤的小 Skill 不需要复杂目录；过度拆分会让维护者在多个文件间跳转。结构设计要服务于复用和按需加载，不要为了“看起来正规”创建空目录。
+
+描述越窄，误触发越少，但欠触发可能增加。描述越宽，触发率上升，但错误加载会污染任务。团队应根据风险选择。低风险文档格式化 Skill 可以稍宽；会修改代码或调用外部系统的 Skill 应更窄，甚至禁止隐式调用。
+
+脚本能提高稳定性，也会引入平台依赖。Windows、macOS、Linux、CI runner、开发机的 shell 环境不同。脚本越多，越需要说明运行环境和替代路径。
+
+参考资料能保存团队知识，也会过期。每个 reference 文件都应有 owner 或更新触发条件。比如发布流程变了、测试框架换了、官方 Codex 能力变了，相关 Skill 应同步更新。
+
+## 常见误区
+
+误区一：把 `description` 写成宣传语。它应该是路由规则。
+
+误区二：`SKILL.md` 正文越长越安心。正文应保留主线，长背景拆到参考文件。
+
+误区三：脚本没有接口说明。Codex 需要知道怎样调用、会造成什么副作用。
+
+误区四：路径写成作者机器上的绝对路径。Skill 应可复制、可打包、可在不同机器运行。
+
+误区五：所有 Skill 都允许隐式触发。高风险流程应要求显式 `$skill-name`。
+
+误区六：没有负例测试。描述调整后，不测反例就无法发现误触发。
+
+## 文件评审标准：合并前应该看哪些细节
+
+团队共享 Skill 合并前，建议做一次结构评审。评审不需要像复杂代码改动那样重，但要覆盖 agent 实际会踩坑的地方。
+
+第一，看 frontmatter。`name` 是否稳定、短、可显式调用；`description` 是否包含触发场景、排除场景和输出形态；描述中是否有“提升效率”“优化质量”这类无法路由的抽象词。如果一个新成员只读 description，能否判断什么时候该用它，什么时候不该用它。
+
+第二，看正文主线。步骤是否按执行顺序写，而不是按知识分类堆叠；是否先确认输入和范围；是否说明读取哪些文件、运行哪些命令、何时停止；是否要求输出证据和未确认项。很多 Skill 失败不是信息不足，而是步骤没有先后，Codex 在中途自行补流程。
+
+第三，看资源拆分。`SKILL.md` 是否过长；长 rubric 是否放入 `references/`；模板是否放入 `assets/`；脚本是否放入 `scripts/`；正文是否用相对路径引用。一个简单判断是：如果删除所有 reference 文件，`SKILL.md` 是否仍能告诉 Codex 大致怎样工作；如果只读 reference 文件，是否能理解它们各自服务哪个判断。
+
+第四，看脚本接口。脚本名是否表达动作；是否说明运行目录；是否说明参数、输出、退出码；是否声明会不会写文件；是否依赖网络、凭据、平台工具或特定 shell。脚本越“聪明”，说明越要具体。不要把复杂副作用藏在一个看似无害的文件名里。
+
+第五，看失败路径。缺少输入、权限不足、脚本失败、网络不可用、连接器未授权、仓库不是 Git、路径不存在时，Skill 是否要求 Codex报告真实状态并降级。没有失败路径的 Skill 在人工交互里会让用户困惑，在 Automation 中会变成重复失败。
+
+第六，看输出。输出是否适合被人处理，是否包含证据，是否有严重程度，是否标出未验证项。输出不是越长越好。团队 Skill 的输出应能进入 PR、工单、Triage 或发布单后被快速判断。
+
+## 结构演进：从单文件到可分发 Skill
+
+Skill 不必一开始就完整。更稳的演进路径是三阶段。
+
+第一阶段是单文件。只包含 `SKILL.md`，适合流程短、没有脚本、没有长背景的任务。这个阶段重点打磨 description 和主线步骤。比如“检查 Markdown 内部链接并输出问题清单”可以先单文件实现。
+
+第二阶段是带资源。流程稳定后，把长规则、示例、模板和脚本拆出去。比如文档链接检查加入 `scripts/check-links.sh`，把输出格式放入 `assets/report-template.md`，把链接判定规则放入 `references/link-policy.md`。拆分后，要确认正文仍然写清何时读取或运行这些资源。
+
+第三阶段是可分发。团队希望多个开发者安装、更新、启用或禁用时，可以把 Skill 放进 plugin 或团队分发机制。此时要关注依赖声明、图标和 app 展示、隐式调用策略、版本兼容、迁移说明。官方 Skills 文档也建议：本地实验可用 skill installer，想给其他开发者安装复用时优先考虑 plugins。
+
+演进过程中要避免反向复杂化。一个单文件 Skill 如果已经稳定，不需要为了“标准化”强行创建空目录。结构是为了降低上下文噪声和维护成本，不是为了满足模板审美。
+
+## 多 Skill 库中的边界设计
+
+单个 Skill 写得好，不代表技能库整体好用。多个 Skill 之间会争夺路由。边界设计要主动处理相邻任务。
+
+比如 `pr-risk-review`、`ci-failure-triage`、`release-readiness` 都可能涉及测试失败。三者的 description 必须区分对象：PR review 看变更风险，CI triage 看失败日志根因，release readiness 看发布前阻塞项。它们的输出也应不同：PR review 输出 findings，CI triage 输出根因候选和下一步命令，release readiness 输出发布阻塞项和人工确认项。
+
+如果两个 Skill 经常被同一句请求触发，先不要急着调模型。把两者 description 放在同一页比较，找出重叠词和缺失排除条件。必要时合并 Skill，或把其中一个设为显式调用。技能库越大，越要避免“每个 Skill 都想覆盖一大片”的写法。
+
+团队还可以建立 Skill 索引，但索引不要放进每个 Skill。索引用于人类浏览，Skill description 用于 Codex 路由。两者用途不同。把大量索引信息写入每个 `SKILL.md` 会增加维护成本。
+
+## 文档风格：让 Skill 面向执行而不是阅读欣赏
+
+Skill 的读者是 Codex，间接读者才是人。写作风格要服务执行。每个步骤尽量包含动词、对象和产物，例如“读取 `references/release-rubric.md` 并按阻塞、风险、未确认分类”，比“参考发布规范进行分析”更可执行。不要把关键要求藏在长段落中；关键步骤应独立成行。
+
+同时要避免过度机械。Skill 不是 shell 脚本，仍然要给 Codex 判断空间。比如“如果测试无法运行，报告命令、错误和影响，不要声称已验证”比“测试失败就停止”更适合真实工程场景。好的 Skill 会定义判断框架和证据要求，而不是把每个分支写死。
+
+输出格式要少而稳定。团队常犯的错误是要求十几个栏目，结果每次报告都空一半。更实用的字段是：范围、证据、结论、未确认项、下一步。PR review 可以增加严重程度；发布检查可以增加阻塞项；CI 诊断可以增加根因候选。字段一旦进入 Automation 或 SDK，下游会依赖它，修改时要按接口变更处理。
+
+示例也要克制。一个好例子和一个坏例子往往足够说明风格。大量示例会让 Codex 模仿某个旧场景，反而忽略当前输入。示例适合放在 `references/examples.md`，正文只说明何时读取。
+
+最后，中文团队也可以在 Skill 中使用英文 frontmatter 和中文正文。`name` 和 `description` 更接近 Codex 路由入口，保持简洁英文通常可复用性更好；正文用中文写团队流程、风险和输出要求，能让维护者更容易审查。关键是描述清楚，不是追求一种语言风格。
+
+## 延伸阅读
+
+- [Agent Skills](https://developers.openai.com/codex/skills)
+- [Record & Replay](https://developers.openai.com/codex/record-and-replay)
+- [Subagents 配置](https://developers.openai.com/codex/subagents)
+- [上一篇：Skills 入门](./31-skills-introduction.md)
+- [下一篇：Skill 评测与调试](./33-skill-evaluation-debugging.md)

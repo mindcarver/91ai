@@ -56,7 +56,7 @@
 </tr>
 <tr>
   <td align="center">选一个 AI 编程工具</td>
-  <td><a href="./docs/ai-coding/">AI Coding 工具评测</a> — 6 款工具横向对比，按难度和场景选型</td>
+  <td><a href="./docs/ai-coding/">AI Coding 工具评测</a> — 按难度、场景和风险边界做横向选型</td>
 </tr>
 <tr>
   <td align="center">系统学习 AI 应用开发</td>
@@ -109,7 +109,7 @@
   <td>中</td>
   <td>付费</td>
   <td>全栈 / GitHub 用户</td>
-  <td align="center"><a href="./docs/ai-coding/openai-codex.md">查看</a></td>
+  <td align="center"><a href="./docs/ai-coding/openai-codex.md">索引</a> · <a href="./docs/ai-coding/codex-engineering/">工程化</a></td>
 </tr>
 <tr>
   <td><a href="./docs/ai-coding/cursor.md">Cursor</a></td>

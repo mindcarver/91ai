@@ -1,0 +1,404 @@
+# Codex 工具体系总览：文件编辑、Shell、检索、MCP 与并行调用
+
+## TL;DR
+
+Codex 的工程能力来自“模型加工具循环”，不是来自一次自然语言回答。文件编辑通常应走 patch 或受控编辑通道；搜索、构建、测试、Git 检查走 shell；外部系统和私有上下文通过 MCP、插件或连接器接入；只读信息收集可以并行，写操作和有共享状态的命令要串行；沙箱和审批决定工具能做什么以及什么时候要停下来问人。理解工具边界，才能把 Codex 用成工程系统，而不是把它当成会写代码的聊天窗口。
+
+## 读者定位
+
+这篇面向中高级开发者、技术负责人和负责 AI 编程治理的平台团队。你可能已经让 Codex 改过代码、跑过测试、查过文档，但还没有系统定义“什么工具做什么事”。本文不会解释每个内部实现细节，而是给出团队可落地的工具策略：编辑、命令、检索、外部上下文、并行、权限和审计如何配合。
+
+## 问题：很多 Codex 事故本质是工具边界混乱
+
+AI 编程失败不总是模型不会写代码。更常见的是工具用错：
+
+- 用 shell 拼接大段文本覆盖源文件，diff 难审。
+- 让多个并行 worker 改同一文件，产生冲突和语义覆盖。
+- 让 Codex 在禁网沙箱里安装依赖，反复失败。
+- 给只读审查任务写权限，扩大风险。
+- 把外部网页或搜索结果当可信事实，忽略 prompt injection。
+- 让 Codex 访问私有系统，却没有审计工具权限和数据边界。
+- 测试输出几万行塞进上下文，关键错误被淹没。
+
+要把 Codex 用稳，团队必须从“写 prompt”升级到“设计工具协议”。模型负责选择下一步，工具负责改变世界。真正的风险通常发生在工具执行层。
+
+## 心智模型：一次 Codex 工作循环
+
+可以把 Codex 工作循环简化为：
+
+```text
+读取上下文
+-> 形成下一步计划
+-> 调用工具
+-> 读取工具结果
+-> 更新判断
+-> 继续执行或收尾报告
+```
+
+工具体系至少包含几类：
+
+```text
+文件编辑：patch、受控编辑器、项目格式化工具
+Shell：rg、git、lint、typecheck、test、build、脚本
+检索：本地搜索、官方文档、web search
+外部工具：MCP、插件、连接器、GitHub/Linear/Slack 等
+并行执行：多个只读检索、多个候选方案、subagents、Cloud attempts
+治理：沙箱、审批、规则、profile、AGENTS.md、hooks
+```
+
+每类工具都要问三件事：它会不会改变状态？它能访问什么数据？失败后如何回滚或报告？只要这三件事不清楚，就不应该放进自动化流程。
+
+## 文件编辑：优先可审查 diff
+
+源代码编辑的目标不是“写进去”，而是生成可审查、可回滚、可验证的 diff。手工或模型直接用 shell 重写整个文件，容易引入编码、换行、格式、无关段落变化，也让 reviewer 难以定位真实修改。
+
+团队规则可以写得很具体：
+
+```markdown
+## Editing policy
+
+- Use patch-style edits for source files and documentation.
+- Do not rewrite whole files unless the task explicitly asks for regeneration.
+- Use project formatters for mechanical formatting.
+- Do not modify lockfiles, generated clients, migrations, or CI config without explicit approval.
+- After edits, inspect `git diff --stat` and relevant file diffs.
+```
+
+大型机械变更例外。比如全仓格式化、重命名、生成 OpenAPI client、更新 lockfile，应优先使用项目自己的确定性工具，然后审查 diff。不要让 Codex 手写生成文件。Codex 可以建议命令、解释 diff、修失败，但最终生成物最好来自可重复工具。
+
+## Shell：搜索、验证和项目事实
+
+Shell 是 Codex 与真实项目交互的主要通道。它适合：
+
+- 用 `rg`、`git grep` 搜索代码。
+- 用 `git status`、`git diff`、`git log` 查看版本状态。
+- 运行 lint、typecheck、test、build。
+- 调用项目脚本生成确定性输出。
+- 检查文件列表、包管理器版本和环境信息。
+
+示例：
+
+```bash
+rg "refreshToken" src
+rg --files src/auth
+git diff --stat
+pnpm lint
+pnpm typecheck
+pnpm test -- src/auth/session.test.ts
+```
+
+Shell 也危险。它能删除文件、访问网络、触发部署、读取环境变量、运行仓库脚本。官方安全文档说明 Codex 本地运行受沙箱和审批策略控制；网络默认关闭；`workspace-write` 允许工作区操作但不等于无限制；`danger-full-access` 应只放在受控环境。
+
+因此 shell 策略应该包含：
+
+- 搜索和验证优先用最小范围命令。
+- 高风险命令需要审批。
+- 安装依赖、访问网络、部署、数据库写入、删除文件要单独确认。
+- 输出过长时先缩小范围或截取关键部分。
+- 不把密钥和环境变量打进 prompt 或日志。
+
+## 本地检索与官方资料
+
+Codex 可以读取仓库文件，也可以在支持的环境中使用 web search。官方文档说明本地任务中的 web search 默认使用缓存模式，`--search` 可切换到 live；在高权限沙箱设置下，web search 默认可能变为 live。无论哪种模式，外部搜索结果都应视为不可信输入。
+
+工程资料优先级建议：
+
+```text
+1. 仓库内事实：源码、测试、配置、AGENTS.md、README、CI。
+2. 官方文档：OpenAI、框架、语言、云服务的官方页面。
+3. 项目 issue / PR / 内部文档：需要权限和来源记录。
+4. 社区博客和问答：只能作为线索，不能作为最终事实。
+```
+
+对 Codex 产品能力、命令、配置和安全行为，应以 OpenAI 官方文档、CLI reference、AGENTS.md 指南、GitHub Action 文档和 openai/codex 仓库为准。不要用二手文章解释最新命令。
+
+## MCP、插件和连接器：外部系统不是普通网页
+
+MCP 是连接模型与外部工具和上下文的标准方式。官方 Codex 文档说明它可用于让 Codex 访问第三方文档，或与浏览器、Figma 等开发工具交互；Codex CLI 和 IDE extension 都支持 MCP 服务器。插件则可以把技能、工具、MCP 配置、hooks、资产等打包成可安装能力。连接器适合访问授权的私有系统，例如 GitHub、Linear、Slack、Google Drive 等。
+
+这些工具的风险高于普通本地读取，因为它们可能有副作用：发评论、改 issue、读私有文档、创建 PR、访问设计稿。官方安全文档也指出，带副作用的 app/MCP 工具调用可以触发审批；破坏性工具调用在工具声明为 destructive 时需要审批。
+
+团队要定义：
+
+- 哪些外部系统可以接入 Codex。
+- 哪些操作只读，哪些允许写。
+- 写操作是否必须人工审批。
+- 工具返回的数据是否可进入 prompt、日志或 PR。
+- 工具失败时是否阻塞任务。
+
+不要把连接器当 web search。私有系统的数据有权限、隐私和审计要求。
+
+## 并行调用：只读可并行，写状态要谨慎
+
+并行能减少等待，但不能减少复杂度。适合并行的任务：
+
+- 同时读取多个互不依赖文件。
+- 同时搜索多个不相交目录。
+- 多个只读 subagent 分析不同风险维度。
+- Cloud 中请求多个候选 attempts。
+- 多个 worktree 中执行互不重叠任务。
+
+不适合并行的任务：
+
+- 两个 worker 修改同一文件。
+- 一个命令依赖另一个命令生成的文件。
+- 多个任务共享同一个工作区状态。
+- 多个 shell 命令同时写同一缓存、数据库或构建目录。
+- 多个 agent 同时尝试解决同一冲突。
+
+判断标准很简单：两个操作是否读写同一份状态？如果会，就串行。如果只是读取不同文件，可以并行。
+
+官方 subagents 文档也给出类似边界：并行代理适合探索、测试、日志分析、总结等读重任务；写重工作流要更谨慎，因为多个 agent 同时编辑会增加冲突和协调成本。Codex 不会自动启动 subagents，需要你明确要求并行代理工作；每个子代理都会消耗自己的模型和工具成本。
+
+## 工具策略与权限策略要一致
+
+工具策略不能脱离权限。一个团队如果规定“Codex 可以跑测试”，但沙箱里没有依赖、没有网络、没有数据库，执行就会失败。反过来，如果为了让测试能跑而开放全权限，又会暴露密钥和文件系统风险。
+
+可以把策略写成矩阵：
+
+| 场景 | 工具 | 权限 | 审批 | 输出 |
+|---|---|---|---|---|
+| 代码理解 | 文件读取、`rg`、`git grep` | read-only | 不需要 | 摘要和引用路径 |
+| PR 审查 | `git diff`、测试日志读取 | read-only | 不需要 | Markdown 或 JSON |
+| 小修复 | patch、定向测试 | workspace-write | 网络和越界写入需审批 | diff、命令结果 |
+| 依赖安装 | 包管理器、网络 | workspace-write + 网络 | 需要 | 安装日志和锁文件 diff |
+| 部署/数据库 | shell、外部系统 | 不建议本地代理自动执行 | 必须人工 | 手动 runbook |
+
+把这张表写进 `AGENTS.md` 或团队工程手册，比口头提醒可靠。Codex 每次进入项目都能读到相同边界，reviewer 也能按同一标准审查。
+
+## 真实工作流案例：修复 auth bug 的工具编排
+
+第一阶段只读探索：
+
+```bash
+rg "refreshToken|session" src/auth src/api
+git diff --stat
+```
+
+Codex 可并行读取：
+
+```text
+并行读取：
+- src/auth/session.ts
+- src/auth/session.test.ts
+- src/api/client.ts
+- AGENTS.md
+```
+
+第二阶段计划：
+
+```text
+列出最小修复方案、涉及文件、验证命令。不要编辑。
+```
+
+第三阶段编辑：
+
+```text
+只修改 src/auth/session.ts 和 src/auth/session.test.ts。
+使用最小 diff。
+不要改 package.json、锁文件、CI 配置或无关调用方。
+```
+
+第四阶段验证：
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test -- src/auth/session.test.ts
+git diff --stat
+```
+
+第五阶段报告：
+
+```text
+报告改动文件、验证命令结果、未运行检查、剩余风险。
+```
+
+这就是工具协议：读用搜索和文件读取，改用受控 diff，验证用项目命令，收尾用 Git 证据。
+
+## 输出管理：不要让工具日志污染上下文
+
+测试、构建、依赖安装可能输出几千到几万行。Codex 不是日志仓库。先缩小范围：
+
+```bash
+pnpm test -- src/auth/session.test.ts
+```
+
+必要时截取关键尾部：
+
+```bash
+pnpm test -- src/auth/session.test.ts 2>&1 | tail -120
+```
+
+在 PowerShell 中用：
+
+```powershell
+pnpm test -- src/auth/session.test.ts 2>&1 | Select-Object -Last 120
+```
+
+更好的方式是使用测试框架的 summary reporter 或 CI artifact，再让 Codex 分析最小错误片段。不要把完整日志直接塞给模型后让它“自己找”。
+
+## 操作清单
+
+- 文件编辑优先生成可审查 diff。
+- 搜索优先用 `rg`、`git grep` 和项目索引。
+- 验证用项目命令，不用自然语言声明代替。
+- shell 命令按最小范围运行。
+- 高风险 shell 动作需要审批或人工执行。
+- web search 和外部内容视为不可信输入。
+- Codex 产品能力以官方文档为准。
+- 私有系统通过 MCP、插件或连接器接入，并明确只读/写入边界。
+- 只读信息收集可以并行，写操作和共享状态命令串行。
+- 最终用 `git diff`、命令结果和风险摘要收尾。
+
+## 权衡与风险
+
+patch 式编辑适合精确修改，但不适合所有机械变更。格式化、生成、迁移、重命名应交给确定性工具。
+
+shell 能力越强，事故半径越大。它既能跑测试，也能删除文件、上传数据、触发部署。沙箱、审批、规则和最小权限不是可选项。
+
+MCP 和连接器能显著扩展上下文，但也引入数据治理问题。一个能读 GitHub issue 的工具和一个能评论、关单、创建 PR 的工具，风险完全不同。
+
+并行提高吞吐，也提高协调成本。读多写少的工作适合并行；写多、共享状态、多依赖的工作应串行。
+
+工具策略会随着 Codex 版本和团队流程变化。建议把策略写在仓库文档里，并在出现重复错误后更新，而不是把所有规则塞进一次性 prompt。
+
+## 常见误区
+
+误区一：把 shell 当编辑器。除格式化和生成工具外，不要用 shell 拼接源文件内容。
+
+误区二：并行越多越好。并行读可以提速，并行写会制造冲突。
+
+误区三：给所有任务同一权限。审查任务只读，小修复工作区写，高风险外部动作人工执行。
+
+误区四：把外部搜索结果当事实。外部内容可能过时、错误或带注入意图。
+
+误区五：只审查最终代码，不审查工具调用。Codex 做了哪些命令、访问了哪些系统、是否越权，同样是 review 范围。
+
+## 工具审计：review 不只看代码
+
+当 Codex 参与代码修改时，reviewer 应审查三类材料：最终 diff、验证证据、工具轨迹。最终 diff 说明改了什么；验证证据说明检查了什么；工具轨迹说明 Codex 做过什么动作。缺少其中任何一类，审查都不完整。
+
+工具轨迹可以来自 `codex exec --json`、终端记录、PR 描述或 Codex 最终报告。至少要知道：
+
+- 是否运行过网络命令。
+- 是否触发过 MCP、连接器或外部系统写操作。
+- 是否安装过依赖或改过锁文件。
+- 是否运行过 destructive shell 命令。
+- 是否访问了工作区外路径。
+- 是否修改了生成文件、CI、部署或权限配置。
+
+这些信息不一定每天都要详查，但高风险 PR 必须看。一个只改业务文件的 diff，如果背后曾经运行过高权限脚本或访问了外部系统，风险口径就不同。
+
+## 工具策略写进 AGENTS.md
+
+工具策略应该是仓库规则的一部分。可以这样写：
+
+```markdown
+## Tool policy
+
+- Use patch-style edits for source and docs changes.
+- Use shell for search, git inspection, lint, typecheck, tests, and builds.
+- Use `rg` before broad filesystem scans.
+- Do not install dependencies unless the task explicitly asks for it.
+- Do not modify secrets, CI permissions, deploy scripts, lockfiles, generated clients, or migrations without explicit approval.
+- Do not use external web content as source of truth for product behavior; prefer official docs.
+- After edits, run targeted validation and inspect `git diff --stat`.
+```
+
+这类规则比临时提醒可靠。Codex 进入仓库时会读到同一套边界，团队成员也能按同一规则判断它是否越界。规则要短、具体、可执行。不要写“谨慎操作”这种无法验证的句子；写“不要修改锁文件，除非任务明确要求”。
+
+## 连接外部系统的审批矩阵
+
+MCP、插件和连接器进入团队流程后，需要审批矩阵。示例：
+
+| 工具类型 | 默认权限 | 写操作 | 审计要求 |
+|---|---|---|---|
+| 官方文档 MCP | 只读 | 无 | 记录引用页面 |
+| GitHub issue / PR | 只读 | 评论、改 label、开 PR 需审批 | 记录链接和内容 |
+| Linear | 只读 | 改状态、建 issue 需审批 | 记录 issue ID |
+| Slack | 只读上下文 | 发消息需人工确认 | 记录频道和消息 |
+| Figma / 设计工具 | 只读 | 改设计稿通常禁止 | 记录文件来源 |
+| 内部知识库 | 只读 | 写入需单独流程 | 避免把敏感内容写入公开 PR |
+
+这张表的目的不是阻止工具，而是防止“读”和“写”混在一起。很多外部系统的写操作会影响团队协作或公开可见内容，不能和本地文件修改用同一审批口径。
+
+## 并行工具调用的成本模型
+
+并行会减少等待时间，但不减少总工作量。多个工具同时返回大输出，会更快耗尽上下文。多个子代理并行分析，会消耗更多模型调用。多个 worktree 并行修复，会增加合并和 review 成本。团队在设计并行流程时，要同时看三种成本：机器时间、模型成本、人类审查成本。
+
+一个实用判断是：读重任务并行，写重任务限流。读重任务包括代码索引、日志摘要、风险扫描、文档查找；写重任务包括代码修改、迁移、依赖升级、生成文件更新。读重任务的冲突少，输出可以汇总；写重任务会争用文件、构建缓存、测试环境和 reviewer。
+
+并行任务还要有汇总者。多个子代理或多个 worker 产出结果后，必须有一个主线程负责合并判断、去重、排序和输出结论。不要让每个 worker 都直接修改最终文件，除非它们的文件范围完全不重叠。
+
+## 工具失败时的沟通格式
+
+工具失败报告应短而完整：
+
+```text
+Tool: shell / patch / MCP / web search
+Command or action:
+Expected:
+Actual:
+Exit code or error:
+Likely layer:
+Next safe step:
+```
+
+不要只写“命令失败”。失败的工具不同，下一步完全不同。patch 失败可能是上下文过期；shell 失败可能是权限或项目命令问题；MCP 失败可能是授权或服务器配置；web search 失败可能是网络或来源不可用。分清工具层，才能让人快速接手。
+
+## 成熟度路线
+
+团队可以按成熟度推进工具使用。
+
+第一阶段，只读工具为主：本地搜索、Git diff、官方文档、代码解释。目标是建立信任和上下文质量。
+
+第二阶段，受控编辑：patch 小 diff、定向测试、明确 Done-when。目标是让 Codex 能完成低风险改动。
+
+第三阶段，外部工具：MCP、GitHub、Linear、文档系统。目标是减少上下文搬运，但写操作仍要审批。
+
+第四阶段，并行和自动化：`codex exec`、Cloud attempts、subagents、队列。目标是提高吞吐，但必须配合隔离、审计和 review 预算。
+
+不要跳过前两阶段直接进入并行自动化。工具体系越复杂，越需要先有清楚的编辑和验证规则。
+
+## 工具选择的责任边界
+
+Codex 的工具体系很容易被误解成“工具越多越好”。实际工程里，工具越多，边界越重要。每个工具都要回答三个问题：它能读什么，能写什么，失败后谁负责。`apply_patch` 负责文件修改，shell 负责执行命令，web search 负责查外部资料，MCP 和连接器负责外部系统，subagent 负责分工协作。把这些能力混在一起，会让审计变困难。
+
+一个任务如果只是改 Markdown，通常只用读文件、写文件、跑检查。引入网页、外部系统和多代理，只会增加风险。一个任务如果要评估最新官方能力，web search 合理，但来源要限制在官方文档。一个任务如果要处理 PR 评论，GitHub 连接器合理，但写评论和改标签应有审批。工具选择应从任务需要出发，而不是从可用工具出发。
+
+## 工具调用的审计粒度
+
+审计不等于记录所有文本。文件工具要记录路径和 diff；shell 要记录命令、工作目录、退出码和关键输出；web search 要记录来源 URL 和访问日期；MCP 写操作要记录对象 ID、动作和结果；subagent 要记录任务范围和改动文件。敏感输入、token、客户数据和完整日志不应无脑保存。
+
+好的审计记录能支持事故复盘。比如一个外部链接被写错，能查到来源页面；一个文件被误改，能查到哪个任务授权了该路径；一个命令删了缓存，能查到运行目录和参数。没有审计，团队只能从最终 diff 猜过程。
+
+## 组合工具的常见陷阱
+
+第一类陷阱是读写混用。让 Codex 先用 web search 读不可信网页，再给高权限 shell 写本地文件，会扩大提示注入风险。外部内容应当作为数据处理，不应成为新指令。
+
+第二类陷阱是并行写入。多个 agent 或工具同时改同一文件，会产生覆盖和冲突。并行适合读取、比较和独立文件写入，不适合共享状态修改。
+
+第三类陷阱是命令替代审查。测试通过不代表设计正确，link check 通过不代表来源可靠，格式化通过不代表内容没有错误。工具提供证据，人负责判断。
+
+第四类陷阱是把连接器当成普通文件系统。GitHub、Linear、Slack、Figma 这类外部系统的写操作会影响协作空间，不应和本地文件写入同级审批。
+
+## 最小工具原则
+
+可以把工具使用设计成升级阶梯。先用本地读取和搜索确认上下文；需要编辑时用 patch；需要验证时用 shell；需要最新资料时用官方来源搜索；需要外部系统时用只读连接器；需要写外部系统时请求审批；需要多代理时拆分不重叠范围。每升一级，都要有明确收益。
+
+这个原则能减少很多不必要风险。比如能用 `rg` 找到的内容，不必让 subagent 扫仓库；能用本地文档确认的事实，不必查网页；能用只读 GitHub 查询解决的问题，不必给写权限。工具能力是上限，不是默认路径。
+
+## 工具失败的降级策略
+
+工具失败时，不要马上换更高权限工具。`apply_patch` 失败，先检查上下文是否过期；shell 失败，先看退出码和工作目录；web search 失败，先确认是否需要联网；MCP 失败，先检查授权和对象 ID；subagent 卡住，先要求状态报告并缩小任务。降级策略应优先缩小范围、提高证据质量，而不是扩大权限。
+
+如果某个工具不可用，最终报告要写清楚影响。比如外部链接检查因网络不可用未跑，说明链接有效性还有残余风险；GitHub 连接器不可用，说明 PR 评论未同步；shell 脚本因 CRLF 失败，说明本地检查未完成。诚实报告比假装完成更可靠。
+
+## 延伸阅读
+
+- [Codex 官方文档](https://developers.openai.com/codex)
+- [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
+- [Agent approvals and security](https://developers.openai.com/codex/agent-approvals-security)
+- [Model Context Protocol in Codex](https://developers.openai.com/codex/mcp)
+- [AGENTS.md 官方指南](https://developers.openai.com/codex/guides/agents-md)

@@ -1,0 +1,336 @@
+# Profile 与 Rules 系统：把 Codex 的场景切换和命令准入分层治理
+
+## TL;DR
+
+Codex 的 profile 和 rules 解决的是两类问题。profile 选择一组配置覆盖，用来切换工作场景，例如只读审计、日常编辑、网络受限维护。rules 控制 Codex 请求在沙箱外运行命令时，哪些命令前缀可以允许、需要提示或直接禁止。二者不应混为一谈：profile 是“本次会话的默认行为”，rules 是“越界命令的准入策略”。团队要做的是用 profile 表达常见工作模式，用 rules 给高风险 shell 前缀设边界，再用 managed requirements 限制开发者不能绕过底线。
+
+## 读者定位
+
+本文面向已经开始把 Codex 带入日常工程流程的中高级开发者、DevEx 负责人、安全工程师和技术负责人。你需要理解 Codex 的沙箱和审批概念，也需要了解 shell 命令如何被拆分、审查和执行。本文不会把每个配置键列成手册，而是关注如何设计一套可维护的 profile 与 rules 体系，让团队在不同任务里获得合适自治度，同时保留审计和拦截能力。
+
+## 问题：只有一个默认模式不够，只有人工审批也不够
+
+真实团队里，Codex 不只做一种事。解释代码时，应该只读；修普通 bug 时，需要写工作区和跑测试；升级依赖时，可能需要联网；发布、迁移、推送、改数据库时，需要强人工确认。把所有任务都放进同一个 `workspace-write + on-request` 默认模式，短期能用，长期会出现两个问题。
+
+第一，开发者为了少点审批，会把默认配置越开越宽。今天为了装依赖开网络，明天为了修权限开 full access，后天忘了改回去。第二，审批弹窗太多以后，人会形成肌肉记忆。只要命令看起来熟，就点允许。真正危险的命令可能藏在复合 shell 里，或者用一个看似正常的前缀触发外部副作用。
+
+profile 和 rules 的分层能缓解这个问题。profile 让你以场景为单位切换默认边界，避免每次手工改配置。rules 让常见越界命令有明确策略，避免每次靠临场判断。二者配合后，团队可以把“只读审计”“普通开发”“依赖维护”“发布前检查”做成不同模式，并把 `rm`、`git push`、`curl | sh`、云 CLI、数据库 CLI 等前缀单独治理。
+
+## 心智模型：profile 管上下文，rules 管出界口
+
+可以用下面的图理解：
+
+```text
+profile 选择配置层
+  -> model / approval_policy / sandbox_mode 或 default_permissions / web_search / hooks
+  -> 会话默认行为
+
+rules 匹配命令前缀
+  -> allow / prompt / forbidden
+  -> 处理请求在沙箱外运行的命令
+```
+
+profile 是入口。你启动 Codex 时用 `--profile audit`，它会在用户基础配置之上加载 `$CODEX_HOME/audit.config.toml`。这个 profile 可以把沙箱设为只读、关闭 web search、调低或调高模型推理。它回答“这次任务应该处在什么工作模式”。
+
+rules 是门禁。Codex 要运行某个需要越过沙箱的命令时，rules 根据命令参数列表匹配前缀，然后给出 `allow`、`prompt` 或 `forbidden`。它回答“这个出界命令是否允许”。官方 rules 文档说明，多个规则匹配时采用最严格决策：`forbidden` 高于 `prompt`，`prompt` 高于 `allow`。
+
+这个区分很关键。不要用 profile 模拟命令审查，也不要用 rules 承担场景配置。profile 太宽，rules 会疲于补漏；profile 太窄，但没有 rules，审批会变成重复手工劳动。两者各自保持小而清楚，治理才会稳定。
+
+## 详细机制：profile 怎样加载，rules 怎样匹配
+
+### profile 是配置层，不是独立世界
+
+官方 config basics 文档列出的优先级中，`--profile profile-name` 选中的 profile 文件位于项目配置之后、用户配置之前。profile 文件路径是 `$CODEX_HOME/profile-name.config.toml`，通常等价于 `~/.codex/profile-name.config.toml`。它适合写“与默认值不同的部分”，而不是复制一份完整配置。
+
+一个只读审计 profile 可以写成：
+
+```toml
+# ~/.codex/audit.config.toml
+approval_policy = "on-request"
+sandbox_mode = "read-only"
+web_search = "disabled"
+
+[shell_environment_policy]
+include_only = ["PATH", "HOME", "USER", "TMPDIR"]
+```
+
+启动：
+
+```sh
+codex --profile audit
+```
+
+一个日常开发 profile 可以更宽，但仍保留审批：
+
+```toml
+# ~/.codex/dev.config.toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+```
+
+如果团队改用 permission profiles，要记住官方 permissions 文档的限制：不要把 `sandbox_mode` 和 `default_permissions` / `[permissions]` 混写。permission profile 版本可以是：
+
+```toml
+approval_policy = "on-request"
+default_permissions = "repo-work"
+
+[permissions.repo-work.filesystem]
+":minimal" = "read"
+
+[permissions.repo-work.filesystem.":workspace_roots"]
+"." = "write"
+"**/*.env" = "deny"
+
+[permissions.repo-work.network]
+enabled = false
+```
+
+这里的 profile 文件负责选择 `default_permissions`，而具体权限规则可以放在用户级或系统级配置中。大型团队还可以用 managed requirements 限制允许哪些 permission profiles，避免开发者自定义一个危险 profile 绕过治理。
+
+### rules 文件放在哪里
+
+官方 rules 文档说明，rules 文件放在活跃配置层旁边的 `rules/` 目录中，例如 `~/.codex/rules/default.rules`。项目本地 rules 可以放在 `<repo>/.codex/rules/`，但只有项目 `.codex/` 层受信任时才加载。Codex 启动时扫描每个活跃配置层下的 rules。
+
+一个基础 rules 文件：
+
+```python
+# ~/.codex/rules/default.rules
+prefix_rule(
+    pattern = ["gh", "pr", "view"],
+    decision = "prompt",
+    justification = "查看 PR 可允许，但需要保留人工确认",
+    match = [
+        "gh pr view 123",
+        "gh pr view --repo openai/codex",
+    ],
+    not_match = [
+        "gh pr checkout 123",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rm"],
+    decision = "forbidden",
+    justification = "删除动作必须由人工在终端执行，或先列出目标后单独审批",
+)
+```
+
+rules 文件使用 Starlark 语法。它像 Python，但设计目标是无副作用地运行规则引擎。规则里的 `match` 和 `not_match` 是内联测试，Codex 加载规则时会验证这些例子。技术负责人应该要求每条非平凡规则都写例子，否则前缀匹配很容易和想象不一致。
+
+### 前缀匹配是参数列表匹配
+
+rules 匹配的是命令参数列表，而不是一整段 shell 字符串。`pattern = ["gh", "pr", "view"]` 只匹配前三个参数正好是 `gh pr view` 的命令。`gh pr --repo openai/codex view 123` 不匹配，因为第三个参数变成了 `--repo`。这会影响规则设计。
+
+如果命令有多个允许子命令，可以使用同一位置的字面量联合：
+
+```python
+prefix_rule(
+    pattern = ["gh", "pr", ["view", "list", "checks"]],
+    decision = "prompt",
+    justification = "只允许只读 PR 查询类命令进入审批流程",
+)
+```
+
+不要写过宽前缀：
+
+```python
+# 不推荐
+prefix_rule(
+    pattern = ["gh"],
+    decision = "allow",
+)
+```
+
+这会把 `gh repo delete`、`gh workflow run`、`gh secret list` 等完全不同风险的命令放进同一桶。前缀应该收敛到具体子命令，最好按只读、写入、破坏性动作分别处理。
+
+### 复合 shell 的处理要保守理解
+
+官方 rules 文档说明，Codex 对 `bash -lc`、`bash -c` 以及 `zsh` / `sh` 等 wrapper 有特殊处理。如果脚本是简单线性命令，由普通 word 组成，并用 `&&`、`||`、`;` 或 `|` 连接，Codex 可以拆分后逐个应用 rules。比如 `git add . && rm -rf /` 会被拆成两个命令，最严格决策生效。
+
+但如果脚本使用重定向、变量、通配符、命令替换、控制流等高级 shell 特性，Codex 不会尝试解释细节，而是把整个 wrapper 当成一个调用。规则只能匹配 `["bash", "-lc", "<full script>"]`。这意味着规则不能替代清晰命令。团队应要求高风险命令不要藏在复杂 wrapper 里，尤其不能通过变量和重定向绕过可读审查。
+
+### 用 `codex execpolicy check` 测试 rules
+
+官方文档提供了 `codex execpolicy check` 来测试规则如何匹配命令：
+
+```sh
+codex execpolicy check --pretty \
+  --rules ~/.codex/rules/default.rules \
+  -- gh pr view 7888 --json title,body,comments
+```
+
+这个命令会输出 JSON，说明最终决策和匹配到的规则。团队在修改 rules 时，应把这个检查放进本地审查流程。rules 是安全控制，不应该靠肉眼读一遍就合并。尤其是包含联合参数、多个 rules 文件、项目层 rules 和用户层 rules 时，测试能及时暴露过宽或失效的匹配。
+
+## 真实工作流案例：为依赖升级建立受控模式
+
+假设团队每月做一次依赖升级。这个任务需要读取仓库、编辑 lockfile、联网访问包仓库、跑测试，但不应该允许推送、发布或删除目录。可以建立 `deps.config.toml`：
+
+```toml
+# ~/.codex/deps.config.toml
+approval_policy = "on-request"
+web_search = "cached"
+default_permissions = "deps-maintenance"
+
+[permissions.deps-maintenance.filesystem]
+":minimal" = "read"
+
+[permissions.deps-maintenance.filesystem.":workspace_roots"]
+"." = "write"
+"**/*.env" = "deny"
+
+[permissions.deps-maintenance.network]
+enabled = true
+
+[permissions.deps-maintenance.network.domains]
+"registry.npmjs.org" = "allow"
+"api.github.com" = "allow"
+"github.com" = "allow"
+```
+
+然后在 rules 中设置命令边界：
+
+```python
+prefix_rule(
+    pattern = ["npm", "view"],
+    decision = "allow",
+    justification = "查询 npm 包元数据是依赖升级的常规只读操作",
+)
+
+prefix_rule(
+    pattern = ["npm", ["install", "update"]],
+    decision = "prompt",
+    justification = "会修改 lockfile，执行前需要确认升级范围",
+)
+
+prefix_rule(
+    pattern = ["npm", "publish"],
+    decision = "forbidden",
+    justification = "发布包不属于依赖升级任务，请在发布流程中人工执行",
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Codex 不应在依赖升级任务中直接推送分支",
+)
+```
+
+运行：
+
+```sh
+codex --profile deps
+```
+
+这样的设计把“依赖升级需要网络”限制在包仓库和 GitHub，把会写 lockfile 的命令留给人工确认，把发布和推送直接禁掉。任务完成后，Codex 可以给出变更摘要和测试结果，但最后推送仍由人完成。
+
+## 操作清单：设计 profile 与 rules 时的检查项
+
+- 每个 profile 是否对应一个真实工作场景，而不是某次临时需求。
+- profile 文件是否只写差异项，避免复制用户配置导致未来难以维护。
+- 是否把只读、日常编辑、依赖维护、高风险发布拆成不同 profile。
+- 是否避免混写 `sandbox_mode` 和 permission profiles。
+- rules 是否只覆盖需要越过沙箱的命令准入，不承担业务流程判断。
+- 每条宽权限 rules 是否有 `match` 和 `not_match` 例子。
+- 是否禁止过宽前缀，例如 `["gh"]`、`["npm"]`、`["aws"]` 直接 allow。
+- 是否对删除、推送、发布、数据库迁移、云资源修改设为 `prompt` 或 `forbidden`。
+- 是否用 `codex execpolicy check` 验证规则。
+- 是否记录 rules 的加载位置，避免用户层和项目层规则互相打架。
+
+## 权衡与风险
+
+profile 太多会让开发者不知道该选哪个。建议从三个开始：`audit` 只读，`dev` 日常编辑，`maintenance` 处理依赖或工具链。等团队有真实需求，再增加更细 profile。不要为每个项目、每个语言、每个小任务都创建 profile。
+
+rules 太细也会造成维护负担。每个命令变体都写规则，最后会让审批系统像防火墙规则表一样难懂。可维护的 rules 应围绕风险类别：只读查询、写工作区、联网下载、修改远端、破坏性删除。对低风险只读命令可以适度 allow，对写入命令 prompt，对无法安全审查的命令 forbidden。
+
+最大风险是“允许规则漂移”。今天为了省事允许 `gh`，明天为了修 CI 允许 `aws`，后天为了发版允许 `npm publish`。规则一旦进入用户层，后续任务都会继承。团队应定期审计 rules，删除不再需要的 allow，并把临时例外改成一次性审批。
+
+## 常见误区
+
+误区一：profile 是权限系统。profile 只是配置层选择，真正的文件系统和网络边界来自沙箱或 permission profile。
+
+误区二：rules 能保证命令安全。rules 只按前缀和拆分逻辑给出决策，不能理解业务语义。`db migrate` 是否危险，仍要看环境和参数。
+
+误区三：`allow` 可以随便给只读命令。只读命令也可能读取敏感内容，尤其是 `cat ~/.ssh/config`、`gh secret list`、云 CLI 查询。
+
+误区四：复合 shell 总能被拆开。包含变量、重定向、通配符、命令替换和控制流时，Codex 会保守地把 wrapper 当成整体。
+
+误区五：项目 rules 一定生效。项目 `.codex/` 只有在受信任时加载。组织底线应放在系统或 managed 配置，不应只依赖项目 rules。
+
+## 团队落地：把规则按风险类别组织
+
+rules 文件不应该按“某个人需要过的命令”堆积，而应该按风险类别组织。第一类是只读本地查询，例如 `git status`、`git diff --stat`、`rg`、语言版本查询。第二类是工作区写入，例如格式化、局部测试生成缓存、代码生成。第三类是外部读取，例如 `gh pr view`、包版本查询、下载依赖元数据。第四类是外部写入，例如 `git push`、创建 PR、修改 issue、发布包、触发部署。第五类是破坏性动作，例如删除、重置、数据库迁移、云资源删除。
+
+每一类都应有默认决策。只读本地查询通常可以让沙箱处理，不需要额外 allow。外部读取可以 prompt 或细粒度 allow。工作区写入要看沙箱和任务范围。外部写入默认 prompt，发布和删除默认 forbidden。这样 rules 的含义才稳定。否则今天 `npm install` 因为某个任务被 allow，明天所有任务都继承了这个风险。
+
+规则组织还要考虑命令家族。`gh`、`npm`、`pip`、`git`、`aws`、`gcloud`、`kubectl` 都是大入口，里面既有只读，也有高风险写入。不要给入口命令整体 allow。应该写到子命令，必要时写到参数形态。例如 `git status` 和 `git push` 风险完全不同；`kubectl get pods` 和 `kubectl delete deployment` 风险完全不同；`npm view` 和 `npm publish` 风险完全不同。
+
+## Prefix rule 的审查要点
+
+审查一条 prefix rule 时，先看 pattern 是否过宽。如果 pattern 只有一个词，通常要提高警惕。再看 decision 是否符合最小权限。`allow` 只适合低风险、可预测、无副作用的命令；`prompt` 适合需要人看目标和参数的命令；`forbidden` 适合不应由 Codex 执行的动作。最后看 justification 是否说明风险边界，而不是写“方便使用”。
+
+`match` 和 `not_match` 是 rules 维护质量的关键。没有例子的规则，后续读者不知道作者想匹配什么。例子要覆盖正常命令、相似但不应匹配的命令、参数顺序变化和危险子命令。比如允许 `gh pr view` 时，`not_match` 应包含 `gh pr checkout`、`gh repo delete` 或 `gh workflow run`。这样当规则被改宽时，测试能暴露出来。
+
+多条规则同时匹配时采用最严格决策，这有利于安全，但也可能让开发者困惑。比如用户层 allow 了某个命令，项目层 forbidden 了更宽前缀，最终会 forbidden。团队应在规则文件里把高优先级禁止项放在显眼位置，并在注释里说明原因。虽然引擎按最严格决策处理，不靠顺序决定，但文件组织仍影响人类理解。
+
+## 规则与审批疲劳
+
+很多团队引入 rules 是为了减少审批疲劳，但错误做法会制造新的疲劳。如果把大量常用命令都设为 prompt，开发者仍然要一直点确认；如果为了减少弹窗改成 allow，又可能过度放权。正确方向是减少低价值审批，保留高价值停顿。
+
+低价值审批通常是重复、只读、范围清楚的动作，例如查看 PR 标题、读取测试状态、查询包元数据。高价值停顿是会改变远端、写大量文件、访问网络、删除或读取敏感位置的动作。rules 应该让前者更顺畅，让后者更醒目。审批弹窗少了以后，每次弹窗才更有意义。
+
+审批提示的质量也很重要。justification 应该告诉人为什么需要批准，批准后可能发生什么。比如“运行 npm install 会修改 lockfile 并执行依赖脚本，请确认任务确实需要安装依赖”比“需要安装依赖”更有审查价值。Codex 生成审批请求时，也应引用规则理由和任务上下文。
+
+## 与 profile 的配合模式
+
+profile 和 rules 的组合最好按场景设计。`audit` profile 下，大多数写入和网络命令都不应执行，即使 rules 允许某些前缀，也应保持谨慎。`dev` profile 下，可以允许工作区内常规命令，远端写入仍 prompt。`deps` profile 下，可以对包查询给更宽 allow，对安装给 prompt，对发布给 forbidden。
+
+这意味着 rules 不一定只有一套。用户层可以有基础规则，项目层可以补充仓库特定规则，组织层可以通过 managed requirements 限制危险配置。项目 rules 适合表达仓库命令，例如 `./scripts/check.sh lint` 可以 prompt 或 allow；组织 rules 适合表达跨项目禁止项，例如禁止 `git push --force` 或发布命令。
+
+对多 worker 任务，rules 还能防止协作边界被破坏。某个 worker 负责写文档，不应因为本地 rules 允许 `git push` 就直接推送；某个 worker 负责八个文件，不应运行会格式化全仓库的命令。任务提示、profile 和 rules 应共同表达这个边界。rules 是底线，不是任务授权书。
+
+## 规则变更的运维流程
+
+把 rules 当安全代码维护。新增 allow 规则需要说明使用场景、风险、例子和替代方案。修改 prompt 为 allow 应比新增 prompt 更谨慎，因为它减少了人工停顿。删除 forbidden 或放宽 destructive 命令应要求更高级别 review。每次变更后运行 `codex execpolicy check`，并把关键命令的输出结果保留在 PR 或变更说明里。
+
+定期审计规则也很必要。过期项目、已废弃 CLI、临时包仓库、一次性迁移命令，都可能留下宽权限规则。季度审计可以问三个问题：这条规则过去三个月是否被需要？它是否仍匹配当前命令形态？有没有更窄的 pattern 可以替代？规则表越干净，开发者越愿意遵守。
+
+最后，rules 不能替代文化。团队仍要要求 Codex 在高风险动作前说明意图、列出目标、给出回滚方法。规则只能拦住一部分命令形态，不能理解业务后果。把 rules 当作工程护栏，而不是把责任交给规则引擎。
+
+## 评审问题：一条规则是否应该存在
+
+每条规则都应该经得起四个问题。第一，它解决的是高频低风险审批，还是掩盖一个本该人工判断的动作？第二，pattern 是否足够窄，能否被相似危险命令绕过或误匹配？第三，decision 是否和最坏后果匹配？第四，规则删除后团队会损失什么，是效率下降，还是安全边界更清楚？
+
+如果一条 allow 规则只是为了减少一次性任务的弹窗，它不该长期存在。一次性任务更适合临时审批。长期 allow 应该服务于稳定、重复、低风险的命令。反过来，forbidden 规则也要具体。禁止过宽会阻碍正常工作，开发者会寻找绕过路径。比如直接禁止所有 `git` 命令不可行，但禁止 `git push --force`、`git reset --hard` 和删除远端分支更合理。
+
+规则还要看能不能被解释给新人。一个新人看到 `pattern = ["gh", "pr", ["view", "list"]]`，能理解它允许只读 PR 操作。看到 `pattern = ["bash", "-lc"]` 的 allow，则很难理解边界，因为它实际上允许任意脚本。越需要额外口头解释的规则，越可能设计得过宽或过隐晦。
+
+## 规则失效的信号
+
+rules 失效通常有几个信号。开发者频繁用更复杂的 wrapper 绕过规则；审批理由变得越来越敷衍；allow 列表不断扩大但没有删除；同一命令在不同 profile 下行为让人困惑；安全负责人无法说清某条规则为什么存在。这些信号出现时，不要继续加规则，应回到任务流程和 profile 设计。
+
+另一个信号是规则开始承担业务审批。比如允许某个数据库迁移命令，因为“这个项目经常要迁移”。数据库迁移是否安全取决于环境、数据、备份、迁移内容和回滚方案，prefix rule 无法判断。此类动作应 forbidden 或 prompt，并要求人工流程。rules 应保持语法层和风险层，不进入业务语义层。
+
+当规则失效时，可以先收缩到 prompt，再观察一段时间。prompt 保留人工停顿，也能收集真实使用场景。等确认哪些参数和子命令稳定低风险，再考虑更窄 allow。不要从宽规则直接继续加例外，那会让规则表更难懂。
+
+## 与审计记录结合
+
+rules 最终要服务审计。一次高风险命令被允许、提示或禁止，应该能在日志或任务摘要里看到原因。Codex 最终报告应说明是否触发过规则，哪些命令需要人工审批，哪些动作被禁止后改用替代方案。这样 reviewer 能判断任务有没有按团队边界执行。
+
+对于组织级规则，建议维护一份简短变更日志，记录新增、放宽、收紧和删除。规则文件本身告诉机器怎么判定，变更日志告诉人为什么这么判定。两者一起，才构成可维护的准入系统。
+
+## 最低通过标准：规则要能挡住相邻风险
+
+一条合格规则不仅要匹配想允许的命令，还要挡住相邻危险命令。允许 `gh pr view` 时，要确认不会顺手允许 checkout、merge、workflow run 和 repo delete。允许 `npm view` 时，要确认不会允许 install、exec 和 publish。允许本地检查脚本时，要确认脚本路径固定、参数可解释、不会接收任意 shell。
+
+团队可以把这个标准写进 review：每条 allow 规则至少有一个正例和两个反例；每条 forbidden 规则说明最坏后果；每条 prompt 规则说明人应该检查什么。这样 rules 文件就不是命令清单，而是风险模型。规则越能解释相邻风险，越能降低审批疲劳和误放权。
+
+还要给规则设 owner。没有 owner 的规则会在工具升级、命令参数变化或项目迁移后继续生效。owner 不一定是个人，也可以是平台组或安全组，但必须有人负责回答“这条规则是否还需要”。规则表越靠近安全边界，越不能无人维护。
+
+## 延伸阅读
+
+- [Codex config basics](https://developers.openai.com/codex/config-basic)
+- [Codex rules](https://developers.openai.com/codex/rules)
+- [Codex permissions](https://developers.openai.com/codex/permissions)
+- [Codex CLI reference](https://developers.openai.com/codex/cli/reference)
+- [Codex sandboxing](https://developers.openai.com/codex/concepts/sandboxing)

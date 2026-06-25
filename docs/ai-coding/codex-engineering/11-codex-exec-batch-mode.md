@@ -1,0 +1,423 @@
+# codex exec：非交互批处理、CI 集成与结构化输出
+
+## TL;DR
+
+`codex exec` 是把 Codex 放进脚本、CI、预合并检查、定时任务和批量处理的入口。它接收一条任务 prompt，非交互执行，完成后退出。官方文档说明：默认情况下 `codex exec` 运行在只读沙箱；运行过程中进度输出到 stderr，最终 agent 消息输出到 stdout；`--json` 会把 stdout 变成 JSONL 事件流；`-o` / `--output-last-message` 可保存最终消息；`--output-schema` 可约束最终 JSON 结构。它适合稳定、边界清楚、可验证的任务，不适合含糊的大型重构或需要多轮人工判断的排障。
+
+## 读者定位
+
+这篇面向平台工程师、DevOps、技术负责人和希望把 Codex 接入自动化流程的开发者。你需要理解 shell、CI runner、环境变量、密钥注入、退出码、工作区状态和 Git 分支隔离。本文重点不是“能不能让 Codex 自动干活”，而是怎样让它在无人值守或半无人值守环境里留下可解析、可审查、可失败处理的结果。
+
+## 问题：交互式能力不能直接搬进自动化
+
+交互式 Codex 很适合人坐在终端前：它可以问问题、请求审批、让你看计划、根据反馈调整。但 CI 不会帮你按确认键，cron 不会读长篇解释，批处理脚本也不能稳定解析自然语言。把交互式 prompt 原样放进自动化，常见结果是：任务卡住、输出不可解析、权限不足、日志过长、失败原因被覆盖，或者更糟，脚本在高权限环境里执行了过宽操作。
+
+`codex exec` 解决的是执行形态问题。它让 Codex 像一个命令行程序那样接入流水线：输入是明确任务，输出是最终消息或事件流，权限在命令启动前确定，失败通过退出码和日志暴露。它不会替你设计任务边界；边界仍要由人写清楚。
+
+## 心智模型：把 `exec` 当成“有工程能力的 CLI 子程序”
+
+一次好的 `codex exec` 调用应该像一个作业单，而不是一句聊天。它至少回答四个问题：
+
+```text
+目标：这次要完成什么？
+范围：允许读取和修改哪些文件？
+验证：完成后运行哪些命令？
+输出：最终结果要给人读，还是给机器解析？
+```
+
+缺少目标，Codex 会泛化任务；缺少范围，Codex 会扩散改动；缺少验证，它会用自然语言替代真实检查；缺少输出协议，后续自动化只能脆弱解析。
+
+`codex exec` 的强项是可组合。你可以把测试日志管道给它总结，也可以让它生成 release notes，还可以让它在只读沙箱里审查 PR。它的弱项是上下文一次性。它不像交互式会话那样适合临场追问，所以 prompt 要更完整、更像工单。
+
+## 官方行为：输出、权限、认证和 Git 边界
+
+官方非交互文档给了几个必须记住的事实。
+
+第一，`codex exec` 适合 CI、预合并检查、定时任务、把命令输出交给 Codex、以及需要预设沙箱和审批策略的流程。它不是交互式 TUI。
+
+第二，基本输出行为是：运行进度输出到 stderr，最终 agent 消息输出到 stdout。这让你可以把最终结果重定向到文件，而不把过程日志混进去。
+
+```bash
+codex exec "generate release notes for the last 10 commits" | tee release-notes.md
+```
+
+第三，默认只读沙箱。要允许编辑，显式使用：
+
+```bash
+codex exec --sandbox workspace-write "Fix the failing formatter check"
+```
+
+需要更宽权限时有 `--sandbox danger-full-access`，但官方建议只在受控环境使用，例如隔离 CI runner 或容器。不要把它作为日常默认。
+
+第四，`--json` 输出 JSON Lines 事件流，事件类型包括 `thread.started`、`turn.started`、`turn.completed`、`turn.failed`、`item.*` 和 `error`，item 类型可能覆盖 agent 消息、推理、命令执行、文件变更、MCP 工具调用、web search 和计划更新。它适合脚本消费，不适合直接给人读。
+
+第五，如果只关心最终消息，用 `-o` 或 `--output-last-message`。需要稳定字段时，用 `--output-schema` 指定 JSON Schema，让最终回答符合结构。
+
+第六，认证要谨慎。`codex exec` 默认复用已保存的 CLI 认证。CI 中可以用 API key，但官方明确建议不要把 `OPENAI_API_KEY` 或 `CODEX_API_KEY` 设置为会运行仓库代码的 job 级环境变量；构建脚本、测试、依赖生命周期钩子或被攻陷的 action 都可能读取它。`CODEX_API_KEY` 只支持 `codex exec`，推荐只对单次调用内联注入。GitHub Actions 场景优先用官方 `openai/codex-action`。
+
+第七，官方文档说明 `codex exec` 需要在 Git 仓库中运行，以降低破坏性变更风险；如果确定环境安全，可以用 `--skip-git-repo-check` 覆盖。这个开关不应成为常规脚本默认项。
+
+## 详细机制：从只读报告到自动修复
+
+建议团队从只读任务开始，而不是第一天就让 Codex 自动改代码。只读任务能验证 prompt、输出格式和误报率：
+
+```bash
+codex exec --sandbox read-only -o reports/pr-risk.md \
+  "Review the current git diff. Focus on bugs, missing tests, security-sensitive changes, and files that need human review. Do not edit files."
+```
+
+当只读报告稳定后，再让它做小范围自动修复：
+
+```bash
+codex exec --sandbox workspace-write \
+  "Fix ESLint errors only under src/utils. Do not modify package.json, lockfiles, tests, or CI config. Run pnpm lint -- src/utils and report changed files."
+```
+
+这个 prompt 明确了目录、禁止项、验证命令和报告内容。不要写成：
+
+```bash
+codex exec "fix lint"
+```
+
+后者给 Codex 的自由度太高，可能改规则、改测试、改配置，甚至把问题藏起来。
+
+## 结构化输出：什么时候用 `--json`，什么时候用 schema
+
+`--json` 用于记录过程事件。比如你想知道 Codex 是否运行了命令、是否改了文件、是否触发了工具调用，可以保存 JSONL：
+
+```bash
+codex exec --json \
+  "Analyze the current diff and list blocking review issues only" \
+  > codex-events.jsonl
+```
+
+但 JSONL 是事件流，不是业务结果 schema。如果下游系统只关心风险等级、文件列表和摘要，应该用 `--output-schema`：
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+    "blocking": { "type": "boolean" },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" }
+  },
+  "required": ["risk", "blocking", "files", "summary"],
+  "additionalProperties": false
+}
+```
+
+```bash
+codex exec \
+  --output-schema ./risk-schema.json \
+  -o ./risk-report.json \
+  "Analyze the current diff and produce a risk report."
+```
+
+schema 约束的是最终回答，不保证中间过程一定正确。流水线仍要检查退出码、diff、测试结果和日志。
+
+## stdin 模式：把外部输出交给 Codex
+
+官方文档区分两种 stdin 模式。第一种是 prompt 加 stdin：prompt 是指令，管道内容是上下文。例如：
+
+```bash
+npm test 2>&1 \
+  | codex exec "Summarize failing tests and propose the smallest likely fix" \
+  | tee test-summary.md
+```
+
+第二种是 `codex exec -`，让 stdin 成为完整 prompt，适合 prompt 文件或上游生成完整工单：
+
+```bash
+codex exec - < .github/codex/prompts/review.md
+```
+
+管道日志时要控制长度。把几万行 CI 日志直接塞给 Codex，会浪费上下文，也容易让关键错误被稀释。先用 `tail`、测试框架 summary、`rg` 或 CI artifact 筛选。
+
+## 真实工作流案例：PR 风险审查
+
+一个较稳的 PR 审查脚本可以分三步。
+
+第一步，准备输入：
+
+```bash
+git diff --name-only origin/main...HEAD > changed-files.txt
+git diff --stat origin/main...HEAD > diff-stat.txt
+```
+
+第二步，只读运行 Codex：
+
+```bash
+codex exec --sandbox read-only --json -o codex-review.md \
+  "Review changes from origin/main to HEAD. Use changed-files.txt and diff-stat.txt as orientation. Focus on bugs, missing tests, security-sensitive behavior, and migration risk. Do not edit files. Return only blocking issues and important non-blocking risks." \
+  > codex-review-events.jsonl
+```
+
+第三步，流水线处理：
+
+```bash
+test -s codex-review.md
+git status --short
+```
+
+这里故意使用只读沙箱。PR 审查不需要写文件，最多写报告文件；把写权限给审查任务没有收益。
+
+## 真实工作流案例：小范围自动修复
+
+假设你要批量修复文档格式：
+
+```bash
+codex exec --sandbox workspace-write -o docs-fix-report.md \
+  "Fix Markdown lint issues only in docs/api/auth.md. Do not change meaning, headings, or links except where required by lint. Run ./scripts/check.sh lint and ./scripts/check.sh links. Report changed lines and any checks not run."
+```
+
+失败处理不要自动清理工作区：
+
+```bash
+if codex exec --sandbox workspace-write -o docs-fix-report.md "Fix docs/api/auth.md lint only"; then
+  git diff --stat
+else
+  echo "Codex task failed; keep workspace for inspection"
+  git status --short
+  exit 1
+fi
+```
+
+不要失败后直接 `git reset --hard`。中间 diff、错误输出和 Codex 的判断都可能有价值。清理应由人工或明确的隔离 worktree 处理。
+
+## 操作清单
+
+- `exec` prompt 写成作业单：目标、范围、禁止项、验证、输出。
+- 默认用只读沙箱做分析和审查。
+- 只有自动修复任务才给 `workspace-write`。
+- `danger-full-access` 只放在隔离、可回滚、受控环境。
+- 输出给人读用 `-o` 保存最终消息。
+- 输出给脚本消费用 `--json` 或 `--output-schema`。
+- CI 密钥只对单次 Codex 调用注入，不作为 job 级环境变量暴露给仓库代码。
+- 失败后保留日志、diff 和事件流。
+- 每个批处理任务使用独立分支或 worktree，避免状态污染。
+- 自动化脚本中记录 `codex --version` 和当前 commit。
+
+## 权衡与风险
+
+`codex exec` 的收益是可组合、可记录、可接入流水线；代价是一次性上下文要求更高。模糊任务放进 `exec`，通常会得到模糊结果。复杂排障和架构设计应先交互式跑通，再提炼成 `exec` 模板。
+
+结构化输出能降低集成成本，但不能证明代码质量。一个 JSON 报告可以字段齐全，同时结论错误。仍要用测试、lint、typecheck、diff 和人工审查闭环。
+
+无人值守权限是最大风险。AI 代理能运行 shell、改文件、触发构建和访问外部系统。审批和沙箱不是麻烦，而是事故边界。尤其不要让 Codex 在含生产凭据、部署权限、数据库写权限的 job 里自由执行仓库代码。
+
+另一个风险是日志泄露。把完整 CI 日志、环境变量、配置文件、密钥路径交给 Codex 前，要确认不含敏感信息。官方已经提醒 API key 不应暴露给运行仓库代码的 job；团队自己的凭据也应遵循同样原则。
+
+## 常见误区
+
+误区一：把交互式 prompt 直接复制到 `exec`。交互式 prompt 可以依赖追问，`exec` 需要一次说清。
+
+误区二：默认给写权限。报告、审查、总结、风险分类都应只读。
+
+误区三：把自然语言报告给脚本解析。脚本需要 JSONL 或 schema，不要依赖“第一行是风险等级”这种约定。
+
+误区四：在失败后自动销毁现场。保留失败现场才能诊断 prompt、环境、权限和代码问题。
+
+误区五：把 `CODEX_API_KEY` 配成全局环境变量。按官方建议，只给单次 `codex exec` 调用注入，并避免同一环境运行不受信任代码。
+
+## 自动化任务设计模板
+
+把 `codex exec` 放进流水线前，建议先写一份任务模板。模板比临时 prompt 更容易 review，也更容易版本管理。
+
+```markdown
+# Codex exec task template
+
+## Goal
+
+一句话说明要完成什么。
+
+## Scope
+
+- Allowed paths:
+- Read-only context:
+- Forbidden paths:
+
+## Constraints
+
+- 不改变公开 API。
+- 不修改测试期望来迎合当前实现。
+- 不安装依赖，除非明确授权。
+
+## Verification
+
+- `command`
+- `command`
+
+## Output
+
+- changed files
+- verification results
+- risks
+- skipped checks and reasons
+
+## Failure policy
+
+- 同一命令失败两轮后停止。
+- 权限或网络失败时报告，不自行扩大权限。
+```
+
+流水线里只替换变量，不改模板结构。这样能保证不同任务的输出可比较。模板也能被 code review：平台团队可以检查它是否过度授权，业务团队可以检查它是否漏了关键验证。
+
+## CI 集成的安全分层
+
+`codex exec` 进入 CI 后，安全边界要比本地更严格。CI 会运行仓库代码，仓库代码可能来自外部 PR，脚本也可能读环境变量。官方文档已经明确提醒，不要把 `OPENAI_API_KEY` 或 `CODEX_API_KEY` 设置成会运行仓库控制代码的 job 级环境变量。这个原则应扩展到所有凭据：npm token、云服务 key、数据库 URL、GitHub token 都不应暴露给不受信任步骤。
+
+一个较稳的 CI 分层是：
+
+| job | 权限 | Codex 用途 |
+|---|---|---|
+| read-only review | 只读 checkout，无写 token | 生成审查报告 |
+| test job | 无 Codex key | 跑项目测试 |
+| trusted fix job | 仅内部分支或手动触发 | 允许 `workspace-write` 生成候选 patch |
+| publish/deploy | 不运行 Codex | 人工或确定性流水线发布 |
+
+如果必须让 Codex 在 CI 中写文件，优先让它写到临时分支或 artifact，而不是直接推送。让人 review patch，再决定是否合并。Codex 自动修复可以节省时间，但不应绕过代码审查。
+
+## 失败处理与重试策略
+
+批处理里最危险的不是失败，而是失败后继续做错事。建议把失败分成四类。
+
+第一类是环境失败：依赖缺失、网络不可达、权限不足、Git 仓库检查失败。这类失败不应让 Codex 猜测修复，应该报告给平台或仓库维护者。
+
+第二类是验证失败：lint、typecheck、test 未通过。这类可以让 Codex 做有限轮最小修复，但要限制范围和次数。
+
+第三类是输出失败：JSON schema 不匹配、报告为空、事件流损坏。这说明集成协议有问题，应停止流水线，而不是继续解析自然语言。
+
+第四类是范围失败：Codex 修改了禁止文件或大量无关文件。这类应丢弃候选，收紧任务模板或 `AGENTS.md`。不要手工从坏 diff 里挑几行，因为这样会丢失来源和验证链。
+
+重试策略也要保守。环境失败重试一次即可；验证失败最多两到三轮；范围失败不重试同一 prompt；认证失败直接停止。无限重试会消耗额度，也会制造更难审查的中间状态。
+
+## 观测与审计
+
+自动化不是只看最终成功率。建议保留三类 artifact：最终报告、JSONL 事件流、Git diff 统计。最终报告给人读；JSONL 事件流用于调查 Codex 做过哪些工具调用；diff 统计用于判断范围。
+
+```bash
+codex exec --json -o codex-final.md \
+  "Review this PR and output blocking risks only" \
+  > codex-events.jsonl
+
+git diff --stat > codex-diff-stat.txt
+```
+
+如果事件流里出现网络搜索、MCP 调用、文件变更或命令执行，reviewer 可以追溯。不要只保存最终一句“没有发现问题”。没有过程证据的自动化审查，很难在事故后复盘。
+
+## 从只读到写入的升级路径
+
+团队落地 `codex exec` 可以按四级推进。
+
+一级，只读总结。让 Codex 总结 diff、日志、变更风险，不影响代码。
+
+二级，只读结构化输出。用 `--output-schema` 生成稳定字段，接入内部仪表盘或 PR bot。
+
+三级，受限写入。只允许修改单个目录或单类文件，例如文档链接、格式问题、小测试补齐。
+
+四级，受控自动修复。只在可信分支、隔离 runner、明确验证命令和人工 review 下运行。
+
+不要跳级。很多团队失败是因为第一天就让 Codex 自动修复 CI，并给了写权限和 key。先观察判断质量，再开放写权限，成本低很多。
+
+## 人工接管点
+
+即使 `codex exec` 是非交互模式，也要设计人工接管点。自动化并不意味着流程里没有人，而是人在更明确的位置判断。常见接管点有三个。
+
+第一个是执行前审批。比如写入任务、依赖更新、访问网络、修改 CI 或生成迁移脚本前，先由人确认任务范围和权限。这个接管点适合高风险但低频的任务。
+
+第二个是失败后接管。`exec` 运行失败后，不应自动扩大权限或改写任务目标。它应该留下报告，由人判断是环境问题、需求问题还是代码问题。失败报告越清楚，下一轮自动化越容易修正。
+
+第三个是合并前接管。即使 Codex 自动生成了 patch 并跑通过验证，合并仍应走 review。reviewer 看的是业务语义、边界和长期维护成本，不只是命令是否通过。
+
+可以把接管规则写进模板：
+
+```text
+如果需要网络、写工作区外文件、修改 CI、修改锁文件、运行部署或数据库命令，请停止并报告，不要自行继续。
+如果验证失败超过两轮，请停止并输出失败报告。
+如果产生范围外 diff，请停止并列出越界文件。
+```
+
+这类规则能让 `codex exec` 在自动化里保持可控。非交互不是无监督；它只是把监督点从对话过程挪到任务边界、失败报告和合并审查。
+
+## 批处理任务的输入卫生
+
+`codex exec` 常被接入 CI、队列和脚本，输入来源会比交互式模式复杂。输入可能来自 issue 标题、PR 描述、commit message、日志、测试输出、网页、用户评论或内部工单。输入越杂，越要先做清洗和边界声明。
+
+第一，明确哪些内容是数据，哪些内容是指令。PR 描述里可能有人写“忽略所有安全规则”；日志里可能包含看起来像命令的文本；网页里可能有提示注入。批处理 prompt 应写明：外部内容只作为待分析数据，不得覆盖系统规则、仓库规则和任务边界。
+
+第二，截断要有策略。不要把几万行日志直接塞给 Codex。先提取失败段、时间窗口、相关测试名和堆栈。截断策略要保留证据链，例如前后各 100 行、错误码、命令、退出码。无策略截断会让 Codex 在缺关键上下文时编造原因。
+
+第三，避免把敏感信息传进事件流。`--json` 很适合审计，但它也会保存过程。输入里如果有 token、客户数据、内部 URL 或凭据片段，应先脱敏。不要把自动化日志变成新的泄露面。
+
+第四，任务描述要和权限匹配。只读审查任务不应给写权限；写入修复任务要限制目录；网络访问要单独审批。`exec` 的危险之处不是它非交互，而是非交互加高权限会让错误快速放大。
+
+## 结构化输出的契约设计
+
+当 `codex exec` 被其它系统消费时，最终消息最好不是自由文本。可以用 schema 要求输出固定字段，例如 `risk_level`、`blocking_findings`、`files_touched`、`verification`、`needs_human`。字段要少而稳定，不要把整篇分析塞进一个复杂嵌套结构。
+
+一个实用 schema 可以这样设计：
+
+```json
+{
+  "risk_level": "low | medium | high",
+  "blocking_findings": [
+    {
+      "file": "path",
+      "line": 123,
+      "issue": "short explanation",
+      "suggested_next_step": "short action"
+    }
+  ],
+  "verification": [
+    {
+      "command": "string",
+      "status": "passed | failed | not_run",
+      "reason": "string"
+    }
+  ],
+  "needs_human": true
+}
+```
+
+字段命名要和业务系统一致。下游如果用 `risk_level` 做路由，就不要让 Codex 自由输出“严重”“中等”“黄色”。枚举值越明确，自动化越稳。schema 也要允许不确定性，例如 `not_run` 和 `needs_human`。不要强迫 Codex 在证据不足时输出“通过”。
+
+结构化输出仍然要保留原始证据。schema 给机器读，事件流和最终报告给人复盘。两者缺一不可。
+
+## 自动修复的安全阈值
+
+并不是所有 `exec` 任务都应自动修复。可以按风险设阈值。低风险自动修复包括 Markdown 空行、拼写、内部链接路径、格式化、明显的类型导入顺序。这类任务范围小，验证直接，回滚容易。
+
+中风险自动修复包括单个函数 bug、缺失测试、小型重构、配置补齐。这类任务可以让 Codex 写 patch，但需要人工 review 和定向测试。
+
+高风险任务不应由 `exec` 直接落地：认证授权、支付、数据删除、迁移脚本、生产配置、依赖大版本升级、CI 发布权限、云资源操作。Codex 可以做只读分析、生成 runbook、写候选 patch，但不能绕过人类批准。
+
+阈值要写进队列系统。不要让每个脚本维护者凭感觉决定是否自动合并。自动化越成熟，规则越要显式。
+
+## 可复现批处理
+
+`codex exec` 的批处理结果要能复现。保存任务输入、基线提交、Codex 版本、命令参数、环境变量摘要、验证命令和输出 artifact。复现不代表每次模型输出完全相同，而是人能在同一上下文下重新检查任务。
+
+如果批处理结果要进入 PR，建议在 PR 描述中保留任务编号和 artifact 路径。出问题时，维护者可以从任务编号找到原始输入，从 artifact 找到事件流，从基线提交找到当时的代码状态。这比事后在聊天记录里翻上下文可靠。
+
+## 发布前复核
+
+`codex exec` 文章发布前要重点检查自动化边界。文章是否区分只读审查和写入修复，是否提醒外部输入可能包含提示注入，是否要求保存事件流和最终报告，是否写明结构化输出不是业务事实本身。如果这些边界缺失，读者很容易把非交互模式理解成无人监管模式。
+
+还要检查示例是否可迁移到团队流程。一个好示例不仅有命令，还要有失败处理和人工接管点。比如验证失败后停止并输出报告，而不是自动扩大权限；范围越界后丢弃候选，而不是继续修补坏 diff；网络或凭据不可用时报告环境问题，而不是让 Codex 尝试绕过策略。批处理的价值来自可重复，不来自无人看管。
+
+## 检查口径
+
+这篇文章的检查口径是自动化是否可审计。一个批处理任务如果没有输入来源、基线、权限、输出 schema、事件流和失败分类，就不应该进入团队流程。`codex exec` 的价值在于把可重复任务变成可记录的执行单元，而不是把人的判断全部拿掉。凡是涉及写入、网络、凭据、外部系统或高风险代码，都要保留人工接管点。
+
+## 最后确认
+
+批处理入口还要有退出条件。遇到权限不足、外部输入不可信、验证连续失败、输出 schema 无法满足、候选反复越界时，应停止任务并报告。自动化系统最怕沉默失败，也怕带着错误假设继续运行。明确退出条件，才能把失败限制在单个任务内。
+
+## 延伸阅读
+
+- [Codex Non-interactive Mode](https://developers.openai.com/codex/noninteractive)
+- [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
+- [Codex GitHub Action](https://developers.openai.com/codex/github-action)
+- [Agent approvals and security](https://developers.openai.com/codex/agent-approvals-security)
+- [openai/codex](https://github.com/openai/codex)

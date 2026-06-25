@@ -1,0 +1,305 @@
+# Codex Cloud 环境深度解析：让云端任务可复现、可审查、可收敛
+
+## TL;DR
+
+Codex Cloud 环境不是开发者电脑的复制品。官方文档描述的执行路径更接近 CI job：为仓库创建环境，checkout 指定分支或 commit，运行 setup 脚本，设置环境变量和 secrets，按环境策略控制 agent 阶段是否能联网，然后让 Codex 在容器里读代码、改文件、跑命令、汇报结果。
+
+很多 Cloud 任务失败，不是模型能力不够，而是工程环境没有被产品化。依赖安装不确定、测试命令缺失、私有包 token 没有最小授权、secrets 被误用、agent 网络权限过宽或过窄，都会让任务停在诊断层。要把 Cloud 用进团队流程，先把环境当作“给 Codex 运行的 CI 环境”维护，而不是把本地习惯塞进 prompt。
+
+## 读者定位
+
+本文面向需要把 Codex Web 接入真实仓库的开发者、平台工程师、DevOps、Tech Lead 和安全负责人。你应该知道 CI 为什么需要锁文件、为什么环境变量和 secrets 要分层、为什么外部网络访问要白名单化。
+
+如果你只是在个人小项目里试用 Codex，可以先用较轻的环境配置。但一旦仓库有私有依赖、付费 API、生产凭据、外部 PR 或多人协作，就应该按本文的方式建立边界。
+
+## 问题：本地能跑，不代表 Cloud 能跑
+
+本地开发环境会积累大量隐含状态：全局 Node 版本、包管理器缓存、登录过的 registry、手动创建的 `.env.local`、本机数据库、浏览器 session、未提交脚本、shell alias、代理配置。开发者习惯了这些状态，就会写出“跑一下测试”这种任务描述。
+
+Cloud 环境不会继承这些隐含状态。它看到的是远端仓库、环境配置、setup 脚本、环境变量、secrets 和任务 prompt。官方 Cloud environments 文档明确把环境配置放在任务执行之前：Codex 会 checkout 任务指定的分支，然后运行 setup，再进入 agent 阶段。环境变量贯穿任务全程；secrets 会在执行时解密，但只提供给 setup 脚本，进入 agent 阶段前会被移除。
+
+这意味着三个事实。
+
+第一，安装依赖必须可重复。`pnpm install`、`npm ci`、`pip install -r requirements.txt`、`uv sync` 这类命令应由仓库和锁文件决定，不应依赖开发者本机缓存。
+
+第二，测试入口必须写清。Codex 可以尝试发现命令，但发现不是契约。团队应告诉它小改动跑什么，公共接口改动跑什么，安全或权限改动跑什么。
+
+第三，secret 不是给 agent 随便读的上下文。它更适合在 setup 阶段安装私有依赖、配置低权限服务、准备测试环境。需要在写代码阶段访问生产 secret 的任务，本身就应该被重新设计。
+
+## 心智模型：把 Cloud 环境当成 Codex 专用 CI
+
+Cloud 环境的目标不是“什么都能跑”，而是“足够让目标任务可靠跑”。越开放的环境越容易掩盖问题，也越容易扩大风险。一个成熟团队应为 Codex 定义最小可用环境。
+
+可以用四层模型管理 Cloud 环境。
+
+第一层是构建层：语言版本、包管理器、锁文件、系统依赖、私有 registry。它决定任务能否启动。
+
+第二层是验证层：lint、typecheck、单元测试、集成测试、构建、文档链接检查。它决定结果能否被信任。
+
+第三层是访问层：环境变量、secrets、网络 allowlist、HTTP 方法限制。它决定 Codex 能接触什么外部资源。
+
+第四层是治理层：`AGENTS.md`、任务模板、禁止操作、失败报告要求、review 规则。它决定 Codex 如何在边界内行动。
+
+把这四层分开，很多问题会变得清楚。依赖装不上是构建层问题；测试不知道怎么跑是验证层问题；需要访问外部文档但 agent 禁网是访问层问题；Codex 乱改 lockfile 是治理层问题。
+
+## 详细机制：setup、变量、secrets、网络与缓存
+
+### setup 脚本
+
+setup 脚本用于准备环境，不是运行应用的地方。它应该短、确定、失败可定位。典型内容包括启用包管理器、安装依赖、生成测试需要的代码、准备本地 mock 数据。
+
+不建议在 setup 中启动长期进程，例如 `npm run dev`、`rails server`、`docker compose up` 后不退出。setup 卡住会让任务无法进入 agent 阶段。需要服务的测试，应优先使用测试框架内置生命周期、轻量 mock、一次性容器，或者在任务说明里写清如何启动和停止。
+
+一个前端仓库可以这样写环境说明：
+
+```markdown
+## Codex Cloud setup
+
+- Use Node 20.
+- Run `corepack enable`.
+- Run `pnpm install --frozen-lockfile`.
+- For targeted validation, run `pnpm test -- <changed-package>`.
+- For type-level changes, run `pnpm typecheck`.
+- For auth, permission, billing, or migration changes, run full validation.
+- Do not run deployment commands.
+- Do not modify `.env*` files.
+```
+
+### 环境变量与 secrets
+
+官方文档区分 environment variables 和 secrets。环境变量在整个任务期间可用，包括 setup 和 agent 阶段。secrets 有额外加密层，只在任务执行时解密，并且只给 setup 脚本使用；出于安全原因，它们会在 agent 阶段前移除。
+
+这个设计给团队一个清晰规则：能让 agent 看到的变量，不应包含高价值凭据。需要私有依赖 token 时，把它放到 secret，用于 setup 安装。需要测试服务时，用低权限测试账号，并确认 agent 阶段是否真的需要继续访问。不要把生产数据库 URL、支付网关密钥、云厂商写权限 token 放进 Codex 环境。
+
+### agent 网络访问
+
+官方 Agent Internet Access 文档说明，agent internet access 按环境配置。可以关闭，也可以开启；开启后可用 domain allowlist 和 HTTP methods 约束。文档还提供常见依赖 allowlist，用于下载和构建依赖。
+
+实践上可以分三档。
+
+保守档：agent 阶段禁网。适合修 bug、补测试、改文档、做内部重构。依赖安装只发生在 setup。
+
+受限档：agent 阶段允许访问指定域名，例如官方 API 文档、包 registry、内部只读文档服务。适合需要查外部规范或运行集成测试的任务。
+
+开放档：允许所有域名。只适合短期诊断或低风险私有环境。不要把它设成默认，因为 prompt injection 和数据外传风险会跟着上升。
+
+### 缓存
+
+Cloud 环境通常会受益于依赖缓存。缓存能减少等待时间，但也可能掩盖依赖漂移。升级语言版本、包管理器、lockfile、setup 脚本、私有 registry 策略后，要预期缓存失效或主动重建。不要把“缓存里刚好有”当作环境契约。
+
+## 真实工作流案例：把一个仓库接入 Codex Cloud
+
+假设团队有一个 TypeScript monorepo，包含 Web、API、shared packages。目标是让 Codex 能处理小型 bug 修复和 PR review。
+
+第一步，整理环境契约：
+
+```markdown
+## Build setup
+
+- Node: 20.x
+- Package manager: pnpm
+- Install: `corepack enable && pnpm install --frozen-lockfile`
+- Do not run deployment commands.
+- Do not modify `pnpm-lock.yaml` unless the task explicitly asks for dependency changes.
+```
+
+第二步，定义验证矩阵：
+
+```markdown
+## Verification
+
+- Docs-only changes: run `pnpm lint:docs`.
+- Frontend component changes: run package tests and `pnpm typecheck`.
+- Shared package changes: run tests for affected packages and downstream typecheck.
+- Auth, billing, permissions, migrations: run full test suite or report why it cannot run.
+```
+
+第三步，配置访问边界：
+
+```markdown
+## Access rules
+
+- Secrets may be used only to install private dependencies in setup.
+- Agent internet access is off by default.
+- If a task requires external docs, request allowlist changes instead of using unrestricted access.
+- Production credentials are not available in Codex Cloud.
+```
+
+第四步，把这些规则写入仓库顶层 `AGENTS.md`，并在敏感子目录增加更具体规则。例如 `packages/billing/AGENTS.md` 可以要求所有计费改动必须补测试，不允许改动价格计算协议，不允许用真实支付凭据。
+
+第五步，选一类低风险任务试运行，例如文档链接修复、单测补齐、非公共 API 的小 bug。观察失败原因，记录环境缺口。不要一开始就让 Codex 做认证迁移、数据库重构或大规模依赖升级。
+
+## 操作清单
+
+环境准备：
+
+- 锁文件是否提交并与安装命令匹配。
+- setup 是否无交互、可重复、失败时能定位。
+- 是否避免长期进程阻塞 setup。
+- 是否写清语言版本和包管理器版本。
+- 私有依赖是否使用低权限 token。
+
+验证设计：
+
+- 是否区分 targeted validation 和 full validation。
+- 是否说明哪些改动必须跑完整测试。
+- 是否允许 Codex 在测试不可运行时报告 blocker，而不是假装通过。
+- 是否把常用验证命令写进 `AGENTS.md`。
+
+访问控制：
+
+- secrets 是否只用于 setup。
+- agent 阶段是否默认禁网或限制 allowlist。
+- 是否避免生产凭据进入环境。
+- 是否记录哪些任务需要额外网络访问。
+
+治理：
+
+- 是否禁止部署命令、真实数据修改、破坏性迁移。
+- 是否要求输出改动摘要、验证结果、剩余风险。
+- 是否把敏感目录的规则放到更近的 `AGENTS.md`。
+
+## 权衡与风险
+
+最小环境更安全，但可能让任务频繁停在依赖、文档访问或集成测试上。开放环境更顺滑，但会把外部输入、网络和凭据风险带进 agent 阶段。团队应该按仓库风险分级，而不是追求单一配置。
+
+对开源仓库，默认策略应偏保守：外部 PR 只读 review，agent 禁网或严格 allowlist，不提供写权限 secrets。对企业内部仓库，可以为内部成员开放更多能力，但仍要记录触发者、任务 prompt、输出、生成的 diff 和验证结果。
+
+另一个权衡是速度与可复现性。缓存、预装依赖和宽松安装命令能提升速度，但如果锁文件不被尊重，后续 diff 的可审查性会下降。对 Codex 来说，稳定的慢环境通常比偶尔很快、偶尔失败的环境更有价值。
+
+## 常见误区
+
+误区一：把 Cloud 环境当成本地电脑。Cloud 没有你的全局状态，也不该有你的个人凭据。把需要的状态写进仓库、setup 或低权限环境配置。
+
+误区二：把 setup 写成完整开发启动脚本。setup 应准备环境并退出。长驻服务要用测试框架控制，或者由任务明确启动。
+
+误区三：把 secrets 当成 agent 可用变量。官方文档说明 secrets 会在 agent 阶段前移除。依赖 secrets 的任务要改成 setup 准备、mock、测试凭据或人工验收。
+
+误区四：为了让一次任务跑通就打开 unrestricted internet access。短期省事，长期会扩大风险。先问：agent 需要访问哪个域名，为什么，是否只读，是否可通过 setup 解决。
+
+误区五：没有环境 owner。Cloud 环境不是一次性配置。语言版本升级、CI 改动、包管理器变化、私有 registry 迁移都会影响它。需要有人像维护 CI 一样维护 Codex 环境。
+
+## 环境分级：不要用一套配置服务所有任务
+
+成熟团队不应该只有一个 Cloud 环境。不同任务需要不同权限、不同成本和不同验证深度。把所有任务都放进最高权限环境，会让安全风险上升；把所有任务都放进最保守环境，又会让很多任务因为缺网络、缺依赖、缺服务而失败。
+
+可以按三类环境设计。
+
+第一类是只读审查环境。它安装依赖，能跑 lint、typecheck、单元测试，但 agent 阶段不需要外网，也不提供写权限 secret。它适合 PR review、文档检查、只读诊断和安全扫描前置分析。这个环境应成为默认。
+
+第二类是受限修复环境。它允许 Codex 修改 workspace 中的文件，可以运行测试，agent 阶段只允许访问少量域名，例如包 registry、官方文档或内部只读服务。它适合低风险 bug 修复、测试补齐和小型重构。这个环境要禁止部署命令、生产数据访问和真实支付调用。
+
+第三类是专项环境。它为某个高风险领域准备，例如移动端构建、浏览器端到端测试、数据库迁移演练、私有包升级。专项环境不应成为默认入口，使用时要有明确任务、审批和日志。专项环境的规则应写清：为什么需要额外权限，哪些输出必须人工复核，失败时如何停止。
+
+环境分级能让任务委派更具体。发任务时不是笼统说“让 Codex 处理”，而是选择“只读审查环境”“受限修复环境”或“专项环境”。这让权限和任务风险匹配。
+
+## 失败诊断：把 Cloud 失败归类
+
+Cloud 任务失败后，先不要急着重跑。重跑只对偶发网络抖动有用，对系统性环境问题没有帮助。可以按以下顺序归类。
+
+依赖失败：安装命令失败、锁文件不匹配、私有 registry token 缺失、系统包缺失、语言版本不一致。处理方式是修 setup，而不是让 Codex 猜测安装。
+
+验证失败：测试命令不存在、脚本依赖本地服务、CI 与本地命令不一致、测试需要数据库但环境没准备。处理方式是补文档、补 mock、补测试入口。
+
+权限失败：agent 需要访问外部文档、issue 链接或内部服务，但网络关闭；或者需要私有依赖 token，但 token 只在本地。处理方式是明确 allowlist 或改成离线任务。
+
+secret 失败：任务设计要求 agent 阶段读取 secret，但官方环境模型不支持这种用法。处理方式是改用 setup 准备、测试凭据、mock，或把任务转成人工步骤。
+
+任务失败：Codex 修改了错误文件、没有理解目标、验证不足。这时才是 prompt 或模型执行问题。仍然要看是否任务边界写清。
+
+把失败归类写进团队复盘，Cloud 环境会逐步稳定。否则每次失败都会被当成个案，下一次还会重复。
+
+## 与 CI 的关系：复用规则，不复制混乱
+
+Codex Cloud 环境和 CI 应该共享工程契约，但不一定完全相同。CI 是合并门禁，要求覆盖完整；Codex Cloud 是候选修改环境，要求启动快、反馈清晰、失败可解释。
+
+可以复用 CI 的安装命令和基础验证。比如 CI 用 `pnpm install --frozen-lockfile`，Cloud setup 也用它。CI 用 `pnpm typecheck`，Codex 任务也应知道这个命令。这样能避免“Codex 通过但 CI 失败”的环境差异。
+
+但不要照搬所有 CI 步骤。发布、部署、制品签名、生产迁移、真实外部服务测试，不应在普通 Codex setup 中运行。Cloud 环境应该停在“能验证候选改动”的位置，而不是执行发布流程。
+
+对大型仓库，可以在 `AGENTS.md` 中写验证选择：
+
+```markdown
+## Validation policy
+
+- Small docs changes: run docs lint and link check.
+- Package-local code changes: run package tests and typecheck.
+- Shared package changes: run affected downstream typecheck.
+- Auth, billing, permission, migration changes: run full validation or report blocker.
+- Never run deploy, release, publish, or production migration commands.
+```
+
+这个策略让 Codex 有明确判断依据，也让 reviewer 能检查它是否按规则验证。
+
+## 安全边界：Cloud 环境中的最小授权
+
+Cloud 环境的安全边界应按任务需要设计。不要把“让任务少失败”作为唯一目标。少失败和少泄露、少越权之间要平衡。
+
+私有依赖 token 应只具备读取依赖的权限，不应能发布包。数据库连接应使用测试库，不应连接生产库。外部 API 凭据应使用测试账号，不应有真实资金、真实邮件、真实用户数据影响。日志中不要输出 token、cookie、授权头和完整连接串。
+
+agent 网络访问要按域名控制。允许访问包 registry 不等于允许访问所有外网。允许访问官方文档不等于允许访问任意网页。对高风险仓库，最好让 agent 禁网，需要资料时把官方链接放入任务描述，或者由人先整理上下文。
+
+不要把 Cloud 环境当作安全扫描替代品。Codex 可以发现问题，也可以修复候选，但它运行在你给的边界内。权限给错时，它无法替你恢复最小授权原则。
+
+## 维护节奏：环境也需要版本管理
+
+Cloud 环境应跟随仓库演进。每次升级 Node、Python、Rust、包管理器、测试框架、私有依赖策略，都要检查 Codex setup 是否还正确。每次新增敏感目录，都要考虑是否需要更近的 `AGENTS.md`。
+
+建议把环境变更纳入 PR review。修改 setup、环境变量、secrets、网络 allowlist、验证命令，都应像 CI 修改一样被审查。审查问题包括：是否增加了 secret 暴露，是否放宽了网络，是否允许部署命令，是否改变了默认验证。
+
+团队还可以建立月度检查：随机抽取几次 Codex Cloud 任务，看失败原因、验证质量、权限请求和产出合并率。低合并率说明任务拆分或环境配置有问题；高失败率说明 setup 和验证契约不稳；高越权率说明治理规则不够。
+
+## 环境说明文档：让 Codex 和人读同一份规则
+
+Cloud 环境的说明不应只存在设置页面。仓库里也要有可 review 的文字，说明这个环境怎样安装依赖、怎样验证、哪些权限可用、哪些操作禁止。这样人类维护者、Codex、CI 配置和审查者看到的是同一份规则。
+
+说明文档可以放在顶层 `AGENTS.md`，也可以放在 `docs/engineering/codex-cloud.md` 后由 `AGENTS.md` 引用。内容不宜太长，但要覆盖关键决策。比如为什么 agent 阶段默认禁网，为什么 secrets 不进入写代码阶段，为什么某些测试只能人工跑。
+
+这种文档还有一个作用：帮助审查环境变更。有人提议放开外网、增加 secret、跳过测试、改安装命令时，reviewer 可以对照文档问清理由。没有文档时，环境会被一次次临时放宽，最后很难恢复最小权限。
+
+## 多语言仓库：避免 setup 变成猜谜
+
+多语言仓库最容易让 Codex Cloud 失败。一个 monorepo 里可能同时有 Node、Python、Go、Rust、Terraform。若 setup 只写“安装依赖”，Codex 会花时间猜测每个子项目命令，甚至运行不该运行的脚本。
+
+处理方式是按目录写规则：
+
+```markdown
+## Package setup
+
+- `apps/web`: use Node 20 and `pnpm install --frozen-lockfile`.
+- `services/api`: use Python 3.11 and `uv sync --locked`.
+- `infra/`: do not run apply or deploy commands; plan only when explicitly requested.
+- `packages/shared`: run unit tests and downstream typecheck when changed.
+```
+
+对多语言仓库，路径约束比单仓库更重要。任务如果只改前端，就不要让 Codex 进入基础设施目录。任务如果只读分析 Terraform，也不应运行真实部署命令。Cloud 环境可以装很多工具，但任务边界仍要小。
+
+## 何时不要修环境
+
+并非所有 Cloud 失败都应该通过放宽环境解决。有些失败是在提醒任务不适合云端执行。比如需要真实生产数据库、需要个人浏览器登录态、需要不可公开的内部系统、需要人工观察视觉细节、需要跨团队审批。此时应把任务转成人工流程，或让 Codex 做只读准备工作。
+
+判断标准很直接：如果为了让任务跑通，需要把高价值凭据交给 agent，或者需要开放大范围外网，或者需要执行不可逆操作，那就不应修环境来迎合任务。应该改任务设计。
+
+## 落地问答：环境 owner 经常要回答的问题
+
+问：是否应该让 Cloud 环境和本地开发完全一致？答：不应该追求完全一致。它们目标不同。本地环境服务人的探索，Cloud 环境服务可复现任务。两者应共享语言版本、依赖安装和验证命令，但 Cloud 不应继承个人凭据、浏览器状态和部署权限。
+
+问：任务经常因为缺外网失败，是否直接打开全部网络？答：先看失败原因。如果只是缺官方文档或依赖域名，配置 allowlist 更合适。如果任务需要任意网页搜索，先让人整理资料，或把任务改成只读研究。全部开放会增加外传和提示注入风险，不应作为默认。
+
+问：是否每个任务都要跑完整测试？答：不用。小任务跑匹配验证，大任务跑完整验证。关键是规则明确。Codex 可以选择 targeted validation，但必须说明为什么足够；若改动涉及认证、计费、权限、迁移，应倾向完整验证或报告 blocker。
+
+问：环境变量和 secrets 谁来管理？答：应由仓库 owner 与平台或安全负责人共同管理。开发者可以提出需求，但不应随意新增高权限 secret。每个 secret 都要有用途、权限范围、轮换方式和删除条件。
+
+问：Cloud 环境稳定后是否就不用管？答：仍要维护。依赖、CI、语言版本、测试框架和安全策略都会变。把 Cloud 环境当作 CI 的一部分看待，定期检查运行结果和失败分类。
+
+补充一点：环境维护记录要写明日期和原因。比如某天放开一个域名，是为了下载哪类依赖；某天新增一个 secret，是为了哪个私有包；某天跳过一项测试，是临时故障还是长期策略。没有记录的权限变化，后续很难审计，也很难回滚。
+
+记录还应包含负责人。没有负责人，环境问题会在失败任务里反复出现，最后变成所有人都绕开的隐性债务。
+
+## 延伸阅读
+
+- [Codex Cloud Environments](https://developers.openai.com/codex/cloud/environments)
+- [Agent Internet Access](https://developers.openai.com/codex/cloud/internet-access)
+- [Codex Web](https://developers.openai.com/codex/cloud)
+- [Custom instructions with AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+- [Codex GitHub Integration](https://developers.openai.com/codex/integrations/github)

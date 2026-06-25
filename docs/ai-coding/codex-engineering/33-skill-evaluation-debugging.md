@@ -1,0 +1,244 @@
+# Skill 评测与调试深度解析：欠触发、误触发和执行失败怎么定位
+
+## TL;DR
+
+Skill 评测不是检查说明文档写得是否完整，而是检查三类可观察行为：应该触发时是否触发，不该触发时是否安静，触发后是否能在当前权限和资源条件下产出可验证结果。对应到工程指标，就是召回率、精确率和完成率。欠触发通常来自 `description` 太抽象或缺少真实用户说法；误触发通常来自描述过宽、边界重叠或缺少排除条件；执行失败通常来自路径、脚本、权限、网络、依赖、输出格式和降级路径没有写清。
+
+一个团队 Skill 在进入复用库前，至少要有正例、反例、执行用例和回归记录。不要只用作者自己的 prompt 测试；要收集不同开发者真实会说的话。Skill 越接近自动化、越可能写文件、越依赖外部系统，评测越要严格。
+
+## 读者定位
+
+本文面向维护 Codex Skill 库的开发者、研发效能团队、平台工程师和技术负责人。你应该已经能编写基本 Skill，并理解 [Skill 文件结构](./32-skill-file-structure.md) 中的 `name`、`description`、`references/`、`scripts/`、`assets/` 分工。本文讨论如何把 Skill 当作小型工程资产评测，而不是靠“我试了一次能用”上线。
+
+如果你的团队还只有一两个个人 Skill，可以先从轻量表格开始。评测不必一开始就做成复杂系统，但必须留下用例、结果和修复动作。没有记录的调试会变成反复猜测。
+
+## 问题：Skill 失败通常不是“模型不听话”
+
+很多 Skill 初版看起来有效，因为作者知道该怎样调用它。作者会在 prompt 里写出和 `description` 高度相似的关键词，比如“请使用发布检查 Skill 检查当前分支”。这类测试没有意义。真实用户会说“明天要发版，帮我看看有没有坑”“这个 PR 能不能合”“CI 又红了，先判断是不是依赖问题”。如果 description 没覆盖真实说法，Codex 可能不会触发。
+
+另一端的问题是误触发。一个 `pr-review` Skill 如果描述成“Use when checking code quality”，用户只是问“解释这个函数为什么这样写”也可能被路由到 review 流程。结果 Codex 开始找 diff、跑检查、输出 findings，用户却只是想理解代码。误触发比欠触发更危险，因为它会把错误工作流带入任务，造成时间浪费、上下文污染，甚至错误修改。
+
+第三类问题是触发后失败。Skill 被正确选中，但引用的脚本不存在，路径相对关系错了，脚本需要网络，当前沙箱只读，MCP 连接器未授权，输出模板字段太多导致报告不可读。很多团队会把这类失败归因于“Codex 这次没发挥好”，实际是 Skill 没把执行环境和失败路径写清。
+
+所以调试顺序要固定：先看路由，再看执行，再看输出。不要在一个本来不该触发的 Skill 里优化脚本；也不要在 description 还模糊时讨论输出格式。
+
+## 心智模型：把 Skill 当作小型产品
+
+一个 Skill 有输入、路由、执行、输出和反馈。输入是用户请求、仓库状态、可用工具和权限。路由由 `name` 与 `description` 决定。执行由 `SKILL.md` 正文、参考资料、脚本和工具能力决定。输出由模板、格式要求和验证步骤决定。反馈来自人类 review、自动化结果、失败记录和回归用例。
+
+按产品质量看，Skill 有三项核心指标。
+
+召回率：应该触发的任务里，有多少触发了正确 Skill。欠触发会让团队继续复制 prompt，复用价值下降。
+
+精确率：触发 Skill 的任务里，有多少真的适合它。误触发会让 Codex 加载错误上下文，打断原任务。
+
+完成率：触发后，有多少能在当前环境下完成可用交付。执行失败会让用户失去信任，自动化场景里还会制造待处理噪声。
+
+这三个指标不能只凭感觉。最小做法是维护一个 Markdown 表格或 YAML 用例文件；更成熟的做法是把用例接入 `codex exec`、record/replay、内部评测脚本或人工复核流程。官方 Record & Replay 能把示范过的流程转成 Skill，适合从稳定桌面或浏览器流程中沉淀初版，但生成后的 Skill 仍需要上述评测。
+
+## 评测集怎么建
+
+每个 Skill 至少准备四类用例。
+
+第一类是明确正例。用户请求直接命中该 Skill，比如“Review this PR for security and missing tests”“检查这个分支发版前有没有配置和迁移风险”。这些用例验证基本召回。
+
+第二类是口语化正例。用户不会说出 Skill 名，也不会复述 description，比如“这个改动能合吗”“明天上线前帮我扫一遍风险”“CI 红了，先判断根因”。这些用例验证 description 是否贴近真实表达。
+
+第三类是相邻反例。它们和 Skill 主题接近，但不应该触发。PR review 的反例包括“解释这段代码”“帮我重构这个函数”“写一个教程说明模块结构”。CI triage 的反例包括“给这个项目设计新的测试策略”“帮我加测试覆盖”。这些用例最能发现误触发。
+
+第四类是执行失败用例。比如缺少日志、无 Git 仓库、脚本不可执行、只读沙箱、网络不可用、MCP 未授权、路径不存在。这些用例验证 Skill 是否会诚实降级，而不是编造结果。
+
+一个轻量表格可以这样写：
+
+```markdown
+| case_id | user_request | expected_skill | expected_behavior | actual_behavior | pass | failure_type | fix |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pr-01 | 帮我审一下这个 PR 有没有安全风险 | pr-risk-review | trigger and output findings |  |  |  |  |
+| pr-02 | 解释这个函数为什么这样写 | none | no skill trigger |  |  |  |  |
+| pr-03 | 这个分支能不能发版 | release-readiness | trigger release check, not PR review |  |  |  |  |
+```
+
+字段越稳定，后续越能比较两次变更的影响。不要只记录“通过/失败”，要记录失败类型。常见类型包括 `missing_trigger`、`false_trigger`、`wrong_skill`、`resource_missing`、`script_failed`、`permission_denied`、`bad_output`、`unverified_claim`。
+
+## 欠触发怎么修
+
+欠触发的首要修复点是 `description`。不要先改正文。Codex 没打开 Skill 时，正文写得再好也没用。
+
+检查 description 是否包含真实用户词汇。用户可能说“审 PR”“能不能合”“上线前扫风险”“CI 红了”“依赖有坑吗”，而不是“执行 pull request risk assessment”。把真实说法写进描述，但保持短句。描述不是关键词堆砌，而是可读的路由规则。
+
+检查 description 是否写清对象。比如“Use when checking release readiness” 仍然偏抽象；“Use when checking a branch or pull request before release for config changes, migrations, rollback, tests, and docs” 更可路由。
+
+检查用户是否会显式调用。如果某个 Skill 边界很窄，或团队希望用户主动选择，可以在文档和 app 默认提示里教用户写 `$skill-name`。官方文档支持显式 `$skill` 调用，也支持通过 `allow_implicit_invocation` 控制隐式调用。不要把所有欠触发都归咎于 description；有些高风险 Skill 本来就应该显式调用。
+
+检查技能列表是否过大。官方文档说明初始技能列表有上下文预算，技能太多时描述可能被缩短或部分技能被省略。如果团队安装了大量 Skill，欠触发可能不是单个 description 的问题，而是技能库治理问题。此时应清理过期 Skill、缩短描述、合并重叠 Skill，或用 plugin/团队分发策略控制可见范围。
+
+## 误触发怎么修
+
+误触发通常来自 description 过宽。修复方法是加排除条件，而不是让正文第一步判断“如果不适合就退出”。Codex 一旦打开 Skill，上下文已经被占用，工作流已经偏航。
+
+把相邻场景列出来。比如 `pr-risk-review` 和 `ci-failure-triage` 都可能涉及失败测试；前者关注变更风险，后者关注失败日志根因。description 应明确区分：“Use when reviewing a pull request or diff…” 和 “Use when diagnosing failed CI logs…”。如果两个 Skill 都能被同一句话触发，用户和 Codex 都会困惑。
+
+使用负向语句。`Do not use for general code explanation, tutorial writing, broad refactoring advice, or feature planning.` 这类排除条件能降低误触发。排除条件不必列完所有情况，但要覆盖高频混淆场景。
+
+对高风险 Skill 禁止隐式调用。`agents/openai.yaml` 中的 `policy.allow_implicit_invocation: false` 适合会写文件、调用外部系统、处理安全问题或容易误触发的 Skill。这样用户必须显式写 `$skill-name`。这会降低召回，但提高精确率。团队应按风险选择。
+
+发现误触发后，要把反例加入评测集。不要只改 description 然后口头说“应该好了”。下一次改描述可能又把同一类误触发带回来。
+
+## 执行失败怎么修
+
+执行失败要按资源、权限、路径、工具和输出逐层排查。
+
+资源层：`references/`、`scripts/`、`assets/` 是否存在，路径是否相对 Skill 目录，文件名是否和正文一致。Skill 被移动或打包后，绝对路径和仓库外路径最容易失效。
+
+权限层：任务是否需要写文件、运行命令、访问网络、控制浏览器、调用 MCP 或读取私有数据。当前 Codex 沙箱和审批策略是否允许。官方 Automations 文档说明自动化使用默认沙箱设置；只读模式下需要修改文件、网络访问或操作本机应用的工具调用会失败。Skill 应提前说明需要什么权限，以及权限不足时怎样降级。
+
+脚本层：脚本是否可执行，是否跨平台，是否依赖未声明的命令、环境变量、凭据或工作目录。每个脚本都应有输入、输出、退出码和失败处理说明。脚本失败时，Codex 应报告失败原因并切换手工路径，而不是跳过检查。
+
+工具层：MCP、连接器、GitHub、浏览器、Computer Use 是否已安装和授权。Skill 可以声明依赖，但依赖声明不等于授权。遇到工具不可用时，应输出“无法验证”的项，而不是猜测。
+
+输出层：最终报告是否满足用户或下游系统需求。很多 Skill 能完成任务，但输出太散，无法处理。应固定字段：范围、证据、命令、结论、未确认项、下一步。若用于自动化，下游字段更要稳定。
+
+## 真实工作流案例：PR review Skill 的调试
+
+一个团队发现 `pr-risk-review` 经常在“解释代码”场景误触发，同时在“这个 PR 能合吗”场景欠触发。原 description 是：
+
+```text
+Use when helping with code quality and review.
+```
+
+这个描述同时太宽又太抽象。修复版：
+
+```text
+Use when reviewing a pull request, branch diff, or patch before merge for correctness, security, compatibility, and missing tests. Do not use for general code explanation, tutorial writing, refactoring brainstorming, or implementing requested fixes. Output severity-ranked findings with file references and evidence.
+```
+
+然后补评测用例：
+
+```markdown
+| case_id | request | expected |
+| --- | --- | --- |
+| pr-positive-01 | 这个 PR 能合吗，帮我看风险 | trigger |
+| pr-positive-02 | review this patch for security and missing tests | trigger |
+| pr-negative-01 | 解释这个函数为什么要传 context | no trigger |
+| pr-negative-02 | 帮我把这个模块重构得清楚一点 | no trigger |
+| pr-negative-03 | 根据这个需求实现功能 | no trigger |
+```
+
+触发问题修完后，团队又发现脚本 `scripts/collect-diff.sh` 在 Windows 开发机失败。修复不是要求所有人换环境，而是在 Skill 里写清脚本依赖 Git Bash；若不可用，Codex 改用 `git diff --name-only` 和 `git diff --stat` 手工收集信息。这样 Skill 在不同环境下能降级。
+
+## 操作清单
+
+1. 为每个 Skill 建正例、口语正例、相邻反例、执行失败用例。
+2. 每个用例记录期望 Skill、实际行为、失败类型和修复动作。
+3. 欠触发先改 `description`，加入真实用户说法和对象范围。
+4. 误触发先加排除条件，必要时关闭隐式调用。
+5. 边界重叠的 Skill 放在一起比较 description。
+6. 执行失败按资源、权限、路径、脚本、工具、输出逐层排查。
+7. 脚本失败必须有降级路径。
+8. 自动化前至少跑过若干次手动回归。
+9. 每次改 description、目录结构或脚本后，重跑评测集。
+10. 记录版本和 owner，避免无人维护的 Skill 长期误导团队。
+
+## 权衡与风险
+
+追求高召回会增加误触发，追求高精确会增加用户显式调用成本。低风险、输出只读的 Skill 可以偏召回；高风险、会写文件或调用外部系统的 Skill 应偏精确。
+
+评测集不可能覆盖所有自然语言表达。目标不是 100% 路由正确，而是覆盖高频场景和高风险混淆。对于低频、模糊、代价高的请求，让 Codex 先澄清比误用 Skill 更好。
+
+自动评测也有边界。路由行为可以半自动检查，执行质量往往仍需人类 review。PR review、发布检查、安全诊断等场景中，Skill 评测不应替代代码 review、测试和发布门禁。
+
+评测本身也会变成维护负担。团队应按风险分级：个人 Skill 可以轻量；团队共享 Skill 要有表格；自动化调用的 Skill 要有回归；高权限 Skill 要有 owner、审计和废弃机制。
+
+## 常见误区
+
+误区一：只测正例。这样只能证明 Skill 能被喊醒，不能证明它不会乱醒。
+
+误区二：用作者自己的措辞评测。真实用户不会照着 description 提问。
+
+误区三：把执行失败归因于模型。很多失败是路径、权限、依赖和脚本接口问题。
+
+误区四：正文里写“如果不适用就退出”来处理误触发。更好的位置是 description 或隐式调用策略。
+
+误区五：没有版本记录。description 的一个小改动就可能影响全队路由。
+
+误区六：自动化前没有回归。Automation 会定时放大 Skill 缺陷。
+
+## 回归流程：每次改 Skill 后怎样防止旧问题复发
+
+Skill 的回归流程可以很轻，但不能没有。推荐把回归分成三档。
+
+第一档是路由回归。每次改 `name`、`description` 或 `agents/openai.yaml` 调用策略后，必须跑正例和反例。正例至少覆盖正式说法、口语说法、跨团队说法；反例至少覆盖相邻任务、普通咨询、修复请求。目标不是让 Codex 在所有表达上都一样，而是确认高频入口不丢、高风险误触发不回归。
+
+第二档是执行回归。每次改 `SKILL.md` 正文、资源路径、脚本命令或输出模板后，至少跑一个真实仓库任务。检查 Codex 是否按顺序读取资源，是否能找到相对路径，是否正确处理脚本失败，是否输出证据和未确认项。执行回归要保留失败日志，因为这类问题很容易只在某个操作系统或某个仓库结构下出现。
+
+第三档是自动化回归。一个 Skill 如果被 Automation、SDK 或 GitHub Action 调用，任何变更都要确认调用方 prompt、显式 `$skill-name`、输出字段和权限假设没有断。自动化依赖的是稳定接口；你改了输出字段，可能不是文章层面的变化，而是下游解析失败。
+
+回归记录建议放在 Skill 目录附近，例如 `references/eval-cases.md` 或仓库统一 `skill-evals/` 目录。记录内容包括日期、改动、用例、结果、失败原因、是否需要跟进。不要把评测完全放在个人聊天记录里，团队以后查不到。
+
+## 失败分类：先归因再修复
+
+调试 Skill 时，先给失败分类，再决定动作。常见分类如下。
+
+`missing_trigger`：应该触发但没触发。优先修 description，加入真实用户说法、对象和产出。不要改正文。
+
+`false_trigger`：不该触发却触发。优先收窄 description，加入排除条件，或关闭隐式调用。
+
+`wrong_skill`：触发了相邻 Skill。把两个 Skill 的 description 并排比较，明确对象、动作、输出差异。必要时重命名或合并。
+
+`missing_input`：用户请求缺少必要信息。Skill 应要求 Codex 澄清，而不是猜。比如 PR review 缺 PR/diff，CI triage 缺日志。
+
+`resource_missing`：引用文件、脚本或模板不存在。修路径，使用相对路径，加入结构检查。
+
+`permission_denied`：沙箱、审批、网络或连接器权限不足。Skill 应报告需要的能力，并提供只读或手工降级路径。
+
+`script_failed`：脚本运行失败。修脚本接口、依赖说明、退出码和替代流程。
+
+`bad_output`：任务完成但输出不可用。修输出模板，减少空话，加入证据字段和未确认项。
+
+`unverified_claim`：Codex 声称完成或验证，但没有证据。修正文，要求列出命令、文件、失败项；高风险场景要求无法验证就标记为未确认。
+
+这个分类能避免团队每次都说“模型没选对”。模型可能影响质量，但很多 Skill 失败有明确工程原因。
+
+## 人工评审：Skill 输出应该怎样验收
+
+Skill 评测不只看是否触发，还要看输出能否被负责人采纳。人工评审可以按四个问题走。
+
+第一，范围是否正确。Codex 是否检查了该检查的文件和系统，是否漏掉了关键目录，是否读了无关大范围。范围错误的输出再详细也没意义。
+
+第二，证据是否足够。每个重要结论是否有文件、日志、命令、文档或无法确认说明。不要接受没有证据的“看起来没问题”。
+
+第三，行动是否清楚。输出是否告诉负责人下一步做什么：修哪个文件、跑哪个命令、找谁确认、是否阻塞。只有结论没有行动的报告会增加处理成本。
+
+第四，风险是否诚实。Skill 是否区分已验证、推断、未确认、无法访问。一个成熟的 Skill 会承认边界，而不是把所有空白都补成肯定句。
+
+人工评审结果也应回到 Skill。比如输出总是太长，就改模板；总是漏掉回滚，就改 workflow；总是误判某类日志，就补 reference 和用例。
+
+## 量化不是越复杂越好
+
+团队很容易把 Skill 评测做成过重流程，最后没人维护。早期不要追求复杂平台，先用一张表把关键问题记录下来。真正有用的字段是：请求原文、期望行为、实际行为、失败类型、修复动作、复测结果。只要这六项稳定，团队就能看到 Skill 是否在变好。
+
+当 Skill 被更多人使用后，再增加统计。比如每周欠触发多少次、误触发多少次、执行失败多少次、输出被采纳多少次。采纳率比触发率更有价值：一个 Skill 触发很多但输出经常被忽略，说明质量或场景有问题。
+
+不要把评测变成“模型打分”。让另一个模型判断输出好坏可以作为辅助，但关键场景仍要人看证据。PR review、发布检查、安全风险、数据迁移这些任务的质量标准来自团队工程规范，不来自模型偏好。
+
+评测也要保留样本多样性。只用一个仓库、一个作者、一个表达方式，结果会虚高。至少要包含新人写法、资深工程师写法、中文请求、英文请求、模糊请求和错误输入。真实世界的请求不会像测试集那么整齐。
+
+当评测显示 Skill 长期表现不好时，不要无限修补。可能这个流程本身还不稳定，或者不适合做成 Skill。此时应退回普通 prompt 或人工流程，等边界清楚后再封装。能撤回也是成熟治理的一部分。
+
+还有一种情况要单独记录：Skill 输出正确，但用户没有采用。原因可能是报告太长、行动不清、证据不够、严重程度排序不符合团队习惯，也可能是用户更信任人工流程。这类问题不属于路由失败，却会影响复用价值。评测表里可以增加“是否被采纳”和“未采纳原因”，让维护者知道该改输出还是改流程。
+
+对自动化调用的 Skill，采纳标准更严格。Triage 中的报告如果连续多次没人处理，应视为失败信号。不是所有“发现”都有价值，只有能推动行动的发现才值得定期运行。
+
+评测结论也要区分“立即修”和“观察”。一次偶发误触发可以先记录，两周内多次出现才改 description；脚本路径错误、权限声明缺失、输出声称已验证却没有证据，则应立即修。不同失败的处理优先级不同，不能全部排进同一个待办池。
+
+评测的目的不是追求漂亮分数，而是让维护者知道下一步改哪里。
+
+能定位，才谈得上持续改进和稳定复用。
+
+## 延伸阅读
+
+- [Agent Skills](https://developers.openai.com/codex/skills)
+- [Record & Replay](https://developers.openai.com/codex/record-and-replay)
+- [Automations](https://developers.openai.com/codex/app/automations)
+- [上一篇：Skill 文件结构](./32-skill-file-structure.md)
+- [下一篇：Automations 与 scheduled skills](./34-automations-scheduled-skills.md)

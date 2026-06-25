@@ -1,0 +1,266 @@
+# Hooks 工程工作流：在 Codex 动作前后插入确定性控制点
+
+## TL;DR
+
+Codex hooks 是本地客户端在特定事件发生时运行的命令。它适合做确定性、短耗时、可审计的检查，例如提交前格式化提示、命令前风险提示、文件编辑后局部 lint、会话结束摘要归档。它不适合承载复杂业务逻辑、隐式修改大量文件、绕过审批、运行长时间服务或访问生产系统。官方 hooks 文档说明，hooks 默认关闭，需要在配置里启用；hook 命令需要被信任；项目层 hooks 只有在项目受信任时加载；多个匹配 hook 会并行执行。团队设计 hooks 时，应把它当成“工程护栏和自动化触发器”，不是另一个隐藏 agent。
+
+## 读者定位
+
+本文面向已经使用 Codex 改代码、跑测试、执行本地命令的中高级开发者，也面向希望把团队规范自动化的技术负责人和 DevEx 工程师。你需要理解 shell 脚本、lint/test 工作流、配置分层和安全审批。读完后，你应该能决定哪些流程适合放进 hooks，哪些应该留给人工审批或 CI，以及如何避免 hooks 引入不可见副作用。
+
+## 问题：人工约定很容易在 agent 流程里失效
+
+人类开发者知道“改完 TSX 要跑 lint”“不要读取 `.env`”“执行迁移前先确认环境”“PR 描述要包含测试结果”。但 Codex 是按上下文和工具结果行动的。提示词里写一遍规则有用，但不能保证每次事件发生时都被执行。长任务里，模型可能忘记早期约定；多个开发者也会有不同习惯。
+
+hooks 的价值在于把一部分规则移到确定性执行层。比如 Codex 即将执行 shell 命令时，hook 可以检查命令文本是否包含危险前缀并给出警告；文件编辑后，hook 可以运行轻量格式检查；任务结束时，hook 可以把最后摘要写入团队约定目录。这样规则不完全依赖模型记忆。
+
+但 hooks 也会带来新的风险。它们在本地运行真实命令。一个写得太宽的 hook 可以修改文件、联网、删除缓存、触发部署，甚至在开发者不注意时改变仓库状态。多个 hook 并行执行还可能互相抢资源。官方文档要求 hook 命令经过信任确认，原因就在这里。工程上要把 hooks 写成小而透明的控制点，而不是隐藏在 Codex 背后的自动化系统。
+
+## 心智模型：hooks 是事件驱动的本地脚本，不是模型插件
+
+可以把 hooks 看成：
+
+```text
+Codex 事件 -> 匹配 hook -> 运行本地命令 -> 返回结果影响后续流程
+```
+
+它和三类机制不同。第一，它不同于 `AGENTS.md`。`AGENTS.md` 是自然语言指导，影响模型决策；hooks 是真实命令，影响本地环境。第二，它不同于 rules。rules 决定越界命令是否允许、提示或禁止；hooks 在事件点执行附加逻辑。第三，它不同于 CI。CI 在远端或隔离环境验证提交；hooks 在开发者本机或 Codex 运行环境即时反馈。
+
+因此 hooks 的设计原则是：确定性、局部、短耗时、低副作用。它应该帮助模型更早发现问题，而不是替代完整验证。一个好的 hook 像门口的检查表；一个坏的 hook 像藏在门后的脚本，谁也不知道它改了什么。
+
+## 详细机制：事件、配置、信任和并行
+
+### 启用 hooks
+
+官方 hooks 文档说明，hooks 功能是 beta，默认关闭。需要在配置中启用：
+
+```toml
+[features]
+hooks = true
+```
+
+hooks 配置可以放在用户级 `~/.codex/config.toml`，也可以放在受信任项目的 `.codex/config.toml`。项目层配置和 hooks 只有在项目受信任时才会加载。团队不能假设一个克隆下来的仓库会自动运行项目 hooks；首次信任流程是安全边界的一部分。
+
+### hook 事件粒度
+
+官方文档当前列出的事件包括 `SessionStart`、`SessionEnd`、`AgentTurnStart`、`AgentTurnEnd`、`UserPromptSubmit`、`ToolPreInvoke`、`ToolPostInvoke` 和 `FileChange`。不同事件适合不同工作。
+
+`SessionStart` 适合检查环境，例如提示 Node 版本、是否在正确分支、是否存在未提交改动。`UserPromptSubmit` 适合轻量记录或拦截不合规任务描述。`ToolPreInvoke` 适合在命令执行前检查风险。`ToolPostInvoke` 适合根据退出码或输出摘要触发轻量诊断。`FileChange` 适合对被修改文件做局部格式或静态检查。`SessionEnd` 适合归档任务摘要。
+
+不要把所有事情都塞进 `ToolPostInvoke`。事件粒度越粗，hook 越难判断上下文，也越容易误触发。一个面向 TS 文件的格式检查，应该挂在 `FileChange` 并过滤路径；一个 shell 风险提示，应该挂在 `ToolPreInvoke` 并检查命令。
+
+### 配置示例
+
+hooks 可以在 TOML 中配置。一个保守示例：
+
+```toml
+[[hooks]]
+event = "FileChange"
+command = "bash .codex/hooks/check-md.sh"
+timeout_ms = 10000
+
+[[hooks]]
+event = "ToolPreInvoke"
+command = "bash .codex/hooks/shell-risk-check.sh"
+timeout_ms = 5000
+```
+
+实际命令应尽量指向仓库内可审查脚本，而不是长内联 shell。脚本要短，输出要清楚，失败语义要明确。比如 Markdown 检查脚本只检查本次变更文件，不要扫全仓库；shell 风险检查只给出拦截或提示，不要尝试替 Codex 自动重写命令。
+
+### 信任模型
+
+官方文档说明，Codex 会为 hook 命令计算哈希；命令第一次出现或发生变化时，需要用户信任。受信任的 hook 命令哈希存储在 `~/.codex/trusted_hooks.json`。这意味着 hook 命令本身是安全边界，不只是普通配置。
+
+团队应该把 hook 命令写得稳定。频繁改命令字符串会频繁触发信任确认，开发者容易无脑通过。更好的做法是固定命令入口，例如 `bash .codex/hooks/file-change.sh`，脚本内容走代码审查。命令入口变化才触发重新信任，脚本内容变化由 git review 和项目治理负责。
+
+### 并行执行和超时
+
+官方 hooks 文档说明，同一事件匹配到的 hooks 会并行执行，并且可以设置 `timeout_ms`。这对性能友好，但也要求 hook 之间不要写同一文件、抢同一锁、启动同一服务或修改同一缓存。并行 hooks 如果都写 `.codex/hooks.log`，输出会交错；如果都跑格式化，文件可能互相覆盖。
+
+每个 hook 都应该有短超时。没有超时的长脚本会让 Codex 交互变慢，甚至让开发者以为模型卡住。工程实践里，交互路径上的 hook 应控制在几秒到十几秒；完整测试和安全扫描应留给显式命令或 CI。
+
+### hook 输出怎样影响工作流
+
+hook 输出会进入 Codex 可见的上下文。输出要像诊断报告，而不是完整日志。好的输出包括事件、命令、失败原因、相关文件和建议下一步。坏的输出包括上千行 lint、完整环境变量、生产日志、无标签 JSON。
+
+hook 失败应语义清楚。比如“Markdown 文件标题层级不合法，请运行 `./scripts/check.sh lint`”比“exit 1”有用得多。Codex 看到清楚失败后，才能决定是否修文件、是否请求审批、是否跳过并说明风险。
+
+## 真实工作流案例：给文档仓库加轻量 FileChange hook
+
+假设团队维护一个 Markdown 知识库，要求每次修改文档后跑 lint 和内部链接检查。但全量检查耗时较长，不能每次文件变化都跑。可以设计两层。
+
+第一层是 `FileChange` hook，只对 Markdown 文件做轻量检查：
+
+```toml
+[[hooks]]
+event = "FileChange"
+command = "bash .codex/hooks/markdown-file-change.sh"
+timeout_ms = 8000
+```
+
+脚本逻辑：
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+changed="$(git diff --name-only -- '*.md' | head -50)"
+if [ -z "$changed" ]; then
+  exit 0
+fi
+
+echo "$changed" | while IFS= read -r file; do
+  [ -f "$file" ] || continue
+  awk 'length($0) > 220 { print FILENAME ":" FNR ": line too long"; bad=1 } END { exit bad }' "$file"
+done
+```
+
+这个 hook 不跑全仓库 lint，不改文件，不读敏感内容，只给出短错误。第二层是显式验证：任务完成前，Codex 仍然运行 `./scripts/check.sh all`。这样 hook 提供即时反馈，正式脚本提供完整把关。
+
+再加一个 `ToolPreInvoke` 风险提示：
+
+```toml
+[[hooks]]
+event = "ToolPreInvoke"
+command = "bash .codex/hooks/reject-dangerous-shell.sh"
+timeout_ms = 3000
+```
+
+脚本只检查命令前缀和明显危险模式：
+
+```sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+payload="$(cat)"
+case "$payload" in
+  *"rm -rf"*|*"git reset --hard"*|*"curl "*|"* | sh"*)
+    echo "High-risk shell command detected. Ask for explicit approval and explain target paths."
+    exit 1
+    ;;
+esac
+```
+
+这个示例不是完整安全系统，但它体现了 hook 的正确位置：提醒和拦截明显风险，要求模型转入显式说明，而不是偷偷执行。
+
+## 操作清单：设计 hooks 前先回答这些问题
+
+- 这个规则是否必须在每次事件发生时执行，还是写进 `AGENTS.md` 已足够？
+- hook 是否只做确定性检查，不依赖模型解释？
+- hook 是否会写文件、联网、启动服务或访问生产系统？如果会，是否真该放在 hook 里？
+- hook 输出是否短、可读、无敏感信息？
+- 同一事件下多个 hook 并行执行时，是否会写同一资源？
+- 是否设置了 `timeout_ms`？
+- 项目 hooks 是否只在受信任项目里运行，团队是否理解这个前提？
+- hook 命令入口是否稳定，避免频繁要求用户重新信任？
+- 脚本是否纳入代码审查？
+- hook 失败时，Codex 是否能从输出知道下一步该做什么？
+
+可以放进 `AGENTS.md` 的约定：
+
+```markdown
+## Hooks Policy
+
+- Hooks are guardrails, not hidden build pipelines.
+- Keep hook output short and free of secrets.
+- Hooks must not publish, push, migrate databases, or call production services.
+- Long validation still belongs to explicit commands or CI.
+```
+
+## 权衡与风险
+
+hooks 能让反馈更早出现，但会增加本地行为的不透明度。一个新开发者看到 Codex 执行文件编辑后又自动跑脚本，可能不知道这是项目配置还是模型决策。团队应在文档中列出 hooks 入口、事件和作用，并让脚本名表达意图。
+
+另一个权衡是速度。每个交互事件都跑脚本，会让 Codex 体验变慢。任务越交互，hook 越要轻。把全量 lint、全量测试、依赖审计放进每次 `FileChange`，最后开发者会关闭 hooks。更稳的做法是 hook 只做局部快检，完整验证由 Codex 在任务收尾时显式执行。
+
+安全上，hooks 不是绕过审批的通道。不要用 hook 自动执行高风险命令，也不要在 hook 里读取用户凭据再调用外部 API。hook 运行在本地环境中，它的风险不低于普通 shell。任何会改变外部系统状态的动作，都应该有单独审批、日志和回滚路径。
+
+## 常见误区
+
+误区一：hooks 可以替代 CI。hooks 运行在本地，环境不统一，可能被关闭或未信任。CI 仍是合并前的正式验证。
+
+误区二：hook 越多越规范。过多 hook 会拖慢交互并制造噪声。只把高频、低成本、确定性规则放进去。
+
+误区三：hook 可以偷偷修复格式。自动修改文件会让 Codex 的 diff 变难审查。格式化可以做，但要清楚输出，并最好由显式命令触发。
+
+误区四：项目 hooks 会自动保护所有人。项目 `.codex/` 层需要信任后才加载。组织安全底线不能只依赖项目 hooks。
+
+误区五：hook 输出越详细越好。hook 输出会进入上下文。长日志、敏感信息和无关 warning 会降低模型判断质量。
+
+## 团队落地：hooks 的生命周期管理
+
+hooks 不是写完就结束。它们会跟随仓库长期运行，影响每个 Codex 会话，所以需要生命周期管理。一个 hook 从提出到启用，至少应经过四步：明确触发事件，说明要防止的问题，写出最小脚本，给出失败时 Codex 应该采取的下一步。没有这四项，hook 很容易变成“有人觉得有用”的隐藏自动化。
+
+启用前要先灰度。可以先让 hook 只输出 warning，不阻断任务，观察一段时间后再决定是否让失败影响流程。很多规则在纸面上合理，到了真实仓库会遇到边界：某些生成文件行很长但合理，某些测试目录不该 lint，某些命令虽然看起来危险但在本仓库是只读 wrapper。灰度能避免开发者因为误报太多而关闭整个 hooks 功能。
+
+启用后要记录版本。hook 脚本变化会改变 Codex 行为，应该像构建脚本一样被 review。建议在脚本顶部写简短说明：事件、输入、输出、是否写文件、是否联网、超时预期。不要在脚本里写长篇政策，政策放在文档，脚本只保留足够让维护者判断边界的信息。
+
+废弃也要有流程。项目规则变化后，旧 hook 可能继续阻塞任务。比如仓库迁移到新 lint 工具后，旧 Markdown hook 仍在检查废弃规则；项目改用新包管理器后，旧 shell 风险检查误报。定期列出 `.codex/hooks/` 下脚本，确认每个仍有 owner 和触发理由。没有 owner 的 hook 应删除或降级为文档规则。
+
+## 事件选择的工程判断
+
+同一个目标可以挂在不同事件上，但效果不同。比如“检查 Markdown 格式”可以挂在 `FileChange`，也可以挂在 `AgentTurnEnd`，还可以挂在 `SessionEnd`。`FileChange` 反馈最快，但触发频繁；`AgentTurnEnd` 能批量处理一轮改动，但上下文可能混杂；`SessionEnd` 最少打扰，但发现问题太晚。选择事件时，要看错误修复成本。越早发现越便宜的规则，可以靠近 `FileChange`；偏最终确认的规则，可以放到 `SessionEnd` 或显式验证命令。
+
+`ToolPreInvoke` 适合做风险拦截，但不适合做复杂策略判断。它看到的是即将执行的工具调用，不一定理解完整业务背景。一个脚本可以拦截 `rm -rf`、`git reset --hard`、`curl | sh` 这类明显危险模式，但不应在这里判断某个数据库迁移是否符合业务变更。业务判断需要人工、PR 审查和测试环境。
+
+`ToolPostInvoke` 适合做轻量解释和提醒。例如某个测试命令失败后，hook 可以提示“请读取失败摘要，不要直接重跑全量测试”；某个命令输出过长后，hook 可以提示“完整日志已落盘，请用关键词检索”。但不要把 `ToolPostInvoke` 变成自动修复器。自动修复会让 Codex 的决策链变得不透明。
+
+`SessionEnd` 适合总结和归档。比如记录本次修改文件、运行过的验证命令、未完成风险。它不适合最后一刻修改代码。任务结束事件里再改文件，会让用户看到的最终摘要和实际 diff 不一致。
+
+## Hooks 与其它控制面的边界
+
+hooks 经常被拿来做 rules、AGENTS.md 和 CI 的工作。边界不清会导致维护失败。自然语言规范应该放在 `AGENTS.md`，比如“改完文档后运行检查”。命令准入应该放在 rules，比如禁止发布和删除。确定性本地快检可以放在 hooks，比如检测新文件是否包含标题。完整验证应该放在 CI 或显式脚本。
+
+如果一个 hook 需要读取大量上下文才能判断，说明它可能不适合 hooks。比如“这次 API 改动是否需要迁移文档”，这需要理解产品语义，应交给 Codex 计划和人类 review。hook 只适合判断“文档目录里新增了 API 文件但没有 frontmatter”这种确定性规则。
+
+如果一个 hook 需要长期运行服务，也不适合 hooks。开发服务器、数据库、浏览器自动化、索引器都应该由显式命令启动，并让 Codex 记录端口、进程和关闭方式。hook 隐式启动服务，会制造端口冲突和残留进程。
+
+如果一个 hook 需要访问网络，也要非常谨慎。网络 hook 会把每次事件变成外部请求，带来速度、隐私和稳定性问题。除非是内部受控服务且有明确审批，否则 hooks 默认不联网。
+
+## 输出设计：让 Codex 能行动
+
+hook 输出应该围绕“下一步动作”写。一个 lint hook 失败时，不要贴满所有规则说明，只要列出文件、行号、问题和推荐命令。一个风险 hook 拦截命令时，不要只说“危险”，要指出触发模式和需要人工确认的目标。一个 session hook 总结时，不要复述整个对话，要列出改动文件、验证命令、失败项和未解决风险。
+
+输出还要控制语气和确定性。hook 是脚本，不应模仿模型说“我建议你也许可以”。它应提供事实和固定建议。比如“blocked: command contains `git reset --hard`; explain target branch and request explicit approval”比“这个命令可能比较危险”更有用。
+
+最后，hook 输出要避免泄露。不要打印完整环境变量、完整请求体、完整日志或 token。必要时只打印变量名是否存在、文件路径、错误类型和哈希。hook 运行频率高，输出一旦进入对话或日志，后续很难追踪扩散。
+
+## 失败处理策略
+
+每个 hook 都应该定义失败后 Codex 怎么办。阻断型 hook 失败，Codex 应停下来解释原因，而不是绕过。提示型 hook 失败，Codex 可以继续，但要在最终报告里列出风险。基础设施型 hook 自身异常，例如脚本不存在或权限错误，应报告 hook 维护问题，不要把它解释为业务代码失败。
+
+团队可以把 hook 失败分成三种级别。一级是警告，不阻断，只提醒。二级是任务内阻断，需要 Codex 修复文件或调整命令后重试。三级是流程阻断，需要人工处理，例如检测到生产凭据、删除命令或发布命令。级别清楚后，Codex 才能在任务中做正确反应。
+
+## Hook 评审问题
+
+审查一个 hook 时，可以先问它是否可预测。给定同样输入，它是否总是给同样结果？如果 hook 依赖当前时间、远端服务、随机文件或开发者本机状态，它就不适合作为交互路径上的阻断规则。可预测性越低，越应该把它移到显式验证命令或 CI。
+
+第二个问题是它是否最小化。hook 是否只处理当前事件相关的文件和命令？一个 `FileChange` hook 如果每次扫全仓库，会让小改动也变慢。一个 `ToolPreInvoke` hook 如果解析复杂业务配置，会让每条命令都承受无关成本。hook 应该像传感器，只报告局部状态，不承担全局推理。
+
+第三个问题是它是否透明。开发者能否从脚本名、配置和输出理解它做了什么？如果一个 hook 叫 `check.sh`，里面同时格式化、删除缓存、联网上报和运行测试，就不透明。透明 hook 的脚本名应该像 `markdown-file-change.sh`、`shell-risk-check.sh`、`session-summary.sh`，让人一眼知道作用范围。
+
+第四个问题是它是否有明确退出码语义。退出码为零代表通过，非零代表阻断，还是只是警告？如果脚本输出 warning 但返回非零，Codex 会把它当失败；如果发现严重问题却返回零，Codex 可能继续执行。退出码和输出文本必须一致。
+
+## Hooks 与多仓库协作
+
+在多 worker 或多人协作的仓库里，hooks 还要尊重任务边界。一个 worker 只负责几篇文档时，`FileChange` hook 不应格式化其它人正在编辑的文件。一个项目层 hook 如果对全仓库运行修改命令，可能把其它 worker 的未完成工作改掉。团队应要求 hook 默认只读或只检查当前变更，不做全局写入。
+
+如果确实需要全局格式化，应由显式命令触发，并在任务说明中告知其它协作者。hooks 的自动性适合早发现问题，不适合在多人并行时重写共享状态。特别是文档仓库、生成代码仓库和 monorepo，隐式全局写入会制造难以归因的 diff。
+
+多仓库还涉及项目信任。某个仓库的 hooks 不应假设另一个仓库也加载同样配置。跨仓库任务应由启动 profile 和显式命令控制，而不是依赖每个仓库本地 hooks 的偶然组合。
+
+## 最低通过标准：hook 要小到可以被删除
+
+一个健康的 hook 应该小到可以被替换或删除，而不会让团队流程崩掉。它提供即时反馈，但真正的质量保证仍在显式检查和 CI。若一个 hook 被删除后，团队完全不知道怎么验证同一规则，说明它承担了太多隐式责任。此时应把规则沉淀到脚本、文档和 CI，再让 hook 只负责调用轻量入口。
+
+这个标准能防止 hook 变成隐藏平台。Codex 工作流需要透明控制点，不能把关键行为藏在用户看不见的事件脚本里。hook 越小，越容易信任；hook 越大，越需要正式运维和审计。
+
+如果团队发现某个 hook 越写越大，通常说明真正需要的是一个显式工具脚本。把复杂逻辑移动到 `scripts/`，让开发者和 Codex 都能主动运行；hook 只在合适事件中提示或调用快检。显式脚本有命令名、参数、文档和 CI 入口，比事件脚本更容易复用和审查。
+
+## 延伸阅读
+
+- [Codex hooks](https://developers.openai.com/codex/hooks)
+- [Codex config basics](https://developers.openai.com/codex/config-basic)
+- [Codex rules](https://developers.openai.com/codex/rules)
+- [Codex permissions](https://developers.openai.com/codex/permissions)
+- [Custom instructions with AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
