@@ -49,6 +49,10 @@ AI Coding 是当前优先建设方向。
 | Gemini CLI | 终端 AI Coding Agent | 中 | 免费额度 | 全栈/Google 生态 | [查看](./ai-coding/gemini-cli.md) |
 | Skill 实战评测协议 | 先实战再结论的可复用评测流程 | 低 | 免费 | 工具评测/内容创作者 | [查看](./ai-coding/skill-realworld-evaluation-protocol.md) |
 
+新增工程专题入口：
+
+- [Loop Engineering 专题](./ai-coding/loop-engineering/README.md) — 把 agent 从“单轮提示”升级成“持续运行控制系统”，覆盖状态文件、pattern、L0-L3 上线分级和跨工具迁移。
+
 ## 学习路径
 
 | 角色 | 推荐路线 |
