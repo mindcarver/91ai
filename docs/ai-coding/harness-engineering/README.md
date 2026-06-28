@@ -1,6 +1,6 @@
 # Harness Engineering 专题：让大模型真正干活的工程学
 
-> 6 篇文章（1 篇总览 + 5 篇正文），从「什么是 harness」讲到开源项目全景、评测争议、趋势论战与实战学习路径。
+> 7 篇文章（1 篇总览 + 6 篇正文），从「什么是 harness」讲到开源项目全景、评测争议、趋势论战、实战学习路径与延伸阅读资源索引。
 > 不是工具推荐清单，而是把「模型之外、决定 agent 上限的那层工程」讲清楚。
 
 ## 这个专题在讲什么
@@ -24,6 +24,7 @@
 - **评测篇（1 篇）**：评分函数、contamination、SWE-bench 三连争议、LLM-as-judge、Hamel 实用主义路线
 - **趋势与争议篇（1 篇）**：多 agent vs 单 agent、bitter lesson 与 harness 寿命、harness 作为技术债、术语出圈史
 - **实战与学习路径篇（1 篇）**：手搓 agent/eval harness、公开课、talk、starter 仓库、5 步可执行学习路径
+- **参考资源与延伸阅读篇（1 篇）**：3 个综合资源入口（课程 / 开放指南 / 精选清单）+ 一手 canonical 博客 + 中文实战资料
 
 ## 核心命题速览
 
@@ -52,6 +53,7 @@
 | 03 | [评测 Harness 与 SWE-bench 的三连争议](./03-eval-harness-and-swe-bench.md) | 评分函数、contamination、SWE-bench 争议、LLM-as-judge、Hamel 路线 |
 | 04 | [趋势与争议：多 agent、Bitter Lesson 与 harness 寿命](./04-trends-and-debates.md) | 多 vs 单 agent、harness 技术债、术语出圈史 |
 | 05 | [实战与学习路径：从 60 行手搓到跑通 SWE-bench](./05-tutorials-and-learning-path.md) | 手搓 agent/eval harness、公开课、talk、starter、5 步路径 |
+| 06 | [参考资源与延伸阅读](./06-references-and-extended-reading.md) | 课程/开放指南/精选清单三大入口 + 一手博客 + 中文实战资料 |
 
 ## 阅读路径
 
@@ -59,7 +61,8 @@
 - **要选型 / 看有哪些轮子**：本篇 → 02
 - **要做评测 / 不信排行榜**：本篇 → 03
 - **要动手做**：本篇 → 01 → 05
-- **完整通读**：按 01 → 05 顺序
+- **完整通读**：按 01 → 06 顺序
+- **要收藏资源 / 找一手文献**：本篇 → 06
 
 ## 术语速查
 

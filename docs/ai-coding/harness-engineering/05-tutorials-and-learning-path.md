@@ -104,4 +104,6 @@
 
 harness engineering 不是读出来的，是搓出来的。整个领域的最佳学习方式就一句话：**先手搓一个最小的能跑的 agent，然后不停地给它加工具、配 eval、分析 trajectory，直到你彻底祛魅。** 当你不再觉得 agent 是黑魔法，而是能清晰说出"这个 agent 卡在这一步是因为 context 里缺了 X / 工具签名没设计好 / 评分函数有漏洞"——你就入门了。
 
-这个专题到这里结束。回到 [系列总览](./README.md)，或继续读本仓库的 [Claude Code](../claude-code.md) / [Codex](../openai-codex.md) 工程化系列，看 outer harness 在具体工具里怎么落地。
+下一篇：[06 参考资源与延伸阅读](./06-references-and-extended-reading.md)，把这个专题依赖的综合资源（课程 / 开放指南 / 精选清单）、一手 canonical 博客与中文实战资料集中索引，方便长期收藏与回溯。
+
+回到 [系列总览](./README.md)，或继续读本仓库的 [Claude Code](../claude-code.md) / [Codex](../openai-codex.md) 工程化系列，看 outer harness 在具体工具里怎么落地。
