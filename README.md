@@ -19,7 +19,7 @@
   <a href="#你想做什么">快速入口</a> &nbsp;·&nbsp;
   <a href="./docs/">内容地图</a> &nbsp;·&nbsp;
   <a href="./docs/paths/">角色路线</a> &nbsp;·&nbsp;
-  <a href="#ai-编程工具">AI 编程</a> &nbsp;·&nbsp;
+  <a href="./docs/ai-coding/">AI 编程</a> &nbsp;·&nbsp;
   <a href="./docs/project-collections/">项目收藏</a>
 </p>
 
@@ -81,67 +81,6 @@
 <tr>
   <td align="center">了解全局再选方向</td>
   <td><a href="./docs/">内容地图</a> — 学习路线、技术雷达和建设 Roadmap</td>
-</tr>
-</table>
-
-## AI 编程工具
-
-<table>
-<tr>
-  <td><strong>工具</strong></td>
-  <td><strong>定位</strong></td>
-  <td><strong>难度</strong></td>
-  <td><strong>费用</strong></td>
-  <td><strong>适合谁</strong></td>
-  <td width="60" align="center"><strong>专题</strong></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/claude-code.md">Claude Code</a></td>
-  <td>终端 AI Coding Agent</td>
-  <td>中</td>
-  <td>付费</td>
-  <td>后端 / DevOps / 重度终端</td>
-  <td align="center"><a href="./docs/ai-coding/claude-code.md">查看</a></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/openai-codex.md">OpenAI Codex</a></td>
-  <td>AI Coding Agent</td>
-  <td>中</td>
-  <td>付费</td>
-  <td>全栈 / GitHub 用户</td>
-  <td align="center"><a href="./docs/ai-coding/openai-codex.md">索引</a> · <a href="./docs/ai-coding/codex-engineering/">工程化</a></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/cursor.md">Cursor</a></td>
-  <td>AI IDE</td>
-  <td>低</td>
-  <td>付费</td>
-  <td>全栈 / IDE 用户</td>
-  <td align="center"><a href="./docs/ai-coding/cursor.md">查看</a></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/cline.md">Cline</a></td>
-  <td>VS Code Agent 插件</td>
-  <td>中</td>
-  <td>按 API 用量</td>
-  <td>前端 / VS Code / MCP 用户</td>
-  <td align="center"><a href="./docs/ai-coding/cline.md">查看</a></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/continue.md">Continue</a></td>
-  <td>开源 AI Coding 助手</td>
-  <td>高</td>
-  <td>免费</td>
-  <td>团队 / 开源偏好 / CI</td>
-  <td align="center"><a href="./docs/ai-coding/continue.md">查看</a></td>
-</tr>
-<tr>
-  <td><a href="./docs/ai-coding/gemini-cli.md">Gemini CLI</a></td>
-  <td>终端 AI Coding Agent</td>
-  <td>中</td>
-  <td>免费额度</td>
-  <td>全栈 / Google 生态</td>
-  <td align="center"><a href="./docs/ai-coding/gemini-cli.md">查看</a></td>
 </tr>
 </table>
 
