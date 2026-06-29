@@ -10,6 +10,18 @@
 - 关注工程落地、长期维护、安全边界和成本。
 - 过时、低质量或失效资料会被移除或标记。
 
+## 提交与推送
+
+用户要求改动内容（文档、代码、配置等）后，完成改动并确认**本次改动未引入新的 lint/links/badges 失败**（运行 `./scripts/check.sh all`；仓库既有的 `.cursor/`、`.agents/` 等历史失败不阻塞），即**自动 commit + push 到远程，无需再询问是否提交**。
+
+自动提交仍须遵守：
+
+- 仅 stage 本次改动相关的文件，**不要扫入工作区里用户其他未提交的改动**。
+- 若本次改动引入检查失败，先修复或报告，不提交未通过的内容。
+- commit message 遵循 conventional commits，**不加 `Co-Authored-By` 或任何 AI 署名**（详见 `.claude/rules/commit.md`）。
+- push 到当前分支 upstream（本项目默认直接 push `main`）。
+- 提交后简述改了什么、推到哪，但不再请求确认。
+
 ## 项目地图
 
 ### 目录职责
