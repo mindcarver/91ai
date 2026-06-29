@@ -1,0 +1,1458 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "ai-carver",
+  "elements": [
+    {
+      "type": "rectangle",
+      "id": "8f1b264f35644063a64d",
+      "x": 50,
+      "y": 316,
+      "width": 300,
+      "height": 50,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#f5222d",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "2bc816b8f24c408c9628"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 522634,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_8f1b264f35644063a64d",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_8f1b264f35644063a64d",
+      "x": 60,
+      "y": 331,
+      "width": 280,
+      "height": 34,
+      "text": "文档",
+      "fontSize": 15,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#ffffff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "2bc816b8f24c408c9628"
+      ],
+      "roundness": null,
+      "seed": 262199,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "8f1b264f35644063a64d",
+      "originalText": "文档",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "948a6a77dccf4e1d8119",
+      "x": 430,
+      "y": -1,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8521838c090b4a7b9849"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 192003,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_948a6a77dccf4e1d8119",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_948a6a77dccf4e1d8119",
+      "x": 438,
+      "y": 9,
+      "width": 224,
+      "height": 24,
+      "text": "一、报价的底层逻辑：你不是在卖…",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8521838c090b4a7b9849"
+      ],
+      "roundness": null,
+      "seed": 492611,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "948a6a77dccf4e1d8119",
+      "originalText": "一、报价的底层逻辑：你不是在卖…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "a7763873e36d4af1b371",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -324,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 62107,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -324
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "c9fdc6c76d484082b626",
+      "x": 430,
+      "y": 33,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b58535d965bd4ce0ba23"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 676935,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_c9fdc6c76d484082b626",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_c9fdc6c76d484082b626",
+      "x": 438,
+      "y": 43,
+      "width": 224,
+      "height": 24,
+      "text": "二、诊断服务的报价策略",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b58535d965bd4ce0ba23"
+      ],
+      "roundness": null,
+      "seed": 841118,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "c9fdc6c76d484082b626",
+      "originalText": "二、诊断服务的报价策略",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "a57bb0dd6ce2481ea730",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -290,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 902033,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -290
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "c70df49c529b4527a6b7",
+      "x": 430,
+      "y": 67,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "9b4df6c94076407cbe4f"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 121504,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_c70df49c529b4527a6b7",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_c70df49c529b4527a6b7",
+      "x": 438,
+      "y": 77,
+      "width": 224,
+      "height": 24,
+      "text": "三、Demo样板间的报价策略",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "9b4df6c94076407cbe4f"
+      ],
+      "roundness": null,
+      "seed": 67895,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "c70df49c529b4527a6b7",
+      "originalText": "三、Demo样板间的报价策略",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "ad0bcdd59e8644bdbdab",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -256,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 409680,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -256
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "9f89dd97d8eb4d9cb08c",
+      "x": 430,
+      "y": 101,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "16584427bb254b428953"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 19110,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_9f89dd97d8eb4d9cb08c",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_9f89dd97d8eb4d9cb08c",
+      "x": 438,
+      "y": 111,
+      "width": 224,
+      "height": 24,
+      "text": "四、定制系统的报价策略",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "16584427bb254b428953"
+      ],
+      "roundness": null,
+      "seed": 701143,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "9f89dd97d8eb4d9cb08c",
+      "originalText": "四、定制系统的报价策略",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "824edf22e18d41fca21c",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -222,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 523230,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -222
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "7e51d98663d647839924",
+      "x": 430,
+      "y": 135,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1877e793c1884535a763"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 780333,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_7e51d98663d647839924",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_7e51d98663d647839924",
+      "x": 438,
+      "y": 145,
+      "width": 224,
+      "height": 24,
+      "text": "五、付款节点设计：保护你的现金流",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1877e793c1884535a763"
+      ],
+      "roundness": null,
+      "seed": 472235,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "7e51d98663d647839924",
+      "originalText": "五、付款节点设计：保护你的现金流",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "05208e5d018e4ee89ea0",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -188,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 496579,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -188
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "8f0612ff42d34774a040",
+      "x": 430,
+      "y": 169,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "84431be9194a44f3b3b6"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 744774,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_8f0612ff42d34774a040",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_8f0612ff42d34774a040",
+      "x": 438,
+      "y": 179,
+      "width": 224,
+      "height": 24,
+      "text": "六、项目边界管理：防范范围蔓延",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "84431be9194a44f3b3b6"
+      ],
+      "roundness": null,
+      "seed": 350004,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "8f0612ff42d34774a040",
+      "originalText": "六、项目边界管理：防范范围蔓延",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "d644ad007b544dcaa523",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -154,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 972814,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -154
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "0489cf3d60ba40a49a66",
+      "x": 430,
+      "y": 203,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "126528ad32844c7490be"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 708084,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_0489cf3d60ba40a49a66",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_0489cf3d60ba40a49a66",
+      "x": 438,
+      "y": 213,
+      "width": 224,
+      "height": 24,
+      "text": "七、验收条款制定：让双方都有据…",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "126528ad32844c7490be"
+      ],
+      "roundness": null,
+      "seed": 512769,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "0489cf3d60ba40a49a66",
+      "originalText": "七、验收条款制定：让双方都有据…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "a9544de1dbfc44fdbb48",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -120,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 573840,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -120
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "b2d70b6c57f64dec90f0",
+      "x": 430,
+      "y": 237,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "bf0d2e2710b243aab2a9"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 68399,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_b2d70b6c57f64dec90f0",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_b2d70b6c57f64dec90f0",
+      "x": 438,
+      "y": 247,
+      "width": 224,
+      "height": 24,
+      "text": "八、常见客户异议处理",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "bf0d2e2710b243aab2a9"
+      ],
+      "roundness": null,
+      "seed": 156795,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "b2d70b6c57f64dec90f0",
+      "originalText": "八、常见客户异议处理",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "786287f1725846edb2e8",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -86,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 213800,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -86
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "1f948fd92378410a923d",
+      "x": 430,
+      "y": 271,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "02bf0a18406d45acb6da"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 625715,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_1f948fd92378410a923d",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_1f948fd92378410a923d",
+      "x": 438,
+      "y": 281,
+      "width": 224,
+      "height": 24,
+      "text": "九、销售跟进话术体系",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "02bf0a18406d45acb6da"
+      ],
+      "roundness": null,
+      "seed": 742874,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "1f948fd92378410a923d",
+      "originalText": "九、销售跟进话术体系",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "ce9f989cf4044cc4a4cd",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -52,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 86510,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -52
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "838be1071a5a43c8ad36",
+      "x": 430,
+      "y": 305,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "f0813d06907744b39e37"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 978200,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_838be1071a5a43c8ad36",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_838be1071a5a43c8ad36",
+      "x": 438,
+      "y": 315,
+      "width": 224,
+      "height": 24,
+      "text": "实战任务",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "f0813d06907744b39e37"
+      ],
+      "roundness": null,
+      "seed": 636432,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "838be1071a5a43c8ad36",
+      "originalText": "实战任务",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "63f2d8140122482eb119",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": -18,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 77636,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -18
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "cd8e6afa86554a789800",
+      "x": 430,
+      "y": 339,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8848a9deaedc4345aff5"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 123917,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_cd8e6afa86554a789800",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_cd8e6afa86554a789800",
+      "x": 438,
+      "y": 349,
+      "width": 224,
+      "height": 24,
+      "text": "十、报价谈判的进阶技巧",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8848a9deaedc4345aff5"
+      ],
+      "roundness": null,
+      "seed": 66430,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "cd8e6afa86554a789800",
+      "originalText": "十、报价谈判的进阶技巧",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "7486d674baa44bde9bd4",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": 16,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 827091,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          16
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "8bdc71e23e2347a6aa89",
+      "x": 430,
+      "y": 373,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1047af07a79e43d5b5ef"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 216594,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_8bdc71e23e2347a6aa89",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_8bdc71e23e2347a6aa89",
+      "x": 438,
+      "y": 383,
+      "width": 224,
+      "height": 24,
+      "text": "十一、合同中的关键条款",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1047af07a79e43d5b5ef"
+      ],
+      "roundness": null,
+      "seed": 526615,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "8bdc71e23e2347a6aa89",
+      "originalText": "十一、合同中的关键条款",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "21f65ceb0b3c4dc9bab9",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": 50,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 718260,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "1a52ab6cf8e945a19dfb",
+      "x": 430,
+      "y": 407,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "#ffe6e6",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b905974ec4664935b9c3"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 84880,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_1a52ab6cf8e945a19dfb",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_1a52ab6cf8e945a19dfb",
+      "x": 438,
+      "y": 417,
+      "width": 224,
+      "height": 24,
+      "text": "十二、建立你的报价自信",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b905974ec4664935b9c3"
+      ],
+      "roundness": null,
+      "seed": 647370,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "1a52ab6cf8e945a19dfb",
+      "originalText": "十二、建立你的报价自信",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "6235bde543b44cf8b5de",
+      "x": 350,
+      "y": 341,
+      "width": 80,
+      "height": 84,
+      "strokeColor": "#f5222d",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 178849,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          84
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#fafafa"
+  },
+  "files": {}
+}

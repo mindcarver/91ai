@@ -1,0 +1,822 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "ai-carver",
+  "elements": [
+    {
+      "type": "rectangle",
+      "id": "7f2a381e01474918bf72",
+      "x": 50,
+      "y": 175,
+      "width": 300,
+      "height": 50,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#13c2c2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c914031b365543b4b8b1"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 351651,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_7f2a381e01474918bf72",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_7f2a381e01474918bf72",
+      "x": 60,
+      "y": 190,
+      "width": 280,
+      "height": 34,
+      "text": "行业拆解方法论",
+      "fontSize": 15,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#ffffff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c914031b365543b4b8b1"
+      ],
+      "roundness": null,
+      "seed": 95684,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "7f2a381e01474918bf72",
+      "originalText": "行业拆解方法论",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "5b5f4f542029401292bb",
+      "x": 430,
+      "y": 20,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "4c1339a31fbb4ddabcd0"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 404133,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_5b5f4f542029401292bb",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_5b5f4f542029401292bb",
+      "x": 438,
+      "y": 30,
+      "width": 224,
+      "height": 24,
+      "text": "一、为什么需要行业拆解",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "4c1339a31fbb4ddabcd0"
+      ],
+      "roundness": null,
+      "seed": 966979,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "5b5f4f542029401292bb",
+      "originalText": "一、为什么需要行业拆解",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "d2ad0304c35945c5a69f",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": -162,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 167371,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -162
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "8200726653994bd3a5d9",
+      "x": 430,
+      "y": 54,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c0772d91b3a5471f91ac"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 398438,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_8200726653994bd3a5d9",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_8200726653994bd3a5d9",
+      "x": 438,
+      "y": 64,
+      "width": 224,
+      "height": 24,
+      "text": "二、行业拆解的核心维度",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c0772d91b3a5471f91ac"
+      ],
+      "roundness": null,
+      "seed": 109323,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "8200726653994bd3a5d9",
+      "originalText": "二、行业拆解的核心维度",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "78c312e4bde24cc6b37a",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": -128,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 183124,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -128
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "58226836e7144cd8a379",
+      "x": 430,
+      "y": 88,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b2ea6fdbe7174cad8b47"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 953571,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_58226836e7144cd8a379",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_58226836e7144cd8a379",
+      "x": 438,
+      "y": 98,
+      "width": 224,
+      "height": 24,
+      "text": "三、行业拆解模板",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b2ea6fdbe7174cad8b47"
+      ],
+      "roundness": null,
+      "seed": 926599,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "58226836e7144cd8a379",
+      "originalText": "三、行业拆解模板",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "e32468e163fd473cab48",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": -94,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 795346,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -94
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "4b92b26796464c0385e7",
+      "x": 430,
+      "y": 122,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a49ac7ba13ad4e609ef6"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 450624,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_4b92b26796464c0385e7",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_4b92b26796464c0385e7",
+      "x": 438,
+      "y": 132,
+      "width": 224,
+      "height": 24,
+      "text": "四、半导体行业拆解实例",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a49ac7ba13ad4e609ef6"
+      ],
+      "roundness": null,
+      "seed": 114815,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "4b92b26796464c0385e7",
+      "originalText": "四、半导体行业拆解实例",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "0904c209fe6848f5a373",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": -60,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 512602,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -60
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "b567eda2ca464c4f92bd",
+      "x": 430,
+      "y": 156,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1318191908054dfc8843"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 435971,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_b567eda2ca464c4f92bd",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_b567eda2ca464c4f92bd",
+      "x": 438,
+      "y": 166,
+      "width": 224,
+      "height": 24,
+      "text": "五、制造业行业拆解实例",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1318191908054dfc8843"
+      ],
+      "roundness": null,
+      "seed": 985773,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "b567eda2ca464c4f92bd",
+      "originalText": "五、制造业行业拆解实例",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "33adbb2ed6a94913bc7e",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": -26,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 831814,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -26
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "db8fa5c002474869bc75",
+      "x": 430,
+      "y": 190,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "0c82c841d1674483ba88"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 133041,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_db8fa5c002474869bc75",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_db8fa5c002474869bc75",
+      "x": 438,
+      "y": 200,
+      "width": 224,
+      "height": 24,
+      "text": "六、金融投研行业拆解实例",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "0c82c841d1674483ba88"
+      ],
+      "roundness": null,
+      "seed": 376258,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "db8fa5c002474869bc75",
+      "originalText": "六、金融投研行业拆解实例",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "c26dcdd0945d42d5ab5d",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": 8,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 379900,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          8
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "7e531dfb21d34b958417",
+      "x": 430,
+      "y": 224,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "207c7ceceb1149ffb428"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 432237,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_7e531dfb21d34b958417",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_7e531dfb21d34b958417",
+      "x": 438,
+      "y": 234,
+      "width": 224,
+      "height": 24,
+      "text": "七、实践练习",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "207c7ceceb1149ffb428"
+      ],
+      "roundness": null,
+      "seed": 859719,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "7e531dfb21d34b958417",
+      "originalText": "七、实践练习",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "7c556965dd934b70bd4a",
+      "x": 350,
+      "y": 200,
+      "width": 80,
+      "height": 42,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 240841,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          42
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#fafafa"
+  },
+  "files": {}
+}

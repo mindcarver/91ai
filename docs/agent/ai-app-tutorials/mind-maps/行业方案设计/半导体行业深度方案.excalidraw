@@ -1,0 +1,1034 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "ai-carver",
+  "elements": [
+    {
+      "type": "rectangle",
+      "id": "fe97529eedc2435caaa9",
+      "x": 50,
+      "y": 208,
+      "width": 300,
+      "height": 50,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#13c2c2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "9a2a73e791294db5a86b"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 755986,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_fe97529eedc2435caaa9",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_fe97529eedc2435caaa9",
+      "x": 60,
+      "y": 223,
+      "width": 280,
+      "height": 34,
+      "text": "半导体行业深度方案",
+      "fontSize": 15,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#ffffff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "9a2a73e791294db5a86b"
+      ],
+      "roundness": null,
+      "seed": 171935,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "fe97529eedc2435caaa9",
+      "originalText": "半导体行业深度方案",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "9b4fda790b6642a5b215",
+      "x": 430,
+      "y": -1,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "77ef154df6264a28aee8"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 485686,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_9b4fda790b6642a5b215",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_9b4fda790b6642a5b215",
+      "x": 438,
+      "y": 9,
+      "width": 224,
+      "height": 24,
+      "text": "一、半导体产业链全景",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "77ef154df6264a28aee8"
+      ],
+      "roundness": null,
+      "seed": 962773,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "9b4fda790b6642a5b215",
+      "originalText": "一、半导体产业链全景",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "2dd0e274e7d348f7909c",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -216,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 304011,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -216
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "021e435588044a7daacf",
+      "x": 430,
+      "y": 33,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "285986e814124addacd3"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 505077,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_021e435588044a7daacf",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_021e435588044a7daacf",
+      "x": 438,
+      "y": 43,
+      "width": 224,
+      "height": 24,
+      "text": "二、半导体核心痛点深度分析",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "285986e814124addacd3"
+      ],
+      "roundness": null,
+      "seed": 575076,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "021e435588044a7daacf",
+      "originalText": "二、半导体核心痛点深度分析",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "e531623269db4128aca3",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -182,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 487111,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -182
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "3f469784566c41209197",
+      "x": 430,
+      "y": 67,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "876410f3d4ff4c098f92"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 753667,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_3f469784566c41209197",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_3f469784566c41209197",
+      "x": 438,
+      "y": 77,
+      "width": 224,
+      "height": 24,
+      "text": "三、半导体AI提效总体方案框架",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "876410f3d4ff4c098f92"
+      ],
+      "roundness": null,
+      "seed": 379080,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "3f469784566c41209197",
+      "originalText": "三、半导体AI提效总体方案框架",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "d2c20ddf3a11450f928e",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -148,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 61910,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -148
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "d27cdea6765e42a39f5a",
+      "x": 430,
+      "y": 101,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8c2aae2e3ae241acba3d"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 31200,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_d27cdea6765e42a39f5a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_d27cdea6765e42a39f5a",
+      "x": 438,
+      "y": 111,
+      "width": 224,
+      "height": 24,
+      "text": "四、良率分析Agent架构设计",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8c2aae2e3ae241acba3d"
+      ],
+      "roundness": null,
+      "seed": 33726,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "d27cdea6765e42a39f5a",
+      "originalText": "四、良率分析Agent架构设计",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "5ed3e94db4d04c68adeb",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -114,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 877383,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -114
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "81ff3b5b5bff44e9b368",
+      "x": 430,
+      "y": 135,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ff3654a4606c47f491c2"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 293018,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_81ff3b5b5bff44e9b368",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_81ff3b5b5bff44e9b368",
+      "x": 438,
+      "y": 145,
+      "width": 224,
+      "height": 24,
+      "text": "五、工艺知识库RAG系统设计",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ff3654a4606c47f491c2"
+      ],
+      "roundness": null,
+      "seed": 61976,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "81ff3b5b5bff44e9b368",
+      "originalText": "五、工艺知识库RAG系统设计",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "2c97bcd6f937412fbd7d",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -80,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 282924,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -80
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "29ab39d673a141249ab7",
+      "x": 430,
+      "y": 169,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ac32bcaa09e345218eb7"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 233511,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_29ab39d673a141249ab7",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_29ab39d673a141249ab7",
+      "x": 438,
+      "y": 179,
+      "width": 224,
+      "height": 24,
+      "text": "六、老板日报系统设计",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ac32bcaa09e345218eb7"
+      ],
+      "roundness": null,
+      "seed": 244622,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "29ab39d673a141249ab7",
+      "originalText": "六、老板日报系统设计",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "adc0b15a65f743a3880f",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -46,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 668304,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -46
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "fbafef1727c64ebb8db5",
+      "x": 430,
+      "y": 203,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "6b306719afb8499b8f8a"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 974336,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_fbafef1727c64ebb8db5",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_fbafef1727c64ebb8db5",
+      "x": 438,
+      "y": 213,
+      "width": 224,
+      "height": 24,
+      "text": "七、半导体数据需求清单",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "6b306719afb8499b8f8a"
+      ],
+      "roundness": null,
+      "seed": 484499,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "fbafef1727c64ebb8db5",
+      "originalText": "七、半导体数据需求清单",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "5911411508b945428e03",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": -12,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 694934,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -12
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "2a32541440cc47f7b5d5",
+      "x": 430,
+      "y": 237,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "e231f26fb4ad423b9ea3"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 885107,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_2a32541440cc47f7b5d5",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_2a32541440cc47f7b5d5",
+      "x": 438,
+      "y": 247,
+      "width": 224,
+      "height": 24,
+      "text": "八、老板版提案摘要",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "e231f26fb4ad423b9ea3"
+      ],
+      "roundness": null,
+      "seed": 596680,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "2a32541440cc47f7b5d5",
+      "originalText": "八、老板版提案摘要",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "78985c319b584082b858",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": 22,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 451060,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          22
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "4a785771127d42eb96eb",
+      "x": 430,
+      "y": 271,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c90000fe67204b229ced"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 273834,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_4a785771127d42eb96eb",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_4a785771127d42eb96eb",
+      "x": 438,
+      "y": 281,
+      "width": 224,
+      "height": 24,
+      "text": "九、实践练习",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c90000fe67204b229ced"
+      ],
+      "roundness": null,
+      "seed": 404417,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "4a785771127d42eb96eb",
+      "originalText": "九、实践练习",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "2860dde5bf774ea79a72",
+      "x": 350,
+      "y": 233,
+      "width": 80,
+      "height": 56,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 739011,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          56
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#fafafa"
+  },
+  "files": {}
+}

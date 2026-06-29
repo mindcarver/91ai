@@ -1,0 +1,2412 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "ai-carver",
+  "elements": [
+    {
+      "type": "rectangle",
+      "id": "b544ed37782447c5bc95",
+      "x": 50,
+      "y": 368,
+      "width": 300,
+      "height": 50,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#1890ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8d3053a7c61d4373947a"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 38728,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_b544ed37782447c5bc95",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_b544ed37782447c5bc95",
+      "x": 60,
+      "y": 383,
+      "width": 280,
+      "height": 34,
+      "text": "AI 应用开发全景地图",
+      "fontSize": 15,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#ffffff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8d3053a7c61d4373947a"
+      ],
+      "roundness": null,
+      "seed": 450971,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "b544ed37782447c5bc95",
+      "originalText": "AI 应用开发全景地图",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "15e0a89ab85a4e5f8b9c",
+      "x": 430,
+      "y": 84,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ced8033cc75545d9a9a4"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 274882,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_15e0a89ab85a4e5f8b9c",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_15e0a89ab85a4e5f8b9c",
+      "x": 438,
+      "y": 94,
+      "width": 224,
+      "height": 24,
+      "text": "核心概念",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "ced8033cc75545d9a9a4"
+      ],
+      "roundness": null,
+      "seed": 940394,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "15e0a89ab85a4e5f8b9c",
+      "originalText": "核心概念",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "b095522b58a14cb68217",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": -291,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 395448,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -291
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "57ae6ce9559844f1aeaa",
+      "x": 720,
+      "y": 4,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "c789fd6e1bdd4b039d33"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 87567,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_57ae6ce9559844f1aeaa",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_57ae6ce9559844f1aeaa",
+      "x": 726,
+      "y": 10,
+      "width": 208,
+      "height": 18,
+      "text": "一、AI、机器学习、深度学习、大模…",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c789fd6e1bdd4b039d33"
+      ],
+      "roundness": null,
+      "seed": 893996,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "57ae6ce9559844f1aeaa",
+      "originalText": "一、AI、机器学习、深度学习、大模…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "ad5c52c9fa184ba6bc66",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": -85,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 947731,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -85
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "e893af3e895e4850bc36",
+      "x": 720,
+      "y": 38,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "a7506f1b8aa04ed3bc6f"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 219950,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_e893af3e895e4850bc36",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_e893af3e895e4850bc36",
+      "x": 726,
+      "y": 44,
+      "width": 208,
+      "height": 18,
+      "text": "二、AI 应用开发的真实含义",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a7506f1b8aa04ed3bc6f"
+      ],
+      "roundness": null,
+      "seed": 60992,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "e893af3e895e4850bc36",
+      "originalText": "二、AI 应用开发的真实含义",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "73a44707d5244f0fa1b3",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": -51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 47903,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "130feead29ab454ab6aa",
+      "x": 720,
+      "y": 72,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "24c39d064d4d4001bd43"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 807968,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_130feead29ab454ab6aa",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_130feead29ab454ab6aa",
+      "x": 726,
+      "y": 78,
+      "width": 208,
+      "height": 18,
+      "text": "三、Chatbot / RAG /…",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "24c39d064d4d4001bd43"
+      ],
+      "roundness": null,
+      "seed": 856671,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "130feead29ab454ab6aa",
+      "originalText": "三、Chatbot / RAG /…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "bc32eb4626634150a6ce",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": -17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 84150,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "dde64fea721a4f23b8e6",
+      "x": 720,
+      "y": 106,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "94e31ef9e3d540049c6c"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 690537,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_dde64fea721a4f23b8e6",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_dde64fea721a4f23b8e6",
+      "x": 726,
+      "y": 112,
+      "width": 208,
+      "height": 18,
+      "text": "四、AI 应用系统九大模块",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "94e31ef9e3d540049c6c"
+      ],
+      "roundness": null,
+      "seed": 240903,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "dde64fea721a4f23b8e6",
+      "originalText": "四、AI 应用系统九大模块",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "a782d8530dbf4606936f",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": 17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 783178,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "1adf04c8beb242ed99e5",
+      "x": 720,
+      "y": 140,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "c890a36b52c048c6bf59"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 514838,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_1adf04c8beb242ed99e5",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_1adf04c8beb242ed99e5",
+      "x": 726,
+      "y": 146,
+      "width": 208,
+      "height": 18,
+      "text": "五、为什么 Prompt 不是 A…",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c890a36b52c048c6bf59"
+      ],
+      "roundness": null,
+      "seed": 747046,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "1adf04c8beb242ed99e5",
+      "originalText": "五、为什么 Prompt 不是 A…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "7889bf9b2d1440c29be0",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": 51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 830581,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "f0f21ab4abbc43b6b420",
+      "x": 720,
+      "y": 174,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "bc80713cc7a4484fbd62"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 317484,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_f0f21ab4abbc43b6b420",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_f0f21ab4abbc43b6b420",
+      "x": 726,
+      "y": 180,
+      "width": 208,
+      "height": 18,
+      "text": "六、为什么 AI 应用开发是系统工程",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "bc80713cc7a4484fbd62"
+      ],
+      "roundness": null,
+      "seed": 500267,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "f0f21ab4abbc43b6b420",
+      "originalText": "六、为什么 AI 应用开发是系统工程",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "f157ea736fde404f8822",
+      "x": 670,
+      "y": 102,
+      "width": 50,
+      "height": 85,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 493184,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          85
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "22c9c96020a4423bb43e",
+      "x": 430,
+      "y": 203,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "873b0e811fbd446486c0"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 908622,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_22c9c96020a4423bb43e",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_22c9c96020a4423bb43e",
+      "x": 438,
+      "y": 213,
+      "width": 224,
+      "height": 24,
+      "text": "概念关系图",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "873b0e811fbd446486c0"
+      ],
+      "roundness": null,
+      "seed": 834318,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "22c9c96020a4423bb43e",
+      "originalText": "概念关系图",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "0f2bc13f092a45689bdc",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": -172,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 631636,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -172
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "f46b353c174b40e3a24d",
+      "x": 430,
+      "y": 288,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "5413aff510384af1afd1"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 703417,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_f46b353c174b40e3a24d",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_f46b353c174b40e3a24d",
+      "x": 438,
+      "y": 298,
+      "width": 224,
+      "height": 24,
+      "text": "实战分析",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "5413aff510384af1afd1"
+      ],
+      "roundness": null,
+      "seed": 447587,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "f46b353c174b40e3a24d",
+      "originalText": "实战分析",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "d3126d088def4369b52d",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": -87,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 57979,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -87
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "911073df0d634d688180",
+      "x": 720,
+      "y": 242,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "72dadaabe01b4f1898dd"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 809917,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_911073df0d634d688180",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_911073df0d634d688180",
+      "x": 726,
+      "y": 248,
+      "width": 208,
+      "height": 18,
+      "text": "画出 AI 应用开发全景图",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "72dadaabe01b4f1898dd"
+      ],
+      "roundness": null,
+      "seed": 665807,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "911073df0d634d688180",
+      "originalText": "画出 AI 应用开发全景图",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "fe6f1941def34e75b8b3",
+      "x": 670,
+      "y": 306,
+      "width": 50,
+      "height": -51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 606900,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "a4aceae7255148aead95",
+      "x": 720,
+      "y": 276,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "16dbb7dab23548fc85c7"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 240382,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_a4aceae7255148aead95",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_a4aceae7255148aead95",
+      "x": 726,
+      "y": 282,
+      "width": 208,
+      "height": 18,
+      "text": "整理 50 个 AI 核心关键词",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "16dbb7dab23548fc85c7"
+      ],
+      "roundness": null,
+      "seed": 871187,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "a4aceae7255148aead95",
+      "originalText": "整理 50 个 AI 核心关键词",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "7f0e80ef5d984300aa00",
+      "x": 670,
+      "y": 306,
+      "width": 50,
+      "height": -17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 370450,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "40a9211ee2034dfda0ea",
+      "x": 720,
+      "y": 310,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "41fedebcc1c741aa97d0"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 446318,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_40a9211ee2034dfda0ea",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_40a9211ee2034dfda0ea",
+      "x": 726,
+      "y": 316,
+      "width": 208,
+      "height": 18,
+      "text": "写一段自己对 AI 应用开发的定义",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "41fedebcc1c741aa97d0"
+      ],
+      "roundness": null,
+      "seed": 456372,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "40a9211ee2034dfda0ea",
+      "originalText": "写一段自己对 AI 应用开发的定义",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "0d666062418840428f1e",
+      "x": 670,
+      "y": 306,
+      "width": 50,
+      "height": 17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 941794,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "5593b28763514b719373",
+      "x": 720,
+      "y": 344,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "6ded4336823f4987a560"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 753826,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_5593b28763514b719373",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_5593b28763514b719373",
+      "x": 726,
+      "y": 350,
+      "width": 208,
+      "height": 18,
+      "text": "用半导体场景解释 AI 如何嵌入业…",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "6ded4336823f4987a560"
+      ],
+      "roundness": null,
+      "seed": 351191,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "5593b28763514b719373",
+      "originalText": "用半导体场景解释 AI 如何嵌入业…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "929b5a92ce844f448874",
+      "x": 670,
+      "y": 306,
+      "width": 50,
+      "height": 51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 385392,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "b4e439d428d547d2b2ab",
+      "x": 430,
+      "y": 424,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1eb0f9db4dc04fc0aaba"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 943519,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_b4e439d428d547d2b2ab",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_b4e439d428d547d2b2ab",
+      "x": 438,
+      "y": 434,
+      "width": 224,
+      "height": 24,
+      "text": "建议产出",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "1eb0f9db4dc04fc0aaba"
+      ],
+      "roundness": null,
+      "seed": 89834,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "b4e439d428d547d2b2ab",
+      "originalText": "建议产出",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "f8fbeb7ce8b74c41bb49",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": 49,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 726018,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          49
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "dd8e3c8eb82a49579b7a",
+      "x": 720,
+      "y": 378,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "b950ed12a4cb42e8a56d"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 205880,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_dd8e3c8eb82a49579b7a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_dd8e3c8eb82a49579b7a",
+      "x": 726,
+      "y": 384,
+      "width": 208,
+      "height": 18,
+      "text": "《AI 应用开发全景图》",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b950ed12a4cb42e8a56d"
+      ],
+      "roundness": null,
+      "seed": 193922,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "dd8e3c8eb82a49579b7a",
+      "originalText": "《AI 应用开发全景图》",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "f927c7929eff436f83fb",
+      "x": 670,
+      "y": 442,
+      "width": 50,
+      "height": -51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 579417,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "1ec2242b54c64d98afb1",
+      "x": 720,
+      "y": 412,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "d1390b43b26246bbb01f"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 826219,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_1ec2242b54c64d98afb1",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_1ec2242b54c64d98afb1",
+      "x": 726,
+      "y": 418,
+      "width": 208,
+      "height": 18,
+      "text": "《AI 核心关键词 50 个》",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "d1390b43b26246bbb01f"
+      ],
+      "roundness": null,
+      "seed": 405460,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "1ec2242b54c64d98afb1",
+      "originalText": "《AI 核心关键词 50 个》",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "5a6f13039dd546c9ba79",
+      "x": 670,
+      "y": 442,
+      "width": 50,
+      "height": -17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 773465,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          -17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "edea38f8034e48d0ad6c",
+      "x": 720,
+      "y": 446,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "595aad73a68347549099"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 462050,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_edea38f8034e48d0ad6c",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_edea38f8034e48d0ad6c",
+      "x": 726,
+      "y": 452,
+      "width": 208,
+      "height": 18,
+      "text": "《我理解的 AI 应用开发》",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "595aad73a68347549099"
+      ],
+      "roundness": null,
+      "seed": 214571,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "edea38f8034e48d0ad6c",
+      "originalText": "《我理解的 AI 应用开发》",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "fdb944ec241748b2a052",
+      "x": 670,
+      "y": 442,
+      "width": 50,
+      "height": 17,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 799142,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          17
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "d28a46ad35324cf8bb31",
+      "x": 720,
+      "y": 480,
+      "width": 220,
+      "height": 26,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 90,
+      "angle": 0,
+      "groupIds": [
+        "91fb9f7c2ca249e79a12"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 644778,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_d28a46ad35324cf8bb31",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_d28a46ad35324cf8bb31",
+      "x": 726,
+      "y": 486,
+      "width": 208,
+      "height": 18,
+      "text": "《半导体 AI 提效场景草图》",
+      "fontSize": 10,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#555555",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "91fb9f7c2ca249e79a12"
+      ],
+      "roundness": null,
+      "seed": 521470,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "d28a46ad35324cf8bb31",
+      "originalText": "《半导体 AI 提效场景草图》",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "0fbc52a1fdff4bec8406",
+      "x": 670,
+      "y": 442,
+      "width": 50,
+      "height": 51,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 60,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 408963,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          51
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "9391ca121ff0409abc7a",
+      "x": 430,
+      "y": 509,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "01ec170e94394f87805b"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 338626,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_9391ca121ff0409abc7a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_9391ca121ff0409abc7a",
+      "x": 438,
+      "y": 519,
+      "width": 224,
+      "height": 24,
+      "text": "常见误区与避坑",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "01ec170e94394f87805b"
+      ],
+      "roundness": null,
+      "seed": 963270,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "9391ca121ff0409abc7a",
+      "originalText": "常见误区与避坑",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "7691e4ccf6684f0a8078",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": 134,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 963239,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          134
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "121378f8f6c645ae9b1a",
+      "x": 430,
+      "y": 543,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "5568b25a9ea349dd9a6a"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 673252,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_121378f8f6c645ae9b1a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_121378f8f6c645ae9b1a",
+      "x": 438,
+      "y": 553,
+      "width": 224,
+      "height": 24,
+      "text": "延伸思考",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "5568b25a9ea349dd9a6a"
+      ],
+      "roundness": null,
+      "seed": 133758,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "121378f8f6c645ae9b1a",
+      "originalText": "延伸思考",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "d27f9f95a3ec47f4bebd",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": 168,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 422894,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          168
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "bdda68924faa4edca56d",
+      "x": 430,
+      "y": 577,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8e2c050e9d6443f0aa77"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 621276,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_bdda68924faa4edca56d",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_bdda68924faa4edca56d",
+      "x": 438,
+      "y": 587,
+      "width": 224,
+      "height": 24,
+      "text": "自测问题",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8e2c050e9d6443f0aa77"
+      ],
+      "roundness": null,
+      "seed": 949146,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "bdda68924faa4edca56d",
+      "originalText": "自测问题",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "362244ef1e5445389d1a",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": 202,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 339642,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          202
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "a8ac3b0428a34ba082fd",
+      "x": 430,
+      "y": 611,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "#e6f7ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "4e4ac5aa49bd464c8ad2"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 469368,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_a8ac3b0428a34ba082fd",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_a8ac3b0428a34ba082fd",
+      "x": 438,
+      "y": 621,
+      "width": 224,
+      "height": 24,
+      "text": "关键词",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "4e4ac5aa49bd464c8ad2"
+      ],
+      "roundness": null,
+      "seed": 35863,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "a8ac3b0428a34ba082fd",
+      "originalText": "关键词",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "b91706a41b094581a96c",
+      "x": 350,
+      "y": 393,
+      "width": 80,
+      "height": 236,
+      "strokeColor": "#1890ff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 651285,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          236
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#fafafa"
+  },
+  "files": {}
+}

@@ -1,0 +1,1246 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "ai-carver",
+  "elements": [
+    {
+      "type": "rectangle",
+      "id": "ba468e90fd5f45b2ba88",
+      "x": 50,
+      "y": 262,
+      "width": 300,
+      "height": 50,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#13c2c2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "87192bfc9ddf42aaad61"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 641736,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_ba468e90fd5f45b2ba88",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_ba468e90fd5f45b2ba88",
+      "x": 60,
+      "y": 277,
+      "width": 280,
+      "height": 34,
+      "text": "行业方案设计知识要点检验",
+      "fontSize": 15,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#ffffff",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "87192bfc9ddf42aaad61"
+      ],
+      "roundness": null,
+      "seed": 414529,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "ba468e90fd5f45b2ba88",
+      "originalText": "行业方案设计知识要点检验",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "dc85d30f411a42cd83c5",
+      "x": 430,
+      "y": -1,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c06b5cb806554e8580d4"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 236161,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_dc85d30f411a42cd83c5",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_dc85d30f411a42cd83c5",
+      "x": 438,
+      "y": 9,
+      "width": 224,
+      "height": 24,
+      "text": "一、行业拆解复盘",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "c06b5cb806554e8580d4"
+      ],
+      "roundness": null,
+      "seed": 809069,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "dc85d30f411a42cd83c5",
+      "originalText": "一、行业拆解复盘",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "ca18857159cf4a699bfe",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -270,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 542561,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -270
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "0177e67b033a4cd0af0a",
+      "x": 430,
+      "y": 33,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b19da32f92cd42b2a29d"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 741714,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_0177e67b033a4cd0af0a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_0177e67b033a4cd0af0a",
+      "x": 438,
+      "y": 43,
+      "width": 224,
+      "height": 24,
+      "text": "二、岗位拆解复盘",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "b19da32f92cd42b2a29d"
+      ],
+      "roundness": null,
+      "seed": 619087,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "0177e67b033a4cd0af0a",
+      "originalText": "二、岗位拆解复盘",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "f9a7f43926044a059fa5",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -236,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 129654,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -236
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "bb599533913c4269b49a",
+      "x": 430,
+      "y": 67,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a158c99071db47a28da4"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 480112,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_bb599533913c4269b49a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_bb599533913c4269b49a",
+      "x": 438,
+      "y": 77,
+      "width": 224,
+      "height": 24,
+      "text": "三、流程拆解复盘",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a158c99071db47a28da4"
+      ],
+      "roundness": null,
+      "seed": 136610,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "bb599533913c4269b49a",
+      "originalText": "三、流程拆解复盘",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "0e0ff606d9c24924b7f0",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -202,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 760029,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -202
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "655a3cd8ce9745ffaffa",
+      "x": 430,
+      "y": 101,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "68fef24f50204e668635"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 183920,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_655a3cd8ce9745ffaffa",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_655a3cd8ce9745ffaffa",
+      "x": 438,
+      "y": 111,
+      "width": 224,
+      "height": 24,
+      "text": "四、AI机会评分复盘",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "68fef24f50204e668635"
+      ],
+      "roundness": null,
+      "seed": 933741,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "655a3cd8ce9745ffaffa",
+      "originalText": "四、AI机会评分复盘",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "4338c04591e041acbaeb",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -168,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 104504,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -168
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "8ebff51ea6e04549abc7",
+      "x": 430,
+      "y": 135,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "6c162417a3c945c28ee8"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 367058,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_8ebff51ea6e04549abc7",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_8ebff51ea6e04549abc7",
+      "x": 438,
+      "y": 145,
+      "width": 224,
+      "height": 24,
+      "text": "五、半导体与制造业方案复盘",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "6c162417a3c945c28ee8"
+      ],
+      "roundness": null,
+      "seed": 88008,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "8ebff51ea6e04549abc7",
+      "originalText": "五、半导体与制造业方案复盘",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "c0bab704103d462180d6",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -134,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 716996,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -134
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "7c24bf24d2874a0584ff",
+      "x": 430,
+      "y": 169,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a0408f4512684de8a56c"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 416192,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_7c24bf24d2874a0584ff",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_7c24bf24d2874a0584ff",
+      "x": 438,
+      "y": 179,
+      "width": 224,
+      "height": 24,
+      "text": "六、相关内容 阶段总结",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "a0408f4512684de8a56c"
+      ],
+      "roundness": null,
+      "seed": 963629,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "7c24bf24d2874a0584ff",
+      "originalText": "六、相关内容 阶段总结",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "fbbfec12356e437587f5",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -100,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 245385,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -100
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "473a986c5edd4c30aab9",
+      "x": 430,
+      "y": 203,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "89f621b5db9f44faad68"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 838769,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_473a986c5edd4c30aab9",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_473a986c5edd4c30aab9",
+      "x": 438,
+      "y": 213,
+      "width": 224,
+      "height": 24,
+      "text": "七、校准示范：医疗健康行业AI…",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "89f621b5db9f44faad68"
+      ],
+      "roundness": null,
+      "seed": 969452,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "473a986c5edd4c30aab9",
+      "originalText": "七、校准示范：医疗健康行业AI…",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "cfa991e03de24a768721",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -66,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 502899,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -66
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "f3ead1673667425e8a97",
+      "x": 430,
+      "y": 237,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "68e65cfb150d480d90eb"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 152765,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_f3ead1673667425e8a97",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_f3ead1673667425e8a97",
+      "x": 438,
+      "y": 247,
+      "width": 224,
+      "height": 24,
+      "text": "八、校准：六小时新行业AI方案",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "68e65cfb150d480d90eb"
+      ],
+      "roundness": null,
+      "seed": 262901,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "f3ead1673667425e8a97",
+      "originalText": "八、校准：六小时新行业AI方案",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "138f97b3cf604d35b10a",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": -32,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 55565,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          -32
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "b3a6318e1bb44e7f90b9",
+      "x": 430,
+      "y": 271,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "74b6d33dab07420ba770"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 662745,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_b3a6318e1bb44e7f90b9",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_b3a6318e1bb44e7f90b9",
+      "x": 438,
+      "y": 281,
+      "width": 224,
+      "height": 24,
+      "text": "八、交付物清单与质量标准",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "74b6d33dab07420ba770"
+      ],
+      "roundness": null,
+      "seed": 555327,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "b3a6318e1bb44e7f90b9",
+      "originalText": "八、交付物清单与质量标准",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "12b732e899fa4831b50b",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": 2,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 997527,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          2
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "7254260e55874494903a",
+      "x": 430,
+      "y": 305,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8e2ded54c496484ca74a"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 799053,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_7254260e55874494903a",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_7254260e55874494903a",
+      "x": 438,
+      "y": 315,
+      "width": 224,
+      "height": 24,
+      "text": "九、方法论融合：从拆解到创造",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "8e2ded54c496484ca74a"
+      ],
+      "roundness": null,
+      "seed": 404813,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "7254260e55874494903a",
+      "originalText": "九、方法论融合：从拆解到创造",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "24be8b3551bc4200b2ca",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 797012,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          36
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "rectangle",
+      "id": "4a8001d898b141409e12",
+      "x": 430,
+      "y": 339,
+      "width": 240,
+      "height": 36,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "#e6fff0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "13ecc6aa045744ed9c38"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 331788,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "t_4a8001d898b141409e12",
+          "type": "text"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "text",
+      "id": "t_4a8001d898b141409e12",
+      "x": 438,
+      "y": 349,
+      "width": 224,
+      "height": 24,
+      "text": "十、后续方向",
+      "fontSize": 12,
+      "fontFamily": 3,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#333333",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "angle": 0,
+      "groupIds": [
+        "13ecc6aa045744ed9c38"
+      ],
+      "roundness": null,
+      "seed": 840930,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "containerId": "4a8001d898b141409e12",
+      "originalText": "十、后续方向",
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "type": "line",
+      "id": "6eaa8483bd244ef38caa",
+      "x": 350,
+      "y": 287,
+      "width": 80,
+      "height": 70,
+      "strokeColor": "#13c2c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 80,
+      "angle": 0,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 147552,
+      "version": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          70
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "updated": 1,
+      "link": null,
+      "locked": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#fafafa"
+  },
+  "files": {}
+}
