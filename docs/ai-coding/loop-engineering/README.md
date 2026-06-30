@@ -120,6 +120,48 @@ Loop engineering 可以先粗暴理解成一句话：
 - **已经在用 Codex / Claude Code**：本篇 → 04 → 05
 - **完整通读**：按 01 → 05 顺序
 
+## 必读文章
+
+围绕 loop engineering 的外部必读，按「先建框架、再落地、最后看演进」分三组。本系列所基于的 [cobusgreyling/loop-engineering](https://github.com/cobusgreyling/loop-engineering) 仓库明确标注 “inspired by Addy Osmani”，所以下面 Addy 那篇是真正的上游标杆文。
+
+### 标杆与概念
+
+- [Loop Engineering — Addy Osmani](https://addyosmani.com/blog/loop-engineering/) — 标杆文（2026/6/7），五个积木块 + 两个产品映射表
+- [The Art of Loop Engineering — LangChain](https://www.langchain.com/blog/the-art-of-loop-engineering) — “agent 本质就是一个 model in a loop”
+- [Anthropic 工程师 11 页 PDF](https://www.facebook.com/datasciencedojo/posts/1036660882217396/) — Anthropic 资深工程师系统阐述（经 Data Science Dojo 流传）
+
+### 实操与工具
+
+- [How I AI: How to Write AI Agent Loops in Claude Code and Codex — Lenny's Newsletter](https://www.lennysnewsletter.com/p/how-i-ai-how-to-write-ai-agent-loops) — 新手向，Claude Code / Codex 落地
+- [Loop Engineering: A Guide for Engineers and Practitioners — Adnan Masood（Medium）](https://medium.com/@adnanmasood/loop-engineering-a-guide-for-engineers-and-practitioners-893bb65ea943)
+- [Loop Engineering: Design AI Loops That Ship While You Sleep — Linas's Newsletter](https://linas.substack.com/p/loop-engineering-complete-guide)
+
+### 进阶与演进史
+
+- [Agentic Loops: From ReAct to Loop Engineering（2026 Guide）— Data Science Dojo](https://datasciencedojo.com/blog/agentic-loops-explained-from-react-to-loop-engineering-2026-guide/)
+- [What Is Loop Engineering? A Complete Guide — Tosea.ai](https://tosea.ai/blog/loop-engineering-ai-agents-complete-guide-2026)
+- [Loop Engineering at Enterprise Grade — Truefoundry](https://www.truefoundry.com/blog/loop-engineering-enterprise-agent-runtime) — 生产 / 企业级“agent runtime”
+- [What Is Loop Engineering? — MindStudio](https://www.mindstudio.ai/blog/what-is-loop-engineering-ai-coding-agents)
+- [Harness Engineering — OpenAI](https://openai.com/index/harness-engineering/) — harness 与 loop 的关系（OpenAI 视角）
+
+## 深读系列（refs/）
+
+对上面 11 篇必读来源逐篇做的费曼式深读，每篇 ≥8000 字，各自抓住一个独特角度，避免雷同。放在 [`./refs/`](./refs/) 子目录，与本系列 01–05 正文互补：正文讲方法，深读讲“别人怎么讲这个方法”。
+
+| # | 深读文章 | 抓的独特角度 |
+| --- | --- | --- |
+| 01 | [Addy Osmani《Loop Engineering》深读](./refs/01-addy-osmani-loop-engineering.md) | 五积木 + 一记忆、双产品映射表、三条人因债 |
+| 02 | [LangChain 纵向 4 层 loop](./refs/02-langchain-nested-loops.md) | 从 model in a loop 到 hill-climbing 的自我改进 |
+| 03 | [Anthropic 工程师的控制系统](./refs/03-anthropic-control-system.md) | 把“停止”设计成控制平面的一等动词 |
+| 04 | [Lenny 新手实操](./refs/04-lenny-claude-code-codex.md) | heartbeat / cron / hook / goal 到工具按钮的映射 |
+| 05 | [Adnan 生产治理](./refs/05-adnan-masood-production-governance.md) | trigger / topology / verifier / stop 与拓扑失效 |
+| 06 | [Linas 三种债](./refs/06-linas-three-debts.md) | 越有效的 loop，欠下的债越深 |
+| 07 | [从 ReAct 到 Loop Engineering](./refs/07-dsd-react-to-loop.md) | 四代智能体循环的演进谱系 |
+| 08 | [Tosea 四层演进](./refs/08-tosea-four-layer-evolution.md) | prompt→context→harness→loop 的宏观坐标 |
+| 09 | [Truefoundry 企业 runtime](./refs/09-truefoundry-enterprise-runtime.md) | 笔记本 loop vs 凌晨 3 点无人值守的 runtime |
+| 10 | [MindStudio 选型手册](./refs/10-mindstudio-good-vs-bad-agent.md) | 四种 loop 架构与好 / 坏 agent 的四维判别 |
+| 11 | [OpenAI《Harness Engineering》](./refs/11-openai-harness-engineering.md) | harness 是 loop 的地基，一手 100 万行战报 |
+
 ## 先给一个最实用的心智模型
 
 可以把一个健康的 loop 暂时记成下面这条链：
