@@ -168,9 +168,9 @@ Loop engineering 可以先粗暴理解成一句话：
 
 | # | 长文 | 角度 | 适合谁 |
 | --- | --- | --- | --- |
-| A | [Loop Engineering 上生产：从单次会话到可信赖的代理控制系统](./long-form/01-production-readiness.md) | 生产落地深度解析，统一判断框架 + readiness 自检 | 想把 loop 真正上生产的中高级工程师 |
-| B | [用 Claude Code 从零搭一条能跑的 Loop：Daily Triage 落地手册](./long-form/02-build-first-loop.md) | 实操教程，含 `loop-init` 脚手架 + `STATE.md`/skill/Actions 完整文件内容 | 想跟着做出第一条 loop 的人 |
-| C | [Loop Engineering 概念全景：把循环放进 AI 编程演进坐标的认知地图](./long-form/03-concept-panorama.md) | 认知地图，prompt→context→harness→loop 演进 + 四代循环谱系 + 边界判别 | 想建立全局认知、对齐团队共识的人 |
+| A | [能停的 Loop 才敢上生产](./long-form/01-production-readiness.md) | 生产落地深度解析，统一判断框架 + readiness 自检 | 想把 loop 真正上生产的中高级工程师 |
+| B | [从零搭出你的第一条 Loop](./long-form/02-build-first-loop.md) | 实操教程，含 `loop-init` 脚手架 + `STATE.md`/skill/Actions 完整文件内容 | 想跟着做出第一条 loop 的人 |
+| C | [从 Prompt 到 Loop](./long-form/03-concept-panorama.md) | 认知地图，prompt→context→harness→loop 演进 + 四代循环谱系 + 边界判别 | 想建立全局认知、对齐团队共识的人 |
 
 ## 先给一个最实用的心智模型
 

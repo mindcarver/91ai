@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# Loop Engineering 概念全景：把循环放进 AI 编程演进坐标的认知地图
+# 从 Prompt 到 Loop：AI 编程 Agent 四代循环的演进全景
 
 > 这是一张给技术 Leader 和资深工程师的认知地图，不是又一篇操作手册。读完你应该能回答三个问题：loop engineering 在 AI 编程演进里占什么坐标；它和 prompt、context、harness、goal、workflow 这些相邻概念到底是什么边界关系；以及一个冷静的判断，你的团队现在该不该投入，投入多少。
 

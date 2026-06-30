@@ -20,7 +20,7 @@
 </div>
 <!-- CONTACT-END -->
 
-# 用 Claude Code 从零搭一条能跑的 Loop：Daily Triage 落地手册
+# 从零搭出你的第一条 Loop：Claude Code + Daily Triage 实战手册
 
 > 前面几篇讲完了 loop 是什么、由哪些积木组成、为什么要从 L1 起步。这篇不再讲概念，只回答一个问题：今天打开终端，我到底怎么用 Claude Code 搭出第一条能稳定跑一周的 loop。
 >
