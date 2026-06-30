@@ -1,0 +1,197 @@
+# Supermemory 架构分析：为什么它更像一个完整的 Memory API，而不是一个 SDK 拼装包
+
+> TL;DR：Supermemory 的核心卖点不是“帮你做语义检索”，而是把 document ingestion、memory extraction、user profile、hybrid search 和上下文注入压成同一个 API 面。它的本地版尤其激进：不是让你自己搭 vector DB、embedding worker 和 chunking pipeline，而是直接给你一个 one-binary memory engine。代价也很明确：接入极简，但内核透明度和可调性会下降。
+
+## 一、先说结论
+
+如果用一句话概括 Supermemory，我会说：它不是一个让你自由拼装的 memory SDK，而是一个意见非常强的 Memory API 平台。
+
+它希望开发者得到的是：
+
+- 一个统一的文档与记忆写入口
+- 一个统一的检索和 profile 读取入口
+- 一套已经决定好的 chunking、embedding、索引和记忆更新机制
+- 一条从 SDK、浏览器插件、MCP 到本地自托管都尽量一致的 API surface
+
+这和 Mem0 的思路差异很大。Mem0 更像“可编排内核”，Supermemory 更像“厚内核 + 薄接入层”。
+
+本文主要基于这些本地文件：
+
+- `README.md`
+- `apps/docs/self-hosting/overview.mdx`
+- `apps/docs/self-hosting/configuration.mdx`
+- `apps/docs/concepts/memory-vs-rag.mdx`
+- `skills/supermemory/references/architecture.md`
+- `packages/validation/schemas.ts`
+- `packages/validation/api.ts`
+
+## 二、公开仓库和本地引擎，其实是两层东西
+
+Supermemory 仓库表面上是一个 Turbo monorepo，能看到的主要是这些层：
+
+- `apps/web`：前端
+- `apps/mcp`：MCP 接入层
+- `packages/ai-sdk`：AI SDK 工具层
+- `packages/validation`：统一 schema 和 API contract
+- `packages/memory-graph`：图可视化组件
+
+但它最关键的 self-host 核心，并不是“这套 TypeScript 代码里一套可完整阅读的服务端实现”，而是文档里反复强调的单独 binary：
+
+- 首次启动会创建 embedded graph engine
+- 本地 embeddings 自动就绪
+- 自动给你一把 API key
+- 对外暴露和 hosted 版基本一致的 Memory API
+
+这点非常重要。它说明 Supermemory 的架构不想让你理解太多底层组件，而是想把组件复杂度折叠进运行时。
+
+## 三、Supermemory 的核心设计：Memory 不等于 RAG
+
+`apps/docs/concepts/memory-vs-rag.mdx` 这篇文档其实把它的设计原理说透了：Supermemory 明确区分 document 和 memory。
+
+在它的模型里：
+
+- document 是原始知识载体，适合静态检索
+- memory 是从 document、对话和历史行为里抽出来的可持续上下文
+- profile 则是更高层的用户状态视图
+
+这不是术语游戏，而是数据模型层面的区别。`packages/validation/schemas.ts` 里可以直接看到它不是只存 chunk：
+
+- `Document`
+- `Chunk`
+- `MemoryEntry`
+- `Profile`
+
+尤其是 `MemoryEntry` 这层，直接带版本、父子关系、遗忘标记和 embedding。这说明它从一开始就假设“记忆会演化、会冲突、会失效”，而不是把所有东西都当成一批永远有效的向量切片。
+
+## 四、它的 ingestion pipeline 为什么这么像“写慢读快”系统
+
+Supermemory 的写入不是同步直写索引，而是一个明确的异步队列。
+
+它公开出来的处理状态就是：
+
+- `queued`
+- `extracting`
+- `chunking`
+- `embedding`
+- `indexing`
+- `done`
+
+这背后的意思很明确：
+
+- `POST /v3/documents` 先尽快返回，让接入方不被大文件或复杂解析阻塞
+- 真正昂贵的步骤在后台完成
+- 查询路径不和写入路径抢资源
+
+这是一个典型的“写慢读快”记忆系统设计。
+
+在本地 self-host 配置文档里，这个设计更直白：
+
+- 搜索始终优先响应
+- 新增文档接受是瞬时的，但真正可搜索要等后台队列走完
+- ingestion 会受 `SUPERMEMORY_EMBEDDING_RAM_LIMIT` 和并发限制控制
+
+换句话说，Supermemory 追求的不是“上传后一秒内全部建好索引”，而是“前台 API 永远像在线服务一样顺手，后台自己消化复杂度”。
+
+## 五、它为什么强调 zero-config 和 one-binary
+
+Supermemory 自托管最反直觉的一点是：它故意不让你先去配数据库、向量库和 embedding pipeline。
+
+文档里的定位非常直接：
+
+- No Docker
+- No database to provision
+- No vector DB config
+- No embedding pipelines
+
+对使用者来说，这意味着三件事：
+
+1. 你不用先决定底层技术栈
+2. 你能很快得到一个可用的 `http://localhost:6767`
+3. 你可以先验证“记忆系统值不值得接”，再考虑更深的基础设施问题
+
+这正是它和很多 RAG 工具的差异。多数 RAG 工具一上来就让你选：
+
+- 哪个向量库
+- 哪个 embedding 模型
+- 怎么 chunk
+- 用什么 worker
+
+Supermemory 的判断是：这些决策先别暴露，先把使用门槛压到最低。
+
+## 六、它的检索接口，已经不是单纯的 search endpoint 了
+
+Supermemory 暴露的不止一个“搜文档”接口，而是一套分工很明确的 retrieval surface：
+
+- `client.search.documents()`：更偏文档和 chunk 检索
+- `client.search.memories()`：更偏记忆和混合检索
+- `client.profile()`：直接拿 profile，并可带搜索结果
+
+而且它把很多会影响质量和延迟的旋钮直接做成 API 参数：
+
+- `searchMode`: `memories` / `documents` / `hybrid`
+- `rerank`
+- `rewriteQuery`
+- `includeFullDocs`
+- `relatedMemories`
+
+这说明它理解的 retrieval，不是“top-k 相似度搜索”这么简单，而是一个带策略层的 context assembly 过程。
+
+特别是 `hybrid` 模式，非常像它整体设计的缩影：不是只返回 memory，也不是只返回 chunk，而是把两边的结果合并、排序、去重，然后交给上层应用使用。
+
+## 七、前后端边界切得很硬，这是个优点
+
+Supermemory 的另一个优点是前后端 contract 很清晰。
+
+从仓库里能看到至少三类接入方式都在消费统一后端语义：
+
+- Web 前端通过共享 `$fetch` 和 validation schema 调用 API
+- Browser extension 直接调 `/v3/documents` 和 `/v4/search`
+- MCP server 再把这些能力包装成 `memory / recall / context` 工具
+
+`packages/memory-graph` 也不是另起一套存储，它只是把已有的 `documents + memoryEntries` 可视化。
+
+这带来的好处是：
+
+- SDK、插件、MCP 和本地服务不容易各玩各的
+- 数据模型一旦稳定，接入层可以快速扩展
+- 你做本地评测时，更容易确认自己测到的是“同一套系统语义”
+
+## 八、本地部署为什么快，但也为什么会有“黑盒感”
+
+我们在 2026 年 6 月 29 日的本地两轮跑数里，Supermemory 的查询延迟确实很漂亮：
+
+| 轮次 | Avg latency | Query hit | Expected path coverage |
+| --- | ---: | ---: | ---: |
+| 15 篇文档 | 61.54 ms | 8/10 | 13/25 |
+| 30 篇文档 | 73.82 ms | 8/10 | 12/25 |
+
+它快并不奇怪，因为它从架构上就在做两件事：
+
+- ingestion 和 search 解耦
+- 本地引擎替你吃掉了 embedding、图引擎和索引管理
+
+但这套体验也带来明显代价：
+
+- 新增写入不是立刻可检索，而是 eventual consistency
+- 你能调的底层参数比传统 RAG stack 少得多
+- 真正的核心引擎部分没有完全暴露成一套可随意 patch 的服务端代码
+- connectors、MCP 托管、质量更高的抽取链路更偏 hosted platform
+
+所以它的 trade-off 很清晰：**用更少的基础设施选择权，换更低的接入摩擦。**
+
+## 九、它适合谁
+
+如果你更在乎下面这些事情，Supermemory 很合适：
+
+- 你想最快得到一个可用的本地 memory API
+- 你不想自己搭向量库、worker、embedding pipeline
+- 你希望文档检索、记忆抽取、用户 profile 是同一套系统
+- 你更在乎产品形态完整度，而不是底层组件可替换性
+
+如果你需要的是极高可控性、自己决定每个 provider、自己设计检索融合逻辑，那它就不一定是第一选择。
+
+## 十、最后一句话
+
+Supermemory 最强的不是某个 endpoint，而是它把 memory 当成了一个独立系统，而不是给 RAG 补的一层附件。
+
+它的核心设计可以概括成一句话：把复杂度藏进 one-binary memory engine，换来统一 API 和极低接入成本。

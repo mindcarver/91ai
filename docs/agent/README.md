@@ -247,6 +247,10 @@ observe -> plan -> act -> evaluate -> continue / stop
 - 一套记忆写入和读取规则。
 - 一组“什么不应该写入记忆”的规则。
 
+延伸阅读：
+
+- [AI Agent 记忆系统专题](./ai-app-tutorials/rag/memory-systems/README.md)：Mem0、Supermemory、Letta、Graphiti、Cognee、LangMem 等项目地图，以及长期记忆论文、实战路线和评测方法。
+
 ## 阶段 6：面向 Agent 的 RAG
 
 Agent 需要知识时，不应该只靠模型参数记忆。

@@ -1,0 +1,161 @@
+# Mem0 架构分析：一个 ADD-only AI Memory Layer，如何把复杂度从写路径搬到读路径
+
+> TL;DR：Mem0 最有意思的地方，不是“支持很多向量库”，而是它把 AI memory 拆成了一条明确的写入流水线和一条更复杂的读取流水线。写入阶段尽量单次 LLM、批量 embedding、批量落库；读取阶段再用 semantic + BM25 + entity boost 做多信号融合。这让它很适合做可控、可插拔、可自托管的 memory orchestration layer，但也把不少复杂度留给了配置、检索和治理。
+
+## 一、先说我的判断
+
+如果只看 README，很容易把 Mem0 理解成“向量数据库外面包了一层 API”。读完本地仓库后，我的判断正好相反：它本质上是在卖一套 memory orchestration。
+
+它至少有三层执行面：
+
+- 本地编排层：`mem0.Memory` / `mem0.AsyncMemory`
+- 远程客户端层：`MemoryClient` / `AsyncMemoryClient`
+- 自托管服务层：`server/` 和 `openmemory/`
+
+这意味着 Mem0 的核心不是某个固定存储后端，而是“统一的 memory 写入、检索、作用域和治理规则”，存储只是底座之一。
+
+本文主要基于这些本地文件：
+
+- `mem0/__init__.py`
+- `mem0/client/main.py`
+- `mem0/memory/main.py`
+- `mem0/vector_stores/base.py`
+- `server/README.md`
+- `AGENTS.md`
+
+## 二、它的分层为什么重要
+
+Mem0 仓库不是单一 SDK 仓库，而是一个多入口系统：
+
+- `mem0/` 是 Python 核心 SDK
+- `mem0-ts/` 是 TypeScript SDK
+- `server/` 是 FastAPI 自托管接口
+- `openmemory/` 是带 UI、API、MCP 的完整平台化版本
+- `integrations/mem0-plugin/` 把 memory 能力接到 Claude Code、Cursor、Codex 这类客户端
+
+这套结构说明一个很关键的设计选择：Mem0 不把“记忆”绑定在某一个产品壳上，而是把记忆层当作可嵌入的基础设施。
+
+换句话说，Mem0 不是先做一个聊天产品，再往里塞记忆；它是先做记忆层，再决定把它接到哪些客户端、工作流和自托管环境里。
+
+## 三、Mem0 的写入链路：为什么它坚持 ADD-only
+
+Mem0 V3 最值得写的不是“能存记忆”，而是它怎么存。
+
+`Memory.add()` 不是把一段文本直接变成向量就结束。默认的智能路径大致是：
+
+1. 识别当前 scope：`user_id` / `agent_id` / `run_id`
+2. 读取同 scope 下最近的消息窗口
+3. 先检索已有 memories，拿到去重和关联上下文
+4. 调一次 LLM 做 memory distillation
+5. 对新 memory 做 hash 去重
+6. 批量 embedding
+7. 批量写入主向量存储
+8. 再做 entity linking，写入独立的 entity store
+
+这条链路背后的核心取舍是：写入阶段尽量少做分支判断，先把“新事实”稳定落下去；更新、冲突和排序问题，留到后面的读取和治理阶段处理。
+
+README 已经把这条路线写得很直白：新的算法是 `ADD-only`，不在自动 ingestion 阶段做 UPDATE/DELETE。`update()` 和 `delete()` 当然还在 API 里，但它们是显式操作，不是默认写入行为。
+
+这有两个直接后果：
+
+- 好处是 ingestion 更稳，更适合高吞吐、批量写入和异步流水线
+- 代价是 memory 会累积，系统必须在读路径补上更多判断逻辑
+
+## 四、Memory formation 不是“句子转向量”
+
+很多人把 memory 系统误解成“把聊天记录塞进向量库”。Mem0 在这点上明显更重。
+
+它的 memory formation 至少做了三件普通 RAG 不会认真做的事：
+
+- 用最近消息窗口补短期上下文，而不是只看当前一句话
+- 用已有 memories 做去重和链接上下文，避免每次都重新发明旧事实
+- 把抽取结果变成更自包含的 memory record，而不是原封不动保存原句
+
+所以它更像“先蒸馏，再存储”，而不是“先存储，再指望检索时自己理解”。
+
+这也是为什么 Mem0 更适合“用户偏好、项目知识、agent 状态”这类长期上下文，而不是只做一层朴素文档检索。
+
+## 五、Mem0 的检索链路：复杂度被搬到了这里
+
+Mem0 的读路径比写路径更值得研究。
+
+从 `mem0/memory/main.py` 和 `mem0/vector_stores/base.py` 看，它的 retrieval 不是单路 ANN，而是三路信号融合：
+
+- semantic search：向量相似度，负责主召回
+- BM25 / keyword search：补精确词项匹配
+- entity boost：从 entity store 里给相关 memory 做增强
+
+最后做 additive fusion，再按统一分数排序。为了让不同后端都能放进一套 ranking 逻辑，`VectorStoreBase` 还强制不同向量库把分数归一到“越大越相似”的统一语义。
+
+这套设计很像一句话：写的时候少判断，读的时候多打分。
+
+它的好处是：
+
+- 对精确词、实体名、偏好类问题更稳
+- 对多跳和时间相关问题更有机会打中正确记忆
+- 不会把质量完全押注在某一个 embedding 模型上
+
+它的代价也很明确：
+
+- 查询路径更重
+- 底层能力会泄漏出来
+- 后端差异不会真的被完全抽象掉
+
+## 六、Provider 抽象为什么做得强，但也不是没有代价
+
+Mem0 的另一个核心优点是 provider 抽象。
+
+`embedding / vector store / llm / reranker` 都走统一入口、provider-specific config 和 factory 装配。对工程团队来说，这意味着：
+
+- 你可以把 OpenAI embedding 换成 Qwen、Ollama 或别的兼容端点
+- 你可以把 Qdrant 换成 PGVector、Pinecone、Milvus
+- 你可以本地嵌入、自托管检索，也可以接云服务
+
+这类抽象对平台型产品非常重要，因为它让“记忆策略”可以相对稳定，而“供应商选择”可以变。
+
+但这里有一个必须讲清楚的现实：这种抽象不是无损的。
+
+向量维度、BM25 能力、批量搜索能力、关键词检索支持、客户端连接方式，都会从底层泄漏上来。我们在本地实测里就遇到了典型问题：
+
+- OpenAI 兼容 embedder 实际读取的是 `OPENAI_API_KEY` / `OPENAI_BASE_URL`
+- `Qwen/Qwen3-Embedding-8B` 需要显式对齐真实维度 `4096`
+- 不同向量库对 hybrid / keyword search 的支持程度并不一致
+
+所以 Mem0 的“可插拔”更准确的说法是：替换供应商很便宜，但理解供应商差异仍然是你的工作。
+
+## 七、这次 91ai 文档实测说明了什么
+
+2026 年 6 月 29 日，我们用 `91ai/docs` 的 Markdown 文档做了两轮本地评测，第一轮 15 篇，第二轮 30 篇，同一套 `query-set.json`。
+
+Mem0 的结果是：
+
+| 轮次 | Avg latency | Query hit | Expected path coverage |
+| --- | ---: | ---: | ---: |
+| 15 篇文档 | 1331.99 ms | 9/10 | 18/25 |
+| 30 篇文档 | 798.56 ms | 9/10 | 16/25 |
+
+这里有一个必须说明的边界：这次对 `91ai/docs` 的 ingest，用的是 `infer=False`，也就是把 Mem0 当作“静态文档检索底座”在用，而不是让它对对话自动 distill 成长期 memory。
+
+这意味着这轮实验更能说明两件事：
+
+- Mem0 的 retrieval layer 在静态知识库场景下是有竞争力的
+- 但它最有特色的 memory formation 能力，其实还没有被完全打满
+
+从结果看，Mem0 在这组文档上更容易命中预期来源路径，说明它的检索链路在“找对依据”这件事上更强；代价是本地查询延迟明显更高。
+
+## 八、它适合谁
+
+如果你更在乎下面这些事情，Mem0 很合适：
+
+- 你想自己选 LLM、embedding、vector store
+- 你需要明确的 `user_id / agent_id / run_id` 作用域
+- 你希望同一套内核既能本地跑，也能挂到服务端和 MCP 上
+- 你愿意为可控性付出更多配置和调优成本
+
+如果你只是想最快把“本地知识库 + 记忆接口”跑起来，Mem0 不是最低阻力路径；但如果你想把 memory 当成长期基础设施，而不是一次性 demo，Mem0 的架构是很值得研究的。
+
+## 九、最后一句话
+
+Mem0 最本质的设计，不是“把对话存起来”，而是：把记忆写入做成 ADD-only 流水线，把记忆读取做成多信号融合排序。
+
+这也是为什么它更像一个 memory orchestration layer，而不是一个会记忆的向量库包装器。

@@ -22,7 +22,7 @@
 
 # RAG 学习指南
 
-这组文章覆盖 RAG（检索增强生成）从原理到生产部署的完整知识体系，基于 2026 年最新技术进展和工程实践。10 篇文章按数据管线顺序组织，每篇独立可读，组合起来是完整的 RAG 构建指南。
+这组文章覆盖 RAG（检索增强生成）从原理到生产部署的完整知识体系，基于 2026 年最新技术进展和工程实践。主体文章按数据管线顺序组织，每篇独立可读；进阶专题补充 Agentic RAG、评估、工程化和长期记忆系统。
 
 ## 文章列表
 
@@ -49,6 +49,7 @@
 7. **[Agentic RAG](agentic-rag.md)** — A-RAG 自主策略选择、Self-RAG 反思 token 机制、Corrective RAG 三路分支、LangGraph StateGraph 完整实现、Router/Tool-use/Multi-agent 架构、框架选型（LlamaIndex Router Engine/LangGraph/CrewAI）
 8. **[RAG 评估与微调](rag-eval-and-finetuning.md)** — RAGAS 四指标（Faithfulness/Answer Relevancy/Context Precision/Context Recall）、反事实测试（上下文消融 + 反事实扰动）、LLM-as-judge（85-90% 一致率）、评估数据准备、生产监控告警、微调策略（Embedding 5-25%、Reranker 10-30%、LLM LoRA）、EU AI Act 合规
 9. **[高级专题与工程实战](advanced-topics-and-engineering.md)** — GraphRAG（Microsoft + LightRAG 10x 降本）、Text-to-SQL、RAG Fusion、多模态 RAG 三路径、12 个痛点及方案、生产框架选型（RAGFlow/Dify/FastGPT）、向量数据库选型、成本分析（$0.005-0.02/查询）、8 步迭代流程、研究前沿（Rankrag/RAG 2.0/推测性检索/检索归因）
+10. **[AI Agent 记忆系统专题](memory-systems/README.md)** — 区分记忆、RAG、上下文和日志；梳理 Mem0、Supermemory、Letta、Graphiti、Cognee、LangMem 等开源项目；补充 LoCoMo、LongMemEval、Memora、A-MEM 等论文和评测线索
 
 ## 学习路线
 
@@ -66,7 +67,7 @@
   检索策略与查询优化（逐步叠加优化，每次只改一个变量）
        ↓
 进阶方向（按需深入）
-  Agentic RAG / RAG评估与微调 / 高级专题与工程实战
+  Agentic RAG / RAG评估与微调 / 高级专题与工程实战 / AI Agent记忆系统
 ```
 
 ## 阅读建议
@@ -77,7 +78,7 @@
 
 **效果优化（2-3 天）**：RAG 评估与微调 → 检索策略与查询优化中的高级技巧。先学会评估（包括反事实测试），才能知道该优化什么。
 
-**前沿探索（按需）**：Agentic RAG → 高级专题与工程实战。适合已经在生产环境跑通 RAG 的场景。
+**前沿探索（按需）**：Agentic RAG → 高级专题与工程实战 → AI Agent 记忆系统专题。适合已经在生产环境跑通 RAG，并开始处理跨会话、跨任务、用户偏好和项目状态的场景。
 
 ## 约定
 
