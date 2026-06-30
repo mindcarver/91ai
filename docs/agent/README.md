@@ -10,7 +10,7 @@
 
 Agent 学习不要从“多 Agent 框架”开始。更合理的路线是先理解 LLM 应用基础，再进入工具调用、工作流、记忆、评测、权限和生产化。
 
-**完整教程：** [AI 应用技术文档](./ai-app-tutorials/README.md)（10 个模块）—— 成体系的 AI 应用开发教程，覆盖 AI 基础认知、Prompt 工程、RAG、Agent 与工作流、工程化与运维、行业方案、商业化交付与综合项目实战，附推荐阅读顺序和面试题库。其中"智能体设计模式"模块单独成系列：[20 篇设计模式](./agent-design-patterns/README.md)（ReAct、Plan-and-Solve、反思搜索、多 Agent 协作、反模式与评估精炼）。
+**完整教程：** [AI 应用技术文档](./ai-app-tutorials/README.md)（10 个模块）—— 成体系的 AI 应用开发教程，覆盖 AI 基础认知、Prompt 工程、RAG、Agent 与工作流、工程化与运维、行业方案、商业化交付与综合项目实战，附推荐阅读顺序、[AI / Agent 面试专题](./ai-app-tutorials/interview/README.md)和面试题库。其中"智能体设计模式"模块单独成系列：[20 篇设计模式](./agent-design-patterns/README.md)（ReAct、Plan-and-Solve、反思搜索、多 Agent 协作、反模式与评估精炼）。
 
 ## 资料筛选原则
 
