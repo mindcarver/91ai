@@ -42,6 +42,8 @@
 - 知识库热更新
 - 成本和延迟优化
 
+这些问题可以配合 [AI 应用运行时工程](../engineering-ops/ai-runtime-streaming-async-hot-update.md) 复习，重点看流式输出、异步任务、幂等重试和知识库热更新。
+
 对应面试问题：
 
 1. RAG 从文档到答案完整链路怎么设计？
@@ -63,6 +65,8 @@
 - 数据构造和质量控制
 - 推理加速和量化
 - 多模态输入和 token 化
+
+SFT 数据构造见 [SFT 与训练数据构造](../model-layer/sft-and-training-data-construction.md)，RLHF / DPO / PPO / LoRA 的关系见 [后训练、偏好对齐与 LoRA](../model-layer/post-training-alignment-and-lora.md)。
 
 对应面试问题：
 
@@ -225,6 +229,8 @@
 - DPO 直接用偏好对优化模型，不显式训练 reward model，工程上更简洁。
 - Agent 场景里，SFT 常用于工具调用格式和轨迹模仿，RL/DPO 更偏提升成功率和偏好对齐。
 
+延伸阅读：[后训练、偏好对齐与 LoRA](../model-layer/post-training-alignment-and-lora.md)。
+
 **Q16：LoRA 参数怎么影响效果？**
 
 回答要点：
@@ -233,6 +239,8 @@
 - alpha 控制 LoRA 增量缩放，太强可能破坏基座能力，太弱效果不明显。
 - target modules 决定改哪些层，常见是 attention 和 MLP 相关线性层。
 - 需要用验证集、任务指标和人工样本一起判断。
+
+延伸阅读：[后训练、偏好对齐与 LoRA](../model-layer/post-training-alignment-and-lora.md)。
 
 **Q17：Agent 评测怎么做？**
 
@@ -343,6 +351,8 @@
 18. KV cache 的作用和代价是什么？
 19. 线上 p95 延迟高怎么优化？
 20. prompt injection 怎么防？
+
+其中运行时系统设计题可以集中复习 [AI 应用运行时工程](../engineering-ops/ai-runtime-streaming-async-hot-update.md)，模型后训练题可以集中复习 [后训练、偏好对齐与 LoRA](../model-layer/post-training-alignment-and-lora.md)。
 
 ## 六、最后的准备建议
 

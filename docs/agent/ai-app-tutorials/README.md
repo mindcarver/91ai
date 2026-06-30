@@ -144,6 +144,7 @@ AI 应用从原型到生产所需的工程能力。
 | [可观测性与调试](engineering-ops/observability-and-debugging.md) | 用 Trace 串起输入、检索、Prompt、模型、工具、成本和质量反馈 |
 | [安全与权限系统](engineering-ops/security-and-permission-system.md) | 在身份、检索、上下文、工具、输出和审计六层建立 AI 安全边界 |
 | [成本与性能优化](engineering-ops/cost-and-performance-optimization.md) | 同时优化账单和延迟：上下文压缩、模型路由、缓存、并行和流式输出 |
+| [AI 应用运行时工程](engineering-ops/ai-runtime-streaming-async-hot-update.md) | 流式输出、异步任务、幂等重试、知识库热更新和面试常见系统设计题 |
 | [部署与上线](engineering-ops/deployment-and-launch.md) | 上线前补齐容器化、配置密钥、持久化、健康检查、Eval 门禁、灰度和回滚 |
 
 ### 行业方案设计
@@ -194,6 +195,7 @@ AI 项目的商业化包装和交付能力。
 |------|------|
 | [训练全景与模型进化路线](model-layer/training-landscape-and-model-evolution.md) | 模型训练的完整流程、主流模型的技术路线演进 |
 | [SFT 与训练数据构造](model-layer/sft-and-training-data-construction.md) | 监督微调的方法和训练数据的构造策略 |
+| [后训练、偏好对齐与 LoRA](model-layer/post-training-alignment-and-lora.md) | 面试高频的 RLHF、DPO、PPO、LoRA、QLoRA 关系和 Agent 场景选型 |
 
 ---
 

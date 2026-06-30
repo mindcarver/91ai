@@ -15,6 +15,9 @@
 | 3 | [上下文与记忆系统设计](../agent-workflow/context-and-memory-system-design.md) | Agent 面试里很容易被追问的 memory / context engineering |
 | 4 | [AI Agent 记忆系统专题](../rag/memory-systems/README.md) | Mem0、Supermemory、Letta、Graphiti、LangMem 等长期记忆系统 |
 | 5 | [RAG 评估与微调](../rag/rag-eval-and-finetuning.md) | RAG 面试里最能拉开差距的评估、反事实测试和生产监控 |
+| 6 | [AI 应用运行时工程](../engineering-ops/ai-runtime-streaming-async-hot-update.md) | 应用/后端岗常问的流式输出、异步任务、幂等重试和知识库热更新 |
+| 7 | [后训练、偏好对齐与 LoRA](../model-layer/post-training-alignment-and-lora.md) | 算法岗常问的 SFT、RLHF、DPO、PPO、LoRA、QLoRA |
+| 8 | [Transformer 详解](../../../machine-learning/stage5-transformer/01-transformer-explained.md) | 算法岗常问的 Attention、位置编码、Decoder、causal mask、KV cache 基础 |
 
 ## 一线公司考点画像
 
@@ -97,7 +100,7 @@
 3. 第 3 天：Agent loop、tool calling、memory。
 4. 第 4 天：Function Calling、MCP、权限和安全。
 5. 第 5 天：SFT、RLHF/DPO、LoRA、模型评测。
-6. 第 6 天：系统设计、成本、延迟、可观测性。
+6. 第 6 天：系统设计、流式输出、异步任务、热更新、成本、延迟、可观测性。
 7. 第 7 天：项目模拟面 + 算法题。
 
 ### 30 天系统准备
