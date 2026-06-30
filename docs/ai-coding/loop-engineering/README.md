@@ -162,6 +162,16 @@ Loop engineering 可以先粗暴理解成一句话：
 | 10 | [MindStudio 选型手册](./refs/10-mindstudio-good-vs-bad-agent.md) | 四种 loop 架构与好 / 坏 agent 的四维判别 |
 | 11 | [OpenAI《Harness Engineering》](./refs/11-openai-harness-engineering.md) | harness 是 loop 的地基，一手 100 万行战报 |
 
+## 长文版（long-form/）
+
+三篇 1.5 万字独立长文，各从一个角度把本专题展开，正文讲方法、长文给系列之外的统一判断。每篇都补了联网调研拿到的硬证据（真实 token/成本数字、生产失败率、CLI 脚手架、maker/checker 证伪逻辑）。
+
+| # | 长文 | 角度 | 适合谁 |
+| --- | --- | --- | --- |
+| A | [Loop Engineering 上生产：从单次会话到可信赖的代理控制系统](./long-form/01-production-readiness.md) | 生产落地深度解析，统一判断框架 + readiness 自检 | 想把 loop 真正上生产的中高级工程师 |
+| B | [用 Claude Code 从零搭一条能跑的 Loop：Daily Triage 落地手册](./long-form/02-build-first-loop.md) | 实操教程，含 `loop-init` 脚手架 + `STATE.md`/skill/Actions 完整文件内容 | 想跟着做出第一条 loop 的人 |
+| C | [Loop Engineering 概念全景：把循环放进 AI 编程演进坐标的认知地图](./long-form/03-concept-panorama.md) | 认知地图，prompt→context→harness→loop 演进 + 四代循环谱系 + 边界判别 | 想建立全局认知、对齐团队共识的人 |
+
 ## 先给一个最实用的心智模型
 
 可以把一个健康的 loop 暂时记成下面这条链：
