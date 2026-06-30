@@ -75,6 +75,10 @@
   <td><a href="./docs/knowledge-map.md">知识图谱</a> — 身份、能力、工具、项目、风险全景图</td>
 </tr>
 <tr>
+  <td align="center">做 AI 评测</td>
+  <td><a href="./docs/evaluation/">AI / 大模型 / Agent 评测专题</a> — 模型、RAG、Agent、AI Coding 和安全红队评测地图</td>
+</tr>
+<tr>
   <td align="center">找 Agent 框架或工作流</td>
   <td><a href="./docs/project-collections/agents.md">Agent 项目收藏</a> — 158 个 Agent 框架、运行时和多智能体项目</td>
 </tr>

@@ -201,6 +201,7 @@ AI 项目的商业化包装和交付能力。
 
 ## 其他资源
 
+- [AI / 大模型 / Agent 评测专题](../../evaluation/README.md) — 统一梳理模型能力、LLM 应用、RAG、Agent、AI Coding、安全红队和生产运行评测
 - [AI / Agent 面试专题](interview/README.md) — 面向一线公司 AI / Agent 岗位，整理公开 JD、社区面经、高频考点、项目深挖和复习路线
 - [面试题库](ai-face.md) — 覆盖基础概念、工程实践、架构设计、商业化的基础面试参考
 - [脑图目录](./mind-maps/) — 各主题的 Excalidraw 思维导图

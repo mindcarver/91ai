@@ -46,7 +46,7 @@
 | Agent 学习图谱 | 如何从 API 走到可上线 Agent | [Agent 学习路径](./agent/) |
 | 架构决策图谱 | 面对需求该选 RAG / Fine-tune / Agent / Workflow | [AI 架构决策指南](./ai-architecture-decisions.md) |
 | 项目生态图谱 | 有哪些可研究、可试用、可二次整理的项目 | [项目收藏](./project-collections/) |
-| 评测图谱 | 如何判断工具和方案是否真的可用 | [评测体系](./README.md#评测体系) |
+| 评测图谱 | 如何判断工具和方案是否真的可用 | [AI / 大模型 / Agent 评测专题](./evaluation/) |
 | 技术雷达 | 哪些方向值得投入、观察或谨慎使用 | [技术雷达](./README.md#技术雷达) |
 
 ## 身份到能力
@@ -70,7 +70,7 @@
 | RAG | Agent Stage 6、Project Collections | 一个带引用的文档问答原型 |
 | MCP / 工具接入 | Agent Stage 2、安全资料 | 一张工具权限表 |
 | Workflow | Agent Stage 3 | 一个带人工确认节点的流程 |
-| Evaluation | Agent Stage 7、AI Coding 评测维度 | 20 条回归用例 |
+| Evaluation | [评测专题](./evaluation/)、Agent Stage 7、AI Coding 评测维度 | 20 条回归用例 |
 | Safety | Agent Stage 8、AI Coding 安全模板 | 最小权限和高风险操作规则 |
 
 ## 第一个项目矩阵
