@@ -1,0 +1,186 @@
+# LlamaIndex Memory:LlamaIndex 框架内置记忆深度技术解析
+
+> 项目地址:https://github.com/run-llama/llama_index(memory 模块在 llama-index-core/memory)。License:MIT。约 50607 star(主仓,2026-07-03 实测)。本文技术细节来自源码、官方文档与本次 ollama 下的 L1 实测尝试。
+
+## 一、项目定位与一句话概括
+
+LlamaIndex Memory 是 LlamaIndex 框架内置的记忆抽象,定位是给 LlamaIndex agent / chat 提供分层记忆。它不是一个独立记忆服务,而是 LlamaIndex 核心库(`llama-index-core/memory`)里的一组"记忆块"(memory blocks):StaticMemoryBlock(静态上下文)、FactExtractionMemoryBlock(事实抽取)、VectorMemoryBlock(向量检索)、ChatMemoryBuffer(短期对话缓冲)等。通过 `Memory.from_defaults(memory_blocks=[...])` 组装一个分层记忆,挂到 agent 上。
+
+一句话:LlamaIndex Memory = LlamaIndex 框架的分层记忆块抽象(静态 / 事实抽取 / 向量 / 短期缓冲)。
+
+## 二、仓库与社区元数据
+
+- 主仓 `run-llama/llama_index`,MIT,约 50607 star。memory 模块在 llama-index-core/memory。
+- 语言 Python。`pip install llama-index-core`(memory 在核心里),配 `llama-index-llms-ollama` / `llama-index-embeddings-ollama`。
+- 近周级迭代(0.14.x)。
+- 还有 `llama-index-memory-mem0`(把 Mem0 作为 LlamaIndex 的记忆后端)。
+
+## 三、整体技术架构
+
+LlamaIndex Memory 的架构是"Memory 容器 + 可组合的 memory blocks"。
+
+**Memory 容器。** `Memory.from_defaults(memory_blocks=[...], token_limit=...)` 创建一个 Memory 对象,管理各 block 的状态、chat history、token 预算。`memory.put_messages(msgs)` 摄入,`memory.get(input=user_msg)` 返回一个 chat prompt(各 block 的内容注入进去)。
+
+**Memory blocks(核心)。**
+- **StaticMemoryBlock**:固定的静态上下文(如系统说明),每次都在。
+- **FactExtractionMemoryBlock**:用 LLM 从对话抽事实,存为 List[str],注入 prompt。这是它的"事实记忆"。
+- **VectorMemoryBlock**:把用户消息存进向量库,按当前 query 检索相关历史消息注入。这是它的"语义检索"。
+- **ChatMemoryBuffer**:短期对话缓冲(最近 N 轮),按 token 预算截断。
+
+**短期存储。** Memory 的状态(各 block 内容、chat history)存在 in-process SQLite(默认)或任何 SQLAlchemy async DB(Postgres)。
+
+**LLM / embed。** 通过 LlamaIndex 的 Settings(llm / embed_model),支持 ollama / OpenAI 等。
+
+## 四、核心记忆模型与实现原理
+
+LlamaIndex Memory 的记忆模型是"可组合的分层记忆块"。关键原理:
+
+**记忆是 prompt 工程,不是独立检索。** 和 Mem0(独立 search 返回事实)不同,LlamaIndex Memory 的 `memory.get(input)` 返回的是一个**注入了各 block 内容的 chat prompt**——FactExtraction 注入当前事实、Vector 注入检索到的相关消息、Static 注入静态上下文、Buffer 注入最近对话。也就是说,记忆是通过"塞进 prompt"生效的,不是通过独立检索 API。这让它的设计更偏"chat memory"(对话记忆)而非"记忆后端"。
+
+**FactExtractionMemoryBlock。** `aget(input, llm, ...)` 时,用 LLM 从 chat history + 当前 input 抽事实,返回当前事实列表(字符串)。事实存为 List[str],无 timestamp / session_id / user_id / metadata(源码核实)。这是一个简单的事实抽取,丢值风险同 Mem0 / LangMem。
+
+**VectorMemoryBlock。** 把用户消息存进一个向量库,aget 时用当前 input 检索 top-k 相关消息注入。需要配 vector_store(否则构造报 ValidationError——本次实测踩坑)。
+
+**token 预算。** Memory 有 token_limit,各 block 按 priority / 比例瓜分 token 预算,超了就 truncate。
+
+## 五、端到端数据流
+
+本次实测尝试(ollama qwen2.5:14b + qwen3-embedding):
+
+1. **配 Settings**:`Settings.llm = Ollama(model="qwen2.5:14b")`,`Settings.embed_model = OllamaEmbedding(model_name="qwen3-embedding:4b")`。
+2. **建 block + Memory**:`fact_block = FactExtractionMemoryBlock(name="facts", llm=Settings.llm)`,`memory = Memory.from_defaults(memory_blocks=[fact_block])`。
+3. **摄入**:`await memory.aput_messages([ChatMessage(...)])`。
+4. **检索 / 注入**:`await fact_block.aget(input=query_msg, llm=..., ...)` 取当前事实(或 `memory.get(input)` 拿注入后的 prompt)。
+
+## 六、技术栈与依赖
+
+- `llama-index-core`(>=0.13,<0.15),memory 在核心。
+- 短期存储:SQLAlchemy / aiosqlite(SQLite 默认,Postgres 可选)。
+- LLM:`llama-index-llms-ollama`(或 openai)。
+- embed:`llama-index-embeddings-ollama`(或 openai)。
+- VectorMemoryBlock 需要一个向量库集成(qdrant / chroma / weaviate / milvus)。
+- (可选)`llama-index-memory-mem0` + mem0ai(把 Mem0 作后端)。
+
+## 七、本地部署与 LLM 后端(ollama)
+
+native Memory + blocks 完全支持 ollama:FactExtractionMemoryBlock(llm=Settings.llm) 和 VectorMemoryBlock(embed_model=Settings.embed_model) 都默认走 Settings,设 `Settings.llm = Ollama(...)` / `Settings.embed_model = OllamaEmbedding(...)` 即可。必须显式设 Settings.embed_model,否则默认 OpenAI(Issue #13534)。VectorMemoryBlock 需要本地向量库(Chroma in-process 或本地 Qdrant docker)。mem0 后端路径默认要 Mem0 Platform key 或 OpenAI key,本地不友好——用 native blocks。
+
+## 八、MCP 集成
+
+**不暴露 MCP server。** LlamaIndex 通过单独的 integration 消费外部 MCP server,但 Memory 模块本身不是 MCP 组件。
+
+## 九、云门控与商业模型
+
+- OSS native Memory:完全本地(ChatMemoryBuffer + Static + FactExtraction + Vector,配 ollama + 本地向量库)。无 API key 强制。
+- LlamaCloud:LlamaIndex 的托管 / 数据集成平台,但不是 Memory 本身的云门控。
+
+## 十、性能与基准
+
+**无。** LlamaIndex 不发布 LongMemEval / LoCoMo / MemoBench 分数(和 LangMem 一样,框架内置模块不自带 benchmark)。
+
+本次实测(L1 尝试):**未得有效分**——FactExtractionMemoryBlock.aget 返回空事实(0 字符);VectorMemoryBlock 构造缺 vector_store 报 ValidationError。属 API 摩擦 / 版本问题,非框架根本不可用。框架模块类别由 LangMem 代表(41.7%)。
+
+## 十一、已知问题与失败模式
+
+- **FactExtractionMemoryBlock 无元数据**:存 List[str],无 timestamp / session_id / user_id(源码核实)。时序 / 跨会话 / 多租户能力弱。
+- **VectorMemoryBlock 需配 vector_store**:不配构造报 ValidationError(本次踩坑)。
+- **aget 返回空**:本次实测 FactExtractionMemoryBlock.aget 返回 0 字符——抽取没触发或参数不对(可能要正确的 input / params 组合)。
+- **chat-memory 设计**:记忆通过 prompt 注入,不是独立检索 API——做"记忆后端"用不自然。
+- **无 benchmark**:无官方分数。
+- **mem0 后端路径本地不友好**:默认要 Mem0 Platform key / OpenAI key。
+
+## 十二、本次实测发现(L1 尝试)
+
+本次 LlamaIndex Memory + ollama:
+
+- **FactExtraction 路径**:aget 返回空事实,未产出可检索内容。
+- **VectorMemoryBlock 路径**:构造缺 vector_store 报 ValidationError。
+- **结论**:API 摩擦(可能补 vector_store + 调对 aget 参数可修),非根本不可用。文档化,未得有效分。
+
+这是本次评测负分数里少数"没能翻案"的——两个 block 路径都没产出内容,且 LlamaIndex Memory 是框架模块(类别已被 LangMem 代表),边际价值低,没深调。
+
+## 十三、适用场景与选型建议
+
+适合:已经在用 LlamaIndex 造 agent / chat,想要原生分层记忆(静态 + 事实 + 向量 + 短期缓冲),愿意手配 block 参数和向量库。
+
+不适合:要独立记忆后端(设计是 chat memory 不是检索 API)、要严格时序 / 多租户(blocks 无元数据)、要官方 benchmark(无)。
+
+建议标签:**观望(已用 LlamaIndex 时试点)**。框架模块,本版本 API 摩擦,类别由 LangMem 代表。
+
+## 十四、与同类对比
+
+- vs **LangMem**:都是框架内置记忆(LangMem for LangChain,LlamaIndex Memory for LlamaIndex)。都 API 摩擦、都无 benchmark、都偏 chat-memory。
+- vs **Mem0**:Mem0 是独立记忆后端(检索 API + 生态大 + 83%);LlamaIndex Memory 是 chat memory(prompt 注入)。要记忆后端选 Mem0。
+
+## 附录 A:实测代码与两个 block 的尝试
+
+```python
+from llama_index.core.memory import Memory, FactExtractionMemoryBlock, VectorMemoryBlock
+from llama_index.core import Settings
+from llama_index.core.llms import ChatMessage, TextBlock, MessageRole
+from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.ollama import OllamaEmbedding
+Settings.llm = Ollama(model="qwen2.5:14b", base_url="http://localhost:11434")
+Settings.embed_model = OllamaEmbedding(model_name="qwen3-embedding:4b", base_url="http://localhost:11434")
+# 路径一:FactExtraction(本次 aget 返回空)
+fact = FactExtractionMemoryBlock(name="facts", llm=Settings.llm)
+mem = Memory.from_defaults(memory_blocks=[fact])
+await mem.aput_messages([ChatMessage(role=MessageRole.USER, blocks=[TextBlock(text="I'm Daniel...")])])
+facts = await fact.aget(input=<ChatMessage>, llm=Settings.llm, ...)   # 本次返回空
+# 路径二:VectorMemoryBlock(本次构造缺 vector_store 报错)
+vblock = VectorMemoryBlock(name="v", embed_model=Settings.embed_model, retrieval_top_k=5)  # ValidationError
+```
+
+## 附录 B:chat-memory vs 记忆后端的设计差异
+
+LlamaIndex Memory 体现了一个重要的设计分野:**chat memory(对话记忆)** vs **记忆后端(memory backend)**。
+
+Mem0 / Supermemory / Graphiti 是"记忆后端"——你把数据塞进去,它返回相关事实(独立 search API),你把事实拼进任何 LLM 的 prompt。它和"当前对话"解耦,可以跨会话、跨 agent 共享。
+
+LlamaIndex Memory 是"chat memory"——它的核心抽象是 `memory.get(input)` 返回一个**注入了记忆的 chat prompt**。记忆是通过"塞进 prompt"生效的,和当前对话 / agent 紧耦合。这适合"让一个 chat agent 记住对话历史"的场景,但不适合"一个独立的、可被多个 agent / 多个会话查询的记忆服务"。
+
+这个差异决定了适用场景:LlamaIndex Memory 适合"单个 LlamaIndex agent 的对话记忆",不适合"组织级的、跨 agent 共享的记忆后端"。如果你要后者,用 Mem0 / Supermemory,不要把 chat memory 当记忆后端用。
+
+本次 LlamaIndex Memory 的 API 摩擦(FactExtraction 空 + VectorBlock 配置错)也部分源于这个设计——它的 block 抽象更偏"prompt 工程",拿来做"检索后端"不自然,所以适配器写起来别扭。这不一定 是工具烂,而是"用 chat memory 做记忆后端"的范式错配。
+
+## 附录 C:四个 memory block 的职责与组合
+
+LlamaIndex Memory 的核心是"可组合的 memory blocks"。理解每个 block 的职责,才能知道它适合什么场景:
+
+**StaticMemoryBlock(静态上下文)。** 固定的、每次都在 prompt 里的内容(如系统说明、固定的用户画像)。不随对话变。占 token 但保证关键上下文常驻。典型用法:存 agent 人设或固定的环境说明。
+
+**FactExtractionMemoryBlock(事实抽取)。** 用 LLM 从对话抽事实,存为 List[str],aget 时把当前事实注入 prompt。这是它的"长期事实记忆"。源码核实:存的是 List[str],**无 timestamp / session_id / user_id / metadata**——这是它的结构化短板(时序 / 跨会话 / 多租户能力弱)。aget(input)时,LLM 读 chat history + 当前 input,产出(可能更新后的)事实列表。
+
+**VectorMemoryBlock(向量检索)。** 把用户消息存进向量库,aget 时用当前 input 检索 top-k 相关历史消息注入。这是它的"语义检索历史"。需要配 vector_store(否则 ValidationError,本次踩坑)。
+
+**ChatMemoryBuffer(短期缓冲)。** 最近 N 轮对话,按 token 预算截断。这是"短期工作记忆"——保证最近上下文在,超预算就丢最老的。
+
+**组合。** `Memory.from_defaults(memory_blocks=[static, fact, vector, buffer], token_limit=N)`。Memory 容器按 token 预算在各 block 间分配。一次 `memory.get(input)` 把所有 block 的当前内容(static + 当前 facts + 检索到的历史 + 最近对话)注入成一个 chat prompt。
+
+这个组合设计的表达力其实很强(四层记忆:静态 / 事实 / 向量历史 / 短期缓冲),适合"一个有长期记忆的 chat agent"。但它的交付方式(prompt 注入)决定了它不适合"独立检索后端"——本次评测就是后者,所以范式错配。
+
+## 附录 D:FactExtractionMemoryBlock 为什么 aget 返回空
+
+本次实测 FactExtractionMemoryBlock.aget 返回 0 字符(空事实)。排查:
+
+**aget 的触发条件。** FactExtractionMemoryBlock 的 aget 不是"总是抽事实",而是按一定触发条件(如 chat history 有新消息 + 触发间隔)。如果 aget 在"没有新东西要抽"时被调,可能返回当前事实(可能为空,如果之前没抽出过)。
+
+**input 参数。** aget(input=query_msg) 期望一个 ChatMessage 作为 input。本次传了 ChatMessage,但仍返回空——可能是 LLM 调用(qwen2.5:14b)产出空事实(抽取 prompt 没让它产出有效内容),或参数组合不全(llm / vector_store / embed_model / tokenizer_fn / callback_manager 都要传对)。
+
+**多阶段 / 异步。** fact 抽取可能是异步的(aget 触发抽取但返回当前缓存,新抽取下次才生效)。本次只调一次 aget,可能没等到抽取完成。
+
+这些是"可能原因",本次没深调(框架模块,类别已由 LangMem 代表,边际价值低)。但它们说明:**LlamaIndex Memory 的 FactExtractionMemoryBlock 不是"调一次 aget 就给你事实"那么简单,它有自己的触发 / 缓存 / 异步语义,要正确使用需要理解这些。** 这是"chat memory 抽象"相对"独立 search API"的复杂度代价——后者(Mem0 `search()`)语义直接,前者语义隐晦。
+
+## 附录 E:LlamaIndex Memory vs llama-index-memory-mem0
+
+LlamaIndex 还有一个 `llama-index-memory-mem0` 集成包,把 Mem0 作为 LlamaIndex 的记忆后端。这和 native Memory(LlamaIndex 自己的 blocks)是两条路:
+
+**native Memory(本文主述)。** LlamaIndex 自己的 blocks(Static / FactExtraction / Vector / Buffer),chat-memory 设计,本地可行但 API 摩擦(本次实测)。适合已经在 LlamaIndex 里且想要原生分层记忆。
+
+**llama-index-memory-mem0。** 把 Mem0(独立记忆后端)包成 LlamaIndex 的记忆接口。这样你在 LlamaIndex 里用 Mem0 的引擎(抽取 + 向量 + BM25,Mem0 的 83% 能力),但通过 LlamaIndex 的 Memory 抽象访问。本地路径默认要 Mem0 Platform key 或 OpenAI key(不友好),要本地 ollama 需配 Mem0 的 ollama provider。
+
+所以如果要在 LlamaIndex 里用强记忆引擎,`llama-index-memory-mem0`(用 Mem0 引擎)可能比 native Memory(本次 aget 空)更可靠——它借 Mem0 的成熟抽取。代价是多一层包装 + Mem0 的依赖。
+
+这给"已用 LlamaIndex + 要记忆"的用户两条路:native Memory(原生但本次摩擦)/ mem0 后端(借 Mem0 能力但更重)。本次只测了 native,mem0 后端路径没测(本地默认要 key,不友好)。选型时如果 native 不行,可以考虑 mem0 后端,但要接受 Mem0 的依赖栈。
+
+这个"框架 A 用框架 B 的组件做后端"的嵌套,也是框架生态的一个特点——组件可组合,但每层包装都加复杂度。直接用 Mem0(不嵌套)永远是最轻的。
