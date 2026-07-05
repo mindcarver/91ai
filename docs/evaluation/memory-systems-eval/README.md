@@ -2,38 +2,40 @@
 
 > 2026-07-03 实测。13 个主流 AI 记忆系统开源项目 + 1 篇评测专题报告。全部结论由实测(L1)或可核实来源支撑,推断处已标注。统一本地后端(ollama)+ 公平对比协议 + 负分校验门。
 
+> **本专题视角：实测评测与选型。** 同一批项目另有[架构解读版](../../agent/ai-app-tutorials/rag/memory-systems/README.md)，从四层记忆架构、写入/读取分离、治理 schema 等设计维度展开。两份互补——本页给你"能不能用、分数多少、坑在哪"，架构版给你"怎么设计、怎么选型、怎么评估"。
+
 ## 目录
 
 ### 评测专题(综合报告,2 万+ 字)
 
-- [AI 记忆系统开源项目深度评测报告](评测专题/AI记忆系统开源项目深度评测报告.md) —— 13 项目横评:方法论、统一后端实测、LongMemEval 排名反转、负分校验六次翻案、选型矩阵。
+- [AI 记忆系统开源项目深度评测报告](overview-report.md) —— 13 项目横评:方法论、统一后端实测、LongMemEval 排名反转、负分校验六次翻案、选型矩阵。
 
 ### 项目详解(每篇 1 万+ 字,技术架构 / 实现原理 / 数据流 / 技术栈)
 
 #### 可插拔记忆层 / 事实抽取
-- [01-Mem0:可插拔事实抽取记忆层](项目详解/01-Mem0-可插拔事实抽取记忆层.md) —— 冒烟 83% / LME 33%。
-- [05-Supermemory:单二进制混合图谱记忆](项目详解/05-Supermemory-单二进制混合图谱记忆.md) —— 冒烟 67% / **LME 50%(全场最高,唯一答对 knowledge-update)**。
+- [01-Mem0:可插拔事实抽取记忆层](projects/01-mem0-pluggable-memory-layer.md) —— 冒烟 83% / LME 33%。
+- [05-Supermemory:单二进制混合图谱记忆](projects/05-supermemory-single-binary-hybrid-graph-memory.md) —— 冒烟 67% / **LME 50%(全场最高,唯一答对 knowledge-update)**。
 
 #### Agent 运行时 / 自管记忆
-- [02-Letta(MemGPT):agent 自管 OS 式记忆](项目详解/02-Letta-MemGPT-agent自管记忆.md) —— **冒烟 100%(全场最高)**,glm-4.7 agent。
-- [09-Hindsight:生物启发三通路记忆](项目详解/09-Hindsight-生物启发三通路记忆.md) —— py3.13 装不上(BLOCKED)。
+- [02-Letta(MemGPT):agent 自管 OS 式记忆](projects/02-letta-memgpt-agent-managed-memory.md) —— **冒烟 100%(全场最高)**,glm-4.7 agent。
+- [09-Hindsight:生物启发三通路记忆](projects/09-hindsight-bio-inspired-three-pathway-memory.md) —— py3.13 装不上(BLOCKED)。
 
 #### 知识图谱 / 时序图
-- [03-Zep + Graphiti:bi-temporal 知识图谱](项目详解/03-Zep-Graphiti-双时序知识图谱.md) —— 冒烟 50% / LME 0%(时序优势被证伪)。
-- [04-Cognee:GraphRAG 知识图谱](项目详解/04-Cognee-GraphRAG知识图谱记忆.md) —— schema bug,双后端 BLOCKED。
+- [03-Zep + Graphiti:bi-temporal 知识图谱](projects/03-zep-graphiti-bi-temporal-knowledge-graph.md) —— 冒烟 50% / LME 0%(时序优势被证伪)。
+- [04-Cognee:GraphRAG 知识图谱](projects/04-cognee-graphrag-knowledge-graph-memory.md) —— schema bug,双后端 BLOCKED。
 
 #### 新颖存储路线
-- [06-Memvid:无抽取逐字块 / 视频存储](项目详解/06-Memvid-无抽取逐字块存储.md) —— 冒烟 83% / LME 25%(便携 RAG,非 agent 记忆)。
+- [06-Memvid:无抽取逐字块 / 视频存储](projects/06-memvid-no-extraction-verbatim-block-storage.md) —— 冒烟 83% / LME 25%(便携 RAG,非 agent 记忆)。
 
 #### 框架内置记忆模块
-- [07-LangMem:LangChain 记忆模块](项目详解/07-LangMem-LangChain记忆模块.md) —— 冒烟 41.7%。
-- [08-LlamaIndex Memory:框架内置记忆](项目详解/08-LlamaIndex-Memory-框架内置记忆.md) —— API 摩擦,未得有效分。
+- [07-LangMem:LangChain 记忆模块](projects/07-langmem-langchain-memory-module.md) —— 冒烟 41.7%。
+- [08-LlamaIndex Memory:框架内置记忆](projects/08-llamaindex-memory-framework-builtin-memory.md) —— API 摩擦,未得有效分。
 
 #### MCP 记忆服务器
-- [10-Basic Memory:本地优先知识图谱 MCP](项目详解/10-Basic-Memory-本地优先知识图谱MCP.md) —— 作 QA memory 用 0%(note/KB 工具,定位错配)。
-- [11-OpenMemory MCP:Mem0 的本地 MCP(sunset)](项目详解/11-OpenMemory-MCP-Mem0的本地MCP.md) —— 引擎即 Mem0,项目停维。
-- [12-Universal Memory MCP:云代理,非本地引擎(deprecated)](项目详解/12-Universal-Memory-MCP-云代理非本地引擎.md) —— Supermemory 云的瘦代理。
-- [13-Reference Memory MCP:官方知识图谱参考实现](项目详解/13-Reference-Memory-MCP-官方知识图谱参考实现.md) —— MCP 官方模板,作起点用。
+- [10-Basic Memory:本地优先知识图谱 MCP](projects/10-basic-memory-local-first-knowledge-graph-mcp.md) —— 作 QA memory 用 0%(note/KB 工具,定位错配)。
+- [11-OpenMemory MCP:Mem0 的本地 MCP(sunset)](projects/11-openmemory-mcp-mem0-local-mcp.md) —— 引擎即 Mem0,项目停维。
+- [12-Universal Memory MCP:云代理,非本地引擎(deprecated)](projects/12-universal-memory-mcp-cloud-proxy-non-local-engine.md) —— Supermemory 云的瘦代理。
+- [13-Reference Memory MCP:官方知识图谱参考实现](projects/13-reference-memory-mcp-official-knowledge-graph-reference.md) —— MCP 官方模板,作起点用。
 
 ## 核心结论速览
 
@@ -54,7 +56,9 @@
 
 ## 评测产出位置
 
-完整可复现产物(原始数据、harness、证据台账)在 `runs/2026-07-03-memory-systems-eval/`:
+完整可复现产物（harness、原始数据、证据台账）规划在 `runs/2026-07-03-memory-systems-eval/` 下，**当前未入库**（产物体积较大）。如需复现：在 GitHub issue 申请，或按 [overview-report.md](overview-report.md) 描述的方法论自行重跑。
+
+计划落盘的产物清单：
 - `decision-report.md` / `findings.md` / `methodology.md` —— 决策报告、发现、方法论。
 - `evidence-ledger.jsonl` —— 30 条证据台账(逐条可核)。
 - `phaseB-research-results.json` —— 13 工具结构化调研数据。

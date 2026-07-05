@@ -48,6 +48,8 @@
 | 架构决策图谱 | 面对需求该选 RAG / Fine-tune / Agent / Workflow | [AI 架构决策指南](./ai-architecture-decisions.md) |
 | 项目生态图谱 | 有哪些可研究、可试用、可二次整理的项目 | [项目收藏](./project-collections/) |
 | 评测图谱 | 如何判断工具和方案是否真的可用 | [AI / 大模型 / Agent 评测专题](./evaluation/) |
+| 记忆系统图谱 | 如何在 Agent 中接入和评测长期记忆 | [AI 记忆系统评测专题](./evaluation/memory-systems-eval/) |
+| ML 基础图谱 | 从经典 ML 到深度学习到 transformer 等底层 | [机器学习学习路径](./machine-learning/) |
 | 技术雷达 | 哪些方向值得投入、观察或谨慎使用 | [技术雷达](./README.md#技术雷达) |
 
 ## 身份到能力
@@ -89,8 +91,8 @@
 
 1. 先建设身份路线，因为它决定读者能不能快速进入。
 2. 再把项目集合转成按身份推荐的工具清单。
-3. 然后补齐 RAG、MCP、Workflow、Evaluation 四条硬核专题。
-4. 最后做统一评测模板和可复现实战项目。
+3. RAG 和 Evaluation 已有教程与实测专题（[RAG 架构](./agent/ai-app-tutorials/rag/)、[评测专题](./evaluation/)、[记忆系统评测](./evaluation/memory-systems-eval/)），下一步重点是补齐 MCP、Workflow 两条硬核专题。
+4. 持续做统一评测模板和更多可复现实战项目（记忆系统评测是首个完整样板）。
 
 ## 判断原则
 

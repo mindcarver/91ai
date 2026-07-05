@@ -34,19 +34,21 @@
 
 ## 开源项目地图
 
-| 项目 | 类型 | 适合场景 | 注意点 |
-|------|------|----------|--------|
-| [Mem0](https://github.com/mem0ai/mem0) / [Docs](https://docs.mem0.ai/introduction) | 通用 memory layer | 给现有 Agent 加长期记忆，控制 LLM、embedding、vector store 和 scope | 配置和 provider 差异需要自己理解 |
-| [Supermemory](https://github.com/supermemoryai/supermemory) / [Self-hosting](https://supermemory.ai/docs/self-hosting/overview) | Memory API / context engine | 快速拿到本地或云端 Memory API，降低接入和部署摩擦 | 自托管版隐藏了不少底层实现细节 |
-| [Letta](https://github.com/letta-ai/letta) | 有状态 Agent 平台 | 需要 agent 自己管理、改写和演化记忆 | 更像完整 runtime，不只是 memory SDK |
-| [Graphiti](https://github.com/getzep/graphiti) / [Zep](https://www.getzep.com/) | 时间知识图谱记忆 | 需要记录事实随时间变化、实体关系和来源证据 | 自托管 Graphiti 需要自己建设外围服务 |
-| [Cognee](https://github.com/topoteretes/cognee) | 知识图谱 memory platform | 企业知识、文档和关系型知识的长期记忆 | 更偏语义图谱和知识组织，不是轻量会话记忆 |
-| [LangMem](https://langchain-ai.github.io/langmem/) | LangGraph 生态 memory SDK | 在 LangGraph 里做 semantic / episodic / procedural memory | 最适合 LangGraph 用户 |
-| [LangGraph Memory](https://docs.langchain.com/oss/python/concepts/memory) | Agent state + store | 区分 thread-scoped short-term memory 和 namespace long-term memory | 需要自己设计写入和检索策略 |
-| [LlamaIndex Memory](https://developers.llamaindex.ai/python/examples/memory/memory/) | memory blocks | 已经用 LlamaIndex 做 agent / workflow | 需要理解短期 FIFO 和长期 block 如何合并 |
-| [Agno Memory](https://docs.agno.com/memory/overview) | Agent framework 内置 memory | 用数据库持久化 agent memory 和 session | 框架绑定更强 |
-| [AutoGen Memory](https://microsoft.github.io/autogen/stable//user-guide/agentchat-user-guide/memory.html) | Agent framework 集成层 | AutoGen 项目里接 Mem0 等外部 memory backend | 更像集成接口，不是独立 memory 产品 |
-| [CrewAI Memory](https://docs.crewai.com/v1.15.0/en/concepts/memory) | Crew/Agent 内置 memory | crew 场景下统一管理短期、长期、实体和上下文记忆 | 适合 CrewAI 生态内使用 |
+> 「实测分」列指向 91AI 自建的 [AI 记忆系统评测专题](../../../../evaluation/memory-systems-eval/)（2026-07-03 实测，统一本地后端 + 负分校验门）。本页的架构解读和那边的实测评测互补。
+
+| 项目 | 类型 | 适合场景 | 注意点 | 实测分 |
+|------|------|----------|--------|--------|
+| [Mem0](https://github.com/mem0ai/mem0) / [Docs](https://docs.mem0.ai/introduction) | 通用 memory layer | 给现有 Agent 加长期记忆，控制 LLM、embedding、vector store 和 scope | 配置和 provider 差异需要自己理解 | [冒烟 83% / LME 33%](../../../../evaluation/memory-systems-eval/projects/01-mem0-pluggable-memory-layer.md) |
+| [Supermemory](https://github.com/supermemoryai/supermemory) / [Self-hosting](https://supermemory.ai/docs/self-hosting/overview) | Memory API / context engine | 快速拿到本地或云端 Memory API，降低接入和部署摩擦 | 自托管版隐藏了不少底层实现细节 | [冒烟 67% / **LME 50%（全场最高）**](../../../../evaluation/memory-systems-eval/projects/05-supermemory-single-binary-hybrid-graph-memory.md) |
+| [Letta](https://github.com/letta-ai/letta) | 有状态 Agent 平台 | 需要 agent 自己管理、改写和演化记忆 | 更像完整 runtime，不只是 memory SDK | [**冒烟 100%（全场最高）**](../../../../evaluation/memory-systems-eval/projects/02-letta-memgpt-agent-managed-memory.md) |
+| [Graphiti](https://github.com/getzep/graphiti) / [Zep](https://www.getzep.com/) | 时间知识图谱记忆 | 需要记录事实随时间变化、实体关系和来源证据 | 自托管 Graphiti 需要自己建设外围服务 | [冒烟 50% / LME 0%（时序优势被证伪）](../../../../evaluation/memory-systems-eval/projects/03-zep-graphiti-bi-temporal-knowledge-graph.md) |
+| [Cognee](https://github.com/topoteretes/cognee) | 知识图谱 memory platform | 企业知识、文档和关系型知识的长期记忆 | 更偏语义图谱和知识组织，不是轻量会话记忆 | [schema bug，双后端 BLOCKED](../../../../evaluation/memory-systems-eval/projects/04-cognee-graphrag-knowledge-graph-memory.md) |
+| [LangMem](https://langchain-ai.github.io/langmem/) | LangGraph 生态 memory SDK | 在 LangGraph 里做 semantic / episodic / procedural memory | 最适合 LangGraph 用户 | [冒烟 41.7%](../../../../evaluation/memory-systems-eval/projects/07-langmem-langchain-memory-module.md) |
+| [LangGraph Memory](https://docs.langchain.com/oss/python/concepts/memory) | Agent state + store | 区分 thread-scoped short-term memory 和 namespace long-term memory | 需要自己设计写入和检索策略 | — |
+| [LlamaIndex Memory](https://developers.llamaindex.ai/python/examples/memory/memory/) | memory blocks | 已经用 LlamaIndex 做 agent / workflow | 需要理解短期 FIFO 和长期 block 如何合并 | [API 摩擦，未得有效分](../../../../evaluation/memory-systems-eval/projects/08-llamaindex-memory-framework-builtin-memory.md) |
+| [Agno Memory](https://docs.agno.com/memory/overview) | Agent framework 内置 memory | 用数据库持久化 agent memory 和 session | 框架绑定更强 | — |
+| [AutoGen Memory](https://microsoft.github.io/autogen/stable//user-guide/agentchat-user-guide/memory.html) | Agent framework 集成层 | AutoGen 项目里接 Mem0 等外部 memory backend | 更像集成接口，不是独立 memory 产品 | — |
+| [CrewAI Memory](https://docs.crewai.com/v1.15.0/en/concepts/memory) | Crew/Agent 内置 memory | crew 场景下统一管理短期、长期、实体和上下文记忆 | 适合 CrewAI 生态内使用 | — |
 
 ## 论文和评测线索
 
