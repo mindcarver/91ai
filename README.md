@@ -43,6 +43,7 @@
 </table>
 
 🌐 AI 社区 · <a href="https://91aihub.com/">91aihub.com</a>
+🐙 GitHub · <a href="https://github.com/mindcarver/91ai">mindcarver/91ai</a>
 
 </div>
 <!-- CONTACT-END -->
