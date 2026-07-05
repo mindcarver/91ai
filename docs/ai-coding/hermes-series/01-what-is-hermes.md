@@ -25,92 +25,376 @@
 
 > 系列第 1 篇 · 读者预设：听说过 Hermes、考虑要不要部署、不想看营销稿的人 · 最后核实：2026-07
 
-**TL;DR：** Hermes Agent 是 Nous Research 2026 年 2 月开源的个人 AI 助手（MIT，约 47k star）。它最响的卖点 "self-improving" 听起来像 AGI 营销，实际指的是另一回事：它把你重复遇到的问题的解法写成 Markdown 文件（叫 skill），下次遇到类似问题先翻自己的笔记。"变聪明" 的是它的笔记本，不是模型权重。这篇拆开这个机制，并诚实讲清楚它的结构性短板——agent 同时充当自己技能的作者、执行者和评审，没有外部 ground truth。
+**TL;DR：** Hermes Agent 是 Nous Research 2026 年 2 月 25 日开源的个人 AI 助手（MIT 协议，约 47k star，主仓库 60+ 内置工具，gateway 支持 20+ 消息平台）。它最响的卖点 "self-improving" 听起来像 AGI 营销，实际指的是另一回事：它把你重复遇到的问题的解法写成 Markdown 文件（叫 skill），下次遇到类似问题先翻自己的笔记本。"变聪明" 的是它的笔记本，不是模型权重。这篇把这个机制拆开讲清楚，并诚实标注它的结构性短板——agent 同时充当自己技能的作者、执行者和评审，没有外部 ground truth，社区已经把这一点列成 Issue #25833；官方为此单独维护了一个跑在运行时之外的 `hermes-agent-self-evolution` 仓库，用 DSPy + GEPA 离线读执行 trace 来纠偏。把这两个仓库放在一起看，才是 Hermes 真实的形状。
 
-## 问题 / 为什么这值得花时间
+---
 
-GitHub 上不缺 AI 助手项目。如果你只是想 "和 AI 聊天"，ChatGPT 网页版就够。所以一个 47k star 的项目要么真有不一样的东西，要么就是营销赢了。Hermes 属于前者，但 "不一样的东西" 被一堆 "90k star 最火自进化助手" 的标题稀释了。这篇只回答一个问题：**它到底 "自进化" 在哪，以及你应该不应该投入时间把它挂到自己服务器上长期用。**
+## 为什么这篇值得你花时间
+
+GitHub 上不缺 AI 助手项目。如果你只是想 "和 AI 聊天"，ChatGPT 网页版就够。所以一个能跑到 47k star 的项目要么真有不一样的东西，要么就是营销赢了。Hermes 大概率属于前者，但 "不一样的东西" 被一堆 "最强自进化助手" 的标题稀释了。你在搜引擎里能搜到几十篇 "Hermes Agent 完全指南"，多数读下来感觉是把 README 翻译了一遍，再叠一堆 "颠覆性"、"革命性" 的形容词。
+
+这篇不写那个。这篇只回答一个问题：**它到底 "自进化" 在哪，以及你应该不应该投入时间把它挂到自己服务器上长期用。** 答案不是简单的 "应该" 或 "不应该"，要看你要解决的是哪类问题，以及你能不能接受它现阶段的结构性短板。下面会把这两件事都讲清楚。
+
+读者预设写在文头了：入门到中级。你不一定写过 LLM 代码，但你得知道 "模型权重" 和 "提示词" 不是一回事，"向量数据库" 和 "Markdown 文件" 也不是一回事。后面所有判断都建立在这个前提上。
+
+---
 
 ## 一个类比先建立坐标系
 
-把三类东西摆一起：
+把三类东西摆一起比，star 数是没意义的，要先想清楚你要解决的是哪类问题：
 
-- **ChatGPT 网页版** = 你去咨询公司找人办事。每次换个人，对方不记得你上次说了啥。无状态。
-- **Claude Code / Cursor 这类 IDE Copilot** = 你雇了个坐你旁边写代码的人。能力集中在 "在你电脑上、当下、写代码"。
+- **ChatGPT 网页版** = 你去咨询公司找人办事。每次换个人，对方不记得你上次说了啥。你说的每一句话只在那一次对话里有意义。无状态。
+- **Claude Code / Cursor 这类 IDE Copilot** = 你雇了个坐你旁边写代码的人。能力集中在 "在你电脑上、当下、写代码" 这件事。下班（关掉 IDE）就走了。
 - **Hermes** = 你雇了个长期助理，常驻在服务器上 24/7。你不打开终端也能从 Telegram 找它。关键是它每次处理完事情会记笔记，越用越知道你喜欢事情怎么办。
 
-这三个不是同一物种。ChatGPT 是无状态聊天，IDE Copilot 是绑在编辑器里的高能会话，Hermes 是常驻的有状态助手。把它们放一起比 star 数没意义，要先想清楚你要解决的是哪类问题。
+这三个不是同一物种。ChatGPT 是无状态聊天，IDE Copilot 是绑在编辑器里的高能会话，Hermes 是常驻的有状态助手。
+
+用 12 岁能听懂的话再说一遍：ChatGPT 像你每天换一个新家教，每次都要从头讲你哪里不会；IDE 里的 Copilot 像你写作业时旁边坐着的同学，你写完作业他就回家了；Hermes 像一个跟你上了三年学的同桌，知道你一元二次方程总是忘步骤，看到你做这道题会主动把步骤卡给你看，因为他三年里记下来了。
+
+这个 "同桌记了三年笔记" 的部分，就是 Hermes 想做的事。它能不能真做到，做到的代价是什么，是后面 24 篇要拆的事。这篇先把整体形状给你。
+
+### 同一件事，三类助手各自会怎么做
+
+为了让上面的类比落地，我们用同一个任务跑一遍："每天早上 7 点，把 Hacker News 头条抓 5 条，配上 30 字中文摘要，发到我的 Telegram"。
+
+- **ChatGPT 网页版**：你每次都得自己去 HN 复制链接、粘到 ChatGPT、让它翻译、再手动转发到 Telegram。它不会主动跑，不会记得你昨天要过这个，明天你还得再来一遍。无状态。
+- **Claude Code / Cursor**：能在 IDE 里写一个 Python 脚本干这件事，配 cron 由系统调度。但它写完脚本就完事了，跑出来的结果不会进它的记忆，下次你让它改摘要风格，它不记得上次写过啥。绑在编辑器里、当下、写代码。
+- **Hermes**：你跟它说一次 "每天早 7 点抓 HN 头条 5 条、30 字中文摘要、发我 Telegram"。它自己写 cron 任务、自己注册到 gateway、到点自己跑、自己发。跑了三天你觉得摘要太长，跟它说 "改成 20 字"，它改 cron 任务的 skill 文件、第二天就生效。跑了十次之后，它可能注意到你每次都点开 AI 类的那条、跳过 Crypto 类，自己写一条 `USER.md` 记 "用户偏好 AI 类内容、跳过 Crypto"，下次摘要排序就把 AI 那条放前面。这个 "我自己注意到你点啥、自己写进画像" 的部分，是 Hermes 区别于前两类的核心。
+
+最后一段那个 "它自己注意到、自己写进画像" 的机制，官方叫 **periodic nudge（周期性提醒）**——在会话过程中按固定间隔给 agent 注入一条系统级提示，让它回头看刚才发生了什么、有没有值得持久化的东西。这个 nudge 不需要你触发，agent 自己跑。这就是它和 "你手动让 ChatGPT 记笔记" 的本质区别——它自己决定记什么。
+
+不过这里又有个坑：**agent 自己决定记什么 = agent 可能记错。** 它觉得你跳过 Crypto 是因为不感兴趣，但实际可能只是你那天没空看。这个偏见会被写进 `USER.md`，影响后续决策。这就是后面要讲的 "self-congratulation" 和 "memory poisoning" 的入口。先把整体形状记住，细节后面拆。
+
+---
 
 ## "Self-improving" 到底什么意思：拆开 learning loop
 
-这是 Hermes 的核心卖点，也是最容易吹牛的地方。先说结论：**它不是模型权重在变，是它积累的 "操作手册" 在变厚。**
+这是 Hermes 的核心卖点，也是最容易吹牛的地方。先说结论：**它不是模型权重在变，是它积累的 "操作手册" 在变厚。** 你如果期待的是模型本身在重新训练自己变得更聪明，那不是这回事；如果期待的是它把你反复教的那些事记下来不再忘，那是对的。
 
-机制分两个循环：
+机制分两个循环，加上一个跑在运行时之外的纠偏循环。下面分别拆。
 
-**第一循环：skill 创建和使用中修补**
+### 第一循环：skill 的创建、加载和使用中修补
 
-- 你让它干了一件复杂的事（比如 "把这份周报整理成飞书表格发给老板"）
-- 它通过试错搞定了
-- 当**同样的模式在 2 个以上会话里出现**，learning loop 触发，把这套解法写成一个 skill——就是一个 Markdown 文件，存在 `~/.hermes/skills/` 下
-- 下次遇到类似请求，它先翻自己的 skill 库
-- 如果某个 skill 在使用时被发现过时或错了，会被就地打补丁（patched during use）
+具体什么时候触发 skill 创建？官方文档和 mranand 的拆解里写得很明确，触发条件是这几个之一：
 
-**第二循环：后台 Curator 整理**
+- 任务里调用了 **5 次以上工具**（tool calls）
+- 中途从错误里恢复过（recovery from an error）
+- 你纠正过它（user correction）
+- 走通了一条不直观但有效的工作流（a non-obvious workflow that worked）
 
-- 后台跑个 Curator 进程，定期给 skill 打分：被看过几次、用过几次、打过几次补丁
-- 长期不用的归档
+注意第一个数字：5 次工具调用。这是个有意设置的阈值，目的就是把 "翻译一句话" 这种简单请求过滤掉，只在有点复杂度的事情上才动笔。一旦触发，它就往 `~/.hermes/skills/` 下写一个 Markdown 文件，结构是 agentskills.io 这个开放标准——开头一段 YAML front matter（`name`、`description`、`version`、`platforms`、`metadata`），后面是步骤说明、要调的工具、要读写的文件。
+
+加载策略也值得讲清楚，因为它直接决定你的 token 账单。Hermes 用的是 **progressive disclosure（渐进式披露）**：默认情况下系统提示里只放技能的名字和一行短描述，**完整内容只有在 agent 判定它和当前任务相关时才加载**。这意味着 200 个技能的实例和 40 个技能的实例在大部分对话里付出的上下文成本差不多。这是个被低估的设计——大部分 agent 项目的上下文成本会随技能数线性增长，Hermes 不会。
+
+skill 写完不是死的。下次它用这个 skill 时发现某一步过时了或者错了，会就地打补丁。具体补丁怎么打？通过 `skill_manage` 这个工具，支持六种操作：`create`、`patch`、`edit`、`delete`、`write_file`、`remove_file`。默认走 `patch`，意思就是只传 "旧字符串 + 新字符串" 这一对，而不是把整个 skill 重写一遍。这又是一个有意识的设计选择——完整重写有风险把本来对的部分也改坏，patch 只动真正变了的那段，而且 token 成本低。把 patch 和 edit 区分清楚，是这个项目工程上的一个细节诚意。
+
+整理成 ASCII 图就是：
+
+```
+       你让它干一件复杂事（≥5 工具调用 / 出过错 / 你纠正过）
+                       │
+                       ▼
+               ┌──────────────────┐
+               │  走通了，触发检查  │
+               └──────────────────┘
+                       │
+            ┌──────────┴──────────┐
+            ▼                     ▼
+     写新 skill 文件          不写
+     (~/.hermes/skills/)     （一次性的就不记）
+            │
+            ▼
+   下次遇到类似问题
+            │
+            ▼
+   只加载名字 + 一行描述（progressive disclosure）
+            │
+            ▼
+   判定相关 → 拉完整内容
+            │
+            ▼
+   执行中发现某步错了？
+            │
+            ▼
+   skill_manage patch（只改那段，不动其他）
+```
+
+### 第二循环：后台 Curator 整理
+
+光让 skill 越写越多是不行的，会变成垃圾抽屉。Hermes 加了一个叫 **Curator** 的后台进程，定期给 skill 库做治理。Curator 的具体行为官方文档和 Level Up Coding 那篇里讲得比较细：
+
+- 给每个 skill 打分：被看过几次、用过几次、打过几次补丁
+- 长期不用的进入归档流程，状态机是 `active → stale → archived`
 - 内容重叠的合并
+- **关键安全阀**：Curator 永远不自动删除，最坏只是归档到一个可恢复的目录
+- Curator 只动 agent 自己写的 skill，**不碰 bundled（内置）和 hub 安装的 skill**
+- 用户可以 **pin** 关键 skill，把它们从归档候选里排除掉
 
-注意这里没有魔法。skill 就是 Markdown 文件。所谓的 "自进化" = 文件越来越多、越来越贴合你的工作习惯。如果你期待的是模型本身在重新训练自己变得更聪明，那不是这回事。
+"永不自动删除" 这个细节重要。它意味着哪怕 Curator 判断失误，你最坏也是去归档目录里把东西捞回来，不会真的丢东西。这是 Nous 团队对前文那个 "self-congratulation" 问题的让步——他们知道自动 grading 会出错，所以在最危险的删除动作上加了一道硬闸门。
 
-（进阶一点：Hermes 还有个独立的 Self-Evolution 模块，用 DSPy + GEPA 根据真实执行轨迹优化 skill 文本——不需要 GPU，只调 API。这是 skill 文本层面的优化，仍然不是模型权重。系列第 9 篇会专门拆。）
+需要强调一句：这里没有魔法。skill 就是 Markdown 文件，你能 `ls` 看到、能用 Neovim 打开改、能 git 版本化。所谓的 "自进化" = 文件越来越多、越来越贴合你的工作习惯。你期待的不是模型变强，是笔记本变厚。把这两件事分开，是这个项目所有营销话术的解码钥匙。
 
-## 它和 OpenClaw 是什么关系
+### 第三循环（容易被漏掉的）：Self-Evolution 离线纠偏
 
-很多人是从 OpenClaw 过来的（Hermes 提供 `hermes claw migrate` 一键迁移）。两者的真实差异：
+这里是 Hermes 设计里最容易被 README 忽略、但其实最重要的一块。Nous 还维护着第二个仓库 [`hermes-agent-self-evolution`](https://github.com/NousResearch/hermes-agent-self-evolution)。它的特点和前两个循环很不一样：
 
-- **OpenClaw**：多 agent、生产稳定、消息渠道多（25+）、有 fenced workspace。定位是 "你今天就能信任地丢进生产环境跑"。
-- **Hermes**：单个 persistent agent、分层记忆、主打自我改进。定位更偏 "长期陪你成长、可以拿来做实验"。
+- **跑在运行时之外**——不是 Hermes 启动时一起跑的，要你手动触发
+- 读的是 **执行 trace**（实际调过什么工具、返回了什么、重试过什么），不是 agent 对自己的评价
+- 跑 **DSPy + GEPA**（Genetic-Pareto Prompt Evolution，遗传-帕累托提示词进化）做提示词搜索
+- 不需要 GPU，只调 API
+- 提出的改动 **由人 review**，不自动 merge
 
-不是替代关系。有人在生产里两个都跑——OpenClaw 干多渠道自动化，Hermes 做长期个人助手。Reddit 上有个说法比较形象：Hermes 像是那个 "协调 OpenClaw 多个 agent" 的单点助手。这是用户视角，不是官方定位，但方向感是对的。
+为什么这个仓库存在？因为前两个循环有一个解决不了的问题：**agent 给自己打分时会偏袒自己**。它觉得自己几乎每次都做得不错，哪怕其实没有。这个偏见不是 bug，是大模型给自己同类做评估时的结构性特征——评估器和执行器共享同一组先验、同一组盲点。让 agent "评估自己做得好不好" 等于让它写一篇关于自己能力的连贯叙述，而大模型写关于自己能力的连贯叙述天生就偏向 "我做得不错"。
 
-## 五大支柱点名（每条后面有专文）
+把 trace 而不是 self-report 当输入，是这个纠偏循环的核心。trace 是外部记录，不会自我美化。Level Up Coding 那篇把这个设计选择叫做 "architectural confession"（架构上的坦白）——Nous 把 GEPA 拆出去单独成仓库，而不是塞进主运行时叫 "self-improvement v2"，就是在承认：**运行时内的循环没法给自己打分，打分必须发生在别处、用别的信号、按别的节奏。**
 
-只点名，不展开：
+### 用一个具体例子把三个循环串起来
 
-1. **闭环学习**——上面讲的 two loops，第 5 篇详拆
-2. **分层记忆**——persistent memory + agent 自己整理 + FTS5 搜历史会话 + Honcho 给你建用户画像，第 10-12 篇
-3. **多平台 Gateway**——一个进程同时接 Telegram/Discord/Slack/WhatsApp/Signal，跨平台对话连续，第 14 篇
-4. **定时任务**——内置 cron，自然语言定时，结果投递到任意平台，第 16 篇
-5. **子 agent 委派**——spawn 隔离子任务并行，RPC 把多步 pipeline 压成零上下文成本一轮，第 16 篇
+光讲机制有点抽象。假设你让 Hermes 干这件事："把我 Notion 里的会议笔记导出来，挑出所有 action item，转成 Linear 任务，按截止日期排好"。第一次跑，它可能这么走：
+
+1. 调 `notion_search` 工具搜会议笔记（**1 次工具调用**）
+2. 调 `browser_extract` 把内容拉出来（**2 次**）
+3. 让 LLM 从笔记里识别 action item（**3 次**）
+4. 调 `linear_create_task` 批量建任务（**4 次**）
+5. 中途 Linear API 报错，agent 重试并降级到分批创建（**5 次 + 从错误恢复**）
+6. 调 `linear_list` 按 due date 排序（**6 次**）
+
+到这里触发条件就齐了：**5 次以上工具调用 + 从错误恢复 + 走通了一条不直观但有效的工作流**。第一循环触发，agent 写一个 skill 文件 `~/.hermes/skills/productivity/notion-to-linear.md`，记录这套流程，包括 "Linear 批量创建会报错，要分批" 这个踩坑点。
+
+第二周你再让它干同样的事，它先翻 skill 库，发现名字匹配，拉完整内容，按 skill 走——但这次 Notion 改了字段名（`Action Items` 变成 `Action item`），skill 里写的字段匹配不到。**它在执行中发现 skill 过时**，调 `skill_manage patch` 改了那段匹配逻辑，这次跑通了。skill 被使用中修补了。
+
+跑了一个月，Curator（第二循环）扫 skill 库，发现 `notion-to-linear.md` 被看过 12 次、用过 8 次、打过 2 次补丁——分数很高，保持 active。还发现 agent 之前还写过 `notion-to-asana.md` 和 `notion-to-jira.md` 两个差不多的 skill——Curator 提议合并成一个 `notion-to-task-tracker.md`，把 Linear/Asana/Jira 三种后端的差异作为参数化分支。
+
+再过两个月，你发现 `notion-to-task-tracker.md` 跑出来的任务质量下降了——agent 把不该当 action item 的句子也挑进去了。你不知道是 Notion 笔记格式变了还是模型变了。这时候你手动跑 Self-Evolution（第三循环）：它读最近 50 次执行 trace，用 GEPA 搜索提示词变体，发现把 "识别 action item" 那段提示词加一句 "只挑以动词开头且带明确 owner 的句子" 能把准确率从 72% 提到 89%。它提议这个改动，你 review 后合进去。
+
+这就是三个循环各自干的事：第一循环写 skill、第二循环治理 skill 库、第三循环基于 trace 优化 skill 文本。**没有一个循环触碰模型权重。** 模型本身不变，变的是 skill 文件越来越多、越来越贴合你的工作习惯、提示词越来越准。这就是 "self-improving" 在 Hermes 语境下的真实含义。
+
+（系列第 9 篇会专门拆 Self-Evolution 怎么用，包括怎么读 trace、GEPA 的具体算法、人在 loop 里要做的事。这里只给直觉。）
+
+---
+
+## 它和 OpenClaw、Claude Code 是什么关系
+
+很多人是从 OpenClaw 听说 Hermes 的（Hermes 提供 `hermes claw migrate` 一键迁移命令）。三者经常被放一起对比，但放一起比 star 数没意义，要先看物种差异。
+
+**物种层面的差异：**
+
+| 维度 | Claude Code / Cursor | OpenClaw | Hermes |
+|---|---|---|---|
+| 形态 | IDE 里的高能会话 | 多 agent 控制平面 | 单个 persistent agent |
+| 上下文生命周期 | 一个 IDE 会话 | 跨会话但靠 hub 路由 | 跨会话且 agent 自己写笔记 |
+| 强项 | 当下写代码 | 多渠道、生产稳定 | 长期陪你成长 |
+| skill 来源 | 人写 | 人写 | agent 自己写 + 人写 + Hub |
+| 谁来评估 skill | 不评估 | 人评估 | agent 自评 + 离线 GEPA 纠偏 |
+| 适合的场景 | 坐在电脑前写代码 | 今天就上生产跑多渠道自动化 | 长期个人助手 + 做实验 |
+
+具体到 OpenClaw 和 Hermes 的差异，Turing Post 那篇对比写得比较准：**OpenClaw 走的是 control-plane-first**，技能靠人写，主打生产稳定、消息渠道多（25+）、有 fenced workspace；**Hermes 走的是 self-improving agent loop**，单 agent + 分层记忆 + 自我改进，定位更偏 "长期陪你成长、可以拿来做实验"。
+
+MindStudio 那篇三者对比的判断也 worth 引用一句：**Claude Code 是你桌前的日常编码工具，Hermes 和 OpenClaw 是 "always-on" 的常驻助手**。意思是你不会拿 Hermes 写一个 React 组件（那是 Claude Code 的活），但你会让 Hermes 每天早上 7 点帮你抓 HN 头条摘要发到 Telegram（这是常驻助手的活）。
+
+**不是替代关系。** 有人在生产里两个都跑——OpenClaw 干多渠道自动化，Hermes 做长期个人助手。Reddit 上 r/openclaw 有个说法比较形象：Hermes 像是那个 "协调 OpenClaw 多个 agent" 的单点助手。这是用户视角，不是官方定位，但方向感是对的。
+
+需要诚实标注一句：r/better_claw 上有人指出 Hermes 的 learning loop 在小规模（几百条记录）下工作良好，但规模上去之后基于关键词的检索会碰到挑战。这不是致命问题，但你拿它当 "永久记一切" 用之前要知道这个边界。
+
+### 一个常见误解：Hermes 不是 "更好的 Claude Code"
+
+很多人看完对比表会想 "那我干脆用 Hermes 写代码不就行了"。不行。Hermes 在 "当下、在你电脑上、写代码" 这件事上不会比 Claude Code 更好，原因是设计目标不一样：
+
+- Claude Code 的整个 UX 是为 "你在 IDE 里、光标在某一行、要改这段代码" 优化的，它有 LSP 集成、有 diff 预览、有文件树感知、有 IDE 的快捷键。
+- Hermes 没有 IDE 集成。它有 60+ 工具、能跑 shell、能 SSH 到远端服务器改代码，但它没有 "光标在这行" 这种上下文感知。它的 UX 是为 "你从 Telegram 发一句话、它在远端干活、把结果发回来" 优化的。
+
+所以正确的用法是 **两个都用**：Claude Code 干 IDE 里的编码，Hermes 干 "跨时间段、跨平台、需要长期记忆" 的事。MindStudio 那篇三者对比的判断是对的：**Claude Code 是 daily driver（日常司机），Hermes 是 always-on（常驻后台）。** 你不会拿 always-on 的助理去抢 daily driver 的活，反过来也是。
+
+### 部署形态：6 种 backend 的成本差异
+
+Hermes 的另一个被低估的设计是 terminal backend 抽象。同一个 agent，根据你选的 backend 跑在不同地方：
+
+| Backend | 跑在哪 | 何时计费 | 适合 |
+|---|---|---|---|
+| Local | 你的机器 | 0（电费） | 个人日常 |
+| Docker | 你机器上的容器 | 0（电费） | 隔离场景 |
+| SSH | 远端服务器 | 服务器月费 | 数据在远端的工作 |
+| Daytona | Serverless | 仅运行时计费，idle 几乎不花钱 | 不均匀的工作负载 |
+| Modal | Serverless | 同上 | 同上 |
+| Singularity | HPC 集群 | 集群成本 | 研究场景 |
+
+Daytona 和 Modal 这两个 serverless backend 是关键。意思是你的 Hermes 可以 24/7 待命、但只在你说 "干活" 时才真的烧钱。如果你用 Hermes 主要是每天早晚各说一次话、中间都不动它，serverless backend 的月成本可能是几美元，而不是一台一直开着的 VPS 的 20-40 美元。这是 "always-on 助手" 这个物种能成立的经济前提——没有 serverless，"24/7 跑着的 LLM agent" 对个人用户成本太高。第 19 篇会专门讲 backend 选择和成本核算。
+
+注意 Docker 模式下 Hermes 默认开启三个安全设置：只读根文件系统、降权（drop Linux capabilities）、命名空间隔离。这是架构级默认值，不是可选配置，意味着 agent 默认不能写到它的指定目录之外、不能提权。零 telemetry（不发任何东西到 Nous）同样是默认值，不是隐私开关。这两个默认值放在一起，是 Hermes 区别于很多商业 agent 平台的核心立场：**跑在你这、数据在你这、不回家报告**。第 20 篇会详讲 security。
+
+---
+
+## 五大支柱点名
+
+Hermes 官方把自己拆成五个支柱：**memory、skills、soul、crons、self-improving loop**。社区文章有时把 gateway 单独算一个支柱，这里采用官方的五分法，gateway 并进多平台能力里讲。下面只点名 + 一句话核心，不展开，每条后面有专文：
+
+1. **闭环学习（self-improving loop）**——上面讲的三个循环。skill 创建 + Curator 整理 + Self-Evolution 离线纠偏。系列第 5 篇详拆循环本身，第 9 篇详拆 Self-Evolution。
+2. **分层记忆（memory）**——四层结构，每层有明确的存储位置和读取时机：
+
+   | 层 | 文件/位置 | 何时读 | 用途 | 上限 |
+   |---|---|---|---|---|
+   | 1. always-on 事实 | `~/.hermes/memories/MEMORY.md` | 每个会话开始时注入系统提示 | 事实、偏好、教训 | 两文件合计 **3,575 字符** |
+   | 2. always-on 画像 | `~/.hermes/memories/USER.md` | 同上 | 关于你这个人是谁 | 同上 |
+   | 3. 会话存档 | SQLite + FTS5 索引 | agent 主动检索时按需拉 | 历史会话的 episodic memory | 无硬上限，按需检索 + LLM 摘要后注入 |
+   | 4. 被动用户建模 | Honcho（可选） | 跨会话被动积累 | 12 层身份的辩证建模 | 由 Honcho 管理 |
+
+   两个设计细节值得记住：第一，**3,575 字符的上限是故意的**，目的是逼 agent 做策展（curate）而不是堆砌——这是用约束换质量的设计选择，不是工程限制。第二，**对 `MEMORY.md` 和 `USER.md` 的修改不立即生效**，要到下一个会话才生效，避免会话中途 agent 自己改自己画像这种诡异行为。
+
+   "always-on" 和 "按需检索" 的边界也重要：always-on 文件占用每个会话的固定上下文，所以必须保持精简；按需检索的会话存档可以无限增长，因为只有相关时才进上下文。这个分离是 Hermes 不被 "记忆越多越贵越慢" 困住的关键。第 10-12 篇详拆。
+3. **多平台 Gateway（soul 关联，但能力上是独立支柱）**——一个 gateway 进程同时接 20+ 平台（CLI、Telegram、Discord、Slack、WhatsApp、Signal、Matrix、Mattermost、Email、SMS、DingTalk、Feishu、WeCom、Weixin、QQ Bot、Yuanbao、Teams、Google Chat 等），跨平台对话连续，因为 session 绑 ID 不绑平台。Telegram 还支持 Project Conversations（私聊 Topics），让你在一个 chat 里跑多个隔离的工作流，每个 topic 各自带自己的 skill 绑定和 session 上下文。Gateway 用 `hermes gateway` 启动后是常驻 system service，关掉终端它还在跑。第 13-14 篇详拆。
+4. **定时任务（crons）**——内置 cron，自然语言定时（"每天早 7 点抓 HN 头条发我 Telegram"），到点后 agent loop 跑任务，结果通过 gateway 投递到任意平台。crons 是 **agent task 的 first-class 调度**，跑的时候有完整的 memory 和 skill 访问权限——这跟 "用 crontab 调一个 Python 脚本、脚本里调 LLM API" 是两回事。后者每次调用都是无状态的，前者每次跑都能用上 agent 之前学到的 skill 和你建的用户画像。crons 定义存盘在 `cron/` 目录，由 gateway 的 cron ticking 模块触发。第 15 篇详拆。
+5. **子 agent 委派（delegation，灵魂层面的扩展）**——spawn 隔离子任务并行，`execute_code` 把多步 pipeline 压成单次推理调用，把多步推理成本压成一步。每个子 agent 有独立的 context，不会污染父会话。第 16 篇给端到端 recipes。
+
+外加一个跨切面的：**SOUL.md** 是 Hermes 的 "人格" 配置文件，定义默认语气、行为边界、拒绝策略。它不是第五个支柱，但是所有支柱共享的 "灵魂"。第 4 篇讲 config 和 context files 时会详拆。
+
+---
 
 ## 权衡：哪些人别上
 
-Hermes 现阶段有明显短板，不是所有人都该投入：
+Hermes 现阶段有明显短板，不是所有人都该投入。下面这些判断都附带具体来源，不是凭感觉：
 
-- **追求 "今天上生产、零惊喜"**：选 OpenClaw。Hermes 还在快速迭代，配置全靠手（CLAUDE.md、hooks、各平台 bot token），v0.9 的实测评价是 "配置负担很重"。
-- **用 Qwen 等部分模型**：社区反馈完成质量不稳。模型选择影响很大（第 19 篇会讲）。
-- **担心安全边界**：Hermes 的持久记忆有 "内存中毒" 风险——恶意或错误写入的记忆会影响后续决策，这块的安全边界讨论得不够。
-- **结构性问题（最重要）**：GitHub Issue #25833 提了个尖锐的批评——self-created skills 缺少机制层面的保证，因为 agent 同时充当作者、执行者和评审者，没有外部 ground truth。换句话说，"自我改进" 可能漂移——它觉得自己改对了，其实未必。Curator 能合并和归档，但 Curator 本身也是 agent。这不是 bug，是架构选择带来的固有张力。
+### 1. 追求 "今天上生产、零惊喜" → 选 OpenClaw
 
-这不是劝退。如果你接受 "它是个长期实验、会迭代、需要你参与调教"，那这个张力是可管理的。但你得知道它存在，别被 "self-improving" 四个字骗成 "它会自动越变越好"。
+Hermes 还在快速迭代（v0.9 是 2026 年 4 月的状态），配置全靠手。你要写 CLAUDE.md（项目记忆文件），写 hooks，配各平台的 bot token，配 model provider，配 tool gateway。heyuan110 那篇 v0.9 实测评价原话大意是 "配置负担很重"。如果你要的是 "今天装完今天就上生产、零意外"，OpenClaw 在这件事上更成熟——它有过 CVE 披露、有 fenced workspace、更新频繁但出 bug 的风险已知。Hermes 还没经过同等规模的生产检验。
 
-## 适合谁
+### 2. 用 Qwen 等部分本地模型 → 完成质量不稳
 
-- 想要个常驻、自己掌控、能从 Telegram 随时叫到的个人助手
-- 接受手配置、愿意参与调教 skill
-- 不指望零维护上生产
-- 对 AI agent 的边界有现实预期
+社区反馈在这里比较一致，但有重要的细分：
+
+- **Nous 官方的态度**：Hacker News 上有用户引用 Nous Research 自己的人的话，说 **"Qwen3.6-27B 是跑 Hermes 的标杆（canonical）本地模型"**。这是官方推荐的下限。
+- **低于这个量级的反馈较差**：r/hermesagent 上有人跑 Qwen 3.5 9B，原话是 "experiences many hallucinations"（幻觉很多），memory/skill 功能不可靠。
+- **资源消耗**：r/hermesagent 有人 在 M1 Max 64GB 上跑 Qwen 3.6 27B 8-bit，原话是 "quickly consumes too much RAM"（快速吃掉太多内存）。r/LocalLLaMA 上有人讨论 35B 在 16GB VRAM 下的量化选择，普遍反映 VRAM 很紧。
+- **微调建议**：r/LocalLLaMA 有帖建议 Qwen 3.6 35B A3B q4 跑 agent 时调高 presence penalty、保持低温，能缓解 agent loop 卡死的问题。
+- **集成 bug**：GitHub Issue #30436 报告 Qwen 通过 NVIDIA NIM 调用时把 response 放错字段，导致 Hermes "treat the response as empty"（把响应当空处理）。这是集成层 bug，不是模型本身问题，但你要踩到的话得自己 debug。
+
+总结：用本地模型跑 Hermes，**27B 是个实务下限**，再往下体验会快速劣化。用 Hermes-4-405B 这种官方推荐模型或者 Claude / GPT 系 API 体验最好。第 18-19 篇会专门讲模型选择和成本。
+
+### 3. 担心安全边界 → 内存中毒是真实风险
+
+Hacker News 在讨论 Hermes 的 `/learn from anything` 功能时，最高赞评论之一直接点出了这个问题，原话大意是 **"memory layer effectively becomes part of the attack surface"**（记忆层事实上变成了攻击面的一部分）。意思是：如果对手能让 Hermes 学到一条恶意或错误的记忆（比如通过一封钓鱼邮件、一个被污染的网页内容、一条注入过指令的消息），这条记忆会持久存在，影响它未来的决策。这就是 **memory poisoning（内存中毒）**。
+
+Hermes 的设计里 `MEMORY.md` 和 `USER.md` 加起来字符上限只有 3,575，是有意逼 agent 做策展。但 "逼它筛" 不等于 "筛得对"——agent 决定写什么进去时同样有 self-congratulation 偏见，它觉得值得记的东西未必真值得记。第 20 篇会专门讲 security、command approval、DM pairing 这块的安全边界。
+
+### 4. 结构性问题（最重要）→ Issue #25833
+
+这是这篇最想讲清楚的一点。GitHub Issue [#25833](https://github.com/NousResearch/hermes-agent/issues/25833) 标题就是 **"Self-created skills lack mechanism-level guarantees for correctness"**（自创建的 skill 缺少机制层面的正确性保证）。核心批评：
+
+> Hermes Agent 的 skill 自动创建系统有一个结构性缺陷：agent 同时充当自己技能的 **作者（author）**、**执行器（executor）** 和 **质量评审（reviewer）**，没有独立验证机制，制造了利益冲突和自我强化错误的可能性。
+
+翻译成大白话：它写 skill、它用 skill、它评价 skill 写得对不对，全是它一个。**没有外部 ground truth。** "自我改进" 可能漂移——它觉得自己改对了，其实未必。Curator 能合并和归档，但 Curator 本身也是 agent，同样有这个偏见。
+
+这不是 bug，是架构选择带来的固有张力。Level Up Coding 那篇把这个张力讲得很透：Naur 的 "Programming as Theory Building" 和 Polanyi 的 "tacit knowledge" 都预测了这件事——agent 积累的是 artifact（文件），不是 theory（为什么这个文件长这样）。让 LLM 蒸馏自己的 tacit competence 成 explicit grade，得到的不是一个客观的 grade，是一段关于自己能力的连贯叙述，而这种叙述天生偏向 "我做得不错"。
+
+具体表现成什么样？社区已经观察到几个症状：
+
+- **从失败的轨迹创建 skill**：agent 跑失败了，但它的 self-evaluation 还是给了一个 "这次学到了东西" 的正面叙述，于是把失败路径也写成了 skill。
+- **patch 把对的逻辑改成错的**：agent 用 skill 时发现某步不工作，它归因于 skill 写错了，于是 patch。但有时候是模型本身的推理错了，不是 skill 错了。patch 之后真的对的逻辑被替换成模型当下偏好的（更糟的）版本。
+- **覆盖用户的手动定制**：你手动写了一个 skill 文件，agent 后续用的时候觉得 "这个可以优化"，patch 了你写的版本。你写的版本是你这个领域专家知识的体现，agent 改成的版本是它自我评估觉得更好的——往往更平庸。这是用户最常投诉的一类。
+
+Curator 的设计（永不自动删除、可 pin、状态机归档而不是销毁）部分缓解了第一个症状——失败 skill 即便写错了，至少不会丢东西，你能恢复。但第二和第三个症状 Curator 解决不了，因为 Curator 自己也是 agent，跟 author 共享同一组偏见。要真正解决，得靠第三循环（Self-Evolution），而那个要你手动触发。
+
+**Nous 团队对这个问题是诚实的。** 他们的诚实体现在两件事上：第一，他们公开留着 Issue #25833 不删；第二，他们把 `hermes-agent-self-evolution` 单独成仓，用基于 trace 的离线评估来纠偏，而不是假装运行时内的循环能自我纠错。这两件事加起来，比任何 "self-improving" 的营销词都更有说服力。但你作为使用者要知道：**这个纠偏循环要你手动触发**，默认是不跑的。你装完 Hermes 就放着不管，它不会自动变好，只会按它自己的偏见积累 skill。
+
+### 5. 关于 "Nous 删评论" 的争议 → 我没找到实锤
+
+研究过程里我专门搜了 HackerNews 上 "Hermes Agent" + "Nous Research" + "deleted comments controversy" 的组合，没找到确凿的 "Nous 在 HN 删负面评论" 的具体事件。搜到的最相关 HN 帖是关于 `HERMES.md` 出现在 commit message 里会导致请求被路由到额外地址的讨论（item 47952722），但那不是删评论争议。如果你看到过具体来源，欢迎在 GitHub issue 里告诉我，我会在后续修订里补上。**诚实比面子重要。**
+
+---
+
+## 适合谁 / 不适合谁
+
+把上面整合成具体判断标准：
+
+**适合 Hermes 的人：**
+
+- 想要个常驻、自己掌控、能从 Telegram 随时叫到的个人助手（不是 IDE 里的编码助手）
+- 接受手配置（写 CLAUDE.md、配 hooks、配 bot token、配 model provider）、愿意参与调教 skill
+- 不指望零维护上生产，能接受 v0.x 阶段的迭代节奏
+- 对 AI agent 的边界有现实预期，知道 "self-improving" 是笔记本变厚不是大脑变强
+- 愿意定期手动跑 Self-Evolution 离线评估，或者至少 review Curator 提议的合并
+- 用 Hermes-4 系列或者 Claude / GPT 系 API，不用太弱的本地模型
+
+**不适合 Hermes 的人：**
+
+- 要今天就上生产、跑多渠道自动化、零惊喜的——选 OpenClaw
+- 主要需求是写代码的——选 Claude Code 或 Cursor
+- 期望 "装一次以后再也不用管" 的——Hermes 不是这个物种
+- 担心安全边界、不能接受内存中毒风险的——等到第 20 篇我们讲完 security 再决定
+- 算力只够跑 9B 以下本地模型的——体验会很差，要么换 API 要么放弃
+
+---
+
+## 几个常被问到的问题
+
+**Q: Hermes 会重新训练模型让自己变聪明吗？**
+A: 不会。"self-improving" 指的是 skill 文件（Markdown）变多变贴合你的工作习惯，不是模型权重变化。模型权重是不动的。如果你想让模型本身更懂你的领域，那是另一条路（用 Nebius Token Factory 之类的服务拿 Hermes session 数据做微调），不是 Hermes 默认行为。
+
+**Q: 那它和 "记笔记的 ChatGPT"（比如 Custom GPTs + 知识库）有啥本质区别？**
+A: 三个区别。第一，Hermes 是 agent，能调 60+ 工具（执行 shell、搜网、生图、调 MCP 服务器），不只是检索知识库回答问题。第二，它的记忆是分层的（always-on 文件 + 按需检索的会话存档 + Honcho 被动建模），不是单一 RAG。第三，它能在跨平台间连续对话（Telegram 上没说完的事到 CLI 接着说），Custom GPTs 做不到。
+
+**Q: 47k star 是怎么来的？真有这么多人在用吗？**
+A: GitHub trending 数据显示 Hermes 在 2026 年 4 月一周内涨了约 53k star，是当时 #1 trending repo。这个数字里肯定有跟星成分（开源项目的 star 数和实际使用人数从来不是一回事）。但 r/LocalLLaMA、r/hermesagent、HN 上的活跃讨论表明有相当数量的真实用户在做实测。把它当 "热门项目" 看待，不要当 "经过大规模生产检验的成熟项目" 看待。
+
+**Q: 我能把生产环境的数据交给它吗？**
+A: 看你怎么配。Hermes 默认零 telemetry（不发送任何东西到 Nous），跑在你自己机器/服务器上。但如果你接了 Nous Portal 或者用 OpenRouter 之类的 API，对话内容会过这些 provider。Docker 模式下默认是只读根文件系统 + 降权 + 命名空间隔离。安全边界第 20 篇详讲，简单结论：可以，但要按规范配，不要裸跑。
+
+**Q: 升级会破坏我现有的 skill 和 memory 吗？**
+A: 不会动你的 `~/.hermes/` 目录（那是用户数据），但 bundled skill 在升级时会被刷新（你改过的会被覆盖，除非你 pin 住）。备份和迁移第 21 篇详讲。
+
+---
+
+## 关于 "self-improving" 这个词
+
+最后讲一个语言层面的事。"self-improving" 在英文里是个有歧义的词。它可以指：
+
+1. 一个系统在不依赖外部干预的情况下变得更好（强意义，接近 AGI 营销）
+2. 一个系统在自己内部积累资源、让自己在未来类似任务上表现更好（弱意义，务实）
+
+Hermes 用的是弱意义。它的 "self" 里有 "you"——你需要 pin skill、改 Curator 判断错的地方、手动跑 Self-Evolution、review GEPA 提议的改动。把它丢着不管，它会按自己的偏见积累；你参与调教，它才会真的往你想要的方向变。Level Up Coding 那篇的结尾说得比营销词准确得多：
+
+> Hermes does not grow on its own. It grows in the presence of a user who pins the skills they care about, edits the ones the Curator gets wrong, runs GEPA when the inner loop starts to drift, and reviews what the offline pipeline proposes before merging.
+
+把这句话记住，比记住所有 "自进化" 的形容词都重要。
+
+---
 
 ## 结论
 
-Hermes 的真实价值不是 "它比你聪明"，是 "它比你耐心"——它把你反复教的那些事写成 skill 不再忘。"自进化" 要打折听：笔记本变厚不等于大脑变强。如果你清楚自己要的是前者，且能接受它现阶段的结构性短板，这是个值得长期投入的方向。本系列后面会逐一拆机制、做实战、给评测。
+Hermes 的真实价值不是 "它比你聪明"，是 **"它比你耐心"**——它把你反复教的那些事写成 skill 不再忘。"自进化" 要打折听：笔记本变厚不等于大脑变强。如果你清楚自己要的是前者，且能接受它现阶段的结构性短板（author=executor=reviewer、内存中毒风险、配置全手动、本地模型有量级下限），这是个值得长期投入的方向。
+
+它最大的诚实不在 README 里，在两个地方：**Issue #25833 公开挂着不删**，和 **`hermes-agent-self-evolution` 单独成仓**。这两件事放在一起，比任何营销词都更能说明 Nous 团队对自己产品的边界是清楚的。你清楚了边界，就能从 Hermes 里拿到价值；你被 "self-improving" 四个字骗成 "它会自动越变越好"，就会在某个时刻发现积累的 skill 已经漂移到不可信。
+
+本系列后面 24 篇会逐一拆机制、做实战、给评测、讲踩坑。如果你看完这篇觉得 "这不是我要的"，那是这篇写对了——帮你省下 24 篇的时间也是贡献。如果你看完觉得 "好，我要上"，下一篇《02-getting-started-60-minutes》会带你 60 分钟跑起来一个能从 Telegram 聊的实例。
+
+---
 
 ## 延伸阅读
 
-- [Hermes Agent 官方文档](https://hermes-agent.nousresearch.com/docs/)
-- [NousResearch/hermes-agent（GitHub）](https://github.com/NousResearch/hermes-agent)
-- [The Two Loops of Hermes Agent（Level Up Coding）](https://levelup.gitconnected.com/the-two-loops-of-hermes-agent-33922ba8d154)
-- [Inside Hermes Agent（mranand Substack）](https://mranand.substack.com/p/inside-hermes-agent-how-a-self-improving)
-- [OpenClaw vs Hermes（Reddit r/openclaw）](https://www.reddit.com/r/openclaw/comments/1swc620/openclaw_vs_hermes/)
-- [GitHub Issue #25833 — self-created skills 的结构性批评](https://github.com/NousResearch/hermes-agent/issues/25833)
+研究和写作这篇时参考过的源（按类型分组）：
+
+**官方**
+
+- [Hermes Agent 官方文档](https://hermes-agent.nousresearch.com/docs/) — 含 `/llms.txt` 机器可读索引
+- [NousResearch/hermes-agent（GitHub 主仓）](https://github.com/NousResearch/hermes-agent)
+- [NousResearch/hermes-agent-self-evolution（Self-Evolution 离线纠偏仓）](https://github.com/NousResearch/hermes-agent-self-evolution)
+- [GitHub Issue #25833 — Self-created skills 缺少机制层面的正确性保证](https://github.com/NousResearch/hermes-agent/issues/25833)
+
+**深度拆解**
+
+- [The Two Loops of Hermes Agent — Daniel Braz（Level Up Coding）](https://levelup.gitconnected.com/the-two-loops-of-hermes-agent-33922ba8d154) — 把双循环 + GEPA 的架构含义讲得最透的一篇
+- [Inside Hermes Agent — mranand Substack](https://mranand.substack.com/p/inside-hermes-agent-how-a-self-improving) — 机制层面的拆解，含 4 层记忆、gateway、agent loop 内部
+- [Hermes Agent's 5-Pillar Architecture — MindStudio](https://www.mindstudio.ai/blog/hermes-agent-5-pillar-architecture-memory-skills-soul-crons)
+
+**对比**
+
+- [Hermes Agent vs OpenClaw — Turing Post](https://www.turingpost.com/p/hermes)
+- [Hermes Agent vs Claude Code vs OpenClaw — MindStudio](https://www.mindstudio.ai/blog/hermes-agent-vs-claude-code-vs-openclaw-which-self-improving-ai-agent-right-for-workflow)
+- [Hermes vs OpenClaw — Reddit r/openclaw](https://www.reddit.com/r/openclaw/comments/1swc620/openclaw_vs_hermes/)
+
+**实测与社区反馈**
+
+- [Hermes Agent v0.9 Review（2026-04，$5 Hetzner VPS 实测）](https://www.heyuan110.com/posts/ai/2026-04-14-hermes-agent-guide/)
+- [r/hermesagent: Anyone actually getting the agent parts (memory, skills) to work?](https://www.reddit.com/r/hermesagent/comments/1ue6k2q/anyone_actually_getting_the_agent_parts_memory/) — Qwen 3.5 9B 幻觉反馈
+- [r/LocalLLaMA: Anybody who tried Hermes-Agent?](https://www.reddit.com/r/LocalLLaMA/comments/1ro9lph/anybody_who_tried_hermesagent/) — VRAM 限制讨论
+- [HackerNews: Hermes Agent /learn from anything 讨论](https://news.ycombinator.com/item?id=48653666) — 内存中毒作为攻击面的原始讨论
+- [HackerNews: Qwen3.6-27B 是 canonical 本地模型](https://news.ycombinator.com/item?id=48558426) — Nous 官方对模型下限的态度

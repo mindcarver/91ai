@@ -25,69 +25,676 @@
 
 > 系列第 2 篇 · 读者预设：决定试一试、想把 Hermes 跑起来的人 · 最后核实：2026-07
 
-**TL;DR：** 一条命令装好（自带 uv、Python 3.11、Node、ripgrep、ffmpeg、MinGit），`hermes setup` 走完向导，`hermes model` 选模型，`hermes gateway` 接上 Telegram。MVP 就这三步。最容易卡的是 Windows 上 uv 被杀毒误删、模型 key 凑不齐——这俩下面单独讲。
+**TL;DR：** 一条命令装好（自带 uv、Python 3.11、Node.js v22、ripgrep、ffmpeg、PortableGit），`hermes setup` 走完向导，`hermes model` 选模型，`hermes gateway` 接上 Telegram。MVP 就这三步，60 分钟内能跑通。最容易卡的两个点都在安装之外：Windows 上 uv.exe 被杀毒误删（这是反复出现的真问题，astral-sh/uv 上挂着一串 issue），以及模型 key 凑不齐。这两个下面单独讲，附上具体怎么验证、怎么绕。
 
-## 安装：一条命令，但要看清它装了什么
+读者标注：本篇面向**入门读者**——你不需要懂 Python venv 怎么手动建，不需要先读过我写的第 1 篇理论铺垫。但你要会用一行命令装东西、会进 PowerShell 或 bash。如果你已经写过 Docker Compose、配过 Ollama，这篇对你太基础，跳到第 4 篇（配置与上下文文件）和第 13 篇（消息网关）。
 
-Linux / macOS / WSL2 / Termux：
+这篇的目标很窄：**让你 60 分钟内跑通一条端到端链路**——本地终端能对话 + Telegram 手机能找到。窄是有意的。Hermes 是个需要长期使用才有回报的工具（它的"自进化"靠积累，详见第 1 篇），所以你尽早判断"这东西在我机器上能不能跑、值不值得继续投入"比"立刻把所有功能都配齐"重要得多。把 60 分钟 MVP 当成一个**决策工具**，不是终点。跑通之后你心里有数了，再决定要不要往深里配。
+
+## 我们要装出什么：成功的样子
+
+先讲清楚 60 分钟后你的机器上应该多了什么、能干什么。否则装到一半你会怀疑自己在干嘛。
+
+成功的最小定义是两条链路都通：
+
+1. **本地 CLI 能对话**——你在终端敲 `hermes`，进交互界面，问它 "我这个目录里有什么文件"，它能列出文件、读文件、跑命令。
+2. **Telegram 能找得到它**——你在手机上给自己建一个 bot，发条消息，Hermes 在你服务器上收到并回复。
+
+做到这两条，你就有了判断 Hermes 值不值得继续投入的实感。剩下那些 24/7 挂着跑、定时任务、多平台、skill 自我进化（第 5-9 篇）、记忆层（第 10-12 篇）都是在这条骨架上加肉。骨架不通就先别加。
+
+60 分钟的时间预算大致这样切：
+
+- 安装（10-15 分钟，Windows 上若被杀毒拦可能拖到 30 分钟）
+- setup 向导（5 分钟）
+- 选模型（10 分钟，Portal 走 OAuth 几乎瞬时，自带 key 看你找 key 的速度）
+- 接 Telegram（10 分钟，主要是去 BotFather 走流程）
+- 跑通验证 + 处理踩坑（剩余时间）
+
+下面按这个顺序展开。
+
+## 前置条件：你只需要这些
+
+Hermes 的安装脚本会自己装齐 Python、Node、ripgrep、ffmpeg 这些依赖，你不用提前装。你需要确认的只有这些：
+
+**所有平台：**
+
+- 一个能联网的终端（bash / zsh / PowerShell / Windows Terminal 都行）
+- 系统里有 `git`（`git --version` 能出版本号）。如果没有：macOS 装 Xcode Command Line Tools；Linux `apt install git` / `dnf install git`；Windows 装好 Git for Windows 或者干脆什么都不装，Hermes 会拉一个便携版 PortableGit 给你
+- 一个能用的 LLM key 或者愿意登 Nous Portal（下面"选模型"那一节细讲）
+
+**Linux 额外：**
+
+- `curl` 和 `xz-utils`（`sudo apt install curl xz-utils`，因为 Node 是当 `.tar.xz` 下载的）
+- 如果要装桌面 app：`build-essential`（`sudo apt install build-essential`，编译原生模块用）
+
+**Windows 原生：**
+
+- Windows 10 或 Windows 11
+- 不需要管理员权限，安装脚本走 user PATH
+- 不需要预先装 Python、Node、Git——脚本会处理
+- 如果你装过系统级 Git，脚本会用现有的；没有的话脚本会拉一个 PortableGit 解压到 `%LOCALAPPDATA%\hermes\git`
+
+**Termux（Android）：**
+
+- 装好 Termux app（F-Droid 版本，Play Store 版本已废弃且版本过旧）
+- 大约 1.5GB 可用空间（要装编译工具链 + Python + Node）
+- 知道自己在干什么——Termux 是 Tier 2 平台，官方"best-effort"维护，下面的"Termux 限制"那节单独讲
+
+不需要的：管理员权限（除 root 模式安装）、Docker（除非你想后续切 Docker 终端后端）、GPU（除非你后面想接本地 Ollama）。
+
+## 第一步：安装——一条命令，但要清楚它装了什么
+
+### Linux / macOS / WSL2 / Termux
 
 ```bash
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-Windows 原生（PowerShell，不需要 WSL）：
+不想 `curl | bash` 的话，等价路径是 clone 仓库再跑脚本：
+
+```bash
+git clone https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+./scripts/install.sh
+```
+
+### Windows 原生（PowerShell，不需要 WSL）
+
+打开 PowerShell 或 Windows Terminal，跑：
 
 ```powershell
 iex (irm https://hermes-agent.nousresearch.com/install.ps1)
 ```
 
-装的东西比你以为的多：uv（Rust 的 Python 包管理）、Python 3.11、Node.js、ripgrep、ffmpeg，外加一个便携版 Git Bash（MinGit，解压到 `%LOCALAPPDATA%\hermes\git`，不污染系统 Git，不需要管理员权限）。装完 `source ~/.bashrc` 重载 shell，敲 `hermes` 进交互界面。
+等价直链形式（指向 GitHub raw 上的脚本，更便于审计）：
 
-## 第一步：跑通 CLI 第一句对话
+```powershell
+iex (irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1)
+```
+
+注意两种写法的差异：`irm | iex` 这条管道会自动剥掉传输过程中带的 UTF-8 BOM；如果改用 `[scriptblock]::Create((irm ...))` 这种带参数的形式，下载到 BOM 会报 `The assignment expression is not valid`。所以**默认就用 `iex (irm ...)`，别瞎换写法**，除非你要传 `-Branch` / `-Commit` / `-Tag` / `-SkipSetup` 这些参数。
+
+需要传参数时的标准写法：
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1))) -SkipSetup -Branch main
+```
+
+参数表（用得上的几个）：
+
+| 参数 | 默认值 | 用途 |
+| --- | --- | --- |
+| `-Branch` | `main` | 装某个分支，测 PR 时有用 |
+| `-Commit` | 不设 | 钉死在某个 commit SHA |
+| `-Tag` | 不设 | 钉死在某个 git tag（如 `v0.14.0`） |
+| `-SkipSetup` | off | 跳过装完自动跑的 setup 向导 |
+| `-HermesHome` | `%LOCALAPPDATA%\hermes` | 改数据目录位置 |
+
+### 装的东西比你想象的多：一个类比先建立坐标系
+
+如果你装过 Python 项目，可能踩过这样的坑：项目 A 要 Python 3.10、项目 B 要 3.12、系统的 Python 被你升级到 3.13 之后某个全局工具坏了、虚拟环境建了十几个但不知道哪个是谁的。Hermes 的安装器在做的事，本质上就是**绕开这套烂账**。
+
+类比一下：传统 Python 应用让你自己去管 Python 版本、依赖、虚拟环境，就像租房时房东让你自己接水管、拉电线。Hermes 的安装器更像**精装修交付**——它自带一个独立的 Python 3.11（通过 uv 装，不碰系统 Python）、自带 Node.js（解压到自己的目录，不污染系统的 Node）、自带便携 Git（Windows 上解压到 `%LOCALAPPDATA%\hermes\git`，不动你系统里已有的 Git），整个 Hermes 像个自给自足的小盒子塞进 `%LOCALAPPDATA%\hermes\` 或 `~/.hermes/`。你删掉这个目录，系统恢复原样，没有残留。
+
+理解这一点之后，下面这串"装了什么"看起来就不吓人了，因为它们都装在 Hermes 自己的目录里，互相不干扰：
+
+别被 "一行命令" 骗了，那条命令实际拉了一堆东西。提前心里有数，等下看到下载体积不会慌。
+
+按安装顺序：
+
+1. **uv**——Astral 写的 Rust Python 包管理器，装到 `%USERPROFILE%\.local\bin`（Windows）或 `~/.local/bin`（Unix）。Hermes 用它管理自己的 Python 环境，更新也走它。
+2. **Python 3.11**——通过 uv 装，**不需要你预先装 Python**，也不要 sudo。这是为什么 Hermes 不污染系统 Python 的关键。
+3. **Node.js v22**——Windows 上 winget 有就用 winget，没有就拉一个便携 Node 解压到 `%LOCALAPPDATA%\hermes\node`。Linux/macOS 类似。Node 是给浏览器自动化工具和 WhatsApp bridge 用的。
+4. **便携 Git（PortableGit，约 45MB）**——只在你系统里没有 git 时才装。Windows 上解压到 `%LOCALAPPDATA%\hermes\git`，**不污染系统 Git**、不写注册表、不要管理员权限。这是 Hermes 设计上的细心之处：它假设你可能不想为一个测试性的工具动系统配置。
+5. **ripgrep**——快文件搜索，可选，没装就退回 grep。
+6. **ffmpeg**——音频格式转换，TTS 语音消息必备（Edge TTS 输出 MP3，发到 Telegram 要转 Opus 才能变成那种圆形语音气泡）。
+7. **Hermes 仓库本身** clone 到 `%LOCALAPPDATA%\hermes\hermes-agent\`（Windows）或 `~/.hermes/hermes-agent/`（Unix），里面建 venv。
+8. **Python 依赖**——Tiered 安装：先试 `.[all]`，失败就回退到 `[messaging,dashboard,ext]`，再不行 `[messaging]`，最后 `.`。这是为了避免 GitHub 限流时某个 `git+https` 依赖挂掉就把你摔到裸装。
+9. 装完会把 `hermes` 命令加到 **User PATH**（Windows）或 `~/.local/bin`（Unix）。
+
+### 装完后的数据布局
+
+| 平台 | 代码位置 | 数据目录 |
+| --- | --- | --- |
+| Linux / macOS（user 安装） | `~/.hermes/hermes-agent/` | `~/.hermes/` |
+| Linux（root 模式，`sudo curl … \| sudo bash`） | `/usr/local/lib/hermes-agent/` | `/root/.hermes/` 或 `$HERMES_HOME` |
+| Windows 原生 | `%LOCALAPPDATA%\hermes\hermes-agent\` | `%LOCALAPPDATA%\hermes\` |
+| WSL2 | `~/.hermes/hermes-agent/` | `~/.hermes/` |
+| Termux | `~/.hermes/hermes-agent/` | `~/.hermes/` |
+
+**关键提醒：Windows 原生装在 `%LOCALAPPDATA%\hermes`，WSL2 装在 `~/.hermes`，两套数据相互独立。** 你可以原生和 WSL 都装一份共存（官方明确支持），但配置不互通——你在 WSL 里登的 model 在原生侧看不到，反之亦然。**别混**。如果你最终决定用 WSL，原生侧的 `%LOCALAPPDATA%\hermes\hermes-agent\` 可以删掉（数据目录 `%LOCALAPPDATA%\hermes\` 里的 config/skills/sessions 也想清掉的话用 `hermes uninstall`，别直接 `Remove-Item -Recurse %LOCALAPPDATA%\hermes`——那会把数据一起带走）。
+
+### 安装过程中你会看到什么
+
+跑那条 curl 命令之后，终端会依次打印每个步骤。大致是这么个节奏（顺序和具体行数会随版本变，但骨架是这样）：
+
+第一步是装 uv。脚本会去 Astral 的 release 拉对应平台的 uv 二进制，几兆字节，几秒就完。Windows 上这步会去 `%USERPROFILE%\.local\bin`，Linux/macOS 去 `~/.local/bin`。**这一步是最容易被杀毒拦的**——uv.exe 落地的瞬间，Defender / Bitdefender 可能直接吞掉，脚本下一步就找不到 uv 了。如果你看到 uv 装完之后立刻报 "uv not found"，先去杀毒隔离区找。
+
+第二步是 uv 装 Python 3.11。这步会去 python.org 的 FTP 拉 CPython 3.11 的 standalone 构建（这些是 Astral 维护的 python-build-standalone，不依赖系统包管理器），约 30-40MB。装完之后 Hermes 的所有 Python 操作都跑在这个独立的 3.11 里，不碰你系统的 Python。
+
+第三步是 Node.js。脚本检测系统里有没有合适的 Node，没有就拉一个便携版本。Windows 上优先 winget，没有 winget 就直接下 portable Node 的 zip 解压。这步几十兆字节。
+
+第四步是 PortableGit（仅 Windows 且系统没 git 时）。从 git-for-windows 官方 release 拉一个 trimmed 的 MinGit，约 45MB，解压到 `%LOCALAPPDATA%\hermes\git`。**注意是 MinGit 不是完整 Git for Windows**，没有 GUI、没有 shell 集成，纯粹给 Hermes 当工具用。这里有个坑：MinGit 的 bash 在 `usr\bin\bash.exe`，跟完整 Git for Windows 的 `bin\bash.exe` 路径不一样，Hermes 会两个都查，但如果你手动解压 MinGit 别忘了挑**非 busybox 变体**（`MinGit-*-64-bit.zip` 而不是 `MinGit-*-busybox*.zip`），busybox 版本里是 ash 不是 bash，缺一堆 coreutils。
+
+第五步是 clone Hermes 仓库。这步如果遇到 GitHub 限流（特别是国内网络），脚本会自动重试几次。
+
+第六步是 Tiered install。先试 `.[all]`，失败回退，再失败再回退。这步最长，要拉几十甚至上百个 Python 包，看网络情况几分钟到十几分钟。
+
+第七步是 setup 向导自动启动（除非你 `-SkipSetup`）。这步是交互的，问你 model、tool、gateway 这些。
+
+整个过程在好网络上 5-8 分钟，慢网络上 20 分钟也正常。卡住超过 30 分钟基本是网络或杀毒问题，不是 Hermes 本身慢。
+
+### 装完一定要做的两件事
 
 ```bash
-hermes            # 进交互 CLI
+source ~/.bashrc      # Linux/macOS/WSL2/Termux
+# 或：
+source ~/.zshrc
+```
+
+Windows 上**关掉当前 PowerShell 窗口，重开一个**。`$env:PATH += ...` 这种手动改只对当前进程有效，不要这么干。
+
+然后验证：
+
+```bash
+hermes --version
+hermes doctor
+```
+
+`hermes doctor` 是个值得记住的命令——它会检查环境是否完整、列出缺失的东西、给具体的修复命令。后续任何时候 Hermes 行为异常，第一反应先跑 `hermes doctor`。
+
+## 第二步：跑 setup 向导
+
+```bash
+hermes            # 进交互 CLI（推荐用 --tui 进新版界面）
 hermes setup      # 全量配置向导（首次推荐走一遍）
 hermes model      # 选 provider 和模型
+hermes tools      # 配置工具开关
+hermes gateway setup  # 配消息平台（下一步）
 ```
 
-`hermes setup` 会一次问完模型、工具开关、要不要接消息平台。新手走这个最省事。走完直接 `hermes` 开聊，确认能回话，本地 CLI 这条线就通了。
+`hermes setup` 是个总览向导，会一次问完模型、工具、消息平台。新手走这个最省事。
 
-## 第二步：选模型——最容易卡的地方
+但要注意 2026 年新版 setup 向导提供**三种模式**，这步的选择影响后面所有事，先想清楚再选：
 
-Hermes 不绑死某个模型，但你要提供 key。两条路：
+| 模式 | 适合谁 | 装好后默认开了什么 |
+| --- | --- | --- |
+| **Quick Setup (Nous Portal)** | 想最快跑通、不在乎订阅费 | Portal 一登，模型 + 工具网关（搜索/图像/TTS/云浏览器）一齐开 |
+| **Full Setup** | 自带 key、要自己掌控每个 provider | 把每个 provider 和工具挨个问一遍，你按需开 |
+| **Blank Slate** | 想要最小可用 agent、之后只开需要的 | 只留 provider+model、File Operations、Terminal 三个，其余全关。关到连 memory capture、compression、smart routing 都关 |
 
-- **凑齐 5 个 key**：模型（OpenAI/Anthropic/OpenRouter）、网页搜索、图像生成、TTS、云浏览器，各找各的。灵活但烦。
-- **Nous Portal 一键包**：一个订阅覆盖 300+ 模型 + Firecrawl 搜索 + FAL 图像 + OpenAI TTS + Browser Use。`hermes portal` 一条命令 OAuth 登录搞定。第 18 篇会细讲成本。
+Blank Slate 这个模式是给控制狂准备的：它甚至会写一个 `agent.disabled_toolsets` 列表，确保 `hermes update` 之后你没主动开的东西永远不会自动加载。它的哲学是"从一个能跑的最小 agent 开始，需要啥再开啥"。
 
-想 60 分钟跑通，选 Portal。想省钱或用自有 endpoint，自带 key。
+**第一次跑选 Quick Setup 或 Full Setup，别选 Blank Slate**——除非你心里清楚自己为什么选它。Blank Slate 把所有自动化（学习循环、压缩、记忆捕获）都关了，会让你觉得"Hermes 怎么没什么神奇的地方"。它的"神奇"恰恰来自这些自动化的积累，关了就只剩一个能调工具的 chatbot。
 
-## 第三步：接上 Telegram
+## 第三步：选模型——最容易卡的地方
+
+Hermes 不绑死某个模型，它是个"底盘"，引擎（LLM）你自己塞。但你要提供 key。
+
+### 硬性要求：模型上下文至少 64K
+
+```
+最低 64,000 tokens context
+```
+
+低于这个值，启动时直接被拒。原因是 agent 多步工具调用需要足够的工作记忆，小窗口模型撑不住。本地模型要把 `--ctx-size` 至少设到 65536（llama.cpp）或 `-c 65536`（Ollama）。这听起来很多，但 64K 已经是当下主流模型的底线——Claude / GPT / Gemini / Qwen / DeepSeek 都轻松过。
+
+### 两条路：Portal 一站式 vs 自带 5 个 key
+
+#### 路 A：Nous Portal（推荐第一次用）
+
+```
+hermes model       # 选 Nous Portal，走 OAuth 浏览器登录
+# 或者：
+hermes setup --portal
+```
+
+一个订阅覆盖：
+
+- **300+ 模型**：Claude、GPT、Gemini、Qwen、DeepSeek 等都可以拨
+- **Tool Gateway**：Firecrawl（网页搜索）、FAL（图像生成）、OpenAI TTS（语音合成）、Browser Use（云浏览器）
+
+OAuth 走完，Nous 自动成为 provider，Tool Gateway 一次性打开。**没有"找 5 个 key"的环节**。
+
+适用场景：第一次想 60 分钟跑通、不想自己分别去 Firecrawl / FAL 各注册一个账号、不在乎订阅月费（具体成本对比放第 18 篇细讲，简单说：少量使用 Portal 划算，重度使用 Portal 比 BYOK 贵一些）。
+
+不适用的场景：你要部署在中国大陆服务器上、网络不通 Nous Portal；或者你公司不允许把数据交给第三方网关；或者你已经有 OpenAI / Anthropic 的年度套餐，不想再付一份 Portal 钱。
+
+#### 路 B：自带 key（Bring Your Own Key）
+
+```
+hermes model       # 一个个选 provider，按提示填 key
+```
+
+你需要凑齐的 key 大致是这些（具体看你想要哪些功能）：
+
+| 用途 | Provider | 环境变量 |
+| --- | --- | --- |
+| 主模型 | OpenAI / Anthropic / OpenRouter / DeepSeek / Kimi 等 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` 等 |
+| 网页搜索 | Firecrawl（默认）/ Tavily / SerpAPI | `FIRECRAWL_API_KEY` 等 |
+| 图像生成 | FAL / Replicate / OpenAI Images | `FAL_KEY` 等 |
+| TTS | OpenAI TTS / ElevenLabs / Edge TTS（免费） | `VOICE_TOOLS_OPENAI_KEY` 等 |
+| 云浏览器 | Browser Use | `BROWSER_USE_API_KEY` |
+
+**关键技巧：混合策略**。Hermes 的 provider 是 per-tool 的，不是 all-or-nothing。你可以模型走自己的 Anthropic key、搜索走 Portal、图像生成走 FAL——这是大多数重度用户最后的配置。
+
+具体写法是直接编辑 `~/.hermes/.env`（Linux/WSL/Termux）或 `%LOCALAPPDATA%\hermes\.env`（Windows 原生）：
 
 ```bash
-hermes gateway setup    # 配 TG/Discord/Slack/WhatsApp/Signal
-hermes gateway start    # 启动网关进程
+ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
+FIRECRAWL_API_KEY=fc-...
+FAL_KEY=...
 ```
 
-最常见是 Telegram：找 @BotFather 建 bot 拿 token，填进 setup，给 bot 发条消息确认能回。这一步通了，"从手机随时用 Hermes" 就成立了。
+或者用 CLI 一条条设：
+
+```bash
+hermes config set ANTHROPIC_API_KEY sk-ant-...
+hermes config set FIRECRAWL_API_KEY fc-...
+```
+
+`hermes config set` 好处是它知道哪些值是 secret（要进 `.env`），哪些是普通配置（要进 `config.yaml`），不会放错地方。手动改 `.env` 时记得别把 secret 放进 User 环境变量——那会让 Windows 上每个进程都看到你的 key。
+
+### 模型选错的代价
+
+不是所有 64K+ 模型都适合 agent 工作。具体哪个模型在哪个任务上稳，第 18 篇会做横向对比。这里只说一个**第一次跑通时不要踩的坑**：别用未经验证的小模型（参数小于 30B 的本地模型、某些过于便宜的 API 路由）做 provider。Hermes 的工具调用对模型的指令遵循要求高，弱模型会不停调用错工具、参数填错、循环不退出，让你以为是 Hermes 本身的 bug。
+
+第一次跑通**用 Claude（Sonnet 或 Opus）或 GPT 系列**——这俩在工具调用上最稳。等骨架跑通、你确认 Hermes 值得继续投入，再换 Qwen / DeepSeek / 本地模型做对比，那时候出问题你心里有数是模型不行还是配置错了。
+
+还有一类隐性坑：**有些 provider 路由虽然便宜但实际拨到的是不同模型**。OpenRouter 上同一个模型名可能有多个 backend，质量天差地别；某些第三方 API gateway 把请求路由到非官方的微调版本。Hermes 的工具调用对模型的 instruction-following 要求高，弱 backend 即使名字叫 Claude 也可能调不动工具。第一次跑通用官方 endpoint（Anthropic 直连、OpenAI 直连）最稳，等熟悉了再考虑省钱的路由。
+
+## Portal vs 自带 key：到底差多少钱
+
+这一节回答 60 分钟里最现实的一个问题：**Portal 订阅划不划算？** 详细的横向对比和成本模型放第 18 篇，这里只给一个粗略判断，让你选路时不犹豫。
+
+Portal 的定价结构（2026 年 7 月现状，具体以官网为准）：按月订阅，分档，用量到一定阈值后限速或按 token 计费。**对于"每天几十次对话 + 偶尔搜索 + 偶尔生成图"这种典型个人用户**，最便宜的 Portal 档够用，月费大致跟一杯到两杯咖啡等量级。
+
+自带 key 的成本构成：你按各 provider 的 pay-per-use 付费。Claude Sonnet 4 大约 $3/百万输入 token、$15/百万输出（Anthropic 官方价）；GPT-4o 类似量级。Firecrawl 搜索按次计费（免费档每月 500 次）；FAL 图像生成 $0.05-0.5/张看模型；Browser Use 按分钟计费。
+
+**判断分水岭：**
+
+- **如果你日均用量 < 50 次对话 + < 100 次工具调用**：Portal 划算，省去找 5 个 key 的麻烦，账单也清楚
+- **如果你日均用量 > 200 次对话，或重度用图像生成、Browser Use**：BYOK 通常便宜，因为 Portal 在重度使用时会触发限速或额外计费
+- **如果你已经有 OpenAI / Anthropic 的年度套餐或企业账号**：直接 BYOK，否则你 portal 的订阅费是浪费
+
+混合策略是大多数长期用户的最终选择：**主模型用自己的 Anthropic key（成本可控）、Tool Gateway 走 Portal（不用单独去 Firecrawl / FAL 注册）**。这种半 BYOK 半 Portal 的用法 Hermes 完全支持，因为它 provider 配置是 per-tool 的。
+
+第一次跑通，强烈建议先 Portal 走一遍。等骨架跑稳、你心里对 Hermes 的用量模式有谱了，第 18 篇会带你算账决定要不要切 BYOK。提前为选哪条路纠结是浪费时间——你连自己用多少都不知道的时候，账是算不准的。
+
+## 第四步：接上 Telegram
+
+接 TG 是 60 分钟 MVP 的最后一步，也是"从手机随时用 Hermes"成立的那一刻。
+
+### 4.1 在 BotFather 创建 bot
+
+1. Telegram 里搜 **@BotFather**，或者直接访问 [t.me/BotFather](https://t.me/BotFather)
+2. 发 `/newbot`
+3. 起显示名（什么都行，比如 "My Hermes"）
+4. 起 username，**必须以 `bot` 结尾**（比如 `my_hermes_bot`），全局唯一
+5. BotFather 回你一个 **API token**，长这样：
+
+```
+123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+```
+
+**这个 token 务必保密。** 任何人拿到这个 token 都能完全控制你的 bot——读它能看到的所有消息、以它的身份发消息。如果泄露，立刻在 BotFather 里 `/revoke` 重置。
+
+可选的几个 BotFather 命令，让 bot 体验更好：
+
+| 命令 | 用途 |
+| --- | --- |
+| `/setdescription` | "What can this bot do?" 那段文字 |
+| `/setuserpic` | bot 头像 |
+| `/setcommands` | 设置 `/` 命令菜单（建议设 `help` / `new` / `sethome` 三个） |
+
+### 4.2 拿到你的 user ID
+
+Hermes 用数字 user ID 控制访问。**username 不是 user ID**，是数字（比如 `123456789`）。
+
+两种拿法：
+
+- 给 [@userinfobot](https://t.me/userinfobot) 发条消息，它立刻回你的 user ID
+- 或者 [@get_id_bot](https://t.me/get_id_bot)
+
+记下这个数字。
+
+### 4.3 把 token 和 user ID 喂给 Hermes
+
+**推荐方式（向导）：**
+
+```bash
+hermes gateway setup
+```
+
+选 Telegram，按提示粘 token、填 user ID（多个 user 用逗号分隔），向导自动写配置。
+
+**手动方式：** 直接编辑 `~/.hermes/.env`：
+
+```bash
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+TELEGRAM_ALLOWED_USERS=123456789
+```
+
+### 4.4 启动 gateway
+
+```bash
+hermes gateway setup    # 配 TG/Discord/Slack/WhatsApp/Signal 等
+hermes gateway start    # 启动网关进程
+hermes gateway status   # 看运行状态
+```
+
+启动后 bot 几秒内上线。从手机给你的 bot 发条 "在吗"，它回了，链路就通了。
+
+### 4.5 让 bot 在群里也能用（如果要用群）
+
+Telegram bot 默认开启 **privacy mode**——在群里只能看到 `/` 开头的命令、对它自己消息的回复、和它在管理员群里的消息。这是 90% 的人"bot 在群里不响应"的原因。
+
+关掉 privacy mode：
+
+1. 给 @BotFather 发 `/mybots`
+2. 选你的 bot
+3. 进 **Bot Settings → Group Privacy → Turn off**
+4. **必须把 bot 踢出群再重新拉进来**——Telegram 在 bot 加入群时缓存 privacy 状态，不重进不会更新
+
+或者更简单的办法：**把 bot 设为群管理员**，admin bot 无论 privacy 怎么设置都能看到所有消息。
+
+具体的群权限、mention 触发、多 bot 路由这些放第 13 篇细讲，60 分钟 MVP 不用碰。
 
 ## 真实踩坑
 
-- **Windows Defender / Bitdefender 删 `uv.exe`**：误报。uv 是 Astral 的 Rust 工具，没签名所以被 ML 类杀毒 flag。验证 + 加白名单要加**文件夹**（`%LOCALAPPDATA%\hermes\bin`），不是 hash——Hermes 更新 uv 后 hash 会变。
-- **Termux 不能装 `.[all]`**：Android 不兼容部分语音依赖，官方提供 `.[termux]` 精简 extra。照 Termux 文档走，别硬装全量。
-- **Windows 路径**：原生装在 `%LOCALAPPDATA%\hermes`，WSL2 装在 `~/.hermes`，别混。
-- **模型选错=白费**：Qwen 等部分模型社区反馈完成质量不稳（见第 1 篇引用的 r/LocalLLM 讨论）。先拿个稳的（Claude / GPT 系列）跑通，再慢慢试别的。
+### 坑 1：Windows Defender / Bitdefender 删 `uv.exe`
 
-## 权衡
+这是最常见、最让人放弃的坑。Hermes 装好之后某次重启，发现 `hermes` 命令不见了，或者更新时报 `uv.exe not found`。原因：杀毒软件把 `uv.exe`（在 `%LOCALAPPDATA%\hermes\bin\uv.exe`）当成了恶意软件，要么直接删掉，要么隔离。
 
-60 分钟 MVP 的代价是只通了一条链路（CLI + TG）。真要 24/7 挂着跑、定时任务、多平台，后面还有配置活（第 13-16、20 篇）。但作为"先确认这东西值得继续投入"，到这一步够了。
+**这是误报。** uv 是 Astral（写 Ruff 那家）开源的 Rust Python 包管理器，MIT 协议，源码在 [astral-sh/uv](https://github.com/astral-sh/uv)，GitHub 87k+ star。它被 flag 是因为 ML 类杀毒引擎对"会下载、会执行其他可执行文件"的程序特别敏感——uv 的工作模式就是去 PyPI 拉包、解压、装到环境里，这种行为模式跟某些 loader 家族撞了。
 
-## 结论
+**这是个反复发生、上游也无能为力的问题。** astral-sh/uv 上挂着一长串相关 issue：
 
-装好 → setup → model → gateway，四条命令。卡点不在安装，在杀毒误报和模型 key。跑通 TG 那一刻，你就有了判断 Hermes 值不值得继续投入的实感。
+- [#13553 Bitdefender 检测为 `Heur.BZC.PYV.Boxter`](https://github.com/astral-sh/uv/issues/13553)——2025 年 5 月报告，Windows 11 24H2，uv 0.7.6
+- [#15011 Windows Defender 误报，移除 uvw.exe](https://github.com/astral-sh/uv/issues/15011)——社区建议给 Windows 二进制做代码签名
+- [#10079 杀毒拦截 uv 安装器](https://github.com/astral-sh/uv/issues/10079)——维护者建议从 PyPI 装 uv 作为替代
+- [#3157 Defender flag 0.1.35](https://github.com/astral-sh/uv/issues/3157)、[#4300 Win11 报病毒](https://github.com/astral-sh/uv/issues/4300)、[#12621 Chocolatey 包 0.6.8 起 DeepInstinct 报毒](https://github.com/astral-sh/uv/issues/12621)、[#17344 0.9.22 Windows 上不能用](https://github.com/astral-sh/uv/issues/17344)
+
+维护者的态度一贯：**这是杀毒厂商的误报，他们改不了**——uv 本身是合法的开源软件，签了名也不一定消除所有 ML 引擎的 flag。每次 uv 新版本发布，新二进制的 hash 一变，又会被某些杀毒引擎重新 flag 一遍。所以**靠 hash 加白名单是没用的**，Hermes 更新 uv 后 hash 会变，白名单失效。
+
+#### 怎么验证确实是误报（不是真的中毒）
+
+1. 把被删的 `uv.exe`（或它在 Defender 隔离区里的副本）的 SHA256 算出来
+2. 跟 [uv 官方 release](https://github.com/astral-sh/uv/releases) 对应版本的 checksum 对——`uv-x86_64-pc-windows-msvc.zip` 的 SHA256 在 release 页面的 `checksums.txt` 里
+3. 一致就是真的 uv 被误删了，不一致才是真有问题（那就要怀疑是不是供应链攻击，但概率极低）
+
+如果你懒得验证，**最实用的判断方式**：直接从 [astral-sh/uv GitHub releases](https://github.com/astral-sh/uv/releases) 重下 uv 二进制，覆盖到 `%LOCALAPPDATA%\hermes\bin\uv.exe`，再跑 `hermes doctor`——如果 Hermes 恢复正常，那就是杀毒误删。
+
+#### 怎么加白名单
+
+**加文件夹，不加单个文件 hash。** 因为 uv hash 会随版本变，文件夹路径不变：
+
+- **Windows Defender**：Windows 安全中心 → 病毒和威胁防护 → 管理设置 → 排除项 → 添加 → 文件夹 → 选 `%LOCALAPPDATA%\hermes\bin`（也加上 `%USERPROFILE%\.local\bin`，uv 主二进制在那）
+- **Bitdefender**：Protection → Exceptions → Add → Folder → 同上路径
+- **第三方杀毒（火绒、360、卡巴等）**：各自的信任区/白名单设置，加同样的文件夹
+
+加完白名单后，从隔离区恢复（Defender：保护历史记录 → 允许在设备上），或者直接重装一遍 Hermes 让它重新拉 uv。
+
+#### 长期解决
+
+帮忙给 uv 在杀毒厂商的误报反馈系统提交 false positive 报告。Bitdefender 和 Microsoft 都有提交入口（[Microsoft 的在这里](https://www.microsoft.com/wdsi/filesubmission)）。提交的人多了，下次更新签名时引擎会调整。这是上游 issue 里反复呼吁的事，但只能社区去做。
+
+#### 一个绕过思路：WSL2
+
+如果你怎么折腾 Defender 都拦，最干脆的解法是装 **WSL2**，在 WSL 里跑 Hermes。WSL2 是个完整的 Linux 子系统，文件系统隔离，Windows 的杀毒软件不会去碰 `~/.hermes/bin/uv`。代价是配置稍重（要装 WSL2、配 Ubuntu），但你拿到了一个真正干净的 Linux 环境，后续跑 24/7 gateway 也更顺。
+
+### 坑 2：Termux 不能装 `.[all]`
+
+Termux 是 Tier 2 平台（官方 best-effort），而且有些功能**根本装不上**。
+
+#### 装不上的功能
+
+- **`.[all]` 全量包不支持**——会报 `No solution found`
+- **本地语音转写（faster-whisper）**——依赖链是 `faster-whisper → ctranslate2`，而 `ctranslate2` 没有 Android wheel，必须从源码编译，基本编不出来
+- **浏览器自动化（Playwright/Chromium）**——installer 默认跳过 bootstrap
+- **Docker 终端隔离**——Termux 里没有 Docker daemon
+- **后台常驻**——Android 可能随时挂起 Termux 进程，gateway 持久性是 best-effort 而不是真正的 managed service
+
+#### 正确的 Termux 安装路径
+
+不要硬装 `.[all]`。用官方测试过的 `.[termux]` extra：
+
+```bash
+# 在 Termux 里：
+pkg update
+pkg install -y git python clang rust make pkg-config libffi openssl nodejs ripgrep ffmpeg
+
+git clone https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+
+python -m venv venv
+source venv/bin/activate
+export ANDROID_API_LEVEL="$(getprop ro.build.version.sdk)"
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e '.[termux]' -c constraints-termux.txt
+
+# 让 hermes 命令在新 shell 里也能用：
+ln -sf "$PWD/venv/bin/hermes" "$PREFIX/bin/hermes"
+
+# 验证：
+hermes version
+hermes doctor
+```
+
+`ANDROID_API_LEVEL` 那行**别省**——`jiter`、`maturin` 这类 Rust/Python 桥接的包编译时需要它，省了会编失败。
+
+#### Termux 的一行安装器（也支持自动 fallback）
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+```
+
+Termux 上这条命令会自动检测环境，先试 `.[termux-all]`，失败回退到 `.[termux]`，再失败回退到 base install。所以即使你不想手动编，直接跑这条也行——失败时它会自动降级。但**别指望它装出和桌面一样的功能集**。
+
+### 坑 3：Windows 原生 vs WSL2 路径混淆
+
+如果你在 Windows 上同时装了原生版和 WSL2 版（这没毛病，官方支持共存），千万别搞混数据目录：
+
+- 原生侧数据：`%LOCALAPPDATA%\hermes\`（即 `C:\Users\<你>\AppData\Local\hermes\`）
+- WSL2 侧数据：`~/.hermes/`（在 WSL 文件系统里，Windows 资源管理器里看是 `\\wsl$\Ubuntu\home\<你>\.hermes\`）
+
+两套配置独立。你在原生侧 `hermes model` 配的 Anthropic key，WSL 侧不会自动看到。你在 WSL 里接的 Telegram bot，原生侧 gateway 启动不会接管（除非你用同一个 `.env`）。
+
+**实测建议**：选一边，别两边都用。如果你最终用 WSL，原生侧 `hermes uninstall` 清掉；如果你用原生，WSL 里就别装 Hermes，省得以后调试"为什么这条命令在另一个终端里不工作"。
+
+### 坑 4：群聊里 bot 不响应
+
+上面"接 TG"那节提过：默认 privacy mode 开着，bot 在群里只能看到 `/` 命令和对它消息的回复。**90% 的"bot 在群里不响应"是这个原因**。
+
+排查顺序（按概率从高到低）：
+
+1. **BotFather privacy mode 还开着** → 关掉，**并且把 bot 踢出群再拉回来**（缓存了不会自动更新）
+2. **没改 privacy 但忘了重进群** → 同上，必须重进
+3. **你的 user_id 没在 `TELEGRAM_ALLOWED_USERS` 里** → 加上
+4. **开了 `require_mention: true` 但你没 @ 它** → 群里要么 @ 它要么回复它的消息
+5. **群里有多个 Hermes bot，token 重复了** → 一个 token 只能给一个 gateway 用，Telegram 会拒绝并发 polling
+
+### 坑 5：模型选了不稳的
+
+第一循环用 Claude 或 GPT，原因前面讲过。这里再补一句：**别用 OpenRouter 上的免费小模型做主 provider**——免费模型经常是参数小的快通道，工具调用质量很差。Hermes 卡住不动、不停重试同一个工具调用、参数一直填错，多半是模型能力不够。换 Claude Sonnet 或 GPT-4o 立刻就好。
+
+## 出问题时怎么看：调试与可观测
+
+跑通之前你可能要折腾几次。提前知道**怎么自己定位问题**，比记住所有坑更重要。Hermes 的设计在这方面是友好的——它默认就会把信息吐在几个固定的地方，知道去哪看就行。
+
+### 第一反应：`hermes doctor`
+
+```bash
+hermes doctor
+```
+
+这个命令是 Hermes 的"自我体检"：它会扫一遍环境、配置、依赖、网络连通性，把发现的问题按严重程度分级，每个问题都给一个具体修复命令。**任何时候 Hermes 行为异常，第一件事就是跑这个**，不要凭感觉猜。
+
+典型 `doctor` 输出会告诉你：
+
+- Python / Node / ripgrep / ffmpeg 哪个缺了
+- venv 是否完整、依赖是否齐
+- 你的 provider 配置是否有效（key 格式对不对、能不能连上）
+- `~/.hermes/` 数据目录是否正常
+- gateway 进程状态
+
+### 第二层：日志
+
+```bash
+# 看 gateway 日志（接 TG 不通时看这个）
+tail -f ~/.hermes/logs/gateway.log
+# Windows 原生：
+Get-Content "$env:LOCALAPPDATA\hermes\logs\gateway.log" -Tail 50 -Wait
+```
+
+gateway 日志会告诉你 bot 是否连上、消息是否送达、有没有认证错误。Telegram 那一侧如果 bot 死活不响应，99% 是 `gateway.log` 里已经报了错——比如 token 错了、网络被墙、user_id 不在白名单。
+
+### 第三层：诊断命令组合
+
+```bash
+hermes config check         # 检查配置完整性
+hermes config migrate       # 老配置升级到新格式（升级后行为怪时跑这个）
+hermes sessions list        # 看 session 列表
+hermes --continue           # 恢复最近 session（验证 session 持久化）
+hermes gateway status       # gateway 进程状态
+```
+
+官方给的"从怪状态恢复"的标准顺序是：
+
+1. `hermes doctor` —— 先看缺什么
+2. `hermes model` —— 确认 provider 没配错
+3. `hermes setup` —— 重跑向导
+4. `hermes sessions list` —— 看 session 状态
+5. `hermes --continue` —— 恢复
+6. `hermes gateway status` —— 看 gateway
+
+这六步走一遍，绝大多数"莫名其妙不工作"的状态会回到正轨。**别在没诊断清楚之前就 reinstall**——重装解决不了配置错误，反而把 `~/.hermes/` 里的数据搞丢（如果你没备份的话）。
+
+### 一个常见误区：先怀疑 Hermes，再怀疑模型
+
+很多人遇到"Hermes 回答得很烂"、"工具调用一直失败"、"循环不退出"，第一反应是 Hermes 有 bug。**90% 的情况是模型能力不够**——你换了个便宜的 provider 路由，或者 OpenRouter 上拨到了一个免费小模型。
+
+怎么快速判断是模型问题还是 Hermes 问题？**把模型切回 Claude Sonnet 或 GPT-4o 跑同样的事**：
+
+```bash
+hermes model    # 切到 Claude / GPT
+```
+
+如果切回去立刻就好，是模型问题。如果切回去还不行，再怀疑配置或 Hermes 本身。这个二分法能省你大量调试时间，是 Hermes 排错时最值得记住的一条捷径。
+
+## 验证：怎么算跑通了
+
+按这个清单走一遍：
+
+```bash
+# 1. 安装健康
+hermes doctor
+# 期待：全绿，没有 missing
+
+# 2. 模型能回话
+hermes
+# 在交互界面里问：
+> 我当前目录有什么文件？列出前 5 个最大的。
+# 期待：它调用 terminal 工具，跑 du / ls，给你答案
+
+# 3. session 能恢复
+hermes --continue
+# 期待：回到刚才那个对话，记得你问过什么
+
+# 4. Telegram 能找得到
+# 在手机上给你的 bot 发：
+在吗？告诉我现在服务器时间。
+# 期待：bot 几秒内回复，并且是服务器真实时间（说明它在你的机器上跑）
+
+# 5. gateway 状态正常
+hermes gateway status
+# 期待：running，PID 存在，最近无 error
+```
+
+这五条都过，60 分钟 MVP 就成了。
+
+## 跑通之后第一周干什么
+
+很多人跑通 MVP 之后的反应是"然后呢？"。下面是建议的第一周路径，按时间排开，能让你在 7 天内从"装好了"过渡到"真的在用"。
+
+**第 1-2 天：什么都不改，就是用。** 把它当 ChatGPT 用，但用 Telegram 而不是网页。问它日常问题、让它写代码片段、读文件、查服务器状态。目的不是测试功能，是**让它产生真实的 session 数据**——Hermes 的 memory、compression、learning loop 都需要真实对话喂进去才会启动。你看了几天的对话历史之后，会自然知道下一步该配什么。
+
+**第 3-4 天：调一个工具。** 进 `hermes tools` 看工具开关，关掉你用不上的、打开一两个你想要的（比如浏览器、代码执行）。一次只动一个工具，跑两天看效果。**别一次开五个**——出问题不知道是哪个工具的锅。
+
+**第 5-7 天：决定要不要续费 Portal。** 这时候你已经有了一周的真实用量数据。第 18 篇会带你算账：把这一周的 token 消耗乘以 30，对比 Portal 各档价格，决定继续 Portal 还是切 BYOK。
+
+**第 7 天之后**才考虑 skill 系统（第 5-9 篇）。skill 是 Hermes 最有意思的部分，但也是最容易被新手玩坏的部分——你写一堆 SKILL.md 但因为没有对应的真实场景触发它们，skill 永远不会被验证、被迭代，最后变成摆设。先用一周让 Hermes 自己遇到问题，再看哪些场景值得写成 skill。
+
+这个顺序的核心思想是**先产生数据，再优化结构**。反过来——先配一堆 skill、一堆 cron、一堆 MCP server，但没有真实使用数据支撑——你会得到一个配置很豪华但实际不怎么用的 Hermes，最后和那些"装了 Obsidian 配了 50 个插件但从来不开"的故事一个下场。Hermes 跟 Obsidian 在这点上是一样的：工具的价值来自长期使用沉淀的私人数据，不是来自配置本身的炫技。先用一周，让数据说话，再回头配。
+
+## 后续方向
+
+骨架通了，接下来按你的优先级：
+
+- **想搞清楚配置怎么调**：第 4 篇（配置与上下文文件）讲 `config.yaml` 和 `.env` 各管什么、profile 怎么切、HERMES_HOME 怎么 override
+- **想让 bot 在多个平台都能找**：第 13 篇（消息网关多平台）讲 Discord/Slack/WhatsApp/Signal/邮件/Home Assistant 的接入，还有 DM pairing 这种更动态的授权方式
+- **想搞懂 Portal 划不划算**：第 18 篇（Nous Portal 与模型选择）做横向对比，按你的用量算账
+- **想跑 24/7**：第 13-16 篇（gateway、cron、长跑）+ 第 20 篇（安全与命令审批）
+- **想接本地模型**：第 17 篇（工具与 MCP）+ 第 19 篇（后端、serverless、成本）
+
+一个反方向的建议：**别急着加 skill**。第 5-9 篇会讲 Hermes 的学习循环和 skill 系统，那是它最有意思的部分，但也是最容易让你"试了一堆 skill、Hermes 还是没变聪明"的部分。先把骨架稳跑一周，让 memory 和 learning loop 有真实数据积累，再回头研究 skill。否则你会把时间花在写 SKILL.md 上，但因为没有真实使用数据，skill 也没法被触发、被验证。
+
+## 权衡：60 分钟 MVP 换来了什么，放弃了什么
+
+任何"快速上手"都是取舍。诚实说清楚这次取舍的两面：
+
+**换来了：**
+
+- **快速的可证伪性**——你不用先研究 5 天架构、读完所有文档，就知道这东西在你机器上能不能跑、值不值得继续投入。Hermes 是个需要长期使用才有回报的工具，所以早一天判断"要不要长期用"价值很高。
+- **一条能持续产生数据的骨架**——MVP 跑通后，memory、learning loop、session 持久化这些自动化的东西就开始默默积累。一周后回头看，你会发现 Hermes 已经知道你常用哪些目录、哪些命令。
+- **可扩展的基线**——后面所有的进阶（skill、cron、多平台、MCP）都是在这条骨架上加。骨架干净，加东西快。
+
+**放弃了：**
+
+- **深度定制**——Quick Setup 的默认配置覆盖大多数场景，但不一定适合你。如果你有特殊的 provider（自托管 vLLM、企业内网 endpoint）、特殊的工具需求（特定 MCP server），MVP 跑完还要花时间调。
+- **生产级稳定性**——MVP 不包含 24/7 监控、自动重启、备份策略。Hermes 进程崩了你不知道、数据丢了没备份。这些是第 20-21 篇的范畴。
+- **安全边界**——默认配置下 Hermes 能跑终端命令、能读你的文件、能联网。在受控的个人机器上没事，但你把它丢到公司服务器或者多人共享环境之前，要先看第 20 篇（安全、命令审批、DM pairing）。
+
+**最关键的判断**：60 分钟 MVP 不是终点，是**决策点**。跑通这一刻你要回答的是"Hermes 在我的真实工作流里有没有位置"。如果有，后面投入时间做深度配置、写 skill、配 cron 才有意义。如果没有，及时止损——不要因为"装都装了"就硬撑着用，那是最差的投资回报。
+
+## 总结
+
+四条命令，60 分钟：
+
+```bash
+# 装
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+# Windows: iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+
+hermes setup      # 向导
+hermes model      # 选模型
+hermes gateway    # 接 TG
+```
+
+卡点不在安装本身，在两件事：杀毒误报（加文件夹白名单解决）、模型 key 凑不齐（用 Portal 一键解决，或者混合策略）。跑通 Telegram 那一刻，你就有了判断 Hermes 值不值得继续投入的实感。
+
+记几个本篇里反复出现的核心判断：
+
+- **Windows 上 uv 被杀毒删 = 误报，加文件夹白名单，别加 hash**。验证方法是对比官方 release 的 SHA256。
+- **第一次跑用 Claude / GPT，别用便宜小模型**。模型能力不够会表现为"Hermes 一直循环、工具调用失败"，让你误以为是 Hermes 的 bug。
+- **Portal 适合第一次跑通，长期重度用通常切 BYOK 或混合**。
+- **Termux 是 Tier 2 平台，用 `.[termux]` 不是 `.[all]`**。`faster-whisper` 装不上是已知限制。
+- **Windows 原生和 WSL2 路径独立，别同时用**。选一边。
+
+跑通之后下一件事不是急着加 skill，是**先用一周**。让 memory 和 learning loop 有真实数据积累，再回头看哪里值得配置。值，第 3 篇我们开始拆 Hermes 的架构心智模型。
 
 ## 延伸阅读
 
-- [Hermes Agent 官方 Quickstart](https://hermes-agent.nousresearch.com/docs/)
-- [Termux 安装指南](https://hermes-agent.nousresearch.com/docs/)
-- [uv 被杀毒误报的 upstream issue（astral-sh/uv#13553）](https://github.com/astral-sh/uv/issues/13553)
+- [Hermes Agent 官方 Installation 文档](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
+- [Hermes Agent 官方 Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)
+- [Windows 原生安装深度指南](https://hermes-agent.nousresearch.com/docs/user-guide/windows-native)
+- [Termux 安装文档](https://hermes-agent.nousresearch.com/docs/getting-started/termux)
+- [Telegram 接入文档](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/telegram)
+- [uv 被 Bitdefender 误报 issue #13553](https://github.com/astral-sh/uv/issues/13553)
+- [uv 被 Windows Defender 移除 issue #15011](https://github.com/astral-sh/uv/issues/15011)
+- [uv 安装器被杀毒拦截 issue #10079](https://github.com/astral-sh/uv/issues/10079)
+- 本系列第 1 篇：[Hermes 是什么](./01-what-is-hermes.md)
+- 本系列第 4 篇：[配置与上下文文件](./04-config-and-context-files.md)
+- 本系列第 13 篇：[消息网关多平台](./13-messaging-gateway-multiplatform.md)
+- 本系列第 18 篇：[Nous Portal 与模型选择](./18-nous-portal-model-selection.md)
