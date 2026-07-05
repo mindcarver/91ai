@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/项目-481+-blue?style=flat-square" alt="项目" />
+  <img src="https://img.shields.io/badge/项目-536+-blue?style=flat-square" alt="项目" />
   <img src="https://img.shields.io/badge/ML_文章-51-9cf?style=flat-square" alt="ML 文章" />
   <img src="https://img.shields.io/badge/Coding_工具-11-green?style=flat-square" alt="Coding 工具" />
   <img src="https://img.shields.io/badge/角色路线-6-orange?style=flat-square" alt="角色路线" />
@@ -78,6 +78,10 @@
 <tr>
   <td align="center">做 AI 评测</td>
   <td><a href="./docs/evaluation/">AI / 大模型 / Agent 评测专题</a> — 模型、RAG、Agent、AI Coding 和安全红队评测地图</td>
+</tr>
+<tr>
+  <td align="center">了解 AI 记忆系统评测</td>
+  <td><a href="./docs/evaluation/memory-systems-eval/">AI 记忆系统评测专题</a> — 13 个开源记忆项目横评：LongMemEval 排名反转、负分校验、选型矩阵</td>
 </tr>
 <tr>
   <td align="center">找 Agent 框架或工作流</td>
