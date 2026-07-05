@@ -25,95 +25,318 @@
 
 > 系列第 17 篇 · 读者预设：想接外部能力、扩展 Hermes 的人 · 最后核实：2026-07
 
-**TL;DR：** Hermes 的工具体系三层：**40+ 内置工具**（开箱即用）、**toolset 分组**（按场景启用）、**MCP 集成**（接任意外部工具，含 computer-use-linux 桌面控制）。理解三层关系，才知道什么是已有的、什么要自己接。
+**TL;DR：** Hermes 的工具体系分三层，理解了三层就知道什么是开箱即用、什么要按场景开关、什么要自己接。最底下一层是 **40+ 内置工具**，覆盖文件、shell、浏览器、搜索、代码执行、图像、TTS、视觉、记忆、todo、飞书文档、Spotify、Home Assistant 等常见需求，装好就能用，全部由主仓测试维护。中间一层是 **toolset 分组**，把工具按场景打包，用 `hermes tools` 命令按需开关，避免一次把几十个工具描述全塞进 prompt。最上面一层是 **MCP 集成**，遵循 Model Context Protocol 这个通用协议，任何 MCP server 都能挂进来当工具源，包括能让 Hermes 直接操作 Linux 桌面的 `computer-use-linux`。原则一句话：**能用内置就别上 MCP，能用 API 就别上桌面控制**。每往上一层，能力更宽，但稳定性、可观测性、安全边界都得自己补。
 
 ## 三层工具体系
 
+把这三层想成一个工具间。最底下是你买机器时随箱附带的 **工具箱**——卷尺、螺丝刀、扳手，厂家已经配齐，常见活儿够用，坏了找厂家。中间是 **工具组**——电工组、木工组、水暖组，你今天要接电线就把电工组整组拎出来，不用把所有工具摊一地。最上面是墙上的 **电源插座**，任何符合接口标准的外接设备都能插——这把电钻是你自己买的、那台热风枪是隔壁借的，厂家不管，但你只要插上就能用。MCP 就是那个标准插座，computer-use-linux 就是插上来的一台"机器人手臂"，能让 Hermes 去点鼠标、敲键盘、操作桌面应用。
+
 ```
-┌─────────────────────────────────────┐
-│  MCP 集成（无限扩展）                 │
-│  接任意 MCP server —— 生态最大        │
-├─────────────────────────────────────┤
-│  toolset 分组（场景化开关）           │
-│  把相关工具打包，按需启用             │
-├─────────────────────────────────────┤
-│  40+ 内置工具（开箱即用）             │
-│  文件、shell、搜索、git、API 调用…    │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  MCP 集成（无限扩展）                              │
+│  任何 MCP server 挂进来 —— 生态最大、最不可控      │
+│  例：computer-use-linux、github、postgres、playwright
+├──────────────────────────────────────────────────┤
+│  toolset 分组（场景化开关）                        │
+│  coding / debugging / browser / file / safe ……    │
+│  hermes tools 命令按需启用，避免描述全塞 prompt    │
+├──────────────────────────────────────────────────┤
+│  40+ 内置工具（开箱即用）                          │
+│  file / terminal / browser / web / vision /       │
+│  image_gen / tts / memory / todo / code_execution │
+└──────────────────────────────────────────────────┘
 ```
+
+三层不是平行的替代关系，而是 **递进的扩展关系**：内置工具是底座，toolset 是组织方式，MCP 是逃生舱。绝大多数日常任务，内置 + 合理的 toolset 分组就够；只有当内置工具确实覆盖不了（要接公司内部系统、要操作桌面应用、要用某个 SaaS 没有内置封装）才动用 MCP。
+
+理解三层还有一个工程上的意义：**故障域分层**。内置工具出问题，提 issue 给主仓，有版本号、有测试用例、有 changelog、有维护者排期修。toolset 配置出问题，是自己的 `config.yaml` 写错，本地能复现、能 git diff、能回滚。MCP server 出问题，依赖第三方维护者，可能半年不更新、可能突然改协议、可能悄悄改权限模型，你只能 fork 自己维护或者换一个。三层从下到上，可控性递减、维护成本递增。这也是为什么"能用内置就别上 MCP"不只是性能考量，更是 **运维责任归属** 的考量——你接的每一个 MCP server，都是给自己加一份长期运维负担。
 
 ## 内置工具：开箱就有
 
-Hermes 装好后内置 40+ 工具，覆盖常见需求：
+Hermes 装好后默认带 40 多个工具，加上各平台预设可达 70+，按功能归类大致是下面这些。每个工具都是 `hermes tools enable <name>` 一行命令启用，描述里写清楚需要哪个环境变量或 API key。
 
-- **文件 / shell**：读写文件、跑命令、目录操作
-- **搜索**：本地 ripgrep、网络搜索（Firecrawl 等）
-- **代码 / git**：git 操作、代码执行、PR 管理
-- **HTTP / API**：调外部 API
-- **多媒体**：图像（FAL）、TTS（OpenAI）、浏览器（Browser Use）
+**文件与搜索**。`file` toolset 里有 `read_file`、`write_file`、`patch`、`search_files`，覆盖读写、增量补丁、按模式找文件。`search_files` 走的是 ripgrep，对大仓依然快。这套是 coding 场景的核心，几乎所有改代码的任务都从这里开始。
 
-具体清单见官方 Bundled Skills / Tools Catalog（延伸阅读）。内置工具的好处：经过测试、和 Hermes 集成度最高、不需要额外配置。能用内置的优先用内置。
+**终端与进程**。`terminal` toolset 提供 `terminal`（一次性命令）和 `process`（长驻进程管理）。Hermes 自带一个打包好的 Git Bash，所以即便在没装完整 shell 工具链的 Windows 上也能跑基本命令，这是它和很多纯 Unix 假设的 agent 拉开差距的地方。
+
+**浏览器自动化**。`browser` toolset 是大户，十多个工具：`browser_navigate`、`browser_click`、`browser_type`、`browser_scroll`、`browser_press`、`browser_snapshot`、`browser_vision`、`browser_console`、`browser_back`、`browser_dialog`、`browser_get_images`，再加两个 CDP 门控的 `browser_cdp` 系列。其中 `browser_snapshot` 出的是无障碍树（a11y tree）文本，`browser_vision` 出的是截图给视觉模型看——前者便宜稳，后者贵但能处理 canvas。这部分和第 14 篇讲的浏览器栈是对应的。
+
+**Web 搜索与抓取**。`web` toolset 包含 `web_search`（网络搜索）和 `web_extract`（URL 抓正文）。`search` toolset 是单独的 `web_search` 别名。`x_search` 是接 xAI 的推文搜索，默认关闭、需要 xAI 凭证。
+
+**代码执行**。`code_execution` toolset 就一个 `execute_code`，跑沙箱里的代码片段，做数据处理、算数、生成图表。和 `terminal` 的区别：`execute_code` 是受控解释器、返回结构化结果，`terminal` 是直接 shell、副作用更大。
+
+**多媒体生成与分析**。`image_gen` 里的 `image_generate`（背后通常接 FAL 或类似服务）、`video_gen` 里的 `video_generate`、`tts` 里的 `text_to_speech`（OpenAI TTS 等）、`vision` 里的 `vision_analyze`（图像理解）、`video` 里的 `video_analyze`（opt-in 视频理解）。这套让 Hermes 不只是文字助手，能产图、配音、看图。
+
+**记忆与任务管理**。`memory`、`todo`、`session_search` 三个 toolset 处理长期记忆、当下待办、历史会话检索。`kanban` 是 opt-in 的看板工具组（`kanban_create`、`kanban_block`、`kanban_complete` 等九个），适合长任务的项目跟踪。
+
+**协作与委派**。`clarify`（不清楚就问用户）、`delegation`（`delegate_task` 把子任务交给另一个 agent）、`skills`（`skills_list`、`skill_view`、`skill_manage` 管理已装的 skill）。
+
+**项目与定时**。`project` toolset 管 Hermes 自己的项目（`project_create`、`project_list`、`project_switch`），`cronjob` 提供定时任务（创建、列表、暂停、恢复、删除）。
+
+**外部集成**。`homeassistant`（4 个 HA 工具，要 `HASS_TOKEN`）、`spotify`（7 个播放控制）、`feishu_doc`/`feishu_drive`（5 个飞书文档与评论工具）、`discord`/`discord_admin`（仅在 `hermes-discord` 平台启用）、`yuanbao`（腾讯元宝，仅 `hermes-yuanbao` 平台）。
+
+**复合 toolset**。`coding` 把 file + terminal + search + web + skills + browser + todo + memory + session_search + clarify + code_execution + delegation + vision 一次性打包，做代码任务时一行 `--toolsets coding` 就齐了。`debugging` 是 file + terminal + web 的最小集。`safe` 是 image_generate + vision_analyze + web_extract + web_search 的只读创作集。
+
+具体清单见官方 Tools Reference 和 Toolsets Reference（延伸阅读）。内置工具的好处很实在：经过主仓测试、和 Hermes 集成度最高、凭证管理统一、错误处理一致、出问题提 issue 就有人管。能用内置的优先用内置，这是贯穿全文的判断标准。
+
+**几个容易被忽视的内置工具细节**：
+
+`memory` 工具是 Hermes 的长期记忆入口，写入的内容跨会话保留。它和第 6 篇讲的 memory 子系统是同一个，但作为工具暴露给 agent 自己决策何时记。`session_search` 是会话级检索，搜当前会话历史，长任务里很有用——比如 agent 在第 30 轮想回顾第 5 轮的某个决定，不用把所有历史塞进 context，调 `session_search` 按关键词捞。
+
+`clarify` 工具专门用来"问用户"。当 agent 判断信息不足时，调 `clarify` 生成一个结构化问题给用户。把它做成工具的好处是：可以关闭——无人值守场景关掉 `clarify`，agent 就不会卡在"等用户回答"的死循环里。这是 toolset 设计哲学的体现：连"问问题"这种基础动作都是可关的，避免 agent 在不该停的地方停下来。
+
+`delegation` 的 `delegate_task` 是子 agent 委派。主 agent 把一个子任务交给另一个 agent 实例（可能用不同模型、不同 toolset），子 agent 完成后返回结果。这是处理复杂任务的关键——主 agent 保持轻量 context，重活外包给子 agent，子 agent 的中间步骤不污染主 context。和第 8 篇的 skill、第 11 篇的多 agent 协作是呼应的。
+
+`code_execution` 和 `terminal` 的边界要分清。`execute_code` 是受控 Python 解释器，输入是代码字符串、输出是结构化结果（stdout、stderr、返回值），适合数据处理、计算、生成图表——干净、可重放、副作用小。`terminal` 是直接 shell，能跑任何命令但副作用大（写文件、装包、改系统）。能用 `execute_code` 解决的别用 `terminal`，前者更安全、更可观测。
+
+`vision_analyze` 和 `browser_vision` 的区别也常被搞混。前者是通用的"看图说话"——给一张图，模型描述内容、回答问题。后者专门用于浏览器——`browser_vision` 工具截当前页面，让模型基于截图决策下一步操作。`browser_snapshot` 出的是 a11y 树文本（便宜、结构化、但对 canvas 和动态渲染无效），`browser_vision` 出的是像素截图（贵、但能处理任何渲染）。两者配合：默认用 snapshot，遇到 canvas、复杂可视化、snapshot 失效时切 vision。
 
 ## toolset：按场景启用
 
-40+ 工具全开会挤占模型每轮的上下文（工具描述要进 prompt），还可能让模型选错工具。toolset 机制把相关工具打包成组，按场景启用：
+40+ 工具一次全开会出问题，而且不止一个。
 
-- 做代码任务时启用"开发"toolset（git、shell、文件操作）
-- 做内容任务时启用"创作"toolset（搜索、图像、TTS）
-- 做运维任务时启用"运维"toolset（部署、监控）
+第一个问题是 **上下文挤占**。每一轮对话，模型能看到的工具列表里，每个工具的 schema（名字、描述、参数、返回）都要序列化进 system prompt 或工具区。一个工具的描述少则几十 token，多则几百，70 个工具全开意味着每轮多烧几千到上万 token，长会话里这是显著浪费。更糟的是工具越多，模型在前 k 个 token 里能分给"判断该用哪个工具"的注意力越分散，选错的概率上升。
 
-`hermes tools` 配置启用哪些。原则：**最小够用集**——只开当前场景需要的，减少噪音和误用。
+第二个问题是 **选择歧义**。当 `web_search`、`x_search`、`browser_navigate`、`browser_snapshot` 同时存在时，问"查一下今天新闻"，模型可能走任何一条路。每条路成本、延迟、结果质量都不一样。工具描述写得再清楚，模型也不是百分百按描述选。
+
+第三个问题是 **副作用失控**。`terminal`、`patch`、`write_file`、`image_generate` 都是写操作，`cronjob` 能定时触发，`computer_use` 能控桌面。全开意味着模型在任何对话里都可能"顺手"调一个有副作用的工具。生产环境里这是事故源。
+
+toolset 机制就是为这三个问题设计的：**把相关工具打包成组，按场景启用，最小够用集原则**。
+
+实际操作用 `hermes tools` 命令，它打开一个 curses 全屏 UI，列出所有 toolset，光标上下移动、空格切换开关、回车保存。也可以非交互式：`hermes tools enable browser`、`hermes tools disable spotify`、`hermes tools --list` 看当前激活集。会话中也能临时切：进 `hermes tools` 改完保存，下一轮就生效。
+
+**场景化分组** 的实践：
+
+- 做代码任务时启 `coding` 复合集（或自己用 `custom_toolsets` 在 `config.yaml` 里定义一个，比如 `data-science: [file, terminal, code_execution, web, vision]`）
+- 做内容创作时启 `safe`（只读 + 多媒体生成）外加 `tts`
+- 做运维任务时启 `terminal` + `web` + `cronjob`，关掉所有多媒体
+- 做 SaaS 集成时按需启 `feishu_doc` 或 `spotify`，不用的关掉
+- 跑无人值守服务器时，关掉 `clarify`（没人会回应）、`computer_use`（没桌面）、`tts`、`image_generate`
+
+平台预设已经替你想了一部分：`hermes-api-server` 默认关掉 `clarify` 和 `text_to_speech`，`hermes-acp` 进一步关掉 `clarify`、`cronjob`、`image_generate`、`text_to_speech` 和全部 Home Assistant 工具。这些预设是"这一类场景通常不需要"的合理默认，自己部署时可以基于预设再裁。
+
+值得注意的是 `all` / `*` 通配符。`--toolsets all` 听着方便，但它 **不会** 启用能力门控的工具——`browser`、`computer_use`、`code_execution`、Feishu、HA、`cronjob`、opt-in 的 `kanban` 这些得显式开。这是个有意的安全设计：能力越强、副作用越大的工具，必须明确 opt-in，不能被一个通配符捎带启用。
+
+**最小够用集**的判断标准：把当前任务需要的 toolset 写下来，划掉任何一个还能完成任务，那就划掉。剩下的就是该启的。这个原则和第 8 篇 skill 的"能不写 skill 就不写"是一脉相承的——每多一个工具就多一份 prompt 负担、多一个出错面。
+
+**toolset 配置的实战模式**。`config.yaml` 里能用 `custom_toolsets:` 定义自己的复合 toolset，省得每次手动组合。比如做数据分析的同事，可以这样定义：
+
+```yaml
+custom_toolsets:
+  data-science: [file, terminal, code_execution, web, vision]
+  content-creation: [safe, tts, memory, todo]
+  ops-minimal: [terminal, web, cronjob]
+```
+
+然后启动时 `--toolsets data-science` 就拿出一组专为数据科学裁的工具。命名 toolset 的好处是团队共享——把 `config.yaml` 进 git，整个团队的工具配置就统一了，新人 clone 下来不用从零配。
+
+**平台预设的现实意义**。Hermes 为每个官方平台（cli、acp、api-server、telegram、slack、discord、feishu 等）都预配了 toolset。这些预设不是随便拍的，是按"这一类场景通常需要什么、不需要什么"裁过的。比如 `hermes-acp`（Agent Communication Protocol，给其他 agent 调用的服务端）默认关掉 `clarify`——因为调用方是另一个 agent，不是人类用户，"问问题"没意义，反而会卡住。`hermes-api-server` 关掉 `text_to_speech`——API 调用通常不要语音输出。部署时先看自己用的平台预设关了什么、为什么关，再决定要不要 override，比自己从 `all` 开始裁省事得多。
+
+**能力门控的工具**。`browser`、`computer_use`、`code_execution`、Feishu、Home Assistant、`cronjob`、opt-in 的 `kanban` 这些工具即便 toolset 启用了，还要额外的能力开关——`hermes model` 命令配模型能力（比如视觉模型才能用 `vision`），或者环境变量（`HASS_TOKEN` 才能开 HA 工具）。这是双重保险：toolset 开关是组织层，能力门控是技术依赖层。`browser` 要浏览器栈装好、`computer_use` 要 `cua-driver` 在 `$PATH`、`code_execution` 要解释器环境。漏配能力门控，工具会"启用但调用即失败"，调试时容易卡——所以新装一个工具先空跑一次确认能力就绪。
+
+**toolset 和模型成本的交互**。每轮对话的 prompt token 数直接影响 API 成本（按 token 计费）。70 个工具全开，假设每个工具描述平均 100 token，每轮多 7000 token；一个 50 轮的会话就是 35 万 token 的额外消耗，按 Sonnet/Opus 的价格算这是实打实的钱。toolset 分组不只是工程纪律，也是 **成本控制**。把不用的工具剔掉，等于每轮省 token、每个会话省钱。生产环境长期跑的 agent，这个优化累积效应明显。
 
 ## MCP：无限扩展
 
-[MCP（Model Context Protocol）](https://modelcontextprotocol.io/) 是接外部工具的通用协议。Hermes 支持 MCP 意味着：**任何 MCP server 都能挂进来当工具用**。
+[Model Context Protocol（MCP）](https://modelcontextprotocol.io/) 是 Anthropic 在 2024 年底推的开放协议，目标是给 LLM 应用和外部数据源/工具之间定一个通用接口。类比一下：USB-C 之于硬件接口，MCP 之于 agent 工具接口。任何 MCP server 实现这套协议，任何 MCP client（Hermes、Claude Desktop、Codex Desktop、Cursor 等）都能挂载它，不用为每个工具写自定义集成。Hermes 内置 MCP client，启动时按配置拉起各 server、发现它们暴露的工具，注册成 first-class 工具。
 
-MCP 的价值在于生态——大量社区维护的 MCP server 已经覆盖：
+**MCP 的核心价值是生态**。社区维护的 MCP server 已经覆盖一大片：
 
-- 数据库连接（Postgres、SQLite、Redis）
-- SaaS 集成（Notion、飞书、Jira、GitHub）
-- 浏览器自动化（Playwright、Browser Use）
-- 文件系统、知识库
-- 桌面控制（见下面）
+- **数据库**：Postgres、SQLite、MySQL、Redis、MongoDB——agent 能直接查数据、写记录（读写权限自己控）
+- **SaaS 集成**：GitHub、GitLab、Notion、飞书、Jira、Linear、Stripe、Slack——读 issue、改文档、查订单
+- **浏览器与桌面**：Playwright、Browser Use、computer-use 系——GUI 自动化
+- **文件与知识库**：本地文件系统、Obsidian vault、Confluence——读私有语料
+- **观测与运维**：Sentry、Datadog、Kubernetes、Prometheus——查日志、看指标
+- **创作工具**：Figma context、Blender、Godot——读设计稿、操作 DDC 工具
 
-接入流程概念：在 Hermes 配置里声明 MCP server（路径或 URL），Hermes 启动时拉起它，工具就出现在 agent 的工具列表里。
+Hermes 还有自己的 **MCP Catalog**，是 Nous 过滤过的社区 server 列表，交互式选装，相当于"应用商店"。
+
+**接入流程**概念上很简单：在 `config.yaml` 的 `mcp_servers:` 块里声明一个 server，给它起个名字、指定启动方式（本地 stdio 子进程，或远程 HTTP 端点），Hermes 启动时拉起、发现工具、注册。每个 server 注册的工具命名规则是 `mcp_<server>_<tool>`，server 名里的连字符和点会被替换成下划线。每个 server 还附带四个 utility wrapper：`list_resources`、`read_resource`、`list_prompts`、`get_prompt`（同样加 `mcp_<server>_` 前缀），分别对应 MCP 协议里的 resources 和 prompts 能力。运行时这些工具被打包成名为 `mcp-<server>` 的 toolset，可以像内置 toolset 一样开关。
+
+stdio server 的最小配置：
+
+```yaml
+mcp_servers:
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+    timeout: 120
+    connect_timeout: 60
+```
+
+HTTP server 的配置：
+
+```yaml
+mcp_servers:
+  my-api:
+    url: https://internal.example.com/mcp
+    headers:
+      Authorization: "Bearer ${MY_API_TOKEN}"
+    ssl_verify: true           # true 用系统 CA / false 关 / 路径指定 PEM CA bundle
+    timeout: 300
+```
+
+**工具过滤**是 MCP 接入的关键能力。一个 server 可能暴露 20 个工具，但你只想要 3 个。`tools.include` 白名单、`tools.exclude` 黑名单，include 优先级高于 exclude。还能用 `resources: false` / `prompts: false` 关掉 utility wrapper。过滤后如果一个工具都没注册成功（全被 exclude、server 不暴露任何工具），那 `mcp-<server>` toolset 不会创建，prompt 里也不占位。这是个干净的设计：**没用的 server 不浪费 prompt**。
+
+**和第 8 篇 skill 的区别**。skill 是 **流程**——一组指令、步骤、模板，告诉 agent "遇到这类任务该怎么做"。MCP 是 **工具源**——一组可调用的函数，扩展 agent "能做什么"。类比：skill 是菜谱，MCP 是食材供应商。一个 skill 可以调一个 MCP 工具（菜谱里指定用某供应商的某样食材），一个 MCP 工具可以被多个 skill 调。两者正交，组合使用：用 skill 编排流程，用 MCP 提供原子能力。computer-use-linux 就是典型——它本身是 MCP server 提供工具，配套有一个 Hermes skill 教 agent 怎么用这些工具完成"操作桌面应用"的任务。
+
+**OAuth 支持**。新版 MCP 协议加了 OAuth 2.1 PKCE 流，Hermes 支持 `auth: oauth` 配置，token 缓存在 `~/.hermes/mcp-tokens/<server>.json`，第一次连接走授权码流，后续自动刷新。这对需要用户授权的 SaaS（Notion、Google Drive 等）很重要，不用手动维护长期 token。
+
+**stdio vs HTTP 的选择**。stdio server 跑在本地子进程，延迟低（无网络）、隔离好（进程崩溃不影响 Hermes）、凭证不出本机。缺点是只能本地用、不能跨机器共享、资源占用算在 Hermes 进程头上。HTTP server 跑在远端，能集中部署（一个 server 服务多个 agent client）、能横向扩展、能放在 DMZ 里隔离凭证。缺点是网络延迟、需要 TLS 配置、OAuth 流复杂、网络抖动会拖垮工具调用。一般原则：本地工具（文件系统、shell、桌面控制）用 stdio；企业共享服务（CRM、知识库、数据库代理）用 HTTP；开发期先用 stdio 验证逻辑，稳定后再迁 HTTP。
+
+**mTLS 双向认证**。企业内部 MCP server 常要求客户端证书。Hermes 支持 `client_cert`（PEM 格式，可以是 cert+key 合一文件，也可以是 `[cert, key]` 或 `[cert, key, password]` 列表）和 `client_key`（单独的私钥路径）。`ssl_verify` 可以是 `true`（系统 CA）、`false`（关校验，仅调试用）、或一个 PEM CA bundle 路径（自签证书场景）。生产环境 `ssl_verify: false` 是大忌，等于关了中间人防护。
+
+**sampling 策略**。MCP 协议里有个反向能力——server 可以请求 client 帮它跑 LLM 推理（叫 sampling）。比如一个数据库 MCP server 收到自然语言查询，它自己没模型，可以反向请求 Hermes 帮它把自然语言翻译成 SQL。这是个强大的能力，但也是攻击面——恶意 server 可能利用 sampling 让你的 agent 跑任意 prompt。Hermes 的 `sampling:` 配置可以设白名单、设 token 上限、设允许的模型范围。生产环境如果不需要 sampling，明确关掉。
+
+**subagent 继承**。`inherit_mcp_toolsets: true`（默认 false）让子 agent 也能用主 agent 配的 MCP 工具。开这个的好处是 `delegate_task` 出去的子任务能用完整工具集；坏处是子 agent 的 context 也会被 MCP 工具描述挤占。一般原则：子 agent 任务越聚焦，越该关继承，只给它当前任务需要的工具。
+
+**MCP server 健康检查**。Hermes 启动时会按 `mcp_servers:` 配置逐个拉起 server、`initialize` 握手、发现工具。失败的 server 会被标记、工具不注册，不会让 Hermes 整体启动失败。但运行中 server 崩溃的检测是另一回事——stdio server 子进程死了 Hermes 能感知（SIGCHLD），HTTP server 挂了要等下次工具调用超时才发现。建议给每个 server 配 `timeout`（默认 300 秒太长）和 `connect_timeout`（默认 60 秒），把故障窗口压缩。
+
+**MCP 工具的命名歧义**。一个 server 暴露的工具叫 `search`，注册成 `mcp_<server>_search`。如果两个 server 都有 `search`，就是 `mcp_github_search` 和 `mcp_linear_search`，靠前缀消歧。但模型在工具描述里看到的可能还是"search"，遇到模糊请求还是会选错。解法：用 `tools.include` 只保留你真正要的、给关键工具的描述做覆盖（如果 server 支持的话）、或者在 skill 里明确指定"这个任务用 `mcp_github_search`"。
+
+**MCP Catalog 与"官方背书"的边界**。Hermes 有个 MCP Catalog（交互式选装器），里面的 server 经过了 Nous 的基本审查。但这不等于"安全"或"生产可用"——审查主要是协议合规性和基本功能验证，不包含深度安全审计、不保证长期维护、不免除你的合规责任。把 Catalog 当成"比随便 GitHub 找的稍微靠谱一点"的预筛选，该做的代码审计、依赖扫描、沙箱测试一样不能少。社区维护的 server 尤其要看最近一次更新时间、issue 处理速度、是否有商业实体兜底——个人维护的项目作者一停就更不动。
 
 ## computer-use-linux：桌面控制 MCP
 
-官方/community 提供的 [computer-use-linux](https://hermes-agent.nousresearch.com/docs/) MCP server 让 Hermes 控制 Linux 桌面：
+[computer-use-linux](https://github.com/agent-sh/computer-use-linux) 是社区（agent-sh）维护的 Linux 桌面控制 MCP server，Rust 写的，从 Codex Desktop Linux 版本里抽出来独立成包。它把 Hermes 从"会调 API 的助手"扩展到"能操作 GUI 的助手"——能让它操作那些没有 API、只能用鼠标点、键盘敲的桌面应用（GIMP、LibreOffice、本地邮件客户端、专用工具软件）。
 
-- AT-SPI accessibility 树（读 UI 结构）
-- Wayland/X11 输入（点、键盘）
-- 截图（看屏幕）
-- 窗口定位（指定操作某个窗口）
+**它提供的工具**：
 
-这把 Hermes 从"会调 API 的助手"扩到"能操作 GUI 的助手"——能让它操作那些没 API 的桌面应用。
+- **诊断与设置**：`doctor`（查环境就绪度）、`setup_accessibility`（开 AT-SPI）、`setup_window_targeting`（开窗口定位）
+- **发现**：`list_apps`、`list_windows`、`focused_window`、`get_app_state`（读应用无障碍树）、`screenshot`（截图）
+- **输入**：`click`、`drag`、`scroll`、`press_key`、`type_text`
+- **语义动作**：`perform_action`（点无障碍树里的具名 action）、`set_value`（设控件值）
+- **窗口管理**：`activate_window`
 
-边界很明确：
+每个工具都带 MCP 安全注解。`doctor`、`list_apps`、`list_windows`、`focused_window`、`get_app_state` 标 `readOnlyHint=true`（只读，安全）。`setup_accessibility`、`setup_window_targeting` 是幂等的本地设置 mutator。`click`、`drag`、`press_key`、`type_text`、`perform_action`、`set_value` 标 `destructiveHint=true` 和 `openWorldHint=true`——这两个注解的意思是：这工具会改世界状态、且能影响超出当前会话边界的范围。第 20 篇的安全框架正是读这些注解决定要不要审批。
 
-- **安全风险高**：能控桌面 = 能干任何你能干的事。和第 20 篇的 command approval 配合，重要操作要确认。
-- **依赖环境**：要 Linux 桌面 + AT-SPI 支持。headless 服务器要装虚拟显示。
-- **慢且脆**：GUI 自动化比 API 调用慢、容易因 UI 变化失效。能用 API 就别用桌面控制。
+**底层依赖**。computer-use-linux 不是凭空控制桌面，它依赖 Linux 桌面的一堆基础设施：
+
+- **AT-SPI2**（`at-spi2-core` 包）——Linux 桌面的无障碍协议，所有 GTK、Qt 应用理论上都暴露 AT-SPI 树。读这棵树相当于读应用的语义结构（这是按钮、这是输入框、这是菜单项），比纯像素识别稳得多。
+- **DBus + zbus**——进程间通信，AT-SPI 走 DBus。
+- **Wayland 或 X11 输入**——Wayland 上用 `ydotool` + `ydotoold`（基于 uinput 的虚拟输入设备），X11 上可用 xdotool。Wayland 因为安全模型更严，xdotool 在原生 Wayland 应用上不工作，ydotool 通过内核 uinput 绕过。
+- **`xdg-desktop-portal`** + 对应后端（`-gnome`、`-gtk`、`-kde`、`-wlr`）——截图、远程桌面、屏幕投射走这套。
+- **`/dev/uinput` 访问权限**——用户要在 `input` 组里，内核模块 `uinput` 要加载。
+- **会话环境变量** `DBUS_SESSION_BUS_ADDRESS`、`XDG_RUNTIME_DIR` 必须设置。
+
+**后端支持矩阵**很碎，这是 Linux 桌面生态决定的：
+
+- GNOME Wayland：最完整支持，需要装一个 GNOME Shell 扩展 `computer-use-linux@avifenesh.dev`，DBus 接口 `dev.avifenesh.ComputerUseLinux.WindowControl`；锁了 Introspect 时回退到扩展
+- GNOME X11：`org.gnome.Shell.Introspect`
+- KDE Plasma / KWin：临时 KWin DBus 脚本（`org.kde.KWin`）
+- Hyprland：`hyprctl clients -j` + `hyprctl dispatch focuswindow`
+- i3：`i3-msg`，可选 `xprop` 补 PID
+- COSMIC Wayland：需要单独的 `computer-use-linux-cosmic` helper
+- Sway / 通用 wlroots：无专用后端，只有 AT-SPI + 全局 ydotool
+- 通用 X11 / XFCE / 其他 WM：同上，能力受限
+
+也就是说，同样的 computer-use-linux，在 GNOME Wayland 上能精确点窗口、读完整无障碍树，在 Sway 上只能全局坐标点击 + 部分应用支持 AT-SPI。**部署前先跑 `computer-use-linux doctor | jq .readiness`**，目标是 `can_register_mcp_tools`、`can_build_accessibility_tree`、`can_send_development_input`、`can_query_windows` 全 true 且 `blockers` 为空。
+
+**Hermes 接入**：
+
+```yaml
+mcp_servers:
+  computer-use-linux:
+    command: computer-use-linux
+    args: ["mcp"]
+    timeout: 120
+    connect_timeout: 30
+```
+
+工具会注册成 `mcp_computer_use_linux_<tool>`，运行时 toolset 名 `mcp-computer-use-linux`。配套推荐装官方 skill：`hermes skills tap add agent-sh/computer-use-linux` 再 `hermes skills install agent-sh/computer-use-linux/computer-use-linux`，这个 skill 教 agent 什么时候该截图、什么时候读无障碍树、怎么从坐标反推控件。
+
+**能力边界**非常清楚，这几条是部署前必须想明白的：
+
+- **安全风险高**。能控桌面等于能干任何你能干的事——删文件、发邮件、转账、改系统设置。和第 20 篇的 command approval 配合，写操作（标了 `destructiveHint` 的）必须走审批，重要操作要二次确认。生产环境永远不要默认 `auto_approve`。
+- **环境依赖脆**。Linux 桌面版本、Wayland 还是 X11、 compositor 是 GNOME 还是 Hyprland、AT-SPI 是否启用、uinput 权限——一个不对就废。headless 服务器要装虚拟显示（Xvfb 或 weston），但虚拟显示上很多 portal 接口不工作，能力大打折扣。
+- **慢且脆**。GUI 自动化比 API 调用慢一个数量级：截一张图、传给模型、模型决策、再点一下、再截图……一次操作几秒到几十秒。而且 UI 一变（应用更新改了按钮位置、窗口尺寸不同、加载时序抖动）就失效。能用 API 就别上桌面控制，这是铁律。
+- **可观测性差**。API 调用有日志、有 status code、有结构化返回。桌面控制只有截图和坐标，出了问题很难复现。要做好截图留痕和操作日志。
+
+computer-use-linux 的真正适用场景是 **API 不存在的桌面应用**——老旧的内部工具、专用 DDC 软件、本地优先的办公软件、需要 GUI 交互的开发者工具。这些场景下它是唯一解，但代价是接受它的脆弱和慢。
+
+**几个具体场景的可行性判断**，帮你想清楚什么时候值得上：
+
+场景一：批量给 LibreOffice Calc 里几百个表格做格式调整。没有 API、脚本能力有限、人工做要几天。computer-use-linux 适合——AT-SPI 读单元格、`type_text` 输入、`perform_action` 点菜单。风险点：UI 卡顿、窗口失焦、菜单层级一变就废。建议先在副本上跑、配审批、每步留截图。
+
+场景二：操作一个老的内部 ERP 客户端（Windows 桌面程序跑在 Wine 里）。AT-SPI 在 Wine 应用上覆盖不全，可能只能靠截图 + 坐标点击。脆且慢，每次 ERP 升级都要重调。这种情况建议先评估能不能直接调 ERP 的数据库或后端 API，绕开 GUI。
+
+场景三：自动化测试一个 Electron 应用。Electron 应用 AT-SPI 支持好（基于 Chromium），无障碍树完整。computer-use-linux 在这里反而是合理选择，比纯像素识别稳。
+
+场景四：操作银行网银、支付应用。**不要用**。误操作后果不可逆、敏感数据进 prompt 有合规风险、桌面控制的可观测性不足以满足审计要求。这类场景要么走官方 API（银行开放 API），要么保持人工。
+
+**和 Hermes 内置 `computer_use` 工具的关系**。Hermes 自己有个内置的 `computer_use` toolset（基于 `cua-driver`，跨 macOS/Windows/Linux），computer-use-linux 是 Linux 上的开源替代和补充。两者区别：内置的 `cua-driver` 是闭源/打包方案、跨平台一致性好但要装驱动；computer-use-linux 开源、Linux only、Wayland 支持更细。Linux 服务器场景通常选 computer-use-linux，因为透明、可调、不依赖闭源组件。
+
+**截图与隐私**。computer-use-linux 的 `screenshot` 工具会把整个屏幕（或指定窗口）截图传给模型。如果屏幕上有敏感信息（密码、私信、客户数据、医疗记录），这些像素会进模型 prompt、可能被记录到会话日志、可能上传到模型服务商。生产环境务必：敏感应用移到单独工作区、操作前最小化其他窗口、定期清会话日志、告知用户"屏幕内容可能被 AI 看到"。合规场景（GDPR、HIPAA、等保）下，桌面控制 + 视觉模型这条链路要做单独的 DPIA。
 
 ## 真实坑
 
-- **工具太多 = 模型选错**：模型面对一堆相似工具可能挑错。toolset 分组 + 清晰的工具描述（和 skill 的 description 一样重要）。
-- **MCP server 不稳定**：社区 MCP 质量参差，挂了 Hermes 调用就失败。重要任务前确认 MCP server 健康。
-- **桌面控制的误操作**：computer-use 类工具点错按钮、删错文件，破坏力大。生产环境慎用，配合审批。
-- **凭证蔓延**：每个 MCP server 可能要自己的 key。集中管理，别散落。
+**工具太多 = 模型选错**。这是最高频的坑。70 个工具全开时，模型面对"帮我查一下 X"这种模糊请求，可能在 `web_search`、`x_search`、`browser_navigate + browser_snapshot`、`session_search`、`mcp-postgres_query` 之间犹豫。每个选择成本差几个数量级。解法是 toolset 分组 + 清晰的工具描述。工具描述的重要性等同于 skill 的 description——一句话说清"这个工具做什么、什么时候该用、什么时候不该用"。模糊的描述（"搜索信息"）会让模型乱选，具体的描述（"在网络搜索引擎查最新公开信息，返回摘要和 URL，适合时效性内容"）能显著降低误选率。
+
+**MCP server 不稳定**。社区 MCP 质量参差，有的连基本错误处理都没做。常见故障：server 启动失败（依赖没装、版本不对）、连接超时（网络问题、OAuth 过期）、工具调用挂起（server 内部死锁）、返回非 JSON（协议不合规）。Hermes 会把超时和连接失败的 server 标记下来，但工具调用中途失败需要业务层兜底——`timeout` 和 `connect_timeout` 一定要配，别用默认无限等待。重要任务前手动跑一遍 `hermes tools --list` 确认所有依赖的 server 健康。
+
+**桌面控制的误操作**。computer-use 类工具点错按钮、删错文件、给错人发消息，破坏力比 API 调用大得多——GUI 没有 dry-run、没有 undo、没有事务。一次错点可能触发不可逆操作（清空回收站、提交表单、关闭未保存文档）。解法：写操作强制审批、敏感应用（文件管理器、邮件客户端、银行/支付）加白名单只允许读、生产环境跑在快照可回滚的虚拟机里、每次操作留截图和坐标日志。
+
+**凭证蔓延**。每个 MCP server 可能要自己的 key——GitHub PAT、Notion OAuth、Postgres 连接串、Spotify client secret、OpenAI API key、HASS token……散落在 `config.yaml`、`.env`、shell 环境、server 自己的配置文件里。一旦泄露一个，影响范围难以评估。集中管理：用环境变量引用（`${GITHUB_TOKEN}` 而不是明文）、secret manager（1Password CLI、Vault、AWS Secrets Manager）、按最小权限原则发 token（只读就别给写权限）、定期轮换。`~/.hermes/mcp-tokens/` 下的 OAuth token 文件权限设 0600。
+
+**配置漂移**。多个环境（开发机、生产服务器、CI）的 `config.yaml` 不一致，导致本地能用的工具到生产找不到、或者生产多了一个工具本地没测过。把 `config.yaml` 进版本控制，敏感值用环境变量，部署前 diff 检查。
+
+**工具版本和模型能力错配**。一些工具依赖模型的视觉或代码能力——`browser_vision` 要模型支持图像输入，`code_execution` 要模型能生成可信代码。换了一个弱模型但工具没关，模型会调一个自己处理不了的工具，输出垃圾结果。这种情况在用便宜小模型省钱时最常见——你以为省了模型费，实际 agent 陷在无效工具调用里反复重试，烧的 token 比直接用强模型还多。配置时把"工具需要什么模型能力"显式写进文档，换模型时同步检查。
+
+**MCP server 的"沉默失败"**。最危险的故障不是 server 崩溃（那个有报错），而是 server 还活着但返回错误数据——比如数据库 server 因为权限变更开始返回空结果、搜索 server 因为 API 改版返回旧格式数据、文件系统 server 路径变了但还能访问到错误的文件。agent 拿到"看起来正常"的数据继续推理，得出错误结论，用户不知情。防御：关键工具调用做 schema 校验、对返回数据做合理性检查（空结果、异常值、格式偏差）、定期跑端到端 smoke test。
+
+**工具描述的"上下文中毒"**。一个写得很差的工具描述会让模型对所有相关工具都产生误判。比如某个 MCP server 的 `search` 工具描述写成"智能搜索任何信息"，模型下次遇到所有 search 类工具都会偏向选它。这种"一个烂描述污染整个工具空间"的现象在工具多时尤其明显。规则：每个工具描述必须写清输入是什么、输出是什么、什么时候 **不** 该用、和相似工具的区别。模糊的营销式描述（"强大的"、"智能的"、"全面的"）是反模式。
+
+**会话工具状态的隐式假设**。agent 在第 10 轮启用了 `browser` toolset，第 50 轮用户说"换个方向做点别的"，agent 可能还在用浏览器工具，因为不知道 toolset 已经被会话中途切换。长会话里这种状态漂移很常见。建议：toolset 切换后明确告诉用户"现在启用的工具集是 X"，重要切换让用户确认。
 
 ## 权衡
 
-工具扩展性的交易：**能力越来越强 vs 复杂度和风险越来越高**。内置工具最稳，MCP 最灵活但最不可控。原则：能用内置就别上 MCP，能 API 就别上桌面控制。每多接一层，可观测性和安全边界都得跟上。
+工具扩展性的核心交易：**能力越来越强 vs 复杂度和风险越来越高**。
+
+内置工具最稳——主仓测试、文档齐全、错误处理统一、出 issue 有人修。代价是覆盖有限，只解决"常见需求"。toolset 是组织层，不增加能力但显著降低误用——把 70 个工具收到当前场景需要的 10 个，prompt 干净、模型选对率高、副作用面小。MCP 最灵活——任何 server 都能挂，生态无限，但稳定性、安全、凭证、可观测性都得自己管。computer-use 类桌面控制是 MCP 里最脆的一档，能不用就不用。
+
+决策树：
+
+1. **能用内置吗？** 能 → 用内置。最稳、最便宜、最可观测。
+2. **内置不行，有 API 吗？** 有 → 写个 MCP server 包 API（或找现成的）。比桌面控制稳得多。
+3. **没 API，只能 GUI？** → 上 computer-use-linux 或 browser 自动化。接受慢和脆，配审批。
+4. **GUI 也没有？** → 这个任务不适合 agent 化，重新评估需求。
+
+每多接一层，可观测性和安全边界都得跟上。新增一个 MCP server 要问：它读什么、写什么、凭证范围多大、失败时怎么 fallback、调用日志在哪、谁能审计。computer-use 类还要问：操作哪些窗口、哪些操作要审批、误操作的回滚路径。
+
+成本维度也别忽略。每个工具的描述进 prompt 是固定成本（每轮都烧），MCP server 调用是变动成本（按用次数烧），桌面控制的截图 + 视觉模型推理是高成本（一次操作可能烧几千 token 的图像）。toolset 分组省的是固定成本，MCP 过滤（include/exclude）省的也是固定成本，把不用的 server 工具剔掉等于每轮省 token。
+
+**演进策略**。一个常见误区是项目初期就把所有能想到的 MCP server 都接上"以备不时之需"。这会带来三个问题：维护负担前置（你要养一堆暂时用不到的 server）、误用风险累积（agent 可能在不该用某工具时用了）、调试复杂度爆炸（出问题时不知道是哪个 server 的锅）。更好的策略是 **倒序接入**：先用内置工具跑通核心流程，跑不动了再加一个 MCP server 解决具体瓶颈，每加一个先观察一周再决定是否保留。工具体系应该是 **业务驱动** 而不是 **技术堆砌**——加工具是为了解决具体痛点，不是为了显得功能多。
+
+**团队协作维度**。多人共用一个 Hermes 实例时，工具配置就是协作契约。每个人习惯的工具不同（开发要 coding 组、运营要内容组、运维要 ops 组），如果都改 `config.yaml` 会冲突。解法：用 platform 预设区分场景（不同入口走不同 toolset），或者用 `custom_toolsets` 定义角色化工具包，或者干脆每人起一个 Hermes 实例配自己的工具。共享实例时尤其要管好写工具的权限——别让运营同事的 agent 能调 `terminal` 改生产服务器。
+
+**监控与可观测性**。生产 agent 的工具调用必须有监控：调用频率、成功率、延迟分布、失败原因 top N。内置工具有结构化日志，MCP server 的日志看你怎么接（stdio server 的 stderr 抓回来、HTTP server 看服务端日志）。computer-use 类工具的"日志"是截图序列，存下来既是调试材料也是审计证据。没有监控的工具体系是黑箱，出问题只能瞎猜。建议在接入第一个 MCP server 时就把日志收集、指标暴露、告警规则一并搭好，别等出事故才补。
 
 ## 结论
 
-三层工具：内置（开箱）、toolset（场景开关）、MCP（无限扩展）。用对的关键不是"接得越多越好"，而是"最小够用集 + 清晰边界"。computer-use 类高风险工具配合审批用。
+三层工具体系是 Hermes 应对"能力 vs 复杂度"张力的方案：内置（开箱即用、最稳）、toolset（场景开关、最小够用集）、MCP（无限扩展、自己负责）。用的关键不是"接得越多越好"，而是"最小够用集 + 清晰边界"。内置覆盖的别上 MCP，API 能搞定的别上桌面控制，每个新接的工具都要补上凭证管理、可观测性、安全审批这三件套。computer-use 类高风险工具，配合第 20 篇的审批框架用，不要裸跑。
+
+**给三类读者的具体建议**：
+
+如果你是 **个人开发者**，刚装好 Hermes 想跑起来：先用 `hermes-cli` 默认预设别动，跑几天熟悉内置工具。第一个自定义是按你的主要任务定义一个 `custom_toolset`（比如 `my-coding: [file, terminal, web, code_execution]`），用熟了再考虑接 MCP。MCP 从最稳的官方推荐开始（github、filesystem），别一上来就接冷门 server。
+
+如果你是 **团队 lead**，要给团队部署 Hermes：把 `config.yaml` 进 git、定义角色化 toolset、用 platform 预设分场景、统一凭证管理（环境变量 + secret manager）、配好监控再上线。MCP server 接入走 PR 评审，每个 server 要写清楚谁维护、出问题找谁、依赖什么外部服务。生产实例和开发实例 toolset 配置要显式 diff，避免"开发能用的工具到生产找不到"。
+
+如果你是 **企业架构师**，评估 Hermes 进生产：重点看 MCP 的安全模型（OAuth、mTLS、sampling 策略）、computer-use 类工具的合规边界（截图隐私、操作审计、回滚机制）、凭证治理（密钥轮换、最小权限、审计日志）。把工具调用日志接进 SIEM、关键写操作接进审批工作流、敏感场景考虑把 agent 跑在隔离网络里。第 20 篇会专门讲安全框架，本篇的"三层工具"是那个框架的施法对象。
+
+如果你只记一句话：**工具是能力，也是负债**。每接一个工具，能力 +1，维护成本 +N，安全面 +M。最小够用集不是吝啬，是工程纪律。三层体系的优雅之处在于，它给了你从"开箱即用"到"无限扩展"的连续光谱，让你按需付费、按风险加锁、按场景裁剪——而不是被迫在"全开裸奔"和"什么都不接"之间二选一。用好这个光谱，工具体系才会成为 agent 的助力而不是负担。
 
 ## 延伸阅读
 
-- [Hermes Tools & Toolsets 文档](https://hermes-agent.nousresearch.com/docs/)
-- [Hermes MCP Integration 文档](https://hermes-agent.nousresearch.com/docs/)
-- [Hermes Bundled Skills Catalog（内置工具清单）](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Hermes Tools & Toolsets 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)
+- [Hermes Toolsets Reference（toolset 清单与组合规则）](https://hermes-agent.nousresearch.com/docs/reference/toolsets-reference)
+- [Hermes MCP Config Reference（mcp_servers 完整 schema）](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)
+- [Hermes Built-in Tools Reference（每个工具的字段与依赖）](https://hermes-agent.nousresearch.com/docs/reference/tools-reference)
+- [Model Context Protocol 官网](https://modelcontextprotocol.io/)
+- [computer-use-linux 仓库（agent-sh）](https://github.com/agent-sh/computer-use-linux)
+- [Hermes Computer Use 文档（桌面控制总览）](https://hermes-agent.nousresearch.com/docs/user-guide/features/computer-use)
+- [第 14 篇：浏览器栈与 Browser Use](./14-browser-stack.md)
+- [第 8 篇：Skill 系统（流程编排）](./08-skill-system.md)
 - [第 18 篇：Nous Portal（含 Tool Gateway）](./18-nous-portal-model-selection.md)
+- [第 20 篇：安全与 command approval](./20-security-approval.md)
