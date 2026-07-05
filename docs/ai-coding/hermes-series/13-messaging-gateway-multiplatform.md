@@ -25,72 +25,269 @@
 
 > 系列第 13 篇 · 读者预设：想从 Telegram / Discord / Slack 等随时用 Hermes 的人 · 最后核实：2026-07
 
-**TL;DR：** Gateway 是 Hermes 的多平台入口——一个进程同时接 Telegram、Discord、Slack、WhatsApp、Signal、Email。配好每个平台的 bot token 和白名单就能从手机随时叫它。最容易卡的是各平台 bot 申请流程和 DM pairing（白名单）配置。
+**TL;DR：** Gateway 是 Hermes 的多平台入口，一个常驻进程同时挂着 Telegram、Discord、Slack、WhatsApp、Signal、Email 等通道。配好每个平台的 bot token 和白名单，就能从手机随时叫它。命令就两条：`hermes gateway setup` 走交互式向导，`hermes gateway start` 启动。最容易卡住的地方不是接通，而是接通之后怎么把它锁住——白名单忘了配是最常见的事故，token 写进 git 公开仓库是次常见的事故，进程半夜挂了没察觉是第三常见。本篇把这三件事和平台接入流程一起讲透。
 
-## 一个进程多平台的设计
+## 一个进程多平台的设计：为什么不是每平台一个 bot
 
-Gateway 是个独立进程（`hermes gateway start`），不是嵌在 CLI 里。它同时挂着多个平台的连接，消息进来统一转给 agent loop，回复再投递回原平台。好处：
+Gateway 不是嵌在 CLI 里的一个子命令，它是一个独立常驻进程。你在终端跑 `hermes gateway start` 之后，它就一直在后台活着，同时维持多个平台的长连接。一条消息从 Telegram 进来，gateway 把它转成统一的内部消息格式丢给 agent loop；agent 处理完，再把回复投递回原来的平台。对 agent 来说，消息来自哪个平台并不重要——它看到的都是同一种内部消息结构；对用户来说，无论从哪个平台进去，背后都是同一个 agent、同一份记忆、同一套技能。
 
-- **不用为每个平台跑一个 Hermes 实例**：一份 agent、一份记忆，多入口。
-- **跨平台对话连续**：你在 TG 问一半，到家从 Discord 接着问，它知道是同一个人、同一个上下文。
-- **CLI 和消息平台共享命令**：`/skills`、`/model`、`/new` 这些在两边都能用。
+这种设计和"每个平台跑一个独立的 bot 实例"有本质差别。如果每平台一个实例，你得维护三份配置、三份记忆、三套进程管理，更糟的是 Telegram 上的 agent 不知道你在 Discord 上跟它聊过什么——它根本不是同一个它。Gateway 把所有入口收拢到一个进程，本质上是在回答一个问题：怎么让一个 agent 出现在你所有常用的聊天工具里，同时仍然是同一个 agent，而不是多个长得像但彼此不认识的克隆。
 
-## 配置流程
+把 gateway 想象成公司前台的一位接待员。这位接待员同时接听公司所有的电话线——固话、手机、网络电话、客服热线，不管客户从哪条线打进来，听到的都是同一个人的声音，他都记得这个客户之前打过电话说过什么。客户不需要知道公司内部有几条电话线，他只要拨一个号码；接待员也不需要为每条线单独雇一个人。这就是 gateway 的核心价值：一份 agent 资源，多个对外入口。
+
+具体来说，这种单进程多平台设计带来四个层面的实际好处。
+
+第一个好处是资源层面的省。不用为每个平台单独部署 Hermes。你只需要一台机器、一个进程、一份配置文件、一份记忆库。维护成本从"平台数 × 一套"降到"一套"。对于在自家 VPS 上自部署的人，这点尤其重要——你的 4 核 8G 小机器跑不动多个常驻 Python 进程，但跑一个 gateway 同时挂三四个平台没问题。从运维角度，备份只备份一份记忆，升级只升级一个进程，看日志只看一个文件，监控只盯一个端口。
+
+第二个好处是数据层面的连续。跨平台对话连续：你在地铁上用 Telegram 问了一半，到家打开 Discord 接着问，agent 知道你在说什么。它知道是同一个人，因为你在两个平台都通过了 DM pairing 绑定到同一个内部用户。记忆库是同一份，技能是同一套。具体的连续性机制后面会专门展开——这里先记住结论：跨平台连续不是自动完美生效的魔法，需要你显式做用户映射，而且有明确边界。
+
+第三个好处是交互层面的一致。CLI 和消息平台共享同一套命令。在终端里你用 `/skills` 列出可用技能、`/model` 切换模型、`/new` 开新会话，在 Telegram 里同样的斜杠命令也能用。这意味着你写在 CLI 里的肌肉记忆，到手机上还能用，不用学两套交互。学习曲线从"学会用 Hermes"变成"学会一套命令，然后从任何地方调用"。对经常在桌面和移动之间切换的人，这点比看上去重要——很多工具在手机端会简化成一个阉割版，Hermes 不会，因为命令集是同一套。
+
+第四个好处是扩展层面的低成本。当你以后想加一个新平台（比如从 Telegram 加 Discord），不需要再跑一个 agent 实例，只需要在 gateway 配置里多挂一个连接。已有的记忆、技能、用户映射全部复用。这让"我什么时候用哪个平台"变成纯粹的习惯问题，而不是"我在哪个平台配过 Hermes"的工程问题。
+
+当然，单进程设计也有它的代价：所有平台共用一个进程，意味着这个进程挂了所有平台同时失联。这是单点故障。后面讲进程保活的时候会专门说怎么应对这个风险——结论是必须配进程管理器（systemd / Docker），不能让它裸跑。
+
+## 配置流程：两条命令，六个平台
+
+Gateway 的配置走交互式向导，不需要手写 YAML：
 
 ```bash
 hermes gateway setup    # 交互式配各平台 token、白名单
-hermes gateway start    # 启动
+hermes gateway start    # 启动常驻进程
 ```
 
-每个平台都靠对应方提供的 bot 机制：
+`setup` 会用箭头键列出所有支持的平台，让你逐个选择配置。已经配好的平台会标记出来，没配的标为待配置。每个平台的配置项大同小异：bot token（或等价的访问凭证）加上你自己的用户 ID（用于白名单）。下面把六个主流平台的接入流程过一遍，重点说每一步容易卡的地方。
 
-- **Telegram**：找 @BotFather 建 bot 拿 token。最简单，建议第一个配它。
-- **Discord**：在 Discord Developer Portal 建 Application + Bot，拿 token，把 bot 拉进你的 server。
-- **Slack**：建 Slack App，配 OAuth scopes，装到 workspace。
-- **WhatsApp / Signal**：机制更绕，依赖第三方桥或官方 API 限制，社区方案为主。
-- **Email**：通过 IMAP/SMTP 配置，异步、慢，但能跑。
+### Telegram：最简单，建议第一个配
 
-每个平台都要配**白名单**——哪些用户可以和这个 bot 对话。不配白名单 = 你的 bot 公开暴露给任何知道它 ID 的人，让它替别人干活、读你的记忆。这就是 DM pairing 要解决的问题。
+找 `@BotFather` 这个官方机器人，发 `/newbot` 命令，给它起个名字（显示名）和一个唯一的用户名（必须以 `bot` 结尾，比如 `my_hermes_bot`），BotFather 会返回一串形如 `123456789:ABCdefGHIjklMNOpqrSTUvwxYZ` 的 token。然后把 token 粘进 `hermes gateway setup`。
+
+Telegram 是六个平台里流程最短的，三分钟就能跑通。建议第一个配它，用最小的摩擦建立对整套流程的信心——先看到 bot 能回消息，再处理复杂的平台。BotFather 还能给你设头像、设描述、设命令列表（这样用户在输入框打 `/` 会看到你的命令提示），这些是锦上添花，跑通基础之后再回来加。
+
+Telegram 还有个独门优势：支持 voice memo。你发语音给 bot，gateway 会自动调语音转写（Whisper 或类似的 ASR）把内容喂给 agent——开车、走路、做饭时用起来比打字方便太多。这是其他平台普遍不支持的能力，也是很多人最终主要用 Telegram 跟 Hermes 沟通的原因。voice memo 的转写质量取决于背景噪音和口音，但日常中文、英文的清晰发音基本没问题。
+
+拿 user ID 的方法：Telegram 里给自己的账号找 ID 不那么直接（平台不显示数字 ID）。可以用 `@userinfobot` 这种第三方 bot，给它发消息它会回你的 user ID。或者更简单的办法——配完 bot 后给它发条消息，gateway 的日志里会打印发送者的 user ID，复制下来填进白名单。
+
+### Discord：流程中等，注意 Intent
+
+去 Discord Developer Portal（discord.com/developers/applications）创建一个 Application，在 Application 下面创建一个 Bot，拿到 bot token。这里有个新手最容易漏的步骤：必须开启 Privileged Gateway Intents 里的 Message Content Intent 和 Server Members Intent，否则 bot 收不到消息内容——它能连上，但收到的消息全是空的，你以为配置错了其实只是 Intent 没开。这个坑社区里中招的人非常多。
+
+然后把 bot 邀请进你的 server，用 OAuth2 URL Generator 生成邀请链接，勾上必要的权限范围（至少要 `Send Messages`、`Read Message History`、`Application Commands`）。把链接贴进浏览器，选择你的 server，授权。这一步完成后 bot 才真正出现在你的 server 里。
+
+Discord 的白名单可以用 server role，也可以直接用 user ID。后者更精细，建议小范围用 user ID——只有这几个具体的人能用。如果做团队 bot（整个 server 都能用），可以基于 role 放行，但这样白名单的实际作用就弱了，要靠第 20 篇讲的 command approval 来兜底危险操作。
+
+Discord 还有个行为细节要知道：默认情况下，每个 DM 是独立的 session，server channel 里则需要 @mention 你的 bot 它才会响应。这是为了避免 bot 在群里刷屏——只有被叫到才说话。这个行为可以改，但默认值是合理的，建议保留。
+
+### Slack：流程最长，靠 Socket Mode 免公网
+
+Slack 的流程比前两个绕。要去 api.slack.com/apps 创建一个 Slack App，配 Bot Token Scopes（至少 `chat:write`、`im:history`、`im:read`、`im:write` 这些基础权限），开启 Socket Mode，订阅 `message.im` 事件，最后把 App 装到你的 workspace（Slack 会给你一个 install URL）。
+
+Socket Mode 是 Slack 接入的关键。它让 bot 通过 WebSocket 主动连 Slack 服务器，不需要你暴露公网 HTTPS 端点。对在家里跑 gateway 的人来说，这意味着不用配反向代理、不用搞域名证书、不用处理 Let's Encrypt 续期，开箱即用。Socket Mode 需要一个 App-Level Token（用 `connections:write` scope），和 Bot User OAuth Token 是两个不同的 token，别搞混。
+
+Slack 装到 workspace 之后，要在 App 的设置里开启 Messages Tab（让 bot 能收 DM），然后给 bot 发条消息测试。如果 bot 不回，最常见的原因是事件订阅没配对，或者 Socket Mode 没真正连上——日志里会写 `socket mode connected` 才算连上。
+
+Slack 还有个比 Telegram 慢的问题：消息往返延迟通常比 Telegram 高一些，社区里有人测过 Slack 大概多 100-200ms。日常聊天无感，但如果做需要快速来回的任务（比如实时编辑代码），可能感觉不如 Telegram 顺。
+
+### WhatsApp 和 Signal：社区桥方案，谨慎使用
+
+这两个平台官方对自动化 bot 的支持很有限，Hermes 走的是社区桥（bridge）方案。WhatsApp 通常需要 WhatsApp Business API 或者第三方的桥接服务（比如 periskope 之类的 CRM 中转），Signal 一般走 signal-cli 这类社区工具——signal-cli 把 Signal 客户端的能力用 Java 重新实现了一遍，可以程序化收发消息。
+
+这两个的配置比前三个复杂得多，稳定性也差一截。原因不是 Hermes 本身，而是平台政策。WhatsApp 对自动化消息有严格的商业政策限制，违反可能导致账号被封；Signal 的设计哲学就是反自动化的（端到端加密、不留元数据），程序化使用本来就走在灰色地带。平台政策收紧的时候桥接方案可能突然失效——某次 Signal 升级之后 signal-cli 失效几周等社区适配是常态。
+
+建议把基础三件套（Telegram/Discord/Slack）跑稳了再考虑这两个。如果你的核心场景在国内，第 14 篇讲的微信桥可能比这两个更实用。WhatsApp 和 Signal 主要给有跨境沟通需求的人用。
+
+### Email：异步但独特，适合长任务
+
+通过 IMAP 收件、SMTP 发件。gateway 周期性轮询邮箱（默认间隔通常几分钟一次，可以配），收到新邮件转给 agent，agent 的回复通过 SMTP 发回去。Gmail 用户要用 App Password 而不是主密码（账户开启两步验证之后才能生成 App Password），并且 IMAP 要在 Gmail 设置里显式开启。
+
+Email 通道是异步的、慢的——一轮对话要等好几分钟（轮询间隔加 LLM 处理时间）。但 Email 有个独特优势：邮件天然带主题和线程，适合长任务、长上下文的对话。比如让 agent 帮你起草一份长文档，用 Email 来回比 Telegram 一条条消息方便得多。也适合"转发式"用法——你收到一封长邮件，直接转发给你的 Hermes bot 邮箱，让它总结、提取待办、起草回复。
+
+Email 默认行为是 `ignore` 未授权用户（不回配对码），因为给每封垃圾邮件回配对码太蠢。要给某个邮箱授权，直接在白名单配置里写邮箱地址。注意 Email 的"白名单"语义和 IM 平台不一样——IM 是 user ID，Email 是邮箱地址，而邮箱地址很容易被冒充（发件人可以伪造）。所以 Email 通道的信任级别要低一些，敏感操作别走 Email。
+
+每个平台配完后，`hermes gateway start` 启动，看到日志里每个平台都打印出 `connected` 或者 `ready`，就说明接通了。这时候去对应平台给自己的 bot 发条消息，如果它回复，恭喜，第一步完成。但接通只是开始——接下来才是真正决定你这套系统安全还是裸奔的关键步骤。
 
 ## DM pairing：把 bot 锁给你的账号
 
-DM pairing 是把"你的某个平台账号"和"Hermes 里的你"绑定的过程。绑完后，只有你的账号发的消息 Hermes 才会响应；别人 @ 你的 bot，它不理。
+这是本篇最重要的一节，也是新手最容易跳过的一节。如果你只读这一篇的一段，就读这一段。
 
-为什么必做：
+Gateway 默认是"拒绝所有未授权用户"的 posture。官方文档原话是：未在白名单里或未通过 DM pairing 配对的用户，默认全部拒绝。这是给一个拥有强大能力的 bot 设的安全默认值——你的 bot 能读你的记忆、能用你的工具、能调你的 API、能跑 shell 命令，这种东西不能让陌生人随便用。
 
-- **防止陌生人消耗你的 API 配额**：不锁的话谁都能用它，账单你付。
-- **防止记忆/技能被污染**：别人和你的 bot 聊的内容可能写进你的记忆（第 11 篇讲的内存中毒风险放大）。
-- **防止越权操作**：bot 有工具权限（动文件、调 API），不锁等于把权限开放给网络。
+DM pairing 是把"你的某个平台账号"和"Hermes 里的你"绑定的过程。绑完之后，只有你的账号发的消息 agent 才响应；别人就算知道你的 bot 用户名、给它发消息，agent 也不理。
 
-每个平台配白名单的方式不同（TG 用 allowed user id 列表、Discord 用 server role 或 user id），但原则一致：默认拒绝，只放你信任的账号。
+为什么这件事必做？三个具体风险，每一个都是真实事故不是假想：
 
-## 跨平台对话连续性
+第一，防止陌生人消耗你的 API 配额。Hermes 背后调 LLM 是要花钱的——要么是你自己配的 OpenAI/Anthropic API key，要么是 Nous Portal 订阅的额度。bot 不锁白名单，等于任何人都能用它跑推理，账单寄到你家。社区里已经出现过这种事故：有人搭好 bot 兴冲冲发推说"我做了一个 Hermes bot"，第二天起来发现 API 账单多了几百美元——bot 被 Reddit 帖子里的网友轮流玩了整夜，每次对话都在烧 token。这种事故的特点是发现得晚——账单月底才结，等你看到的时候损失已经造成。
 
-Gateway 让你在多平台间切换还保持上下文。机制上：
+第二，防止记忆和技能被污染。Hermes 的记忆是跨会话共享的（第 10-12 篇讲过记忆系统）。陌生人跟你的 bot 聊的内容，可能被写进长期记忆，下次你自己用的时候，agent 会基于这些被污染的上下文回答你。这是第 11 篇讲的"内存中毒"风险在多平台场景下的放大——单平台时中毒源只有你自己，多平台时中毒源是整个互联网。想象一下：有人故意给你的 bot 灌一堆"用户偏好他是个程序员"的虚假记忆，之后你问编程问题，agent 会基于这个被植入的偏好给偏题的回答。这种攻击隐蔽，因为你看不到记忆被改了什么，只能感觉到 agent 越来越怪。
 
-- **同一 user id 跨平台映射**：Hermes 把你的 TG 账号和 Discord 账号都关联到内部同一个 user，记忆共享。
-- **会话可以指定继续**：在 Discord 接着 TG 的对话聊，agent loop 能拉到之前的上下文。
+第三，防止越权操作。bot 持有你的工具权限——动文件系统、调外部 API、跑 shell 命令、读你存的密钥（如果你的 skill 配置里有 AWS key 之类的）。不锁白名单等于把这些权限开放给网络。这不是假设性的风险，是真实会发生的：只要有人猜到或者扫到你的 bot 用户名（Telegram bot 用户名是公开的，可以被扫），他就能让你的 agent 跑任意命令。社区里有过 bot 被利用来挖矿、被用来发垃圾消息、被用来当跳板攻击其他服务的事故。
 
-边界：连续性不是完美的——不同平台的消息格式、附件支持差异（TG 能发 voice memo，Slack 行为不同），有些信息会丢。但"它是同一个 Hermes 在跟我说话"成立。
+DM pairing 的具体机制是这样的：当一个未授权用户首次给你的 bot 发消息时，gateway 不会把消息转给 agent，而是 bot 自动回复一段提示和一个 8 位配对码（形如 `A3F7-K9P2`）。bot 持有方（也就是你）在 CLI 里执行：
 
-## 真实坑
+```bash
+hermes pairing approve <platform> <code>
+```
 
-- **bot token 泄露**：token 写进 config 文件，如果 config 进了 git 公开仓库，别人能完全控制你的 bot。token 走 env vars 或 secret manager，别硬编码、别提交。
-- **白名单忘了配**：最常见事故。装好 bot 兴冲冲测试，忘了锁白名单，几天后 API 账单爆了或记忆被污染。
-- **平台限流**：TG bot 有发送频率上限，做定时推送（第 15 篇）时要注意别触发限流。
-- **进程挂了不知道**：gateway 是常驻进程，挂了你的 bot 就失联。配合进程管理（systemd / pm2 / Docker restart policy）保活。
+比如 `hermes pairing approve telegram A3F7K9P2`。把这个 code 批准之后，该用户就被永久加入授权列表，之后他发的消息 agent 才会正常响应。这是个人肉 in-the-loop 的设计——你必须主动在另一个通道（CLI）确认，才能让一个新用户进来。两步验证的思路：知道 bot 用户名（网络可见）不等于能用，还得有过 CLI 的你点头。
 
-## 权衡
+除了 pairing 这种"先发消息再批准"的方式，还有一种更直接的方式：直接在配置里写白名单（allowlist），把允许的用户 ID 列出来。适合你已经知道要给谁用的情况，比如只给自己用、只给几个同事用。Discord 和 Telegram 的白名单通常配 user ID，Slack 可以配 user ID 或者 channel ID。白名单的好处是不需要对方先发消息才能加——你提前配好，对方一发消息就生效。
 
-Gateway 让 Hermes 真正变成"随时可用的个人助手"——这是它和 IDE 类工具的根本差异。代价是多平台配置 + 维护的运维负担，以及安全边界必须自己把（白名单、token 管理、进程保活）。值得不值得看你能不能接受这份运维。
+这里有个特别危险的开关要重点提一下：`GATEWAY_ALLOW_ALL_USERS=true`。把这个环境变量设成 true，gateway 会接受所有用户，等于关掉白名单。官方文档里这个选项存在，是因为某些团队场景确实需要开放（比如团队 bot 给整个部门用），但个人部署千万别开。开了它等于把上面三个风险全部揽到自己身上。一个判断标准：如果你的 bot 是给"知道它存在的人"用，开 allow all 是 OK 的；如果它可能被陌生人发现（你公开提过它、用户名好猜），allow all 就是定时炸弹。
+
+另外还有个相关的配置：未授权用户的行为模式（unauthorized behavior mode）。可以设成两种：
+
+- `pairing`（默认）：bot 回复配对码提示，让用户走 pairing 流程。适合个人 bot 或者小团队 bot，让新用户能自助申请。
+- `ignore`：静默丢弃消息，不回复任何东西。适合公开 bot 但你不想被骚扰，或者 Email 这种天然会被扫描的场景。
+
+Email 通道默认是 `ignore`，因为给每封垃圾邮件回配对码太蠢。这个模式按平台分别配，按需选择。
+
+最后提醒一个安全细节：白名单配完后不是一劳永逸。如果你怀疑某个已授权账号被泄露，或者某个曾经信任的人不再信任了，可以用 `hermes pairing revoke` 撤销授权。社区里也报告过一个坑：撤销后如果不清理 `_rate_limits.json` 里的限流记录，重新配对会被卡住（GitHub Issue #40158 记录了这个 bug）。撤销之后如果还要重新配对，留意一下这个文件，必要时手动删掉对应条目。
+
+## 跨平台对话连续性：能连续到什么程度
+
+前面提到"跨平台对话连续"是单进程多平台设计的好处之一，这里要展开说清楚——连续不是魔法，它有明确的能力边界。把这件事讲清楚比吹"无缝衔接"重要，因为知道边界才能正确用。
+
+理想的连续性是这样：你在 Telegram 问 agent 帮你查某个 API 的用法，回家打开 Discord 接着问"那个 API 的错误码列表呢"，agent 应该知道你在说什么，因为它是同一个它，记得刚才聊过什么。
+
+现实是，这种连续性依赖两个机制叠加：
+
+第一个机制是同一用户跨平台映射。Hermes 内部维护一个用户身份，你的 Telegram 账号和 Discord 账号都通过各自的 DM pairing 绑到这个内部身份上。绑定之后，无论你从哪个平台进来，agent 都认你是同一个人，记忆库是同一份。这是连续性的基础——身份打通了，记忆才能共享。但要注意，这个映射不是自动发生的，需要你在每个平台都做一次 pairing；只在 Telegram 配过，Discord 那边 Hermes 把你当陌生人。
+
+第二个机制是会话检索。Hermes 把每次对话存成 session（第 10 篇讲过），session 之间可以检索。你在 Telegram 的对话存为一个 session，在 Discord 开新对话时，agent 可以通过 SQLite FTS5 全文检索加上 LLM 驱动的 recall，把过去相关的 session 内容拉进上下文。这个检索不是无脑全量塞（那样上下文会爆），而是基于相关性打分选 top-k。
+
+但这里有个被社区反复讨论的边界：跨平台的会话不是自动无缝接续的。GitHub Issue #49730 就是专门讨论这个限制的 feature request——很多用户期望"在 Discord 直接说接着聊"agent 就能完美接上 Telegram 的上下文，但实际很多时候你得显式让它去查历史，比如说"我刚才在 Telegram 问过你 X，继续"。社区讨论的方案包括用外部记忆 provider（把记忆接到外部向量库，跨 session 检索更强），但原生支持的跨平台 session 续传目前还是个改进中的领域，不是开箱即用的魔法。
+
+为什么连续性做不到完美？本质上是平台差异和检索精度的双重限制。平台差异后面单独说，检索精度的问题是：agent 不知道你"刚才在 Telegram 聊的"具体是哪一个 session，除非你给提示。LLM 驱动的 recall 会基于当前消息去匹配历史 session，但匹配不一定准——你可能聊过三个不同的 API，agent 不知道你说的"那个 API"是哪一个。所以显式提示（"接着刚才关于 Stripe API 的话题"）能显著提升连续质量，因为它给了 recall 一个明确的检索锚点。
+
+另一个边界是平台能力差异。不同平台支持的消息格式不一样：Telegram 能发 voice memo（自动转写）、能发各种附件（图片、文件、位置）；Slack 有自己的 message formatting（block kit，可以做出很丰富的卡片式 UI）；Email 是纯文本加附件。一条在 Telegram 里格式化漂亮的回复，转到 Email 里可能变成一团乱码（Markdown 在邮件里不渲染）；一个 voice memo 在 Discord 那边没有等价物（你得打字）。所以"连续"指的是对话上下文连续，不等于消息体验完全一致。这种体验割裂是单进程多平台设计的固有代价——你接受了多入口便利，就要接受平台差异带来的信息损耗。
+
+具体来说，下面这些信息在跨平台时容易丢：
+
+- 富格式：列表、表格、代码块在 Slack 里渲染好，转到纯文本通道（SMS、Email）会变成乱七八糟的符号。
+- 附件：Telegram 发的图片、文件，agent 处理之后内容存在记忆里，但你在 Discord 接着聊的时候看不到原图，只能基于 agent 的描述。
+- voice memo 的非语言信息：语速、停顿、语气在转写成文字时全部丢失，agent 只看到文字。
+- 平台原生的交互：Slack 的按钮、Discord 的 reactions，这些在其他平台不存在。
+
+实际使用建议：把跨平台连续当作"agent 记得我在不同平台聊过什么"来用，而不是"上一句话在 Telegram 说的下一句话在 Discord 完美承接"。需要严密承接的复杂多步任务，尽量在同一个平台内完成；跨平台切换时，主动给 agent 一个上下文提示（"接着刚才关于 X 的话题"）能显著提升连续质量。把"切换平台"当作"重新开始一个会话但 agent 还记得我"——这更接近实际能力，而不是"无缝接力"。
+
+## CLI 与消息平台命令对照
+
+前面提到 CLI 和消息平台共享命令，这里把常用命令对照列一下，方便迁移：
+
+- `/new`：开新会话。无论在 CLI 还是 Telegram，效果一样——把当前 session 结束，下一次消息进入新 session。适合话题转换时清空当前上下文。
+- `/model`：切换模型。在手机上想从便宜的 Haiku 切到更强的 Sonnet，直接发 `/model sonnet`（具体模型名按你配的后端来）。第 4 篇讲过模型选择的影响。
+- `/skills`：列出当前可用的技能。第 6-9 篇讲的 skills 系统，在消息平台和 CLI 里完全一致——你装的 skill 在哪个平台都能用。
+- `/help`：列出所有可用命令。记不住的时候发它。
+- `/memory`：查看或操作记忆。第 10-12 篇讲过，记忆系统的入口在所有平台一致。
+
+这些命令之所以能跨平台共享，是因为 gateway 把它们统一拦截在 agent loop 之前——平台收到斜杠命令，gateway 直接处理，不进 LLM 推理。这意味着斜杠命令响应快（不消耗 token，秒回），行为可预期（不会因为模型理解偏差而失败）。这种"命令走快捷通道、对话走 LLM"的分流设计，是 gateway 性能优化的一个关键点。
+
+注意一个细节：不同平台对斜杠命令的解析可能有差异。比如 Discord 的斜杠命令是平台原生功能（要你自己在 Developer Portal 注册 application command），Hermes 的斜杠命令是文本解析。所以在 Discord 里用 Hermes 命令，建议直接发文本 `/skills`（前面带斜杠的普通消息），而不是用 Discord 的 slash command 注册机制——两者长得像但不是一回事，文本方式更可靠。Telegram 和 Slack 类似，发文本就行。
+
+还有一个对比要清楚：CLI 是同步阻塞的（你发一条等回复），消息平台是异步的（你可以连发多条，agent 按顺序处理）。所以消息平台上不适合那种需要严密一来一回的细粒度任务（比如逐行改代码），更适合发个大任务等结果。这个差异不是 gateway 的设计选择，是平台本身交互模式的差异，Hermes 只是顺应了它。
+
+## 真实坑：四类常见事故
+
+搭好多平台 gateway 不等于完事，下面是社区里反复出现的四类事故，按发生频率排：
+
+### 第一类：白名单忘了配（最常见）
+
+最常见，没有之一。装好 bot 兴冲冲测试，能用了，以为自己配过了，其实那是因为 bot owner 默认在白名单里（你自己测当然能用）。过几天 API 账单爆了，或者发现记忆被污染，才意识到忘了把"只允许我自己"这件事显式写进配置。
+
+教训：搭好 bot 之后，立刻用一个朋友的账号（或者自己的小号、另一个平台的账号）测试——如果陌生人发消息 agent 也回复，说明白名单没生效。这个测试应该成为标准流程的一部分，不是可选项。
+
+更深一层的问题：很多人不知道默认 posture 是拒绝所有，以为"我没设白名单就是没人能用"，其实反过来——某些版本的默认（或者某些 adapter 的 fail-open 行为，比如 GitHub Issue #38638 提到的）可能是允许所有。所以"我没配过"不等于"它现在是锁的"，要主动验证。验证方法就是上面说的让陌生账号试。
+
+### 第二类：bot token 泄露（次常见）
+
+token 写进 `~/.hermes/config.yaml` 或者 `.env`，然后整个目录不小心 push 到公开 GitHub 仓库。token 一旦公开，任何人都能完全控制你的 bot——读它收到的所有消息、冒充它发消息、改它的配置、调用它持有的工具。这是比白名单忘配更严重的事故，因为白名单还能补救（陌生人发消息你看到日志能发现），token 泄露是悄无声息的——攻击者拿到 token 之后什么都不做，只是默默读你的消息流，你完全察觉不到。
+
+GitHub 的 secret scanning 会自动扫到 Telegram/Discord/Slack token 并通知平台方撤销，这是被动防护（要等 GitHub 扫到、平台通知你），不能依赖。主动防护是你自己管好：
+
+- token 走环境变量（在 shell 的 rc 文件里 export）或者 secret manager（比如 pass、1password CLI），绝不硬编码进会被提交的文件。
+- `~/.hermes/` 这个目录加进 `.gitignore`，确保整个 Hermes 配置目录不会进 git。
+- 如果一定要用 git 管理 Hermes 配置（比如做版本控制），把 token 字段抽到不入库的本地文件（比如 `~/.hermes/secrets.local.yaml`），主配置文件引用它。
+- 定期轮换 token（每几个月），轮换之后旧 token 立刻在平台方撤销（BotFather 的 `/revoke` 命令、Discord Developer Portal 的 reset token 按钮）。
+
+判断你的 token 是否泄露过：去对应平台的 bot 管理后台看 token 的最后使用时间和来源 IP，如果有陌生的，立刻撤销重发。
+
+### 第三类：平台限流（做自动化时必踩）
+
+Telegram bot 有发送频率上限（大致每秒 30 条消息、每分钟 600 条，具体看 chat 类型和 bot 是否被官方限流），Slack 也有 rate limit（每分钟几十条短消息，超过会 429）。做定时推送（第 15 篇 cron + 子 agent）的时候特别要注意——如果你的 cron 任务一口气往十个群发消息，很可能被限流甚至临时封号。
+
+限流的应对：
+
+- 批量推送加间隔（每条消息之间 sleep 1-2 秒）和抖动（间隔随机化，不要严格 1.0 秒）。
+- 别整点齐发（cron 写 `0 9 * * *` 是最糟的，全网都在 9 点发，你的 bot 跟别人的 bot 撞在一起）。第 15 篇会专门讲这个，本篇只提醒：手动测试的时候看不出限流，因为你就发一两条；自动化才是限流的高发场景。
+- 监控 429 响应（Telegram 和 Slack 都返回这个状态码），遇到就退避重试，别硬冲。
+- 给重要消息设优先级，限流的时候优先发重要的，不重要的延后。
+
+### 第四类：进程挂了不知道
+
+gateway 是常驻进程，挂了你的 bot 就失联，而你不会立刻知道——直到你发消息没人回才发现。这种事故最隐蔽，因为你以为它在工作，其实已经死了三天，错过了多少消息根本不知道。挂掉的原因五花八门：内存泄漏（长期运行）、依赖的外部服务超时（LLM API 慢）、网络抖动、机器重启、OOM killer 等。
+
+三种保活方案，按可靠性排：
+
+**systemd（Linux VPS 推荐）**：写一个 unit 文件，配 `Restart=always` 和 `RestartSec=5`，进程挂了自动拉起，VPS 重启后也自动启动。这是最稳的方案。社区有现成的 unit 文件模板（zenn.dev 的"Part 6 如何用 systemd 让 Hermes 常驻"教程、lumadock.com 的"24/7 运行 Hermes"教程都给了完整 unit 文件）。一个最小可用的 unit 文件大致长这样（具体路径按你的安装调整）：
+
+```
+[Unit]
+Description=Hermes Agent Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+ExecStart=/usr/local/bin/hermes gateway start
+WorkingDirectory=/home/youruser
+EnvironmentFile=/home/youruser/.hermes/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+配完 `systemctl enable --now hermes-gateway`，搞定。
+
+**Docker**：用官方镜像跑，配 `--restart unless-stopped`。注意 Docker 镜像内部用 s6 管理进程，`docker stop` 的行为有点绕（CMD 是 `sleep infinity` 当心跳，真正的 gateway 在 s6 下面）。社区有人报告过容器每小时自动重启一次的现象（Reddit r/hermesagent 有讨论），这是 s6 overlay 的定时任务设计，不是 bug——但你要知道这件事，看到日志里每小时重启一次别慌。Docker 的好处是隔离好（崩了不影响宿主机）、迁移方便（换机器就 pull 镜像）、配 compose 文件可以同时跑多个 profile（多 gateway）。
+
+**pm2 / nohup / tmux**：临时方案，不推荐长期用。pm2 在 Hermes 上有个已知 bug（GitHub Issue #35043）——`hermes gateway restart` 在非 systemd 环境下大约 50% 的概率会失败，新进程作为旧进程的子进程被一起带走。如果你不得不用 pm2（比如在 macOS 本地开发），遇到这个 bug 的话用 `pm2 restart hermes-gateway`（pm2 自己的重启）而不是 `hermes gateway restart`（Hermes 内部的重启）。nohup 和 tmux 是最低级的保活（其实就是不让进程随终端关闭而死），没有任何重启逻辑，进程一旦自己挂了就真的没了，只适合临时测试。
+
+保活之外，建议加个监控：cron 定时（比如每 5 分钟）给 bot 发条 ping 消息，agent 不回就告警（发邮件、推 IFTTT、发到另一个群）。或者用 uptime 监控服务（UptimeRobot、健康检查脚本）盯一下 gateway 进程的存活。这种主动监控能让你从"挂了三天才发现"变成"挂了五分钟收到通知"，差别巨大。一个常见的偷懒办法：用第 15 篇要讲的 cron + 子 agent，让 Hermes 自己定时给自己发一条"还活着吗"，对方不回就触发告警——用 Hermes 监控 Hermes，鸡生蛋蛋生鸡但确实管用。
+
+## 权衡：值得不值得
+
+Gateway 让 Hermes 真正变成"随时可用的个人助手"——这是它和 IDE 类 AI 工具的根本差异。Cursor 再强，你只能坐在电脑前用；Hermes 配好 gateway，地铁上、走路时、做饭间隙、排队结账时，掏出手机就能用。这种"随时在线"的可用性，是个人 AI 助手和桌面生产力工具的分水岭。一旦习惯了，你会很难回到"必须打开电脑才能用 agent"的状态——就像习惯了手机之后很难回到只能用座机。
+
+但代价是实打实的运维负担。多平台配置是一次性的（配完就行，最多几个月调一次），但白名单管理、token 轮换、进程保活、限流规避、平台政策变化应对，这些都是持续的。你得把 gateway 当成一个长期维护的小服务来对待，不是配一次就忘的东西。每周看一次日志、每月轮换一次 token、每季度回顾一次白名单，这种节奏是合理的。如果你完全不打算做这些事，gateway 的可靠性会随时间下降，直到某天出事。
+
+值不值得，看你能不能接受这份运维成本，以及你对"持续在线 agent"的需求强度。如果你已经在用 VPS 跑别的服务（比如自部署 Nextcloud、跑个 Telegram bot、托管个小网站），加一个 Hermes gateway 不算什么额外负担，systemd unit 加一行的事，对你来说是顺手。如果你完全没碰过服务器运维，光是 systemd unit 文件、Docker compose、密钥管理这些概念就得学一阵——这种情况下，建议先只配 Telegram 一个平台（最简单），跑顺了再扩。不要一上来就配六个平台，会把自己淹没。
+
+还有一个维度的判断：使用频率。如果你每天用 Hermes 不到一次，CLI 够用，gateway 的边际价值不高（一年用三百次，每次开终端的摩擦可以忍）。如果你像本系列预设的读者那样，想把 agent 真正嵌入日常（出门问、随时记、定时跑、跨设备续），那 gateway 几乎是必经之路——它的价值随着使用频率线性增长，越用越值。
+
+最后一个隐性收益：把 agent 从桌面带到手机，会改变你和它的关系。桌面上的 agent 是"我打开它干活的工具"，手机上的 agent 是"我随时想到就能问的伙伴"。后者的使用模式会自然演化出新的用法——碎片时间的提问、突发想法的记录、上下文相关的提醒——这些是桌面 agent 触发不到的场景。第 15 篇讲的 cron 加子 agent 就是这种演化的一部分：让 agent 不仅被动响应，还主动出击。Gateway 是这一切的基础。
 
 ## 结论
 
-一条 `hermes gateway setup` + `start`，配好各平台 bot token 和白名单，就能从手机随时用 Hermes。重点不是"接通"——重点是"接通后把它锁住"：DM pairing、token 管理、进程保活，三件事不做就是裸奔。
+一条 `hermes gateway setup` 加 `start`，配好各平台 bot token 和白名单，就能从手机随时用 Hermes。重点不是"接通"——接通是 setup 向导十分钟的事；重点是"接通之后把它锁住"。DM pairing 把 bot 绑给你的账号、token 管理避免泄露、进程保活让它持续在线，这三件事不做就是裸奔。三件事都做了，gateway 才真正变成"无处不在的助理"，而不是"出事才想起来的实验品"。
+
+本篇是多平台与自动化主线的第一篇。第 14 篇讲微信桥（HermesClaw），把国内最常用的聊天工具也接进来，补全最后一块拼图；第 15 篇讲 cron 加子 agent，让 gateway 不只是被动响应，还能主动定时干活；第 16 篇端到端实战，把所有平台和自动化串成一个完整流程。读完这三篇，你就能把 Hermes 从"桌面工具"升级成"无处不在的助理"——这套能力加在一起，才是 Hermes 区别于其他 AI 编码工具的核心竞争力。
 
 ## 延伸阅读
 
-- [Hermes Messaging Gateway 文档](https://hermes-agent.nousresearch.com/docs/)
-- [Hermes Security 文档（DM pairing、command approval）](https://hermes-agent.nousresearch.com/docs/)
+- [Hermes Messaging Gateway 官方文档](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/) — 平台列表、setup 向导细节
+- [Hermes Security 文档](https://hermes-agent.nousresearch.com/docs/user-guide/security) — DM pairing、allowlist、command approval 三层防护
+- [Telegram Setup 教程](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/messaging/telegram.md) — 含 voice memo 转写细节
+- [Slack Setup 教程](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/slack) — Socket Mode 配置步骤
+- [Discord Setup 教程](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/discord) — Privileged Gateway Intents 注意事项
+- [多 gateway 部署](https://hermes-agent.nousresearch.com/docs/user-guide/multi-profile-gateways) — 一机多 profile 的运维方式
+- [GitHub Issue #49730：跨平台会话连续性](https://github.com/NousResearch/hermes-agent/issues/49730) — 当前限制与社区方案讨论
+- [GitHub Issue #35043：非 systemd 重启 bug](https://github.com/NousResearch/hermes-agent/issues/35043) — pm2 用户必读
+- [GitHub Issue #38638：fail-open adapter 风险](https://github.com/NousResearch/hermes-agent/issues/38638) — 不显式配白名单时的隐性风险
+- [用 systemd 让 Hermes 常驻（zenn.dev）](https://zenn.dev/sora_biz/articles/hermes-vps-06-systemd?locale=en) — 完整 unit 文件教程
+- [24/7 运行 Hermes（lumadock.com）](https://lumadock.com/tutorials/run-hermes-agent-with-systemd) — 重启策略和资源限制
 - [第 14 篇：微信桥 HermesClaw](./14-wechat-bridge-hermesclaw.md)
+- [第 15 篇：cron 加子 agent](./15-cron-subagent.md)
+- [第 16 篇：端到端实战](./16-end-to-end.md)
 - [第 20 篇：安全三件套](./20-security-command-approval-dm-pairing.md)
