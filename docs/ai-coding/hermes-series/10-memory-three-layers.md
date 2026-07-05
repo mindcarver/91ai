@@ -25,72 +25,339 @@
 
 > 系列第 10 篇 · 读者预设：关心长期记忆、个性化、跨会话连续性的人 · 最后核实：2026-07
 
-**TL;DR：** Hermes 的记忆不是单一黑盒，社区把它拆成几块：**会话检索**（FTS5 全文搜历史对话）、**curated memory**（agent 自己挑值得记的写进去）、**user model**（Honcho 给你建画像）、**procedural**（skill，第 5-9 篇讲过）。理解每层管什么，才能判断"记不记得"和"记得对不对"。
+**TL;DR：** Hermes 的记忆不是单一黑盒。把它拆成四块来看：**会话检索**（SQLite FTS5 全文搜历史对话原文）、**curated memory**（agent 自己挑值得长期记的写进 `MEMORY.md`）、**user model**（`USER.md` + 可选 Honcho 给你建画像）、**procedural**（skill，第 5–9 篇讲过）。这四块机制不同、输入不同、失败模式也不同。混在一起谈，就会问出"它到底记不记得住"这种没法一句话回答的问题。本篇给全景地图：每层管什么、各层风险、和本仓库已评测过的 13 个开源记忆项目相比 Hermes 算哪一类。**机制细节（FTS5 召回质量、curated 写入触发、Honcho dialectic）拆给 #11 和 #12**。
 
-## 为什么单聊"记忆"不够
+## 为什么单聊"记忆"这个词不够
 
-大部分人对 AI 记忆的期待是"它能记住我上次说的"——但这是个模糊词。实际"记住"分好几种：
+大部分人对 AI 记忆的期待是"它能记住我上次说的"——但"记住"是个被严重过载使用的词。打开任何一篇讲 agent memory 的文章，"remember""long-term memory""persistent memory"这些词被交替使用，指的却常常不是同一件事。在 Hermes 这个具体系统里，至少能拆出四种被混在一起讲的能力：
 
-- **能搜到过去的对话原文**（会话检索）
-- **能把零散对话里的偏好提炼出来**（curated memory）
-- **对你这个人的画像越来越准**（user model）
-- **会做某类事的方法越来越稳**（procedural / skill）
+- **能搜到过去某次对话的原文**——这是会话检索（session search）。你说"上周我提到的那本《XX 书》"，它去历史里全文搜，把那段原文捞回来。它不"理解"你喜欢什么，它只是个搜索引擎。
+- **能把零散对话里的事实/偏好提炼出来存住**——这是 curated memory。agent 自己读你的对话，决定"用户有一只叫 Pepper 的猫"这种事值得长期记，把它写进 `MEMORY.md`。
+- **对你这个人的画像越来越准**——这是 user model。`USER.md` 里写"用户是后端工程师、偏好简洁回答、不喜欢被反复确认"，可选的 Honcho 后端还能做更深一层 dialectic（辩证式）用户建模。
+- **会做某类事的方法越来越稳**——这是 procedural memory，也就是 skill。第 5–9 篇讲过的自我改进循环，把"怎么做某类任务"沉淀成可复用的程序。
 
-这四件事机制不同、风险也不同。混在一起谈，就会问出"它到底记不记得住"这种没法一句话回答的问题。
+这四件事的机制完全不一样：第一件是确定性的关键词召回（FTS5 + BM25），后三件都靠 LLM 自己判断。它们的风险也不一样：会话检索最多召不准，curated memory 可能记错或漏记，user model 一旦建偏很难纠正，procedural 一旦错误固化影响后续所有同类任务。
 
-## 四块记忆各管什么
+把它们混在"记忆"这一个词下讨论，就会出现这种典型的、看似合理其实没法回答的问题——"Hermes 到底能不能记住我说过的话？" 答案取决于你问的是哪一层：会话检索层基本能（FTS5 会把原文索引到），curated 层可能能（看 agent 有没有觉得值得记），user model 层是另一回事（它不记你"说过"什么，它记它"觉得你是谁"），procedural 层又完全是另一条线（它记"该怎么做"而不是"你说过什么"）。
+
+所以本篇要做的事很明确：把这四块拆开，给一张全景地图，让你之后判断任何关于 Hermes 记忆的说法时，先想清楚它落在哪一层。
+
+## 先看全景：四块记忆各管什么
+
+下面这张 ASCII 图是社区拆法的汇总，对照官方文档和 mranand 的 "Inside Hermes Agent" 长文整理出来。注意一个重要的诚实声明：**官方文档没有把记忆明确称为"四层"**，社区里有"三层""四层""六层"三种说法并存（下面会专门讲为什么）。这里采用四块的功能切分，因为它对理解"风险落在哪"最有用，但不要把"四层"当成神圣数字。
 
 ```
-┌─────────────────────────────────────────────┐
-│  会话检索（FTS5）                            │
-│  原始对话全文索引，按关键词/语义召回          │
-├─────────────────────────────────────────────┤
-│  Curated Memory（agent 自己整理）           │
-│  从对话提炼出"值得长期记的事实/偏好"          │
-├─────────────────────────────────────────────┤
-│  User Model（Honcho）                        │
-│  对你的画像——角色、习惯、说话风格             │
-├─────────────────────────────────────────────┤
-│  Procedural（skills）                        │
-│  "怎么做某类事"的程序性记忆（第 5-9 篇）      │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│            Hermes Agent 记忆全景（四块功能切分）                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ① 会话检索  Session Search（FTS5）                              │
+│     原始对话全文索引，按关键词/短语召回                           │
+│     存储：SQLite state.db，FTS5 虚拟表，BM25 排序                │
+│     召回方式：search_messages()，确定性                          │
+│     风险等级：低（最多召不准，不会记错）                         │
+│                                                                 │
+│  ② Curated Memory  agent 自整理                                 │
+│     从对话里挑出"值得长期记"的事实/偏好，写进 MEMORY.md          │
+│     写入触发：5 个 hook（会话结束、低置信、显式 etc.）           │
+│     谁决定记什么：agent 自己（背景 review agent）                │
+│     风险等级：中（可能记错的、漏记对的）                         │
+│                                                                 │
+│  ③ User Model  USER.md + 可选 Honcho                             │
+│     对你这个人的画像——角色、习惯、说话风格、要避免什么           │
+│     上限：USER.md 约 1,375 字符；Honcho 做更深 dialectic 建模    │
+│     风险等级：高（画像固化后纠正成本大，早期对话污染风险）       │
+│                                                                 │
+│  ④ Procedural  skills（程序性记忆）                              │
+│     "怎么做某类事"的可复用程序（第 5-9 篇 self-improvement）     │
+│     存储：skills/*.md，agent 自己写、自己改                      │
+│     风险等级：最高（错误一旦固化成 skill，影响后续所有同类任务） │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-注意这是社区的拆法（参考 mranand 的 "four-layer memory system" 分析），不是官方文档的明确分层。官方把记忆描述为"persistent memory + agent-curated + nudges + FTS5 session search + Honcho"——机制都列了，但没强调"层"的概念。所以别把"四层"当成神圣数字，理解机制比记层数重要。
+读这张图的方式：**从上往下，确定性递减、风险递增**。①几乎是个搜索引擎，它不会"记错"，顶多"没搜到"。②③④都靠 LLM 判断，所以"记错"是真实存在的失败模式，而且越往下，错误的影响范围越大——curated 记错一条事实只影响那一条，user model 建偏影响所有未来对话的语气和方向，procedural 错误固化影响所有同类任务。
 
-## 每层的输入和风险
+下面四节分别拆每一块的输入、机制、风险。
 
-- **会话检索**：原始输入是对话本身。风险低（只是索引），但召回质量取决于搜索方式（纯 FTS5 关键词 vs 加语义）。
-- **Curated Memory**：输入是对话，但 **agent 决定**什么值得记。风险在这里——它可能记错的、漏记对的（第 11 篇详讲）。
-- **User Model（Honcho）**：基于历史对话给你建画像。风险是画像固化后难改——早期对话给它留了错印象，后面纠正要费劲。
-- **Procedural（skill）**：上一条主线讲过的 self-improvement 风险，错误固化的概率最高。
+## ① 会话检索（FTS5）：唯一确定性召回的一层
 
-## 和你已知的记忆系统对比
+### 输入和机制
 
-如果你看过 [91AI 的 AI 记忆系统评测专题](../../../evaluation/memory-systems-eval/)，可以把 Hermes 的记忆放在那个坐标系里：
+每一轮对话——不管来自 CLI 还是 messaging 集成——都会被原样写进 SQLite 的 `state.db`，并用 FTS5（SQLite 的全文搜索扩展）建索引。当后续某轮需要"翻历史"时，agent 调用 `search_messages()`，传入 FTS5 查询语法，拿到按 BM25 排序的原始消息片段。这是 Hermes 三层模型里的"Tier 2 / full-text session search"，也是社区一致认定的最底层、最不会出错的一块。
 
-- Hermes 的 **curated memory + skill** 类似 **Mem0 / Letta** 那类"agent 自管 + 写入 + 检索"的路线（评测里的第 1、2 个项目）。
-- Hermes 的 **FTS5 会话搜索** 是偏轻量的"原文召回"，比不上 **Zep/Graphiti** 那种时序知识图谱的精度（评测里时序优势实测还被证伪过）。
-- Hermes 的 **Honcho user model** 是"用户建模"维度，评测里 13 个项目大多没专门做这块。
+关键点是它的**确定性**：只要那段原文被写进库里，并且你的查询包含原文里出现过的关键词或短语，FTS5 就一定会把它捞出来，排序由 BM25 决定。这里没有 LLM 在中间做判断、没有抽取、没有摘要——原文进、原文出。这让它成为四块里唯一一个"理论上可以靠测试覆盖"的层。
 
-注意：本系列**不做**对 Hermes 记忆的统一后端实测横评（原计划第 13 篇已取消）。上面的定位是基于架构分析，不是实测分数。要严谨的实测，建议参考你的评测专题方法论自行复现。
+### 它能做什么、不能做什么
 
-## 真实坑
+FTS5 + BM25 是经典的关键词召回。它的强项是精确匹配——你说"Pepper"，它一定捞回所有提到 Pepper 的消息。它的弱项也很明确：
 
-- **"它应该记得"≠"它真的记得"**：四层里只有会话检索是确定性召回，其他三层都靠 agent 判断。你以为它记了，可能它没记。
-- **早期污染**：刚开始用时如果对话风格混乱，user model 可能建偏。后面要刻意纠正。
-- **跨会话连续 ≠ 记忆准**：它"知道你上次说了什么"（检索），不代表它"理解你的偏好"（user model）。两个能力。
+- **没有语义**。"我的猫"搜不到只写"feline pet"的段落。官方仓库的 [issue #44075](https://github.com/NousResearch/hermes-agent/issues/44075) 就是社区在讨论给 session_search 加 hybrid（BM25 + 向量）模式来补这个缺口，LanceDB、Milvus 都有人提过方案，目前还是开放 issue。
+- **不会聚合**。"我有几只猫"这种问题 FTS5 自己回答不了，它只能把所有提到猫的段落捞回来交给 LLM 去数。本仓库的 [13 项目记忆评测](../../../evaluation/memory-systems-eval/overview-report.md)里专门有一条结论：**多会话聚合是所有原子事实/段落型记忆的固有弱项**——你拿原文召回，LLM 数错的概率并不低。
+- **不知道新旧**。如果一个事实更新过（旧值和新值都存在原文里），FTS5 会把两个都捞回来，哪个先被 LLM 采纳要看上下文，不是看时间戳。这恰好是评测里 Supermemory 唯一答对 knowledge-update 题而 Mem0/Memvid 都答错的原因——矛盾消解不是 FTS5 干的活。
 
-## 权衡
+### 风险
 
-Hermes 的记忆设计偏"agent 自治"——它自己挑、自己写、自己改。好处是省心，不用你手动维护记忆库；代价是过程不透明、可能记错。如果你对记忆准确性要求高（比如做客服、做研究助手），这种自治记忆需要更多监督。
+会话检索层的风险低，但不是零。主要三类：
 
-## 结论
+1. **召不全**：BM25 排序靠后段会被截断，长会话里某些片段永远进不了上下文。
+2. **关键词漂移**：用户问的词和对话里出现的词不一致时召回失败（"我的猫" vs "Pepper"）。
+3. **存储上限**：state.db 不是无限大，旧 session 是否会被清理、清理后 FTS5 还能不能搜到——这是部署相关的问题，官方文档建议做 session 存储策略。
 
-把"记忆"拆成四块看：会话检索、curated memory、user model、procedural。前三篇分别拆后三块的机制和坑。判断 Hermes 记忆好不好用，要先想清楚你关心的是哪一层。
+会话检索的具体实现细节（FTS5 schema、`search_messages()` 用法、 sanitization 怎么处理用户输入里的特殊字符）拆给第 12 篇讲。
+
+## ② Curated Memory：agent 自己挑、自己写
+
+### 输入和机制
+
+curated memory 是 Hermes 最有意思也最危险的一层。它的核心机制是：**agent 自己读对话，自己决定什么值得长期记，自己写进 `MEMORY.md`**。这和传统的"用户手动维护笔记"完全反过来——你不用自己写记忆库，agent 替你写。代价是过程不透明，且依赖 agent 的判断质量。
+
+写入不是随时发生的。社区拆出来 Hermes 有 5 个触发 hook，会启动一个**背景 review agent**（注意是 fork 出来、隔离于外部 memory 插件的，确保 review 过程不被外部状态污染）来扫一遍刚结束的对话，挑出"值得长期记"的内容写进 `MEMORY.md`。具体的 5 个触发条件、review agent 的 prompt、低置信时怎么 nudge 用户确认——这些机制细节拆给第 11 篇。
+
+存储形式是扁平 Markdown 文件 `MEMORY.md`，agent 通过 tool call 读写。这有两个直接后果：第一，它是人类可读的——你可以打开文件看 agent 到底记了什么，这点比向量库黑盒好太多；第二，它和 prompt caching 的关系微妙——如果整个 `MEMORY.md` 被塞进 system prompt，每次写入都会让 cache 失效，所以官方的实现是把外部 provider 召回的内容注入到 **user message**（包在 `<memory-context>` 块里），不是 system prompt，专门为了保留 prompt caching。
+
+### 它能做什么、不能做什么
+
+curated memory 的强项是**压缩**。一段 30 轮的对话，里面真正值得长期记的可能就 3 条事实——agent 提炼出来存住，下次直接用，不用重新读 30 轮。这比纯 FTS5 召回原文省 token、也精准。
+
+但它的弱项恰好在"agent 判断"这一步：
+
+- **可能记错的**。agent 把玩笑话当真、把临时偏好当成长期偏好、把错别字当专有名词——这些都会写进 `MEMORY.md`。本仓库评测里 Mem0（事实抽取型，机制和 curated memory 同源）在冒烟测试 12 题里答错 1 题，就是把 11/12-15 的会议日期和 11/11 的到达日轻微混淆。这是同源机制的真实失败模式。
+- **可能漏记对的**。agent 觉得不值得记、但其实重要的事，会从 `MEMORY.md` 里缺席。这种失败比"记错"更难发现——你不知道它没记什么。
+- **多会话聚合依然弱**。和 FTS5 一样，curated memory 把事实拆成独立条目存，不会在检索时重新聚合。"用户取了几件衣服"这种要数跨会话的事实，评测里所有原子事实型记忆都答错。这是机制固有问题，不是写错了 prompt。
+
+### 风险
+
+curated memory 的核心风险是**判断不确定性**。和会话检索的"确定召"完全不同，这里每一条记忆的诞生都经过 LLM 的一次（或几次）判断。具体三类：
+
+1. **抽取质量依赖 LLM**：弱模型抽出来的记忆条目质量差、强模型贵且慢。Hermes 的 review agent 默认走主模型，所以你换模型 = 换记忆质量。
+2. **写入门槛过低/过高**：门槛过低 `MEMORY.md` 会膨胀，挤占上下文；过高会漏记。社区的 nudge 机制（在不确定时主动问用户"要记这个吗"）就是来调节这个的，第 11 篇详讲。
+3. **不可逆性弱**：写错了可以改（agent 自己能改 `MEMORY.md`），但前提是它后续会重新评估。如果一条错记忆被反复检索、强化，它会越来越难被推翻——这其实就是 user model 层"固化"风险的弱化版。
+
+## ③ User Model：画像怎么建、为什么难改
+
+### 输入和机制
+
+`USER.md` 是 Hermes 给你建的用户画像文件，上限约 1,375 字符（这是个硬约束，不是建议——Avi Chawla 的 masterclass 里专门讲了字符限制）。里面写的是：你的名字、角色（比如"后端工程师"）、沟通偏好（"喜欢简洁回答""不喜欢被反复确认"）、技能水平、要避免什么。每次会话开始，`USER.md` 会被加载进上下文，作为 agent 行为的基线。
+
+可选的 Honcho 是另一层。Honcho 是一个 AI-native 的记忆后端，专门做**dialectic reasoning 和深度用户建模**——它不是简单地存"用户偏好简洁"，而是会试图建一个能和你"对话"的用户模型，包含你的目标、动机、矛盾。Honcho 作为 Hermes 的一个外部 memory provider 插件接入，和 `USER.md` 平行存在。
+
+注意 `USER.md` 和 `MEMORY.md` 的分工：`MEMORY.md` 是"关于这个世界/项目的事实"（你有什么猫、项目用什么框架），`USER.md` 是"关于你这个人的画像"（你是谁、你怎么想、你要什么）。两个文件、两个机制、两种风险。
+
+### 它能做什么、不能做什么
+
+user model 的强项是**让 agent 行为风格稳定**。一旦 `USER.md` 里写定"用户是后端工程师、偏好简洁"，后续所有对话 agent 都会按这个基线走，不用你每次重新解释。这是个性化的核心。
+
+它的弱项恰好是它的强项的另一面——**画像固化后纠正成本大**。考虑这个场景：
+
+- 你刚装上 Hermes，前几次对话都是在问很基础的问题（"什么是 RAG""Python 装哪"）。
+- agent 给你建的画像可能是"初学者、需要详细解释"。
+- 三个月后你已经很熟了，开始问深层问题，但 agent 还是按"初学者"画像给你啰嗦地解释基础概念。
+- 你想纠正这个画像——但 `USER.md` 已经写满，里面没有"用户已进阶"这种动态字段，要改你得手动编辑或等 agent 自己慢慢 update。
+
+这就是 user model 层的核心风险：**它不擅长追踪变化**。本仓库评测里有一个非常具体的实证——Supermemory 是唯一答对 knowledge-update 题的工具，因为它有专门的矛盾/时序消解机制；Mem0（ADD-only）和 Memvid（逐字块）都答错，捞到了旧的 stale 值。Hermes 的 `USER.md` 在架构上没有 Supermemory 那种显式的消解层，所以画像更新慢、容易被早期印象拖住。
+
+### 早期对话污染风险
+
+这是 user model 最值得专门讲的失败模式。**早期对话会不成比例地影响画像**——因为 `USER.md` 一开始是空的，前几条写入会塑造它的骨架。如果你刚开始用 Hermes 时对话风格混乱（一会儿问正经技术问题、一会儿闲聊测试），画像可能建得很乱。后面想清理：
+
+- 手动编辑 `USER.md`（最快，但要你意识到问题）。
+- 等 agent 自己重新评估（慢，且依赖 agent 主动 update）。
+- 用 Honcho 的 dialectic 机制（如果接入的话），它能更好地处理矛盾，但成本更高。
+
+实操建议：**刚装上 Hermes 的前 5-10 次对话，刻意保持你想让 agent 长期记住的风格和角色**。不要拿它随便测试无关问题——那些对话都会进画像。这和训练模型的前几步类似，影响 disproportionate。
+
+## ④ Procedural（skills）：错误固化的高发区
+
+### 输入和机制
+
+procedural memory 就是 skills——agent 把"怎么做某类事"沉淀成可复用的程序，存成 `skills/*.md`，下次遇到同类任务直接调用。这部分第 5–9 篇讲得很细（learning loop、self-improvement、错误纠正），这里只从"记忆"视角做一个总览。
+
+skill 的诞生路径：agent 完成一类任务 → 背景 review agent 评估"这个流程值得固化吗" → 如果值得，写成 skill 文件 → 下次同类任务优先用 skill。skill 的更新路径：agent 发现现有 skill 在新场景下失效 → 修改 skill 文件 → 新版本覆盖旧版本。
+
+### 它能做什么、不能做什么
+
+procedural memory 的强项是**任务级稳定性**。一旦 agent 学会了"用户喜欢 PR 描述用某个固定模板"，后续所有 PR 描述都会按这个模板走，不用每次重新学。这是其他三层都做不到的——会话检索是消息级，curated 和 user model 是事实/偏好级，procedural 是流程级。
+
+它的弱项是**错误固化的代价最高**。考虑这个场景：
+
+- agent 第一次做某类任务时基于不完整信息建了个 skill，里面有个错误步骤。
+- 后续所有同类任务都按这个错误 skill 走，错误被反复执行。
+- 直到某次失败足够明显，触发 self-improvement 循环（第 9 篇讲过），skill 才会被修改。
+
+这个"失败足够明显"的门槛是关键。如果错误不致命（比如 PR 描述里某个字段写得不够好），它可能永远不会触发纠正，错误就长期存在。这是 procedural 层比 user model 层更危险的地方——user model 建偏只影响语气和方向，procedural 错误固化影响实际操作正确性。
+
+判断 procedural 层健康度的实操信号：定期翻 `skills/` 目录看每个 skill 文件最近一次被改是什么时候、改动是修 bug 还是扩场景。如果一个 skill 三个月没动过但你一直在用它处理的同类任务，要么它已经稳定可用（好情况），要么它的失败从来没明显到触发 self-improvement（坏情况，错误在静默传播）。区分这两种情况只能靠抽查——拿最近几次同类任务的实际输出对照 skill 文件，看 skill 里写的步骤和实际执行的是不是一致。这种抽查是 procedural 层目前没有自动化的部分，只能人工补。
+
+### 和 self-improvement 的联动
+
+第 9 篇讲过 self-improvement 怎么纠正 skill 错误。从记忆视角看，self-improvement 本质上就是 procedural memory 的"修订机制"——它不是另一套系统，而是 procedural 层自带的更新流程。理解这一点能帮你判断：什么时候该手动干预 skill（self-improvement 触发不了的时候），什么时候可以让它自己改。
+
+## 关于"几层"的诚实声明：社区有三种说法
+
+到这里必须讲清楚一件容易被忽视的事：**Hermes 的"几层记忆"在社区里有三种并存的说法，没有一个是官方钦定的**。
+
+- **三层说**（Akshay Pachaar 的 LinkedIn 帖子）：tier 1 = `MEMORY.md` + `USER.md` 两个小文件；tier 2 = FTS5 session search；tier 3 = skills。这是按"读取速度/成本"分层，tier 1 每次都加载、tier 2 按需搜、tier 3 按需调。
+- **四层说**（mranand 的 Substack 长文 "Inside Hermes Agent"）：把 prompt memory、session、skills、curated 分成四层，每层有"specific job, specific location on disk, specific moment when it gets read"。
+- **六层说**（MarkTechPost 报道的 Memory OS）：在 Hermes 之上又加了 workspace、fabric 等层，是社区/第三方扩展。
+
+为什么会有分歧？因为官方文档（Persistent Memory 页）**没有用"层"这个词**，它只列机制："bounded, curated memory that persists across sessions"、"FTS5 session search"、"skills"、"Honcho as external provider"。机制都在，但分层是社区为了理解方便自己加的抽象。
+
+**本篇采用四块切分的理由**：它对"风险落在哪"最有解释力。三层说把 `MEMORY.md` 和 `USER.md` 合成一层，掩盖了"事实记忆"和"用户画像"两种完全不同的失败模式；四块切分把它们分开，让你看清 user model 的固化风险和 curated memory 的判断风险是两件事。但请记住这是分析框架，不是官方架构图——别拿"四层"去和官方文档对线，那边写的是机制不是层。
+
+## 把 Hermes 放进开源记忆项目坐标系
+
+光讲 Hermes 自己的分层不够。本仓库另有一个完整的 [AI 记忆系统开源项目评测专题](../../../evaluation/memory-systems-eval/)，13 个项目横评（Mem0、Letta、Zep/Graphiti、Cognee、LangMem、LlamaIndex Memory、Basic Memory、OpenMemory MCP、Reference Memory MCP、Universal Memory MCP、Hindsight、Memvid、Supermemory），统一后端实测过冒烟 + LongMemEval 子集。把 Hermes 放进那个坐标系，能更清楚地看到它走的是哪条路线。
+
+先回忆评测报告里的**六类记忆模型分类**（评测报告第十四节）：
+
+| 类别 | 代表项目 | 记忆形状 | 关键特征 |
+| --- | --- | --- | --- |
+| 逐字块/段落向量 | Memvid | 原文切块 embed | 零丢值、无聚合、无时序 |
+| 事实抽取 | Mem0、LangMem | 原子自然语言事实 | 压缩、依赖抽取模型、聚合弱 |
+| 知识图谱 | Graphiti、Cognee | 实体+关系+边，带时序 | 关系结构强、抽取易丢值 |
+| 混合 profile + 图 | Supermemory | profile + RAG + 矛盾消解 | 能处理更新、embedding 锁死 |
+| agent 自管 / file-text | Letta | agent 自己 tool call 读写 | 不丢值、运维重、不 scale |
+| 关键词/实体图谱 note | Basic Memory、Reference MCP | markdown 笔记 + 规则图 | 零 LLM 依赖、非语义 QA |
+
+把 Hermes 的四块对应进去：
+
+| Hermes 的层 | 对应评测里的哪一类 | 最接近的开源项目 |
+| --- | --- | --- |
+| ① 会话检索（FTS5） | 接近"逐字块/段落向量"，但用 BM25 关键词不是向量 | Memvid（但 Memvid 是向量，Hermes 是 BM25） |
+| ② Curated Memory | "事实抽取"+"agent 自管"的混合 | Mem0（抽取）+ Letta（agent 自管 file） |
+| ③ User Model（USER.md） | 不在六类里——这是"用户画像"维度，评测里只有 Supermemory 的 profile 专门做 | Supermemory 的 static/dynamic profile |
+| ③ User Model（Honcho） | 接近"混合 profile"，但走 dialectic 路线 | Supermemory（同维度，机制不同） |
+| ④ Procedural（skills） | 完全不在六类里——这是"程序性记忆"，评测里只有 Letta 的 L3 skill learning 沾边 | Letta（最接近，但 Letta 没专门拆 procedural） |
+
+### 关键定位结论
+
+**Hermes 走的是 agent 自治路线，最接近 Letta，不是 Zep/Graphiti 那种时序图。** 这是第一位的定位。Hermes 的 curated memory、user model、procedural 三层都靠 agent 自己 tool call 读写——agent 决定记什么、改什么、什么时候调。这和 Letta 的 MemGPT 哲学一脉相承：把记忆当成操作系统的内存层次，让 agent 自己管。区别是 Hermes 把这件事做得更"开箱即用"——`MEMORY.md` 和 `USER.md` 是扁平 markdown 文件，不需要 pgvector；Letta 要起完整的 pgvector + server 栈。
+
+**Hermes 不像 Zep/Graphiti。** Zep 走 bi-temporal 知识图谱，靠 Graphiti 引擎把对话抽成实体+关系+时序边。评测里 Graphiti 在本地小模型下抽取严重丢值（冒烟 50%、LongMemEval 0%），所谓"时序优势"因为日期解析脆弱没兑现。Hermes 没走这条——它存的是扁平事实和原文，不建图。这意味着 Hermes 没有 Zep 那种关系推理能力，但也不背 Graphiti 抽取丢值的包袱。这是个有意识的取舍。
+
+**Hermes 的 user model 是评测里大多数项目没专门做的维度。** 13 个项目里只有 Supermemory 显式维护用户 profile（static 稳定事实 + dynamic 近期活动 + 矛盾消解）。Hermes 通过 `USER.md` + 可选 Honcho 做了这件事——`USER.md` 接近 Supermemory 的 static profile（角色、偏好），Honcho 接近 dynamic profile 但走 dialectic 路线。这是 Hermes 相对评测里大多数项目的一个差异化点。
+
+**Hermes 的 procedural 是评测里都没人专门做的层。** 评测报告的 L0–L3 成熟度里，L3 是"skill learning"，只有 Letta 真正达到。Hermes 通过 self-improvement 循环（第 5–9 篇）也做到了 procedural。这意味着从"记忆深度"看，Hermes 和 Letta 是仅有的两个达到 L3 的系统——其他 11 个都停在 L1 或 L2。
+
+### 一个重要 caveat
+
+本仓库的记忆评测**没有实测 Hermes 自己**——评测对象是 13 个独立开源记忆项目，Hermes 不在评测范围。上面所有定位都是**架构层面的对应**，不是实测分数。"Hermes 最接近 Letta"指的是设计哲学相似，不代表它们在 LongMemEval 上分数会接近。如果要严谨的实测对比，得用评测报告第三节那套统一后端协议（固定 LLM、固定 embedding、固定 judge、固定 harness）把 Hermes 也跑一遍——这是评测报告反复强调的"别信单一来源 benchmark"原则。
+
+## 跨会话连续 ≠ 记忆准：两个被混淆的能力
+
+这是本篇最想讲清楚的一组区分。
+
+很多人评估 agent 记忆时只看一个指标——"它能不能接续上次对话"。这是**跨会话连续性**（cross-session continuity）。但连续性和"记忆准"是两个完全不同的能力，混在一起评估会导致严重误判。
+
+- **跨会话连续**：会话 A 说"我有只猫叫 Pepper"，会话 B 里 agent 知道这件事。这是**检索能力**——能不能把过去的事实捞回来。会话检索层（FTS5）+ curated memory 共同支撑。
+- **记忆准**：会话 A 说"我有只猫叫 Pepper"，agent 不仅记住了，还**正确地理解了**这件事对你意味着什么——你不是在随便提猫，你是个有宠物的人，提到 Pepper 时你会关心它的健康、饮食。这是**建模能力**——能不能从事实推出你的画像和偏好。user model 层支撑。
+
+一个 agent 可以连续性很强（每次都能捞回你说过的话）但建模很弱（永远只是把事实复读，不理解你为什么说）。反过来也可能——建模很强（一旦建好画像很准）但连续性弱（旧事实检索不到，画像对不上具体事实）。**Hermes 在这两个能力上的强弱不一样**：
+
+- 连续性：会话检索（FTS5）+ curated memory 双保险，**强**。FTS5 保证原文可搜，curated memory 保证关键事实被提炼。除非 agent 漏记或 FTS5 召回失败，连续性是有保障的。
+- 建模：靠 `USER.md` + 可选 Honcho，**中**。`USER.md` 上限 1,375 字符，画像空间有限；Honcho 能做更深建模但要额外接入。和 Supermemory 那种专门的 profile + 矛盾消解机制比，Hermes 的建模层相对简单。
+
+理解这个区分的实操价值：**当你觉得"Hermes 记不住我"时，先分清是哪个能力的问题**。是它搜不到你说过的话（连续性，查 FTS5 召回）？还是它搜到了但没理解你的偏好（建模，查 USER.md 内容）？两个问题的修复路径完全不同——前者可能是关键词漂移，要改查询或加 hybrid 搜索；后者是画像没建好，要改 USER.md 或重新引导对话。
+
+给一个具体的诊断流程，遇到"它没记住"时按这个顺序排查：
+
+1. **先看是连续性还是建模**。打开 Hermes 的 session 日志，看它有没有真的搜到那段历史。搜到了但还是答错——是建模问题（事实在但没理解）。根本没搜到——是连续性问题。
+2. **连续性问题继续往下拆**。是关键词不一致（你问的词和原文不一样）？还是 BM25 排序太靠后（事实在库里但被截断）？前者改查询措辞、或者把关键术语固化进 USER.md；后者是 FTS5 固有局限，社区 issue #44075 的 hybrid 方案是长期解法。
+3. **建模问题再看一层**。打开 USER.md，看 agent 给你建的画像里有没有"会偏好 X""会关心 Y"这类和当前问题相关的判断。没有——是画像没建到这一层；有但是错的——是画像建偏了。前者要主动引导对话让 agent 补全；后者要手动改 USER.md。
+
+这三步能把模糊的"它记不住"拆成可操作的具体问题。比直接重启会话、或者抱怨"Hermes 记忆不行"高效得多。
+
+## 早期对话污染：最容易被忽视的风险
+
+把 user model 固化风险具体化一下。这是装上 Hermes 后最常踩的坑，但很少有人提前讲。
+
+**场景**：你刚装上 Hermes，兴奋地测试各种功能。前 5 次对话里：
+- 1 次问正经技术问题（你真实的工作场景）
+- 2 次随便测试（"讲个笑话""写首诗"）
+- 1 次用很口语、随意的风格
+- 1 次用英文测试
+
+这 5 次对话都会被 review agent 扫过、写进 `USER.md` 和 `MEMORY.md`。结果画像可能是：
+- "用户喜欢测试 agent"（来自那 2 次随便测试）
+- "用户沟通风格随意"（来自那次口语对话）
+- "用户可能用英文"（来自那次英文测试）
+
+但你的真实工作场景是严肃后端工程师、用中文、不需要测试性对话——这些只占了 5 次里的 1 次。画像建偏的概率非常高。
+
+**为什么这个风险容易被忽视**：因为 Hermes 用起来很顺，前几次对话不会让你觉得"它在学我"。等你用了三个月、画像已经固化、开始感觉"agent 怎么老是不懂我"时，你已经不记得前 5 次对话写了什么了。这时候去翻 `USER.md`，会发现里面有些判断让你愣住——"我什么时候说过我喜欢这种回答风格？"
+
+**缓解办法**：
+
+1. **装好后先空跑几次正经场景**：刻意用你真实的工作问题、真实的沟通风格，让画像建在正确基础上。
+2. **定期 review `USER.md` 和 `MEMORY.md`**：这两个文件是人类可读的 markdown，打开看就行。发现不对的判断，手动改。
+3. **不要拿 Hermes 测试无关功能**：要测 joke、写诗、闲聊，用别的 agent。Hermes 会把所有对话都当数据源。
+4. **如果画像已经偏了，重置比改更快**：删掉 `USER.md` 让它重建，比逐条修改更省事。代价是失去已有的（可能部分正确的）画像。
+
+这个风险在评测报告里有间接印证——Mem0 在 LongMemEval 上的 multi-session 失败，本质上也是"早期的事实条目和后期的事实条目混在一起、没法消解"。Hermes 的 user model 没有专门的矛盾消解机制（不像 Supermemory），所以早期污染的修复更依赖人工。
+
+## 四块记忆的失败模式总览
+
+把前面四节的失败模式集中成一张表，方便对照：
+
+| 层 | 失败模式 | 触发条件 | 影响范围 | 修复 |
+| --- | --- | --- | --- | --- |
+| ① 会话检索 | 召不全/关键词漂移 | 长会话、用户词和原文不一致 | 单次召回 | 改查询、加 hybrid（社区 issue 开着） |
+| ② Curated Memory | 记错/漏记 | agent 判断失误、review agent 漏触发 | 单条事实 | 手动改 MEMORY.md |
+| ③ User Model | 画像固化/早期污染 | 早期对话风格混乱、USER.md 满了改不动 | 所有未来对话的语气方向 | 手动改 USER.md 或重置 |
+| ④ Procedural | 错误固化成 skill | skill 基于不完整信息建立、self-improvement 没触发 | 所有同类任务 | 手动改 skill 文件 |
+
+读这张表的方式：**风险影响范围从上到下递增**。会话检索错了影响一次召回，curated 错了影响一条事实，user model 错了影响所有对话的方向，procedural 错了影响所有同类操作。这也解释了为什么"agent 自治"路线（Hermes 走的）需要更多人工监督——自治的好处是省心，代价是错误会自动传播，越往下游影响越大。
+
+## 后续两篇拆什么
+
+本篇是记忆主线的全景框架。后面两篇分别拆机制细节：
+
+- **第 11 篇：curated memory + nudge**——拆 review agent 的 5 个写入触发条件、低置信时怎么 nudge 用户、MEMORY.md 的写入和检索路径、agent 自治记忆的可靠性怎么评估。如果你关心"agent 会不会乱记/漏记"，看这篇。
+- **第 12 篇：FTS5 + Honcho**——拆 SQLite FTS5 的 schema 和 `search_messages()` 实现、为什么社区在讨论加 hybrid 向量搜索、Honcho 的 dialectic 用户建模机制、外部 memory provider 的 `<memory-context>` 注入路径和 prompt caching 关系。如果你关心"召回质量怎么提升""Honcho 值得接入吗"，看这篇。
+
+本篇不重复这两篇的细节。读完本篇你应该有的判断：**遇到任何关于 Hermes 记忆的问题，先想清楚它落在四块的哪一块、是连续性问题还是建模问题、影响范围多大**。这个框架比"它到底记不记得住"有用得多。
+
+## 和评测专题的联动阅读
+
+如果你想横向对比 Hermes 和其他 13 个开源记忆项目，强烈建议配合本仓库的评测专题读：
+
+- [评测专题 README](../../../evaluation/memory-systems-eval/)——13 个项目清单、分类、入门导航。
+- [评测总报告](../../../evaluation/memory-systems-eval/overview-report.md)——统一后端实测、六类记忆模型分类、LongMemEval 排名反转、负分校验门六次拦冤案。本篇引用的所有评测结论（Mem0 抽取丢值、Graphiti 时序优势证伪、Supermemory 矛盾消解、Letta agent 自管 100%）都来自这里。
+- [Letta 项目详解](../../../evaluation/memory-systems-eval/projects/02-letta-memgpt-agent-managed-memory.md)——Hermes agent 自治路线最近的对照项目。
+- [Mem0 项目详解](../../../evaluation/memory-systems-eval/projects/01-mem0-pluggable-memory-layer.md)——Hermes curated memory 的事实抽取同源机制。
+- [Supermemory 项目详解](../../../evaluation/memory-systems-eval/projects/05-supermemory-single-binary-hybrid-graph-memory.md)——Hermes user model 该补的"矛盾消解"维度参考。
+- [Graphiti 项目详解](../../../evaluation/memory-systems-eval/projects/03-zep-graphiti-bi-temporal-knowledge-graph.md)——Hermes 没走的时序图谱路线的实测结果。
+
+阅读顺序建议：先读本篇建立 Hermes 四块记忆的全景 → 读评测总报告理解六类记忆模型 → 回到本系列的 #11/#12 看机制细节。这样既能在架构层面给 Hermes 定位，又能在实测层面理解每类记忆的真实强弱。
+
+## 权衡：Hermes 记忆设计的中庸之道
+
+把所有分析收束成一组权衡判断。Hermes 的记忆设计选了一条特定的中庸之道：
+
+**省心 vs 不透明**：选了省心。agent 自治替你管记忆，不用手动维护；代价是过程不透明，要查它记了什么得打开文件。
+
+**Markdown vs 向量库**：选了 Markdown。`MEMORY.md`/`USER.md` 人类可读、调试友好；代价是没有向量库那种语义检索能力，FTS5 只能做关键词召回。
+
+**Agent 自管 vs 抽取流水线**：选了 agent 自管。和 Letta 一脉相承，让 agent 决定记什么；代价是判断质量依赖模型，弱模型记的东西质量差。
+
+**开箱即用 vs 深度建模**：选了开箱即用。`USER.md` 1,375 字符够用但不深；Honcho 留了深度建模的口子但默认不接入。Supermemory 那种矛盾消解、Cognee 那种图谱，Hermes 都不做。
+
+**走到 L3 vs 停在 L2**：走到了 L3（procedural skill）。这是评测里 13 个项目里只有 Letta 真正做到的深度，Hermes 通过 self-improvement 也做到了。
+
+这套权衡意味着 Hermes 适合：**想要一个开箱即用、agent 自治、能跨会话连续、有 user model 和 procedural 能力的本地 agent，且接受"过程不透明、画像可能固化、需要定期人工 review"的人**。不适合：对记忆准确性要求极高（比如做客服、做法律研究助手）、需要严格时序追踪、需要深度语义检索的场景——这些场景应该考虑评测里的专门项目（Supermemory、Graphiti、Mem0）做后端，而不是依赖 Hermes 内置记忆。
+
+最后一句结论：**判断 Hermes 记忆好不好用，要先想清楚你关心的是哪一层**。会话检索几乎人人满意；curated memory 看你能否接受 agent 自治的判断质量；user model 要警惕早期污染；procedural 是 Hermes 相对其他项目的差异化优势，但也是错误固化风险最高的层。把这四块分开评估，比问"它记忆好不好"靠谱得多。
 
 ## 延伸阅读
 
-- [Hermes Memory 官方文档](https://hermes-agent.nousresearch.com/docs/)
-- [Inside Hermes Agent（mranand，four-layer 拆解）](https://mranand.substack.com/p/inside-hermes-agent-how-a-self-improving)
-- [91AI 记忆系统评测专题（13 项目横评）](../../../evaluation/memory-systems-eval/)
+- [Hermes Persistent Memory 官方文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory) — 官方对 bounded curated memory 的描述。
+- [Hermes Memory Providers 官方文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory-providers) — 8 个外部 memory provider 插件，包括 Honcho、Mem0。
+- [Hermes Session Storage 官方文档](https://hermes-agent.nousresearch.com/docs/developer-guide/session-storage) — FTS5 session search 的 `search_messages()` 用法。
+- [Hermes Honcho 官方文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/honcho) — Honcho 作为 user model 后端的 dialectic 机制。
+- [Inside Hermes Agent（mranand，four-layer 拆解）](https://mranand.substack.com/p/inside-hermes-agent-how-a-self-improving) — 社区"四层记忆"说法的源头。
+- [How Hermes Agent Memory Actually Works（Vectorize）](https://vectorize.io/articles/hermes-agent-memory-explained) — 第三方深度拆解，含 provider 架构。
+- [Hermes Agent Masterclass（Avi Chawla）](https://blog.dailydoseofds.com/p/hermes-agent-masterclass) — 提到 USER.md 1,375 字符上限等具体约束。
+- [Semantic Search for Session History（GitHub issue #44075）](https://github.com/NousResearch/hermes-agent/issues/44075) — 社区讨论给 FTS5 加 hybrid 向量搜索。
+- [Honcho + Hermes Integration Guide](https://honcho.dev/docs/v3/guides/integrations/hermes) — Honcho 作为 user model 层的接入指南。
+- [91AI 记忆系统评测专题（13 项目横评）](../../../evaluation/memory-systems-eval/overview-report.md) — 把 Hermes 放进坐标系时本篇引用的所有实测结论来源。

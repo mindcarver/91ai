@@ -23,80 +23,425 @@
 
 # FTS5 session 搜索 + LLM 摘要 + Honcho 用户建模
 
-> 系列第 12 篇 · 读者预设：想搞懂"跨会话召回"和"用户画像"机制的人 · 最后核实：2026-07
+> 系列第 12 篇 · 读者预设：想搞懂「跨会话召回」和「用户画像」机制的人 · 最后核实：2026-07
 
-**TL;DR：** 这篇拆记忆的两个底层技术：**FTS5**（SQLite 全文搜索，给所有历史会话建索引，召回靠关键词 + LLM 摘要压缩）和 **Honcho**（dialectic 用户建模，给你建越来越准的画像）。前者解决"找到过去说过的话"，后者解决"理解你这个人是谁"。两个都不是魔法，理解边界才知道什么时候靠得住。
+**TL;DR：** 这篇拆记忆主线的两个底层技术。**FTS5** 是 SQLite 的全文搜索扩展，Hermes 用它给所有历史会话建索引，召回靠 BM25 关键词排序 + LLM 摘要压缩；**Honcho**（plastic-labs/honcho）是 dialectic 用户建模，不贴静态标签，而是通过持续对话迭代出一个动态的、带张力的画像。前者解决「找到过去说过的话」，后者解决「理解你这个人是谁」。两个都不是魔法——FTS5 语义召回弱、Honcho 早期画像会被带偏、摘要会丢关键信息。理解这三层各自的边界，才知道什么时候靠得住、什么时候必须手动兜底。
+
+这是记忆主线的收尾篇。第 10 篇讲过记忆的三层全景（curated memory / session search / context），第 11 篇拆了 curated memory（SOUL.md + MEMORY.md + AGENTS.md）。本篇把后两层彻底拆开：**session search 背后的 FTS5 + LLM 摘要** 怎么协作，**Honcho** 怎么给 Hermes 加用户建模这层，以及三层（原文召回 / 精炼召回 / 画像注入）在一次「它记得我」的体验里到底怎么走通。
+
+---
+
+## 跨会话召回的两个底层问题
+
+先说清楚为什么需要这两层。一个 agent 要让人感觉「它记得我」，背后其实是两个完全不同的问题：
+
+**问题一：找细节。** 「上次我们讨论的那个叫 Temporal 的工具，我说了什么来着？」——这是字符串级召回。你需要的不是 agent 「感觉」你提过，而是它能把那句话原封不动找出来。这层错了，agent 会胡编——它「觉得」你说过 X，但 X 其实是它自己脑补的。
+
+**问题二：理解你。** 「按我习惯的方式写代码。」——这层不是找某句话，是 agent 对你这个人有一个累积的理解：你工作时偏好简洁、讨论架构时愿意展开、你不喜欢冗余抽象。这层错了，agent 每次都从零开始，你要不停重复「别加注释」「别造抽象层」「我用 pnpm 不用 npm」。
+
+这两个问题用同一套机制都解决不好。纯靠 prompt 里写「请记住用户偏好」太弱——上下文窗口一满，偏好就没了。纯靠全文搜索也不行——「按我习惯」搜不到任何关键词。所以 Hermes 的设计是把它们拆开，用不同的机制各管一头：
+
+- **找细节** → FTS5（全文索引原文）+ LLM 摘要（精炼版召回）
+- **理解你** → Honcho（dialectic 用户建模）
+
+下面分别拆。
+
+---
 
 ## FTS5：会话原文的全文索引
 
-FTS5 是 SQLite 的全文搜索扩展。Hermes 用它给所有历史会话建索引。当你新开一个会话提了个问题，agent loop 不只看当前对话，还会拿你的话去 FTS5 索引里搜——"过去有没有聊过相关的"。
+### 它是什么，Hermes 怎么用它
 
-为什么用 FTS5 而不是纯向量搜索：
+FTS5 是 SQLite 的全文搜索扩展模块（SQLite 3.9.0 起内置）。它给你的文本建倒排索引，让你能用 `MATCH` 操作符做高速关键词检索，结果按 **BM25** 排序——这是信息检索领域用了三十年的标准排序函数，TF-IDF 的改进版，考虑词频、文档长度、词的全局稀有度。
 
-- **轻量**：SQLite 自带，不依赖单独的向量数据库。
-- **关键词召回强**：精确词、术语命中率高，对"那个叫 X 的工具"这种查询友好。
-- **可调试**：搜索结果是 SQLite 行，能直接查、能 explain。
+Hermes 把所有会话存进一个 SQLite 数据库（`~/.hermes/state.db`）。这个库里至少有两张表是相关的：
 
-但 FTS5 的弱点也明确：
+- 一张普通表，存每条消息的全文、会话 ID、时间戳、来源（用户/agent/tool）。
+- 一张 **FTS5 虚拟表**（virtual table），对消息全文建索引。虚拟表是 SQLite 的特殊机制——它不是真的存数据，而是存索引结构，查询时和普通表一样用 SQL。
 
-- **纯语义召回弱**：你换种说法，关键词不重，可能搜不到。Hermes 通常配 LLM 摘要 + 可能的混合检索来补这块（社区有人用 Milvus 等补混合搜索，见延伸阅读）。
-- **冷启动**：会话少的时候召回稀疏。
+agent loop 暴露给 LLM 的 `session_search` 工具，底层就是一条 SQL：
 
-## LLM 摘要：压缩长会话给跨会话用
+```sql
+SELECT message_id, session_id, rank, snippet(...)
+FROM messages_fts
+WHERE messages_fts MATCH ?
+ORDER BY rank
+LIMIT ?;
+```
 
-会话越长，原始 context 越放不下。Hermes 的做法是用 LLM 给历史会话做摘要——把冗长对话压成"关键事实 + 决定 + 偏好"的精炼版，跨会话召回时优先用摘要而不是全文。
+`MATCH ?` 里的 `?` 是用户当前问题（或 agent 提炼出来的检索词），`rank` 是 FTS5 默认的 BM25 分数（越小越相关），`snippet()` 会高亮命中片段。这条 SQL 几毫秒就能跑完——哪怕你有几千个会话、几万条消息。
 
-这有两面：
+这就是为什么 Hermes 能说「三周前你问过 Temporal 的事，当时我们聊了 workflow 的可靠性」。它不是真的「记得」，是当场去 FTS5 索引里搜出来的。
 
-- **好处**：跨会话召回 token 成本低、信号集中。
-- **代价**：摘要是 LLM 生成的，可能丢细节或失真。重要细节被摘要漏掉 = 召回时拿不到。
+### 为什么选 FTS5 而不是纯向量搜索
 
-实操上，FTS5（原文召回）+ LLM 摘要（精炼召回）是互补的：前者保细节，后者省 token。Hermes 在这层的工程取舍会随版本变（看 changelog）。
+这是社区里反复被问的问题。答案是工程务实，不是理论最优。FTS5 在 Hermes 这个场景下有几个真实优势：
+
+**零额外基础设施。** SQLite 是 Hermes 本来就要用的（存 session metadata、message history、model config）。FTS5 是 SQLite 自带模块，不引入任何新依赖。对比一下：纯向量搜索要起一个 embedding 模型、要存向量、要一个向量数据库（哪怕是本地的 LanceDB / Chroma 也要起进程）。Hermes 的核心卖点是「能跑在 5 美元 VPS 上」，这种克制成了一种产品力。
+
+**关键词召回强。** 这一点被严重低估。程序员和 agent 对话里高频出现的是**专有名词**——`Temporal`、`pnpm`、`SOUL.md`、`FTS5`、`session_search`、`Issue #44075`。这些词天然适合关键词检索：稀有度高、精确匹配即正确答案。BM25 在这类查询上甚至常常**优于**向量检索——向量会把「Temporal」和「time」「chronological」混在一起，而 FTS5 直接给你含「Temporal」的那条消息。
+
+**可调试。** FTS5 的结果是 SQLite 行。召回不对的时候，你可以打开 `state.db`，跑同样的 SQL，看 `EXPLAIN QUERY PLAN`，看 BM25 分数。向量检索黑盒得多——「为什么没召回那条」往往只能猜。对于一个 self-hosted、鼓励用户 hack 的 agent，这个透明度很重要。
+
+**冷启动友好。** 没有预训练 embedding 模型要下载，没有索引要 warm up。装好 Hermes 第一天就能用。
+
+### FTS5 的弱点，以及为什么社区在补混合检索
+
+但 FTS5 不是没有软肋。它最大的问题是：**纯语义召回弱。**
+
+你换个说法，关键词不重，它就搜不到。比如你三周前问过「Workflow 引擎怎么处理长时间运行的任务」，今天你说「我想做一个会跑几天的异步流程，引擎选哪个」。关键词几乎不重叠（`workflow`/`引擎` vs `异步流程`/`引擎`），FTS5 BM25 召回会很差。但语义上这俩是同一个问题。
+
+这一点 Hermes 自己人也认。GitHub 上有两个直接相关的 issue：
+
+- **Issue #44075**（Semantic Search for Session History）：明确指出 `session_search` currently relies **exclusively** on FTS5 keyword matching，提议加向量检索做 hybrid（BM25 + dense vector）。
+- **Issue #17649**（Semantic Skill Retrieval with SQLite FTS5）：讨论用 FTS5 给 skill 做语义检索，把它和 `tool-slimmer` 里的 BM25 工具选择机制对应起来。
+
+社区方案不少。Milvus 官方博客有一篇专门讲怎么用 Milvus 2.6 的 hybrid search 补 Hermes learning loop 的短板——BM25 抓精确关键词，dense vector 抓语义，一次查询两边都覆盖，rephrased query 终于能连到之前存过的内容。LanceDB 也写过类似的，强调「BM25 还在，只是补一层向量」——精确名字、ID、术语还是靠 BM25，含义靠向量。
+
+**关键认知：** 这些混合检索方案目前都是**社区实践 / 第三方插件**，不是 Hermes 默认。默认的 `session_search` 还是纯 FTS5。如果你重度依赖「换个说法也要能找到」，要么自己接 Milvus/LanceDB，要么养成「同一个东西用同一个词」的提问习惯。
+
+**冷启动稀疏** 也是真实问题。会话少的时候，FTS5 索引里就没几条，召回自然稀疏。前几十个会话里，agent 「记忆力」会明显不如跑了几个月之后。这不是 bug，是统计规律——倒排索引的价值随数据量增长。
+
+### FTS5 召回失败的具体案例
+
+为了让「语义召回弱」这个抽象弱点可感知，走两个真实的失败案例：
+
+**案例一：同义词替换。** 你三周前讨论过「Kubernetes 集群的自动扩缩容」，今天问「我那套容器编排系统，节点数怎么动态调」。BM25 关键词几乎完全不重叠（`Kubernetes`/`集群`/`自动扩缩容` vs `容器编排`/`节点数`/`动态调`）——FTS5 BM25 召回率会非常低。但语义上这是同一个问题。这种情况下，agent 要么说「我不记得你提过」（诚实但无用），要么瞎编一个通用答案（更糟）。
+
+**案例二：抽象到具体。** 你之前讨论过「eventual consistency 在分布式系统里的权衡」，今天问「我们的购物车服务该用强一致还是最终一致」。前者是抽象讨论，后者是具体决策。关键词只有 `consistency` 一个重合词，BM25 排序会被其他无关消息（也提到 `consistency`）盖过。语义上你今天的问题明显是基于之前的讨论延伸的，但 FTS5 看不出来。
+
+这两个案例的共同点：**用户的自然语言习惯和原始记录的措辞有 gap。** 这个 gap 在程序员场景里其实没那么多（专有名词多，BM25 强），但在偏讨论、偏架构设计的对话里会很明显。这也是为什么社区在推混合检索——dense vector 在这两个案例上能轻松召回，弥补 BM25 的盲区。
+
+如果你不想自己接混合检索，有个使用习惯能缓解：**在同一主题的多次会话里尽量用一致的术语。** 这是个反直觉的建议（自然语言本该灵活），但对 FTS5 友好。把「Kubernetes」一直叫「Kubernetes」而不是「k8s」「容器编排」「集群」，能让 BM25 召回率显著提升。
+
+**FTS5 编译依赖** 是个隐蔽坑。Hermes 的 session store 在 `hermes_state.py` 里直接 `CREATE VIRTUAL TABLE ... USING fts5(...)`。如果系统自带的 Python `sqlite3` 模块编译时没带 FTS5（某些精简发行版、某些容器镜像会这样），session store 直接拒绝打开——见 Issue #13029。报错信息不一定明显，得知道往这查。自托管部署前确认 `python3 -c "import sqlite3; print(sqlite3.compile)"` 之类，或直接试 `CREATE VIRTUAL TABLE t USING fts5(x)`。
+
+---
+
+## LLM 摘要：把长会话压缩给跨会话用
+
+FTS5 召回的是原文。但原文有个问题：**太长。** 一个跑了三小时的会话，可能有好几百条消息，几万 token。如果你召回 5 条相关的，每条都是完整原文，token 预算瞬间爆掉。Hermes 给当前会话的 context window 是有限的——塞进去太多历史，留给当前任务的空间就少了。
+
+所以 Hermes 在原文之上还压了一层 **LLM 摘要**。两层关系不是「二选一」，是**互补**：FTS5 保细节（原文总在那儿能搜到），摘要省 token（跨会话召回时优先用精炼版）。
+
+### 压缩机制：双阈值 + 4 阶段算法
+
+Hermes 的压缩不是「会话一长就摘要」这么简单，而是一个 **dual-compression 系统**——两个阈值，分别触发不同强度的压缩。mem0.ai 的博客拆过这套，大致流程是：
+
+1. **第一阈值**（早期触发）：跑一个 **4 阶段算法**。
+   - **阶段 1：prune 廉价 tool 结果。** 工具调用返回的大块 JSON、长输出，直接裁掉，只留摘要或关键字段。这一步 token 成本低，收益高。
+   - **阶段 2-4：渐进式 summarize。** 把中间部分（不是头、不是尾）逐步压成摘要。Hermes 的设计哲学被 kenhuangus 的拆解总结成一句话：**「protect head and tail, summarize the middle」**——头尾保留原文（当前任务上下文 + 最近对话），中间压成摘要。这是因为对话开头往往是任务定义（重要），结尾是最新状态（重要），中间是过程（可压缩）。
+2. **第二阈值**（晚期触发）：更激进的压缩，可能再叠一层摘要的摘要。
+
+### Auto-Lineage：压缩不是覆盖，是分叉
+
+这里有个 Hermes 设计里特别聪明的一笔。压缩时，它**不原地修改**当前会话——而是创建一个新的 **continuation session**（延续会话），用 `parent_session_id` 指回压缩前的原会话。这叫 **Auto-Lineage on Compression**。
+
+意义是什么？**原文没丢。** 压缩后的摘要塞进 continuation，但原会话还在 `state.db` 里，FTS5 索引照常能搜到。你随时可以穿越回压缩前的完整历史。Session 之间形成一条 lineage 链：parent → child → grandchild，每一跳都是一次压缩。
+
+举个例子走一遍 lineage 的实际场景：
+
+- 你和一个长会话聊了 4 小时，讨论一个复杂重构方案。
+- 中间某个点触发第一阈值 → 4 阶段压缩 → 生成 continuation A（`parent_session_id` 指向原会话）。
+- 又聊了 2 小时，触发第二阈值 → 再压缩 → continuation B（`parent_session_id` 指向 A）。
+- 现在的「当前会话」是 B，里面是摘要的摘要。
+
+lineage 链是：原会话 → A → B。FTS5 索引三个都覆盖。你今天想找「4 小时那个会话里我们具体讨论的某个函数名」，`session_search` 跨三个 session 都能搜到，agent 拉出原文细节给你。这就是 lineage 设计的价值——压缩为了节省 token，但原文为了精准召回保留。
+
+但 lineage 也有代价——Issue #45117 就在抱怨，压缩后的 pre-compression session 在 TUI 里不容易发现。用户看到的是当前 continuation，旧会话藏在 lineage 链里，得手动跳。这是个 UX 问题，不是数据完整性问题，但确实会让人误以为「内容丢了」，其实只是找不到了。
+
+Reddit 上还有用户报告过另一个 lineage 的边缘 case：长会话经过多次压缩后，agent 偶尔会丢失对 session ID 的引用，回复时显得「不知道自己在哪个 session」。这通常是 agent loop 在 lineage 链较深时上下文构造的 bug，不是数据损坏，但确实影响体验。怀疑遇到这种情况，可以手动 `/compress` 重置，或者新开会话把关键上下文带过去。
+
+### 摘要的代价：丢细节、失真
+
+摘要是 LLM 生成的二次产品。它必然有损。具体损失在哪：
+
+**具体数字、ID、路径会被压掉。** 摘要倾向于保留「语义要点」（我们讨论了 X，决定做 Y），而把具体值（issue #44075、`~/.hermes/state.db`、版本号 v0.8.0）当成噪声丢掉。但很多时候你召回要的就是这些具体值。
+
+**语气、偏好、边缘 case 会模糊。** 「我说过我喜欢简洁但不极端」这种带张力的表述，摘要可能压成「偏好简洁」，把「不极端」这个限定丢了。下一次 agent 就真的极端简洁了。
+
+**摘要的摘要会指数级失真。** 多次压缩后，信息保真度像传话游戏一样衰减。Hermes 的双阈值设计部分是为了延缓这个，但长会话跑几小时，最深层的历史还是会有这个问题。
+
+**应对：重要数据别只靠对话记忆。** 这是 Hermes 文档反复强调的一条原则。具体数字、项目结构、长期偏好——**写进 SOUL.md（持久身份/事实）或 MEMORY.md（episodic 观察）**。这两个 curated markdown 文件不进摘要压缩管线，原文常驻 context。MEMORY.md 有 ~2,200 字符（~800 token）上限——超过会被截断，导致「summary loss」（这词在社区里有两种用法，一种指 LLM 摘要的失真，一种指 MEMORY.md 超 limit 被截断，注意区分）。SOUL.md 太长也有风险——指令会被截断或被更高优先级覆盖，导致「SOUL 指令被忽略」。第 11 篇详细讲过怎么管这两个文件，这里不重复。
+
+实操原则：**对话里说过的、未来可能要精确召回的东西，主动让 agent 写进 MEMORY.md。** 不要假设「上次说过了它就该记得」——它记得的是摘要，不是原文。
+
+---
 
 ## Honcho：dialectic 用户建模
 
-Honcho 是个外部组件，Hermes 用它做"用户建模"。dialectic（辩证）的意思是：它不是给你贴一堆静态标签（"程序员""喜欢简洁"），而是通过持续对话迭代出一个动态的、有张力的画像——比如"工作时偏好简洁，但讨论架构时愿意展开"这种带语境的理解。
+FTS5 + 摘要解决的是「找细节」。但跨会话还有一层它们都管不到——**理解你这个人**。「按我习惯写代码」搜不到任何关键词，也压不进任何摘要。这层需要的是 **用户建模**（user modeling）：agent 对你有一个累积的、结构化的理解，并且这个理解随每次交互演化。
 
-为什么这层重要：
+Hermes 默认的 curated memory（SOUL.md / MEMORY.md）能扛一部分——你手动写「我喜欢简洁」「我用 pnpm」就行。但手动维护有上限：你不会把每次对话里暴露的细微偏好都写进去；有些偏好你自己都没意识到，是 agent 从你的反应里推断出来的。
 
-- **决定个性化深度**：纯靠 prompt "请按用户偏好回复" 太弱。Honcho 把你的偏好结构化下来，注入每轮决策。
-- **跨会话连续**：你不需要每次重新自我介绍。Honcho 画像跟着你。
+这就是 Honcho 登场的地方。Honcho（plastic-labs/honcho）是 Hermes 集成的一个外部 memory backend，专门做 **dialectic 用户建模**。
 
-但有边界：
+### 什么是 dialectic（辩证）建模
 
-- **画像固化难改**：早期对话给 Honcho 留了错印象，后面纠正要费劲。开始用 Hermes 时尽量别风格混乱。
-- **画像 ≠ 真的你**：Honcho 给的是模型对你理解的快照，不是你本人。它"觉得"你是某种风格，可能放大某个侧面。
+关键词是 **dialectic**——辩证。这个词在 Honcho 里有具体含义，不是哲学黑话。它的对立面是 **静态标签**。
 
-## 三层怎么协同
+静态标签式用户建模是这样的：给你贴一堆 tag——`programmer`、`prefers_concise`、`uses_pnpm`、`likes_react`。存在数据库里，每次 agent 回复前查出来塞进 prompt。这种做法简单，但有几个根本问题：
 
-一次"它记得我"的体验，实际是三层协同：
+- **标签是离散的，人是连续的。** 「偏好简洁」是个光谱，不是 boolean。你对不同任务、不同时间的简洁度容忍度不一样。
+- **标签之间有张力，扁平列表表达不了。** 「工作时偏好简洁，但讨论架构时愿意展开」——这两条都是真的，静态标签要么只存一条（丢信息），要么都存（agent 不知道何时用哪条）。
+- **标签一旦贴上很难改。** 你半年前贴了 `junior_dev`，现在水平涨了，标签还在那儿误导 agent。
+
+Honcho 的 dialectic 做法是：**不给标签，给一个动态演化的 representation（表征）。** Honcho 的核心数据原语是 **peer**——一个 peer 可以是用户、可以是 agent、可以是 NPC、可以是任何参与对话的实体。每个 peer 有一个 **working representation**（工作表征），是 Honcho 通过 LLM 持续推理出来的一段结构化描述。
+
+这个 representation 不是一次性生成的。Honcho 监听所有 peer 之间的消息流，每来一条新消息，就用 LLM 推理：「这条消息暗示了关于这个 peer 的什么？」推理出来的产物叫 **Conclusions**（结论）——通过形式逻辑推导出的关于 peer 的显式和隐式洞察。Conclusions 累积成 representation，representation 随新消息演化。
+
+所以叫 dialectic：**通过持续的对话往返，迭代出一个带张力的、活的画像。** 不是「你是 X」，是「在语境 A 下你倾向 X，在语境 B 下你倾向 Y，最近你从 X 往 Z 移动」。
+
+### 一个 Conclusions 的具体走例
+
+抽象讲完，走个具体例子让 Conclusions 这个概念落地。假设你是个新用户，第一次和 Hermes 配 Honcho 用，前几条消息是这样的：
+
+> 你：「帮我写个 Python 脚本，把一个目录下的 markdown 文件批量重命名，按文件头部的 H1 标题。」
+> Agent：（生成脚本，附了详细注释和 docstring）
+> 你：「能去掉注释吗？太啰嗦了。」
+> Agent：（去掉注释）
+> 你：「这个函数名 `rename_markdown_files_based_on_h1` 太长了，缩到 `rename_md` 之类就行。」
+
+Honcho 的 dialectic 推理大概会推出这些 Conclusions：
+
+- **显式**（你直接说的）：偏好无注释代码、偏好短函数名。
+- **隐式**（从行为推断的）：偏好简洁优先于「最佳实践」（注释本是社区推崇的）；命名风格倾向缩写而非描述性；倾向命令行式的紧凑表达。
+- **元层面**（关于推理风格的）：这个用户对自己想要的风格有明确判断，agent 应该少做「保姆式」建议；纠正反馈应该立即采纳而不是辩论。
+
+注意这些 Conclusions 之间的**张力**：「偏好无注释」和「最佳实践」冲突，但 Honcho 不是非此即彼——它记的是「这个用户在这个语境下，简洁优先于 best practice」。下次写库代码（语境不同）时，representation 里可能还会演化出「库代码会保留必要 docstring」这种条件性结论。这就是 dialectic 比静态标签强的地方：它能容纳矛盾，并标记矛盾的语境边界。
+
+这些 Conclusions 累积起来，就是 User peer 的 working representation。下一次你新开会话，agent 在 system prompt 里看到的不是「tag: prefers_concise」，而是上面那一组带语境的、活的判断——这就是为什么 Honcho 建模的个性化感觉比规则引擎「懂你」。
+
+Conclusions 也不是无上限堆的。Honcho 内部有去重、过滤、矛盾解决的逻辑（虽然 Issue #557 指出这套逻辑还不够好），目标是让 representation 保持「精炼且不互相打架」，而不是越长越好。
+
+### Honcho 的数据模型：Workspace / Peer / Session
+
+具体一点，Honcho 的数据模型是三层层级（v3 架构）：
+
+- **Workspace**（工作区）：最外层隔离边界。一个 Hermes 实例通常对应一个 workspace。
+- **Peer**（对等体）：workspace 里的实体。Hermes 集成里至少有两个 peer——**User peer**（代表你）和 **AI peer**（代表 agent）。Honcho 会给每个 peer 建独立的 representation。
+- **Session**（会话）：peer 之间发生的对话序列。消息流挂在 session 上。
+
+关键设计：**representation 是分层的。** Honcho 区分 **local representation**（某个 peer 视角下对另一个 peer 的看法）和 **global representation**（workspace 级别的聚合表征）。这意味着 AI peer 对你的理解，和你对自己的理解，可以是两份不同的数据——这恰恰反映了现实：别人对你的看法和你自己的自我认知本来就有差距。
+
+还有个有意思的配置：**你可以控制一个 peer 是否要 form representation of other peers**。比如在一个多 agent 场景里，你可能不想让某个工具型 agent 建立对用户的画像，可以关掉。这是个隐私 / 成本旋钮。
+
+### Dialectic endpoint：怎么把画像注入 agent
+
+建好的 representation 怎么用？Honcho 暴露了 **Dialectic API**。两种用法：
+
+1. **拉取当前 representation**：直接 GET 一个 peer 的 working representation，塞进 agent 的 system prompt 或 context。这是「snapshot of user」——显式和推导出的事实列表。CHANGELOG 显示新版 Dialectic API 默认用 **most recent user representation**，保证你拿到的是最新画像。
+2. **通过 `/chat` endpoint 对话式查询**：让 Honcho 的内部 LLM 基于它对你的理解回答问题。「这个用户在这个任务上更看重速度还是正确率？」Honcho 会基于累积的 Conclusions 给出推断。
+
+Hermes 集成里，agent loop 在构造每轮 context 时，会注入 User peer 的 representation。这相当于给 agent 一个「这个用户是谁、他偏好什么」的 grounding，让个性化不靠当前 prompt 里几句「请按用户偏好」的软弱指令。
+
+社区 benchmark（Plastic Labs 自己发的）显示 Honcho 在 LongMem、LoCoMo、BEAM 三个长期记忆基准上达到 SOTA——但注意这是厂商自测，看相对趋势就好，绝对数字别太当真。
+
+### 为什么这层不是可选的（对重度用户）
+
+轻度用户用不到 Honcho——你偶尔和 Hermes 聊几次，curated memory + FTS5 够了，画像层收益低于它的复杂度成本。但对**重度、长期、跨多项目**的用户，Honcho 解决的是 curated memory 解决不了的问题：
+
+- **被动偏好收集。** 你不会主动把「我看到冗长注释会烦躁」写进 SOUL.md，但 Honcho 能从你反复说「这段注释太多了」推断出来。
+- **跨项目连续性。** 你在项目 A 里建立的「这个用户喜欢 Type-First 设计」的画像，Honcho 会带到项目 B。curated memory 是 per-instance 隔离的（profile 之间不共享）。
+- **带语境的偏好。** 静态文件表达不出「写库代码时严格、写脚本时随意」这种条件性偏好，representation 可以。
+
+代价是：Honcho 要起独立进程，要 LLM 推理（每条消息都触发 dialectic，token 成本不低），要维护它自己的存储。这就是为什么它是 **optional skill**，不是默认开。
+
+---
+
+## 三层协同：一次「它记得我」怎么走通
+
+讲了三层各自机制，现在把它们拼起来。一次让你感觉「它记得我」的体验，背后是 FTS5 + 摘要 + Honcho 三层协同。用一个具体场景走一遍：
+
+> 你三周前和 Hermes 聊过用 Temporal 做工作流编排，讨论了 workflow id 设计、retry 策略。今天你新开一个会话：「我想给现在的项目加个会跑几天的异步任务，引擎选哪个？」
 
 ```
-你说话 → FTS5 搜历史会话原文（找细节）
-       → LLM 摘要召回（找精炼关键点）
-       → Honcho 画像注入（定调你的偏好/风格）
-       → agent loop 综合这些 + 当前任务 → 回复
+                     ┌─────────────────────────────────────────┐
+   你的输入           │  Honcho User Representation（画像层）    │
+   "想加个会跑几天的  │  - peer: 用户                            │
+    异步任务..."  ──► │  - 偏好: 工作时简洁，讨论引擎时愿意展开    │
+                     │  - 历史: 评估过 Temporal/Restate/Trigger    │
+                     │    决策倾向: 重可靠性 > 重开发速度          │
+                     └─────────────────────────────────────────┘
+                                     │
+                                     ▼ (注入 system prompt)
+   ┌──────────────────────────────────────────────────────────┐
+   │                  Hermes Agent Loop                        │
+   │                                                            │
+   │  1. 解析意图 → 判断需要召回历史                            │
+   │  2. 调 session_search("异步 任务 引擎")  ──┐               │
+   │  3. 调 session_search("Temporal workflow") ├─ FTS5         │
+   │  4. 取相关 session 的摘要（不是原文）     ┤  (BM25 原文召回)│
+   │  5. 综合画像 + 召回 + 当前任务 → 生成回复 ◄┘               │
+   └──────────────────────────────────────────────────────────┘
+                                     │
+         ┌───────────────────────────┴───────────────────────────┐
+         ▼                                                       ▼
+   ┌──────────────────────┐                            ┌─────────────────────┐
+   │ FTS5 召回（原文层）  │                            │ LLM 摘要召回（精炼层）│
+   │ state.db FTS5 索引   │                            │ 历史 session 的摘要   │
+   │ BM25 排序            │                            │ "关键事实+决定+偏好"  │
+   │ → 命中:              │                            │ → 命中:              │
+   │  "Temporal 的 retry  │                            │  "用户评估过 Temporal,│
+   │   策略我们聊过..."   │                            │   关心 retry/id 设计" │
+   └──────────────────────┘                            └─────────────────────┘
 ```
 
-任何一层拉胯，体验都打折。FTS5 召回不到 = "它忘了我说过"；摘要失真 = "它理解错了"；Honcho 画像偏 = "它越来越不懂我"。
+走一遍流程：
 
-## 真实坑
+1. **画像注入（最先进 context）。** agent loop 启动时，Honcho 的 User peer representation 已经在 system prompt 里了。agent 一开始就知道「这个用户评估过 Temporal/Restate/Trigger，决策时重可靠性」。注意这层不依赖当前会话——它是历史所有交互累积出来的。
+2. **意图解析。** 你说「会跑几天的异步任务，引擎选哪个」。agent 识别出这是个引擎选型问题，需要召回相关历史。
+3. **FTS5 召回（原文层）。** agent 调 `session_search`，query 大概是「异步 任务 引擎」「Temporal workflow」之类。FTS5 在 `state.db` 里跑 BM25，命中三周前那个会话里的具体消息——「Temporal 的 retry 策略我们聊过，你担心 idempotency」。这是原文级精度。
+4. **摘要召回（精炼层）。** 对于那个历史会话，agent 不取全文（太长），取它的 LLM 摘要——「用户评估过 Temporal，关心 retry/idempotency 设计，倾向于把 workflow id 设计成业务幂等」。这是精炼版，token 成本低，信号集中。
+5. **综合生成。** agent 拿到：当前任务 + 画像（这个用户重可靠性、评估过 Temporal）+ FTS5 召回（具体讨论细节）+ 摘要召回（关键决策点）。基于这些生成回复：「考虑到你三周前对 Temporal 的 idempotency 的关注，我建议……」
 
-- **以为有向量搜索就万事大吉**：Hermes 默认偏 FTS5 + 摘要，纯语义召回不是强项。如果你的使用强依赖"换个说法也要能找到"，可能要补混合检索（社区方案，不是默认）。
-- **画像被早期对话带偏**：第一次用时如果随便聊、风格乱，Honcho 可能建个错的 baseline。开局几天有意识地给清晰偏好。
-- **摘要丢关键信息**：长会话被摘要后，某条具体细节（比如一个数字）可能没了。重要数据别只靠对话记忆，写进 SOUL.md 或专门的记忆条目。
+任何一层拉胯，体验都打折：
 
-## 权衡
+- **FTS5 召回不到** = 「它忘了我说过」——比如你换了说法，BM25 没命中，agent 只能瞎编或重新问。
+- **摘要失真** = 「它理解错了」——三周前的具体讨论被压成了错误的概括，agent 基于错误前提回答。
+- **Honcho 画像偏** = 「它越来越不懂我」——早期对话给了错的 baseline，后续每次都在错的画像上叠加。
 
-FTS5 + 摘要 + Honcho 这套是工程务实的选择——轻量、不依赖重型向量基础设施、能跑在 5 美元 VPS 上。代价是召回精度和画像深度都比不上专门的知识图谱 + 重型用户建模方案。Hermes 选的是"够用且能跑"，不是"理论最优"。
+这就是为什么这三层要一起讲——单独看任何一层都看不清「记忆」的全貌。
+
+---
+
+## 早期画像污染：Honcho 最阴险的失败模式
+
+讲完了正常路径，重点讲一个 Honcho 特有的、容易被忽视的失败模式：**早期画像污染**。
+
+问题是这样：Honcho 的 representation 是从你最早的对话开始累积的。前几十条消息里，Honcho 推理出来的 Conclusions 权重很高——因为那时候 representation 是空的，每条新消息对画像的影响都很大。如果这几条早期消息给了错的印象，后面纠正要费大劲。
+
+为什么这是个真实问题，不是理论担忧：
+
+**头几次使用 Hermes 时，你大概率不是「正常使用」。** 你在测试、在玩、在随便问些有的没的、在用混乱的风格试探 agent 的边界。这些消息全被 Honcho 推理成 Conclusions——「这个用户喜欢随意风格」「这个用户关心的话题是 X」——然后固化成 representation 的 baseline。
+
+**Representation 有惯性。** Honcho 不是每次重新推理，是基于已有 representation 增量更新。一旦 baseline 错了，后续正确消息要花更多力气才能「翻转」结论。这就像第一印象——人在后续交互中会更多解读支持第一印象的证据，而不是推翻它（确认偏误）。LLM 推理有没有这个倾向有争议，但工程上 representation 的更新机制确实有惯性。
+
+**Issue #557 是真实证据。** plastic-labs/honcho 仓库里这个 issue 报告了几个相关问题：empty representations（画像为空，dialectic 没推出来）、duplicate conclusions（同样的结论被推出多份，污染 representation）、lack of filtering（没有机制过滤掉低质量或矛盾的 conclusions）。这些 bug 都会放大早期污染的影响。
+
+**画像 ≠ 真的你。** 这是最容易被忽略的认知偏差。Honcho 给你的是「模型对你理解的快照」，不是你本人。它可能放大你的某个侧面（你某次聊得多的话题），可能漏掉你的核心（你从没在对话里显式说过的偏好）。如果你完全信任 representation，agent 的回复会越来越偏离你真实的需求。
+
+### 应对：开局几天有意识地给清晰偏好
+
+这事的应对不在代码层，在使用习惯层：
+
+**前 5-10 个会话有意识地表达偏好。** 不是让你列清单，而是在自然对话里给清晰信号。「我喜欢这个方案，因为简洁」「这个太啰嗦了，能不能砍掉一半」——这种带评价的反馈比中性的事实陈述更能塑形 representation。
+
+**避免开局风格混乱。** 第一次用时不要一会儿写诗、一会儿写代码、一会儿问菜谱。Honcho 不知道你在测试，会把每个侧面都收进画像。开局集中在一个使用场景（比如就用来写代码），让 representation 先在一个维度上稳定下来，再扩展。
+
+**定期检查 / 重置画像。** Honcho 的 representation 是可读的（通过 Dialectic API 拉 snapshot）。重度用户应该偶尔看一眼 agent 觉得你是谁——如果偏差大，考虑重置 workspace 或手动修正。Hermes 的 profile 是完全隔离的（独立 SOUL.md、独立 Honcho workspace），最坏情况可以开新 profile 重新开始。
+
+**Curated memory 兜底。** 关键偏好（核心栈、根本性风格偏好、绝对不能做的事）写进 SOUL.md。SOUL.md 优先级高于 Honcho representation——出现冲突时，agent 应该信 SOUL.md（明示的用户意图）而不是 Honcho（推断的画像）。这也是 Hermes 的设计意图：curated memory 是 ground truth，Honcho 是补充。
+
+---
+
+## 摘要丢信息的应对：把关键数据写进文件，别只靠对话
+
+前面讲压缩时提过，这里专门展开，因为这是用户最常踩的坑。
+
+坑的逻辑链是这样的：
+
+1. 你在对话里说了一个关键信息（API key 路径、生产环境 URL、某个项目的特殊约定）。
+2. 你假设「agent 记得，因为我说过」。
+3. 那个会话后来被压缩了——摘要可能没保留这个具体值。
+4. 几周后你新开会话问这个值——FTS5 召回的可能是摘要（如果原文太长 agent 选择取摘要），摘要里没有这个值。
+5. Agent 要么说「我不记得」，要么更糟——基于其他线索猜一个错的值。
+
+应对是把关键数据从「对话记忆」迁移到「文件记忆」。Hermes 的 curated memory 体系就是为这个设计的：
+
+- **SOUL.md**：你的身份、根本性偏好、绝对约束。比如「我所有项目都用 pnpm，永远不要用 npm」「我视觉敏感，避免高对比度配色」。这些是不变的事实，写进 SOUL.md 常驻 context。
+- **MEMORY.md**：episodic 观察——项目结构、环境事实、工具行为。比如「这个项目的测试在 `tests/e2e/` 下，跑 `pnpm test:e2e`」。~2,200 字符上限，超过会被截断（这是另一种「summary loss」），所以定期清理过期条目。
+- **AGENTS.md**：项目级指令，给 agent 看的「这个仓库的规矩」。第 11 篇详细讲过。
+
+**判断标准：这个信息未来要不要精确召回？** 如果要（具体路径、版本号、配置值、决策结论）→ 写文件。如果不要（过程性讨论、已经被决策取代的备选方案）→ 留在对话里，让摘要管。
+
+**主动让 agent 写。** 对话里出现关键信息时，明确说「把这个写进 MEMORY.md」。Agent 自己也能判断（curated memory 的更新机制会在每轮结束时决定写什么），但用户主动提醒能显著提高命中率。
+
+**别迷信「它记得」。** Hermes 的记忆设计哲学是「bounded, curated memory」——bounded（有上限）是核心。它不是无限录音机，是一个有意识裁剪过的记忆系统。理解这个设计意图，才不会在「我以为你记得」上栽跟头。
+
+---
+
+## 权衡：为什么是这套，不是别的
+
+讲完了机制和坑，退一步看整体的设计权衡。为什么 Hermes 选了 FTS5 + LLM 摘要 + Honcho 这套，而不是其他更「先进」的方案？
+
+**对比纯向量 RAG。** 主流 LLM 应用的记忆方案大多是某种向量 RAG：embed 所有历史，query 时 cosine similarity 召回 top-k。这套在「换个说法也能找到」上确实强，但有几个问题在 Hermes 的场景下被放大：embedding 模型要选要维护、向量库要起、对专有名词召回反而不如 BM25、可调试性差。Hermes 选 FTS5 是用「语义召回弱」换了「轻量 + 关键词强 + 可调试」——对程序员场景（高频专有名词）这个交换是赚的。
+
+**对比知识图谱。** 一些重型方案（GraphRAG 之类）把记忆建成实体-关系图，召回时走多跳推理。表达力强，但构建和维护成本高，对 self-hosted 个人 agent 不现实。Honcho 的 representation 算是「轻量级图谱」——有结构化的 peer 和 relationship 概念，但不强制 schema，靠 LLM 推理而不是图查询。这是个中间道路。
+
+**对比纯文件 + prompt。** 最朴素的方案就是把所有上下文塞进 markdown 文件，每轮全量塞 prompt。简单粗暴，但 context window 顶不住，且没法做选择性召回。FTS5 + 摘要就是为了让「选择性召回」成为可能——只召回相关的，不是全塞。
+
+**Hermes 选的是「够用且能跑」，不是「理论最优」。** 这套能在 5 美元 VPS 上跑、不依赖 GPU（FTS5 是 CPU 操作，Honcho 的 dialectic 可以走外部 API）、可以 self-host、可以 hack。代价是召回精度（尤其语义召回）和画像深度都比不上专门的知识图谱 + 重型用户建模方案。但作为一个开源 agent 的默认 stack，这个权衡是合理的——它给了 80% 场景下 80 分的体验，剩下 20% 让用户通过 curated memory、社区混合检索方案、或自己 hack 来补。
+
+这个权衡也解释了为什么 Hermes 在记忆这层留了那么多扩展点（memory provider 可以插拔、Honcho 是 optional skill、社区能做 Milvus 集成）——它知道默认 stack 不是所有人够用。
+
+---
+
+## 真实坑汇总
+
+把上面散落的坑集中一下，方便排查：
+
+**FTS5 相关**
+- 默认纯 BM25，语义召回弱。重 phrased query 的场景要自己接混合检索。
+- 冷启动稀疏，前几十个会话召回质量低。
+- SQLite 必须带 FTS5 模块，精简环境可能没编进去（Issue #13029）。
+
+**摘要相关**
+- 具体值（数字、ID、路径）容易被压掉。
+- 多次压缩指数级失真。
+- pre-compression session 在 TUI 里不易发现（Issue #45117）。
+- MEMORY.md 超 ~2,200 字符会被截断，重要条目要主动管理。
+
+**Honcho 相关**
+- 早期画像污染（Issue #557 报告的 empty/duplicate/filtering 问题会放大）。
+- Representation 有惯性，纠偏成本高。
+- Dialectic 推理有 LLM 成本，重度使用不便宜。
+- 画像 ≠ 用户本人，不能完全信任。
+
+**整体协同**
+- 三层任一层拉胯都让「记得我」体验打折，排查时要分层定位。
+- FTS5 召回到的内容可能被摘要层失真——怀疑召回不准时，直接查 `state.db` 看原文。
+
+---
 
 ## 结论
 
-跨会话召回靠 FTS5（原文）+ LLM 摘要（精炼）；用户画像靠 Honcho（辩证建模）。两层都不是魔法，靠得住的程度取决于你使用模式的稳定性、以及你是否愿意主动纠偏。理解了这两层，"它怎么记得我"就不再黑盒。
+跨会话召回靠 **FTS5（原文 BM25 召回）+ LLM 摘要（精炼召回）**；用户画像靠 **Honcho（dialectic 建模）**。两层都不是魔法，靠得住的程度取决于你的使用模式稳定性、以及你是否愿意主动纠偏（写 curated memory、检查 Honcho 画像、有意识给清晰偏好）。
+
+理解了这两层，「它怎么记得我」就不再是黑盒。你知道哪句话会被 FTS5 召回、哪句话会被摘要压成什么、哪句话会塑形 Honcho 画像——也就知道什么时候该信它的「记得」、什么时候该手动兜底。
+
+这是记忆主线的收尾。第 10 篇是全景，第 11 篇是 curated memory，本篇是底层机制。三篇一起读，Hermes 的记忆系统就基本拆透了。接下来系列会转向其他子系统（执行、工具、skill 学习循环等）。
+
+---
 
 ## 延伸阅读
 
-- [Hermes Memory 文档](https://hermes-agent.nousresearch.com/docs/)
-- [How to Fix Hermes Learning Loop with Milvus Hybrid Search（补混合检索的社区实践）](https://milvus.io/blog/hermes-agent-learning-loop-milvus-hybrid-search.md)
-- [Honcho（dialectic user modeling）](https://github.com/plastic-labs/honcho)
-- [第 10 篇：记忆全景](./10-memory-three-layers.md)
+**官方文档**
+- [Hermes Agent · Session Storage](https://hermes-agent.nousresearch.com/docs/developer-guide/session-storage) — FTS5 虚拟表 schema、parent_session_id lineage、source tagging 的官方说明。
+- [Hermes Agent · Sessions 用户指南](https://hermes-agent.nousresearch.com/docs/user-guide/sessions) — `session_search` 工具用法、Auto-Lineage on Compression。
+- [Hermes Agent · Context Compression and Caching](https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching) — 双阈值压缩系统 + Anthropic prompt caching 的官方设计。
+- [Hermes Agent · Honcho Skill](https://hermes-agent.nousresearch.com/docs/user-guide/skills/optional/autonomous-ai-agents/autonomous-ai-agents-honcho) — User peer / AI peer 设计、集成方式。
+- [plastic-labs/honcho](https://github.com/plastic-labs/honcho) — Honcho 仓库，CLAUDE.md 里有 dialectic 设计的核心理念。
+- [Honcho v3 · Architecture & Intuition](https://honcho.dev/docs/v3/documentation/core-concepts/architecture) — Workspace / Peer / Session 数据模型，representation 分层。
+- [Honcho · Peer Representations](https://honcho.dev/docs/v3/documentation/core-concepts/representation) — Conclusions、working representation 的产物定义。
+- [SQLite FTS5 官方文档](https://www.sqlite.org/fts5.html) — BM25 排序函数、`rank` 列、`MATCH` 语法、虚拟表机制。
+
+**社区深度解析**
+- [How to Fix Hermes Agent's Learning Loop with Milvus 2.6 Hybrid Search](https://milvus.io/blog/hermes-agent-learning-loop-milvus-hybrid-search.md) — 补混合检索（BM25 + dense vector）的社区实践，解决 FTS5 语义召回弱的问题。
+- [How Hermes and Claude Handle Context Compression in Real Production Agents](https://mem0.ai/blog/how-hermes-and-claude-handle-context-compression-in-real-production-agents-(and-what-you-should-extract)) — 双阈值压缩 + 4 阶段算法的拆解。
+- [Designing Hermes Agent from Scratch: A Systems Deep Dive](https://kenhuangus.substack.com/p/designing-hermes-agent-from-scratch) — 「protect head and tail, summarize the middle」压缩哲学。
+- [Semantic Memory for Hermes Agent with LanceDB](https://www.lancedb.com/blog/semantic-memory-for-hermes-agent-with-lancedb) — 另一个混合检索社区方案，强调 BM25 不替代、只补充。
+- [Benchmarking Honcho — Plastic Labs](https://plasticlabs.ai/blog/research/Benchmarking-Honcho) — LongMem / LoCoMo / BEAM 基准结果（厂商自测，看趋势）。
+- [Introducing Neuromancer XR — Plastic Labs](https://plasticlabs.ai/blog/research/Introducing-Neuromancer-XR) — peer 消息触发心理推理的具体机制。
+
+**相关 issue（看真实问题和讨论）**
+- [Issue #44075 · Semantic Search for Session History (Hybrid BM25 + Vector)](https://github.com/NousResearch/hermes-agent/issues/44075) — FTS5 语义召回弱的官方讨论。
+- [Issue #17649 · Semantic Skill Retrieval with SQLite FTS5](https://github.com/NousResearch/hermes-agent/issues/17649) — FTS5 用于 skill 检索，BM25 工具选择机制。
+- [Issue #13029 · Session store fails to open when SQLite lacks FTS5](https://github.com/NousResearch/hermes-agent/issues/13029) — FTS5 编译依赖问题。
+- [Issue #45117 · TUI: make pre-compression session history discoverable](https://github.com/NousResearch/hermes-agent/issues/45117) — Auto-Lineage 的 UX 短板。
+- [Issue #29902 · Allow memory provider to serve as session search backend](https://github.com/NousResearch/hermes-agent/issues/29902) — memory provider 与 session_search 解耦的提案。
+- [Issue #557 · empty representations, duplicate conclusions, no filtering](https://github.com/plastic-labs/honcho/issues/557) — Honcho 画像质量的真实问题。
+
+**系列内交叉链接**
+- [第 10 篇：记忆三层全景](./10-memory-three-layers.md)
+- [第 11 篇：curated memory（SOUL.md / MEMORY.md / AGENTS.md）](./11-curated-memory-soul.md)
