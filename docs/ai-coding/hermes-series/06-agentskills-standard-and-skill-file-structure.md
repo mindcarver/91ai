@@ -23,83 +23,693 @@
 
 # agentskills.io 标准 + skill 文件结构解剖
 
-> 系列第 6 篇 · 读者预设：想读懂 skill 文件、为手写做准备的人 · 最后核实：2026-07
+> 系列第 6 篇 · 读者预设：想真正读懂 skill 文件、为下一篇文章手写第一个 skill 做准备的人 · 最后核实：2026-07
 
-**TL;DR：** skill 就是一个 Markdown 文件 + 一段 frontmatter，遵循 [agentskills.io](https://agentskills.io/) 开放标准。frontmatter 管"什么时候触发这个 skill"（description 是关键），正文管"具体怎么做"。这个标准不是 Hermes 独有——跨工具通用，所以你写的 skill 能搬走。
+**TL;DR：** skill 不是黑魔法，它就是一个 Markdown 文件加一段 YAML frontmatter，遵循 [agentskills.io](https://agentskills.io/specification) 这个开放标准。frontmatter 管"什么时候触发这个 skill"（`description` 字段是命门），正文管"具体怎么做"。这个标准不是 Hermes 私有的——Claude Code、Cursor、OpenAI Codex 都在靠拢，所以你在 Hermes 写好的 skill 大部分能直接搬到 Claude Code 用。本篇会把一个真实 skill 文件从路径到 frontmatter 到正文一段段拆开，并把 description 写法（CSO、obra/superpowers 实验、Anthropic 官方建议）一次讲透。
 
-## skill 文件长什么样
+---
 
-一个 skill = `~/.hermes/skills/<name>/SKILL.md`（或单文件）。结构：
+## 一、为什么 skill 文件长这样：先建立心智模型
+
+在拆结构之前，先回答一个更基本的问题：为什么 agent 框架不直接写一段巨大的系统提示词，而是要把知识拆成一个个 skill 文件？
+
+答案是一个纯经济学问题：**上下文窗口是有限的，token 是要花钱的，每次请求都把所有知识塞进去既贵又慢还会互相干扰**。Anthropic 把这个矛盾用一个叫"progressive disclosure"（渐进式披露）的设计解决了，agentskills.io 标准把这个设计固化成了文件格式约定。
+
+把 skill 想象成图书馆里的一本书，而不是一本百科全书：
+
+- **frontmatter 是索引卡**：贴在书脊上，图书馆（agent loop）只需要扫一眼索引卡就知道这本书讲什么、什么时候该去翻它。索引卡必须小——标准说大概 100 token 量级。
+- **正文 `SKILL.md` 是书的正文**：只有当图书馆判定"这本书相关"时才翻开。标准建议控制在 5000 token 以内（约 500 行 Markdown）。
+- **`scripts/`、`references/`、`assets/` 是附录和工具书**：正文里提到"详见附录 A"时才去翻。这些是按需加载的，不进基础上下文。
+
+这套三层结构是 skill 文件所有设计决策的根因。后面你看 frontmatter 字段为什么这么定、正文为什么要求短、为什么强调"参考资料别塞死在 skill 里"，都是从这个根因推出来的。
+
+---
+
+## 二、skill 文件的物理形态：路径、目录、最小可用形态
+
+### 2.1 Hermes 里的路径约定
+
+在 Hermes Agent 里，一个 skill 物理上就是 `~/.hermes/skills/` 下面的一个目录。目录名就是 skill 的标识。最小可用形态长这样：
+
+```
+~/.hermes/skills/
+└── weekly-report-to-feishu/
+    └── SKILL.md
+```
+
+只有一个目录、一个文件，这就是一个合法 skill。Hermes 安装时会往 `~/.hermes/skills/` 拷一份自带的 bundled skills（详见后文第七节），用户自己写的 skill 也放同一个目录下，agent loop 不区分两者。
+
+如果你不想要 bundled skills（比如想做最小化定制），有三种关掉的方式，都会在 profile 目录里写一个 `.no-bundled-skills` 标记文件。这个细节在 [Hermes 官方 Skills System 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) 里有写。
+
+### 2.2 agentskills.io 标准的目录结构
+
+agentskills.io 把这个目录形态正式写进了规范，并允许你挂更多东西：
+
+```
+skill-name/
+├── SKILL.md          # 必须：frontmatter + 指令正文
+├── scripts/          # 可选：可执行脚本（Python/Bash/JS）
+├── references/       # 可选：详细参考文档（REFERENCE.md、FORMS.md 等）
+├── assets/           # 可选：模板、图片、查表数据
+└── ...               # 任何额外文件
+```
+
+几个容易踩的细节：
+
+1. **目录名必须和 frontmatter 里的 `name` 字段完全一致**。这不是建议是规定，校验器会拒绝不一致的 skill。GitHub 上有个真实的 bug（[NousResearch/hermes-agent#5433](https://github.com/NousResearch/hermes-agent/issues/5433)）——`hermes skills list` 用 frontmatter 的 `name` 字段，bundled manifest 用另一个 key，两边对不上时会把 bundled skill 误判成用户自己写的 local skill，原因就是这个一致性约束被打破。
+2. **文件名固定是 `SKILL.md`**，全大写。不是 `skill.md`，也不是 `Skill.md`。Hermes、Claude Code 都按这个固定名字找。
+3. **目录名只能小写字母、数字、连字符**，不能下划线、不能大写、不能以连字符开头或结尾、不能连续两个连字符。比如 `weekly-report-to-feishu` 合法，`Weekly_Report` 不合法。
+
+### 2.3 单文件 skill
+
+社区里有些工具（包括 Claude Code 的早期实现）支持把 skill 压成单文件——一个 `.md` 文件里同时包含 frontmatter 和正文，没有外层目录。这种形态适合非常小的 skill（几十行），但只要你想挂脚本或参考文档，就必须升级成目录形态。agentskills.io 规范本身要求目录形态，单文件是事实兼容的一种简写。
+
+---
+
+## 三、frontmatter 解剖：YAML 块的字段清单
+
+打开任何一个 `SKILL.md`，第一段都是三个连字符包起来的 YAML 块，叫 frontmatter。这段 YAML 是给 agent 的检索系统读的，不是给人读的。
+
+### 3.1 完整字段表（agentskills.io 规范）
+
+| 字段 | 是否必须 | 约束 | 用途 |
+| --- | --- | --- | --- |
+| `name` | 必须 | 1–64 字符；只能小写字母、数字、连字符；不能开头/结尾连字符；不能连续连字符；必须等于父目录名 | 内部标识，agent 用它引用 skill |
+| `description` | 必须 | 1–1024 字符；非空 | **决定 skill 何时被检索到**——这是命门 |
+| `license` | 可选 | 短文本，建议许可证名或一个 LICENSE 文件引用 | 法律层面 |
+| `compatibility` | 可选 | 1–500 字符 | 环境要求：目标产品、系统包、网络访问等 |
+| `metadata` | 可选 | string→string 的 map | 任意额外元数据，建议 key 名加点独特性避免冲突 |
+| `allowed-tools` | 可选 | 空格分隔的工具名串 | 实验性：预批准 skill 可以跑的工具 |
+
+Hermes 在这之上还约定了一些 `metadata` 子键，常见的是 `metadata.hermes.tags`（分类标签）、`metadata.hermes.config`（运行时配置，[源码 `agent/skill_commands.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/skill_commands.py) 会解析它）、以及社区里常见的 `version`、`author`、`requires_toolsets`（声明依赖的 MCP 工具集）。这些不在 agentskills.io 标准里，但因为 `metadata` 是开放 map，加进去不会破坏兼容性。
+
+### 3.2 可选字段在实战里到底用不用
+
+很多人写 skill 只填 `name` 和 `description` 两个必须字段，剩下都空着。这没问题，但会错过一些实际收益。逐个说一下可选字段什么时候值得填。
+
+**`license`**：只要你的 skill 可能被分享（开源到 Skills Hub、发给同事、贴到 GitHub），就必须填。短文本就行——`MIT`、`Apache-2.0`、`Proprietary` 都可以，或者指向一个 `LICENSE` 文件名。社区惯例：内部用的 skill 填 `Proprietary` 或 `Internal`，准备开源的填 `MIT`。Hermes 自带的 bundled skills 大多是 `MIT`（参考 [claude-code skill 的 frontmatter](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/autonomous-ai-agents/autonomous-ai-agents-claude-code)）。
+
+**`compatibility`**（最多 500 字符）：当你的 skill 有环境要求时填。比如 `weekly-report-to-feishu` 这个 skill，没有飞书 MCP 工具就跑不动，应该在 compatibility 里写明：`需要 feishu-bitable MCP 工具；macOS / Linux / Windows`。agent 在加载 skill 前会读这个字段，环境不匹配时会跳过——这能避免"加载了一个用不了的 skill 浪费上下文"。
+
+**`metadata`**：开放 map，加什么都行。Hermes 用 `metadata.hermes.tags` 做分类、`metadata.hermes.config` 存运行时配置（[源码 `agent/skill_commands.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/skill_commands.py) 里能看到解析逻辑）。Claude Code 忽略 `metadata.hermes.*` 但保留 `metadata` 本身。建议你自己的扩展 key 加个独特前缀（比如 `metadata.mindcarver.*`），避免和别的工具冲突。
+
+**`allowed-tools`**（实验性）：空格分隔的工具名串，预批准 skill 可以跑的工具。意义：默认 agent 调用任何工具都要走权限校验，可能会反复问你"允许调 X 吗"。如果某个 skill 只需要调两三个已知工具，提前列出来，agent 跑这个 skill 时不再打断你。注意这是实验性字段，不同工具支持程度不一样——Hermes 和 Claude Code 都支持但行为有差异，跨工具搬运时要单独测。
+
+### 3.3 `name` 字段：看似简单，三个坑
+
+`name` 表面上是个标识符，但有几个常被忽略的点：
+
+1. **必须等于父目录名**。前面讲过，校验器会卡。
+2. **建议动词在前、用动名词**。obra/superpowers 的 [writing-skills 文档](https://github.com/obra/superpowers-skills/blob/main/skills/meta/writing-skills/SKILL.md) 给的对比很清楚：`creating-skills` 比 `skill-creation` 好，`condition-based-waiting` 比 `async-test-helpers` 好，`root-cause-tracing` 比 `debugging-techniques` 好。原因是 agent 在检索时更接近"我现在要做 X"的语义，动名词直接命中。
+3. **用核心洞见命名，不要用工具名**。`flatten-with-flags` 比 `data-structure-refactoring` 好——前者说出"在做什么、为什么"，后者只说出了一个抽象动作。
+
+### 3.4 `description` 字段：本篇真正的重点
+
+这是整篇文章最值钱的一节，请慢慢读。
+
+#### 3.4.1 description 到底是给谁看的
+
+很多人误以为 `description` 是给人看的"功能介绍"——错。在 progressive disclosure 的设计里，agent 启动时会把所有 skill 的 `name` + `description` 全部加载进上下文（约 100 token 每个），然后 agent loop 收到你的请求时，拿你的话去匹配这一长串 description，匹配分高的才会被激活。
+
+也就是说：**description 不是给用户看的广告，是给模型看的检索信号**。它是搜索引擎里的关键词，不是产品包装上的卖点。
+
+obra/superpowers 把这件事称作 CSO（Claude Search Optimization，Claude 搜索优化）。它的核心论点一句话：**future Claude needs to FIND your skill**——未来的 Claude 实例必须先能找到你的 skill，否则你写得再好也白搭。这跟 SEO 是同一个道理：内容再好，搜不到就是零。
+
+#### 3.4.2 写 description 的五条铁律
+
+把 agentskills.io 规范、Anthropic 官方《[The Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf)》（33 页 PDF）、obra/superpowers 的实验结论合在一起，可以归纳出五条互相印证的规则。
+
+**铁律一：写触发条件，不写功能介绍。**
+
+对比一下两种写法：
+
+```yaml
+# 反面：营销腔，对检索零贡献
+description: 一个强大智能的飞书表格自动化工具，帮助你高效整理文档。
+
+# 正面：触发条件，明确说什么场景下命中
+description: 把会议纪要、周报草稿或一堆待整理事项整理成飞书多维表格，按项目分组、带状态列。当用户提到"整理成飞书表格""周报进飞书""按项目分组汇总"时触发。
+```
+
+Anthropic 官方指南直接说："the description field is literally the trigger"——description 字段就是触发器本身。obra 把这条提升到"Iron Law"级别：**description 只描述触发条件，不描述别的任何东西**。
+
+**铁律二：埋用户实际会说的原话。**
+
+不要写你认为"专业"的术语，要写用户嘴里真正会冒出来的词。如果你的用户是说"周报进飞书"的，那这五个字必须出现在 description 里。原因：agent 拿用户的原话做语义匹配，原话命中率永远比同义词高。
+
+obra 在 [writing-skills 的 CSO 一节](https://github.com/obra/superpowers-skills/blob/main/skills/meta/writing-skills/SKILL.md) 把这叫"Keyword Coverage"，并列出几类必埋的关键词：
+
+- **错误信息原话**："Hook timed out"、"ENOTEMPTY"、"race condition"
+- **症状词**："flaky"、"hanging"、"zombie"、"pollution"
+- **同义词组**："timeout/hang/freeze"、"cleanup/teardown/afterEach"
+- **工具/命令的真实名字**：实际命令、库名、文件类型
+
+**铁律三：写"问题"，不写"语言症状"。**
+
+这条有点反直觉。看对比：
+
+```yaml
+# 反面：写语言症状（依赖具体技术词）
+when_to_use: when tests use setTimeout/sleep and are flaky
+
+# 正面：写问题本质
+when_to_use: when tests have race conditions, timing dependencies, or pass/fail inconsistently
+```
+
+理由：如果 skill 本身不是技术特定的（比如"如何处理异步竞态"是个通用方法论），你在 description 里塞 `setTimeout` 反而会让 agent 误以为这个 skill 只在 JavaScript 场景下用。反过来，如果你的 skill **就是**技术特定的（比如"React Router 鉴权重定向"），那必须明说：
+
+```yaml
+# 技术特定 skill：显式声明
+when_to_use: when using React Router and handling authentication redirects
+```
+
+**铁律四：用负面关键词挡住误触发。**
+
+Anthropic 官方指南专门提到"negative keywords"——在 description 里明确写"什么时候**不要**用这个 skill"。这能挡住模型在边界场景下硬套。
+
+举例，一个专门处理"飞书多维表格"的 skill，可以在 description 里写："仅用于飞书 Bitable，不适用于飞书文档/表格的普通单元格操作。"——这一句话能挡掉一大批误触发。
+
+obra 在 GitHub Issue [obra/superpowers#526](https://github.com/obra/superpowers/issues/526) 里专门提议要把 negative trigger patterns 加进 CSO 章节，和 Anthropic 官方指南对齐。
+
+**铁律五：重复关键词，但不要堆砌。**
+
+最后一条是最容易被过度执行的：为了命中检索，把同一个关键词在 description 里堆五遍。这是黑帽 SEO 思路，对模型检索效果反而有害——模型会判定为垃圾信号。
+
+obra 的建议是在多个不同字段里重复关键概念：在 `description` 里出现一次、在 `when_to_use` 里出现一次、在 Overview 标题里出现一次、在 section header 里出现一次。**不同的上下文里多次出现**比**同一段里堆砌**效果好得多——这跟传统 IR（信息检索）里的 TF-IDF 思路一致。
+
+#### 3.4.3 description 反模式速查
+
+把社区里反复出现的失败模式总结一下：
+
+| 反模式 | 症状 | 修复 |
+| --- | --- | --- |
+| 营销腔 | "强大""智能""最佳""一站式" | 全删，换成具体动词 |
+| 太宽 | "处理文档" | 收窄到具体场景："把会议纪要整理成飞书表格" |
+| 太抽象 | "提升代码质量" | 写症状："消除重复代码、降低圈复杂度" |
+| 只写功能不写触发 | "这是一个表格工具" | 加"当用户...时触发" |
+| 堆关键词 | "表格 表格 表格 飞书 飞书" | 不同字段各出现一次 |
+| 缺负面关键词 | 总是被不该用的时候误用 | 加"不适用于..." |
+
+obra 的论断很尖锐但很准确：**手写 skill 不生效，90% 是 description 写成了产品宣传而不是触发条件**。
+
+#### 3.4.4 一个真实的 description 拆解
+
+来看 obra/superpowers 自己的 `writing-skills` 这个 skill 的 frontmatter（截自[仓库 main 分支](https://github.com/obra/superpowers-skills/blob/main/skills/meta/writing-skills/SKILL.md)）：
+
+```yaml
+---
+name: Writing Skills
+description: TDD for process documentation - test with subagents before writing, iterate until bulletproof
+when_to_use: when creating new skills, editing existing skills, or verifying skills work before deployment
+version: 5.1.0
+languages: all
+---
+```
+
+注意几件事：
+
+1. `description` 一句话讲完核心洞见："TDD for process documentation"——把"写 skill"重新框定成"对流程文档做 TDD"，这是个有力的心智模型，也是这个 skill 区别于其他 skill 的核心。
+2. 后半句给方法："test with subagents before writing, iterate until bulletproof"——把工作流压缩成三个动作。
+3. `when_to_use`（obra 自己加的字段，不在 agentskills.io 标准里但被 Claude Code 兼容）以 "when" 开头，列了三种触发场景：creating / editing / verifying。每种都是动词。
+4. 没有一个营销词。没有"powerful""intelligent"。
+
+这段 frontmatter 长度不到 200 字符，但信息密度极高，每一字都在为检索服务。
+
+---
+
+## 四、正文写法：模型读完后能照着做
+
+frontmatter 让 agent 决定"要不要打开这个 skill"，正文让模型决定"打开后怎么执行"。正文写法的核心矛盾是：**模型读得越细执行越准，但读得越多上下文越挤**。
+
+agentskills.io 规范给了一个量化约束：**正文建议控制在 500 行以内、5000 token 以内**。超过的部分应该拆到 `references/` 子目录里，按需加载。
+
+obra 给的约束更细：
+
+- **getting-started workflow**：150 词以内（这种 skill 会被频繁加载到每个会话）
+- **frequently-loaded skills**：200 词以内
+- **其他 skills**：500 词以内
+
+### 4.1 正文的标准骨架
+
+不是所有 skill 都要套同一个模板，但一个能跑的骨架通常长这样：
+
+```markdown
+# Skill Name
+
+## Overview
+一句话讲这是什么、核心原则是什么。
+
+## When to Use
+- 列具体症状 / 场景
+- 列 When NOT to use（负面边界）
+
+## Steps / Core Pattern
+1. 第一步：输入是什么，输出是什么
+2. 第二步：...
+3. 第三步：...
+
+## Examples
+- 一个完整可运行的真实例子（不要造多语言版本）
+
+## Common Mistakes
+- 列常见错误 + 修复
+
+## Edge Cases / 边界条件
+- 不确定时怎么处理
+- 何时不该用
+```
+
+### 4.2 写正文的四条要点
+
+**要点一：步骤具体可执行，不留"你看着办"。**
+
+每一步必须明确输入和输出。反面："分析数据，整理成表格"——模型不知道分析什么、整理成什么表格。正面："解析输入 Markdown，提取每段的`项目名`、`事项`、`负责人`、`状态`四列，输出为 JSON 数组。"
+
+**要点二：写边界条件，这是最值钱的部分。**
+
+模型不会天然知道"什么时候不该用这个 skill"和"遇到不确定输入怎么办"。这两件事必须在正文里写死。
+
+举例，一个把会议纪要整理成飞书表格的 skill，正文里应该有这种段落：
+
+```markdown
+## 边界条件
+
+- 状态列默认用"未开始/进行中/已完成"，除非用户明确指定其他枚举。
+- 解析到的负责人如果不在团队成员列表里，**不要瞎猜**，把这条事项单独放进"未归类"清单，并在回复里列出。
+- 输入如果少于 3 条事项，直接走人工确认流程，不要自动建表（避免低价值噪音）。
+```
+
+这三条边界挡住了 80% 的瞎猜行为。obra 的实验结论是：**写边界条件比写"步骤怎么走"对模型行为的影响大得多**。
+
+**要点三：短。**
+
+skill 进上下文，越长越挤占 token。500 行是规范建议的上限，但好的 skill 通常远短于这个数。obra 的 token efficiency 原则给几个具体技巧：
+
+- **把详细 flag 文档移到 `--help`**：不要在 skill 里列所有命令行 flag。
+- **交叉引用而不是重复**：如果某个工作流在另一个 skill 里讲过，引用它，不要复制。
+- **一个绝佳例子胜过五个平庸例子**：不要给五种语言的版本，给一个最常见语言的、能跑的真实例子。
+- **删冗余**：不要解释命令本身已经表达的信息。
+
+**要点四：不要塞参考资料。**
+
+这是新手最常犯的错——把整个飞书 API 文档、整个 React 文档塞进 skill 正文。这违反 progressive disclosure 的设计：**skill 正文是"做什么"，不是"参考资料全集"**。
+
+正确做法：把参考资料放进 `references/` 子目录，让 skill 在需要时调工具去查。比如：
+
+```
+weekly-report-to-feishu/
+├── SKILL.md             # 写步骤、边界、何时用
+└── references/
+    ├── bitable-api.md   # 飞书多维表格 API 详尽参考
+    └── status-enums.md  # 状态枚举约定
+```
+
+正文里写："调飞书 API 建表/追加行（API 细节见 `references/bitable-api.md`）"——agent 真的要去调 API 时才翻开那个文件。这样平时这个 skill 只占正文那点 token，只在真正干活时才把 API 细节加载进来。
+
+---
+
+## 五、一个完整 skill 文件逐段解剖
+
+把前面讲的全部组装起来。下面是一个**完整的、可用的、遵循 agentskills.io 标准**的 skill 文件示例。我把它逐段拆开注释，你可以拿这个当模板。
+
+### 5.1 文件路径
+
+```
+~/.hermes/skills/weekly-report-to-feishu/SKILL.md
+```
+
+### 5.2 完整文件内容
 
 ```markdown
 ---
 name: weekly-report-to-feishu
-description: 把会议纪要或周报整理成飞书多维表格，按项目分组、带状态列。
-  当用户提到"整理成飞书表格""周报进飞书""按项目分组汇总"时触发。
+description: 把会议纪要、周报草稿或一堆待整理事项整理成飞书多维表格，按项目分组、带状态列。当用户说"整理成飞书表格""周报进飞书""按项目分组汇总"时触发。仅用于飞书 Bitable，不适用于飞书文档的普通正文表格。
+license: MIT
+compatibility: 需要 feishu-bitable MCP 工具；macOS / Linux / Windows 均可
+metadata:
+  hermes.tags: [feishu, bitable, weekly-report, productivity]
+  version: 1.2.0
+  author: mindcarver
+allowed-tools: feishu-bitable-create feishu-bitable-append
 ---
 
-## 什么时候用
+# weekly-report-to-feishu
 
-- 输入是会议纪要、周报草稿、或一堆待整理的事项
-- 输出目标是飞书多维表格
+## Overview
 
-## 步骤
+把非结构化的会议纪要 / 周报 / 待办列表，转换成一张飞书 Bitable 表格，按项目分组，每行带状态列。核心原则：宁可把不确定的事项单独列出来问用户，也不要瞎猜负责人。
 
-1. 解析输入，提取项目名、事项、负责人、状态
-2. 按项目分组，合并重复项
-3. 调飞书 API 建表/追加行（用 bitable 工具）
-4. 回复表格链接 + 未归类项清单
+## When to Use
 
-## 注意
+适用：
+- 输入是会议纪要、周报草稿、或一堆散乱的待办（Markdown / 纯文本均可）
+- 目标产物是飞书 Bitable（多维表格）
 
-- 状态列默认用"未开始/进行中/已完成"，除非用户另有要求
-- 解析不确定的项单独列出，不要瞎猜负责人
+不适用：
+- 用户只是想给一段文字加格式（不是表格场景）
+- 输入是结构化数据（已经是 CSV / Excel），直接导入飞书更快
+- 输入少于 3 条事项（不值得自动建表）
+
+## Steps
+
+1. **解析输入**：扫一遍输入文本，按"项目名 / 事项 / 负责人 / 状态"四列提取。状态默认归到"未开始"。
+2. **去重合并**：同一个项目下重复的事项合并，负责人冲突时保留两个并列、不合并。
+3. **建表**：调 `feishu-bitable-create`（API 细节见 `references/bitable-api.md`）建一张表，字段：项目（单选）、事项（文本）、负责人（人员）、状态（单选，枚举：未开始/进行中/已完成/阻塞）。
+4. **追加行**：调 `feishu-bitable-append` 把数据写进去。
+5. **回复用户**：返回表格链接 + 未归类清单（负责人不在团队里的、项目名解析不清的）。
+
+## Examples
+
+输入：
+> 周会：1) 关于官网改版，阿新下周一交付首版设计；2) 数据迁移，阿新和小红这周对齐方案；3) 文案这事没人接，先挂着。
+
+输出表格：
+
+| 项目 | 事项 | 负责人 | 状态 |
+| --- | --- | --- | --- |
+| 官网改版 | 首版设计 | 阿新 | 未开始 |
+| 数据迁移 | 对齐方案 | 阿新、小红 | 未开始 |
+| (未归类) | 文案 | 待定 | 阻塞 |
+
+## Edge Cases
+
+- **状态枚举冲突**：用户已有的飞书表里状态枚举不一样（比如"todo/doing/done"），尊重已有枚举，不要强改。
+- **负责人不在团队**：单独列出，**不要瞎猜**。把"文案这事没人接"标成"待定"放进未归类，不要默认归到说话人头上。
+- **输入是音频转文字**：先让用户确认解析结果再建表，因为转文字常有错字。
+- **跨多个项目**：单个表上限是 5000 行（飞书限制），超过分表。
+
+## Common Mistakes
+
+- 不要把状态写死成"已完成"——默认应该是"未开始"。
+- 不要直接调飞书 OpenAPI（绕过 MCP 工具），会丢失权限校验。
+- 不要在 skill 里硬编码 app_id / app_secret，走环境变量。
 ```
 
-## frontmatter：description 是命门
+### 5.3 逐段注释
 
-`name` 是标识，`description` 决定**这个 skill 什么时候被检索到**。agent loop 收到你的请求时，是拿你的话去匹配 skill 库里各个 description——匹配上了才用。
+**frontmatter 段**
 
-写 description 的几个原则（参考 obra/superpowers 的 CSO 实验数据）：
+- `name` 等于目录名 `weekly-report-to-feishu`，全小写连字符。
+- `description` 包含三件事：what（整理成飞书多维表格）、when（用户说"整理成飞书表格"等原话）、negative（不适用于普通正文表格）。命中关键词和挡误触发都做到了。
+- `license` / `compatibility` / `metadata` / `allowed-tools` 都是可选字段，但加了能让 agent 更准地判断环境兼容性。
+- `metadata.hermes.tags` 是 Hermes 特有的扩展，agentskills.io 标准里 `metadata` 是开放 map，加进去不破坏跨工具兼容。
 
-- **写触发条件，不写功能介绍**。"把 X 整理成飞书表格"比"一个强大的表格工具"有用得多。
-- **埋关键词**：用户实际会怎么说？"周报进飞书""按项目分组汇总"——这些原话写进去，命中率直线上升。
-- **别营销**："最佳""强大""智能"这些词对检索零贡献，删掉。
+**Overview 段**
 
-很多人手写 skill 不生效，90% 是 description 写成了产品宣传而不是触发条件。
+一句话讲 what + 一句话讲核心原则（"宁可问用户也不瞎猜"）。这个原则在后面的 Edge Cases 里被反复执行。
 
-## 正文：写给未来的自己（或模型）看
+**When to Use 段**
 
-正文是"模型读到后照着做"的指令。要点：
+明确列出"适用 / 不适用"。不适用那一组是负面边界，挡掉"输入已经是 CSV""输入太少"这类不该触发的场景。
 
-- **步骤具体、可执行**：每步明确输入输出，不留"你看着办"。
-- **写边界条件**：什么时候不该用、不确定时怎么处理。这条最值钱——能挡住模型瞎猜。
-- **短**：skill 进上下文，越长越挤占 token。只写模型猜不到的硬规矩。
+**Steps 段**
 
-## agentskills.io：开放标准，能搬走
+每一步明确输入输出。第 1 步说"按四列提取"——不是"分析数据"。第 3 步明确字段名和枚举。第 5 步包含一个"未归类清单"的产出，对应 Overview 里的核心原则。
 
-skill 不是 Hermes 私有格式。agentskills.io 是个跨工具约定（Claude Code、Cursor、Hermes 等都在靠拢）。意味着：
+**Examples 段**
 
-- 你在 Hermes 写的 skill，大部分能直接搬到 Claude Code 用（路径约定不同，格式兼容）。
-- 社区 Skills Hub 上发布的 skill 你也能装（第 8 篇）。
-- 不被 Hermes 锁死——这是选 Hermes 而不是某个闭壳工具的实质理由之一。
+给一个真实输入 + 真实输出表格。注意输出里有一行"未归类"，对应 Edge Cases 里"负责人不在团队"的处理。
 
-## 真实坑
+**Edge Cases 段**
 
-- **description 写太宽**：比如"处理文档"——什么文档都触发，结果误用。窄一点更安全。
-- **正文写太长**：把整个飞书 API 文档贴进去。应该让 skill 调工具去查，而不是把参考资料塞死在 skill 里。
-- **硬编码私密**：token、key 不要写进 skill——skill 可能被分享或同步，密钥走 env vars 或 vault。
+四个边界：状态枚举冲突、负责人不在、音频转文字、跨多项目。每条都是模型猜不到的硬规矩。
 
-## 权衡
+**Common Mistakes 段**
 
-手写 skill 的代价是时间，回报是"一次写对，长期复用"。但不是所有事都值得手写——先看 Skills Hub 有没有现成的（第 8 篇），再决定造轮子。
+三条历史踩过的坑：状态写死、绕 MCP、硬编码密钥。把"曾经错过的"沉淀成"以后别再错"。
 
-## 结论
+### 5.4 这个 skill 一共多少 token
 
-skill = Markdown + frontmatter，命门是 description。写成触发条件不是功能介绍，正文写边界条件不是参考资料。下篇手写第一个跑通的 skill。
+整个文件大约 800 中文字符 + frontmatter，估算 < 2000 token。远低于 agentskills.io 建议的 5000 token 上限。如果你的 skill 超过这个量级，应该把详细参考（比如飞书 API 的完整字段表）拆到 `references/bitable-api.md`，让 agent 真正要调 API 时才加载。
+
+---
+
+## 六、agentskills.io 标准：跨工具兼容是真是假
+
+前面反复说"agentskills.io 是开放标准"，这一节认真讲讲这件事的实质。
+
+### 6.1 这个标准从哪来
+
+[agentskills.io](https://agentskills.io/home) 是 Anthropic 在 2025 年 12 月 18 日发布的开放标准（参考 [Strapi 的报道](https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them)），同期发布了规范文档和 SDK。规范本身的核心就是上一节拆的"目录 + SKILL.md + frontmatter"那一套，是 [agentskills.io specification 页面](https://agentskills.io/specification) 的全部内容。
+
+发布半年内，OpenAI、Google、Microsoft、Cursor 都宣布采用同一份 SKILL.md 格式（参考 [Agensi 的整理](https://www.agensi.io/learn/agent-skills-open-standard)）。这意味着同一个 skill 文件，理论上可以在 20+ 个 agent 工具里跑。
+
+### 6.2 跨工具兼容到什么程度
+
+这里要泼一盆冷水：**"格式兼容"不等于"行为兼容"**。
+
+格式层面是真的通用的：
+
+- frontmatter 的 `name`、`description`、`license`、`compatibility`、`metadata`、`allowed-tools` 字段定义一致。
+- YAML 解析规则一致。
+- 目录结构（`SKILL.md` + `scripts/` + `references/` + `assets/`）一致。
+
+行为层面有差异：
+
+| 工具 | 路径约定 | 字段扩展 | 检索机制 |
+| --- | --- | --- | --- |
+| Hermes Agent | `~/.hermes/skills/<name>/` | `metadata.hermes.tags`、`metadata.hermes.config`、`requires_toolsets` | progressive disclosure，启动加载全部 frontmatter |
+| Claude Code | `~/.claude/skills/` 或项目 `.claude/skills/` | 支持 obra 的 `when_to_use` 字段 | 同上 |
+| Cursor | 项目 `.cursor/skills/` | 自有 metadata | 类似 |
+| OpenAI Codex | 各自约定 | 各自 metadata | 类似 |
+
+实际搬一个 skill 从 Hermes 到 Claude Code：
+
+1. 复制 `SKILL.md` 目录到目标路径。
+2. **检查 `metadata.hermes.*` 字段**——这些是 Hermes 特有的，Claude Code 会忽略但不会报错。如果你依赖了 `requires_toolsets` 来声明 MCP 工具依赖，Claude Code 不会自动安装那个 MCP server，需要在 Claude Code 这边单独配。
+3. **检查 `allowed-tools`**——不同工具对工具命名约定不一样（Hermes 的 `feishu-bitable-create` 在 Claude Code 里可能是 `mcp__feishu__bitable_create`）。
+4. **检查正文里调用的工具名**——同样的问题，工具名跨工具不通用。
+5. frontmatter 的 `name` + `description` + 正文逻辑（步骤、边界）通常能原样跑。
+
+社区里实测的结论：**80% 的逻辑可以无损搬运，剩下 20% 是工具命名和 MCP 配置**。这 20% 不是标准的问题，是各工具的 MCP 工具命名还没有统一约定。
+
+### 6.3 为什么这件事重要
+
+回到 Hermes 的选型逻辑——为什么不选一个闭壳的商业 agent 工具？
+
+答案就在这里：**你的 skill 资产不被锁死**。你在 Hermes 里花一个周末写好的 skill，明年如果转 Claude Code，80% 能直接搬走；社区 Skills Hub（下一篇 #8 讲）上别人写的 skill，你装过来就能用。这是一种"数据可携带性"的实质保障。
+
+如果是闭壳工具，你写好的 skill 文件格式是私有的，迁移成本可能是"全部重写"。
+
+---
+
+## 七、Hermes 自带的 Bundled Skills 速览
+
+Hermes 安装时会往 `~/.hermes/skills/` 拷一份自带技能库，叫 Bundled Skills。完整的目录在 [Bundled Skills Catalog](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog)。
+
+这套自带的 skill 主要分几类：
+
+- **autonomous-ai-agents**：把其他 agent 工具（Claude Code、Codex、Grok）当子进程调起来，做 delegating coding。`hermes-agent` 自己也在这一类（[官方页](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/autonomous-ai-agents/autonomous-ai-agents-hermes-agent)）。
+- **software-development**：git 工作流、PR review、commit 规范、skill 作者本人用的 [Skill Authoring](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/software-development/software-development-hermes-agent-skill-authoring)。
+- 其他分类（文档处理、数据整理、自动化等），具体看 catalog 页。
+
+几个值得专门读的 bundled skill：
+
+1. **hermes-agent-skill-authoring**：这是 Hermes 官方教你怎么写 skill 的 skill，相当于"meta-skill"。它的 frontmatter 和正文本身就是一份范本，读它比读规范更有体感。
+2. **claude-code**（[页](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/autonomous-ai-agents/autonomous-ai-agents-claude-code)）：教 Hermes 怎么调起 Claude Code 做编码任务。看它的 frontmatter 字段：`Tags: Coding-Agent, Claude, Anthropic, Code-Review`，`Authors: Hermes Agent + Teknium`，`License: MIT`——这就是一个 bundled skill 的标准 metadata 形态。
+
+读这些 bundled skill 的最快方式：直接打开 `~/.hermes/skills/<name>/SKILL.md` 看。它们就是写给你看的范文。
+
+如果你不想用 bundled skills（想从零搭建），三种关闭方式都会写一个 `.no-bundled-skills` 标记到 profile 目录，详见 [Skills System 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)。
+
+---
+
+## 八、常见反模式清单
+
+把社区里反复出现的失败模式汇总，每条都给修复方向。
+
+### 8.1 description 写太宽
+
+**症状**：skill 总在不该用的时候被激活，或者什么都触发它。
+
+**典型**：`description: 处理文档`——什么文档都触发。
+
+**修复**：收窄到具体场景。"把会议纪要整理成飞书 Bitable，按项目分组、带状态列。" + 加 negative keyword："不适用于普通正文表格。"
+
+### 8.2 description 营销腔
+
+**症状**：skill 写得很用心，但从来没被自动激活。
+
+**典型**：`description: 一个强大智能的飞书自动化助手，帮助你高效整理各种文档。`
+
+**修复**：删全部形容词，换成动词 + 触发条件。Anthropic 官方一句话总结："the description field is literally the trigger"。
+
+### 8.3 正文写太长
+
+**症状**：每次激活这个 skill，上下文被吃掉一大块，后续对话开始失忆或回答变差。
+
+**典型**：把整个飞书 API 文档、所有可能字段的枚举值、所有错误码表都贴进 `SKILL.md`，文件 3000 行。
+
+**修复**：把详细参考拆到 `references/` 子目录，正文只保留步骤、边界、关键例子。agentskills.io 标准：500 行 / 5000 token 是上限。obra：frequently-loaded 的 skill 控制在 200 词内。
+
+### 8.4 在 skill 里塞参考资料
+
+**症状**：同上，但更隐蔽——不是堆步骤，而是堆"以防万一"的背景知识。
+
+**典型**：在 skill 里贴一段"飞书是什么""Bitable 是什么""多维表格的历史"。
+
+**修复**：删掉。agent 调工具时自带工具说明。skill 正文是"做什么"不是"这个领域是什么"。如果非要有领域知识，放 `references/`。
+
+### 8.5 硬编码密钥
+
+**症状**：skill 一旦分享或同步，token / API key 泄露。
+
+**典型**：frontmatter 里 `metadata.hermes.config.feishu_app_secret: abc123...`，或者正文里写死 `curl -H "Authorization: Bearer sk-xxx"`。
+
+**修复**：密钥永远走环境变量（`FEISHU_APP_SECRET`）或 vault。skill 文件假设会被分享，不要放任何不能公开的内容。
+
+### 8.6 name 和目录名不一致
+
+**症状**：skill 不被识别，或者被识别成"local skill"而不是 bundled。
+
+**典型**：目录叫 `weekly_report`，frontmatter `name: weekly-report-to-feishu`。
+
+**修复**：把目录名改成和 `name` 一致。校验命令：`skills-ref validate ./my-skill`（agentskills.io 提供的校验工具）。
+
+### 8.7 没写边界条件
+
+**症状**：skill 在 80% 的常规场景下工作完美，遇到 20% 的边界就开始瞎猜。
+
+**典型**：正文只有"步骤 1/2/3"，没有 Edge Cases 段。
+
+**修复**：每写完一个 skill，问自己三个问题——输入数据缺失时怎么办？输入格式异常时怎么办？副作用失败（API 超时、权限不足）时怎么办？把这三类答案写进 Edge Cases 段。obra 的实验：**写边界条件对模型行为的影响，比写"步骤怎么走"大得多**。
+
+---
+
+## 九、skill 校验与测试：从写完到放心用
+
+写完一个 skill 不等于它能跑。和写代码一样，需要校验和测试。这一节给一套最轻量的流程。
+
+### 9.1 静态校验：`skills-ref validate`
+
+agentskills.io 提供了一个官方校验工具 `skills-ref`，用法：
+
+```bash
+skills-ref validate ./weekly-report-to-feishu
+```
+
+它会检查：
+
+- frontmatter 是否存在、YAML 是否合法
+- `name` 是否符合字符约束（小写字母、数字、连字符、不开头结尾连字符、不连续连字符）
+- `name` 是否等于父目录名
+- `description` 是否非空、是否超过 1024 字符上限
+- `compatibility` 是否超过 500 字符上限
+- 其他字段的格式约束
+
+跑通这个校验是最低门槛。如果你的 skill 没过这一关，agent 加载时会直接报错或者默默忽略。
+
+### 9.2 列举与状态检查：`hermes skills list`
+
+Hermes 自带一个命令 `hermes skills list`，会列出当前 profile 下所有已加载的 skill，标注每个是 bundled 还是 local。这是验证你写的 skill 有没有被识别的最快方式。
+
+注意前面提到的 [Issue #5433](https://github.com/NousResearch/hermes-agent/issues/5433)：在某些版本里，bundled manifest 的命名 key 和 frontmatter 的 `name` 字段对不齐，会导致一个 bundled skill 被误显示成 local。如果你看到自己没写过的 skill 出现在 local 列表里，先查一下是不是这个 bug。
+
+### 9.3 行为测试：obra 的 TDD 方法
+
+静态校验只能保证"格式对"，不能保证"行为对"。obra/superpowers 把"行为对"的问题用 TDD 解决了，流程前面 Q5 提过，这里展开：
+
+**RED 阶段（基线失败）**：写 skill 之前，先构造一个压力测试场景——一段具体的用户请求或输入数据。让 agent **不加载这个 skill** 跑这个场景，记录它的失败行为：怎么瞎猜、走偏到哪里、用了什么借口（rationalization）。
+
+**GREEN 阶段（最小可行 skill）**：把 skill 加上，跑同样的场景。如果 agent 现在按 skill 走了，绿灯；如果没有，说明 skill 没写到位。
+
+**REFACTOR 阶段（堵漏洞）**：即使 GREEN，agent 也可能找到新的借口绕过 skill。把新借口加进 skill（比如在 Common Mistakes 段加一条"不要用 X 借口跳过 Y 步骤"），再跑，直到没有新借口。
+
+这套流程的核心论断（obra 原话）："If you didn't watch an agent fail without the skill, you don't know if the skill teaches the right thing."——如果你没看过 agent 在没有这个 skill 时是怎么失败的，你根本不知道这个 skill 是不是在解决真问题。
+
+这个方法看起来重，实际上写一个压力测试场景大概 15 分钟，能挡住 80% 的"上线了才发现不生效"。第 9 篇讲自我改进时会把它和 Hermes 的 `/learn` 命令结合起来讲。
+
+### 9.4 上线前自检清单
+
+把前面散落的所有检查点汇总成一份自检表，每个 skill 上线（分享给别人、加进团队 profile、发布到 Skills Hub）前过一遍：
+
+- [ ] `name` 等于目录名，全小写连字符
+- [ ] `description` 是触发条件不是营销词，含用户原话，含 negative keywords
+- [ ] 正文 < 500 行 / 5000 token
+- [ ] 详细参考拆到 `references/`，没塞死在正文
+- [ ] Edge Cases 段写了至少 3 条边界（输入缺失 / 格式异常 / 副作用失败）
+- [ ] 没有硬编码密钥（token、key、app_secret）
+- [ ] `license` 字段填了（开源填 MIT，内部填 Proprietary）
+- [ ] `skills-ref validate` 通过
+- [ ] `hermes skills list` 里能看到、被正确分类
+- [ ] 跑过至少一次 RED-GREEN-REFACTOR 行为测试
+
+这份清单本身可以存成一个 skill——很多人就是这么做的。
+
+---
+
+## 十、几个常被问到的问题
+
+**Q1：skill 和 slash command 有什么区别？**
+
+slash command 是用户主动触发的快捷指令（你打 `/xxx`），skill 是 agent 自动判断要不要用的知识。slash command 是"用户告诉 agent 调什么"，skill 是"agent 自己决定调什么"。Hermes 2026 年 6 月加了 `/learn` 命令（[MarkTechPost 报道](https://www.marktechpost.com/2026/06/24/nous-research-adds-learn-to-hermes-agents-skills-system-capturing-workflows-as-slash-commands-without-hand-writing-skill-md/)），能把一次工作流自动沉淀成 skill 文件，不用手写。
+
+**Q2：skill 和 MCP 工具有什么区别？**
+
+MCP 工具是"agent 调用的外部能力"（API、数据库、文件系统），skill 是"agent 在什么场景下用什么步骤调用哪些工具"。skill 是更高层的"方法论"，工具是"动作"。一个 skill 通常会引用多个 MCP 工具。前面 `weekly-report-to-feishu` skill 调了 `feishu-bitable-create` 和 `feishu-bitable-append` 两个 MCP 工具。
+
+**Q3：我应该把所有事情都写成 skill 吗？**
+
+不应该。obra 给的判定标准：
+
+- **写 skill**：这个方法论会跨项目复用、别人也会受益、不是项目特定。
+- **不写 skill**：一次性方案、标准做法文档已经很全、项目特定约定（这种放 `CLAUDE.md` 或 `AGENTS.md`）。
+
+**Q4：skill 之间能互相调用吗？**
+
+不能直接调用。但可以在正文里交叉引用，比如"详见 `references/condition-based-waiting.md`"。注意 obra 的提醒：用路径引用而不是 `@skill-path`，因为 `@` 语法在 Claude Code 里会强制加载文件，浪费上下文。
+
+**Q5：我写了一个 skill，怎么验证 description 写得好不好？**
+
+obra 的 TDD 方法（[writing-skills 全文](https://github.com/obra/superpowers-skills/blob/main/skills/meta/writing-skills/SKILL.md)）给了一个具体流程：
+
+1. **RED**：拿一个压力测试场景，让 agent **不加载这个 skill** 跑一遍，记录它的失败行为（怎么瞎猜、怎么走偏）。
+2. **GREEN**：把 skill 加上，跑同样的场景，看 agent 是否按 skill 走。
+3. **REFACTOR**：如果 agent 还是走偏，说明 description 没写清楚或者边界没写死，回去补，再跑。
+
+这套流程把"写 skill"变成了 TDD——非常有工程感。第 9 篇讲自我改进时会专门展开。
+
+---
+
+## 十一、结论：一张图记住本篇
+
+把整篇文章压缩成一张心智图：
+
+```
+skill 文件
+├── 物理形态：~/.hermes/skills/<name>/SKILL.md (+ scripts/ + references/ + assets/)
+├── frontmatter（YAML，给检索系统读）
+│   ├── name：必须等于目录名，小写连字符
+│   ├── description：命门。写触发条件，不写营销。埋原话、写负面关键词
+│   └── 可选：license / compatibility / metadata / allowed-tools
+├── 正文（Markdown，给模型执行读）
+│   ├── Overview / When to Use / Steps / Examples / Edge Cases
+│   ├── 控制在 500 行 / 5000 token 以内
+│   └── 详细参考拆到 references/，别塞死在正文里
+└── 跨工具：agentskills.io 标准，Hermes / Claude Code / Cursor / Codex 格式兼容，行为差异主要在工具命名
+```
+
+记住三句话：
+
+1. **skill = Markdown + frontmatter**，命门是 description。
+2. **description 写触发条件不是功能介绍，正文写边界条件不是参考资料**。
+3. **agentskills.io 是开放标准**，你写的 skill 能搬走——这是选 Hermes 而不是闭壳工具的实质理由之一。
+
+下一篇 #7 我们手写第一个跑通的 skill，把这套理论变成可运行的产物。再后面 #8 讲 Skills Hub（社区共享），#9 讲自我改进（skill 怎么从一次工作流自动长出来）。
+
+---
 
 ## 延伸阅读
 
-- [agentskills.io 开放标准](https://agentskills.io/)
-- [Hermes Skills System 文档](https://hermes-agent.nousresearch.com/docs/)
-- [obra/superpowers 的 description 写法实验（CSO）](https://github.com/obra/superpowers)
+- [agentskills.io 规范（Specification）](https://agentskills.io/specification) — 开放标准的完整定义。
+- [Agent Skills Overview](https://agentskills.io/home) — 标准主页，含 Quickstart。
+- [Anthropic 官方《The Complete Guide to Building Skills for Claude》（PDF）](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf) — 33 页官方权威指南，触发器和负面关键词的源头。
+- [obra/superpowers writing-skills（GitHub）](https://github.com/obra/superpowers-skills/blob/main/skills/meta/writing-skills/SKILL.md) — CSO（Claude Search Optimization）的提出者和实验数据来源，范本 skill。
+- [obra/superpowers Issue #526](https://github.com/obra/superpowers/issues/526) — 把 negative trigger patterns 加进 CSO 章节的提议，和 Anthropic 官方对齐。
+- [Hermes Agent Skills System 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) — Hermes 视角的 skill 系统，含 `.no-bundled-skills` 标记等 Hermes 特有约定。
+- [Hermes Bundled Skills Catalog](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog) — Hermes 自带技能库目录。
+- [Hermes Agent Skill Authoring（bundled skill）](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/software-development/software-development-hermes-agent-skill-authoring) — Hermes 官方的"怎么写 skill"skill，范本。
+- [Hermes Agent `agent/skill_commands.py`（GitHub）](https://github.com/NousResearch/hermes-agent/blob/main/agent/skill_commands.py) — frontmatter 解析的源码，看 `metadata.hermes.config` 是怎么被读的。
+- [Strapi：What Are Agent Skills and How To Use Them](https://strapi.io/blog/what-are-agent-skills-and-how-to-use-them) — agentskills.io 标准发布的第三方报道，时间线（2025-12-18 Anthropic 发布）。
+- [Agensi：SKILL.md Open Standard](https://www.agensi.io/learn/agent-skills-open-standard) — 跨工具采用情况整理（Anthropic / OpenAI / Google / Microsoft / Cursor）。
+- [Ken Huangus：Chapter 12 The Skill System Pattern](https://kenhuangus.substack.com/p/chapter-12-the-skill-system-pattern) — Claude Code vs Hermes 的 skill 系统对比。
