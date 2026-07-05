@@ -25,102 +25,232 @@
 
 > 系列第 21 篇 · 读者预设：要把 Hermes 长期跑、不想某天炸掉的人 · 最后核实：2026-07
 
-**TL;DR：** 长期跑 Hermes，三件事绕不开：**升级**（`hermes update` + `hermes doctor` 自检）、**备份**（`~/.hermes/` 整个目录，记忆和 skill 是核心资产）、**迁移**（从 OpenClaw 来用 `hermes claw migrate`，先 `--dry-run`）。这三件不做，某次升级 / 机器故障 / 想换部署 = 数据丢、配置乱、要从头重建。
+把一个 AI Agent 当成长期工具来用，和把它当玩具试一下，心态完全不一样。玩具用完即走，崩了重装就行；长期工具意味着你日复一日往里堆东西：今天写一个 skill，明天纠正一次记忆，后天调一次平台配置，半年之后回头一看，里面已经攒了一整套属于你自己的工作流。这个时候最怕什么？最怕某天你执行了一条升级命令，或者机器突然挂了，或者你想从一台服务器搬到另一台，然后发现 skill 失效、记忆错乱、配置丢失、平台 bot 全部掉线。这种翻车不是设想，是几乎每一个把 Hermes 跑过三个月以上的人都会遇到的事。
+
+Hermes Agent（NousResearch 出品，2026 年 2 月才正式开源）的迭代速度在整个 Agent 生态里属于快的那一档。skill 系统、记忆存储、backend 抽象、平台对接层，在过去几个月里都改过不止一次。快迭代是好事，意味着 bug 修得快、新功能上得快、社区反馈响应得快；但代价是每次升级都可能踩到不兼容的边界，老配置在新版本里突然失效、老 skill 突然不被加载、老记忆格式突然不被识别，这些都不是小概率事件。开源、迭代快、又涉及个性化数据，这三件事凑在一起，决定了把 Hermes 长期跑稳定本身是一项需要纪律的工作，不是装上就完事。这篇就把长期运维绕不开的三件事一次讲透：升级、备份、迁移。三件事可以类比成软件的体检、保险和搬家。体检是定期确认系统还健康，保险是出事之前先留好后路，搬家是把整套环境无损地换到新地方。每一件都枯燥，每一件都被低估，每一件出问题都要付大代价。
+
+**TL;DR：** 三件事记住三组命令就够。升级用 `hermes update` 加 `hermes doctor`，前者把版本往前推，后者做一遍自检；备份的核心是把整个 `~/.hermes/` 目录当成资产，里面 skills 和记忆最值钱，git 推私有仓库加定期全量打包推对象存储；迁移分两种，OpenClaw 过来用 `hermes claw migrate --dry-run` 先干跑，跨机搬迁则打包整个目录加新机重配凭证。三件事的共同底线是：永远不在生产直接升、永远不在没备份的情况下动结构、永远先 dry-run 再实际迁移。这些是 boring 的纪律，但 boring 才是长期跑得稳的前提。更进一步的共同心法是把 Hermes 当成「会自己长东西的生物」来对待——它每次交互都可能产生新的 skill、新的记忆条目、新的个性化调整，这种持续生长的状态意味着任何时间点都可能是有价值的状态，备份必须能覆盖到任意时间点，而不只是最近一次。
 
 ## 升级：保持新鲜的代价
 
-Hermes 2026.2 才开源，迭代飞快——skill 系统、记忆机制、backend 都可能在新版本变动。两条命令：
+先说升级。Hermes 是一个会自己长 skill 的 Agent，跑得越久里面东西越复杂，这恰恰意味着它对版本变化比普通软件更敏感。一条普通的 `hermes update` 命令在别人那里只是拉个新版本，在你这里可能意味着 skill 加载逻辑变了、记忆文件被重新解析、某个配置项被改名、或者 backend 抽象层重构导致你之前写的对接代码失效。升级不是坏事，但盲升是。
+
+### 两条核心命令
+
+升级流程的两个支柱命令是 update 和 doctor。前者负责把代码往前推，后者负责确认升级之后系统还是健康的：
 
 ```bash
 hermes update      # 升到最新版
-hermes doctor      # 自检，诊断配置/环境问题
+hermes doctor      # 自检，诊断配置和环境问题
 ```
 
-升级的坑：
+`hermes update` 的行为比看起来智能一点。它会自动检测你当初是用哪种方式安装的——pip、git installer、Homebrew 还是 NixOS——然后调用对应路径的更新命令。这意味着你不必记自己是 pip 装的还是 git clone 的，工具会替你识别。装完之后它会告诉你升级到了哪个版本，以及之前是哪个版本，这一点对回退很重要，建议每次升级都把这两个版本号记一下。
 
-- **skill / 记忆格式可能变**：跨大版本时 skill 文件格式或记忆存储结构可能改。升前看 changelog，看有没有 breaking change。
-- **配置项改名 / 废弃**：升完发现原来配的东西不生效，往往是配置项被改名或废弃。`hermes doctor` 能查出部分。
-- **升级把 skill 改坏**：极少数情况新版本对 skill 处理逻辑变了，老 skill 不兼容。所以 skill 库 git 管起来（第 7 篇），升完 diff 一遍。
+`hermes doctor` 是升级之后必须跑的体检命令。它扫描配置文件、环境变量、依赖、skill 加载状态、平台对接状态，把潜在问题列出来。比如你之前依赖的某个 provider 配置项在新版本里被改名了，doctor 能告诉你旧字段不再生效；又比如某个 skill 的 frontmatter 缺了必填字段，doctor 会标出来。doctor 不是万能的，它只检查它知道的检查项，但它能扫掉一大类低级问题。
 
-升级策略：
+需要提醒的是，文档里出现过 `hermes update --check` 这种只检查不实际升级的用法，但在某个版本的 issue 里（GitHub issue 编号 10318）有人反映这个参数实际上没有被 CLI 识别。所以如果你跑 `hermes update --check` 报错，不要怀疑自己，是工具本身的实现状态不稳定。临时替代方案是手动看 changelog 或者直接看 GitHub release 页面确认最新版本号。
 
-- **不在生产直接升**：先在测试环境升，跑一遍核心场景，没问题再升生产。
-- **看 changelog**：尤其关注 skill、记忆、安全相关的 breaking change。
-- **升完跑 doctor**：让自检工具扫一遍。
-- **保留一个旧版本回退路径**：知道怎么回退到上一版（`~/.hermes/hermes-agent` 是 git checkout，能 reset）。
+### 升级的四类典型坑
+
+升级会踩的坑大致可以分成四类，每一类都有对应的应对办法。
+
+第一类是 skill 格式变化。Hermes 的 skill 是放在 `~/.hermes/skills/` 下面的目录，每个目录里有一个 `SKILL.md` 描述这个 skill 干什么、什么时候触发、怎么执行。这个文件的 frontmatter 字段在不同版本之间有过调整：早期版本的 description 字段定义比较宽松，后来版本对 description 的写法更严格，因为它直接决定 skill 什么时候被自动调用。如果你升级之后发现某个 skill 突然不被触发了，先去检查 description 写法是否符合新版本的要求，而不是怀疑模型变笨了。更隐蔽的情况是 skill 的执行逻辑依赖某个内部 API，新版本重构了这个 API，老 skill 直接报错。应对办法是把 skill 库用 git 管理（第 7 篇详细讲过），每次升级之后跑一遍核心 skill，对比 git diff 看哪些 skill 被自动改写过。
+
+第二类是记忆存储结构变化。Hermes 的记忆不是一个简单的文本文件，它包括 SOUL.md（人设）、MEMORY.md（持久记忆）、USER.md（用户画像）、还有会话历史和 state.db 这种数据库文件。记忆的解析逻辑和存储格式在版本之间有过迁移，比如从纯 markdown 迁到带结构的 sqlite。这种迁移通常是 Hermes 自动执行的，升完第一次启动会自动转格式。但自动迁移有失败概率，尤其是你跨了多个大版本一起升的时候。应对办法是升级前一定备份整个 memory 目录，万一自动迁移把数据弄坏，可以从备份回滚。
+
+第三类是配置项改名或废弃。Hermes 的配置分散在 `~/.hermes/config.yaml` 和 `~/.hermes/.env` 里，前者管 provider、平台 bot、运行参数，后者管密钥。配置 schema 在迭代中会调整，比如某个 provider 的名字改了、某个开关被拆成两个、某个新增的必填项没有默认值。升完发现原来能跑的 provider 报错，多半是这个原因。`hermes doctor` 能识别一部分这类问题，但不是全部。应对办法是看 changelog 里的 breaking changes 段落，对照自己的 config 检查一遍。
+
+第四类是升级把 skill 改坏。这种情况比少见还少见一点，但确实发生过：新版本对 skill 的处理逻辑变了，比如对 frontmatter 的解析更严格了，或者 description 里的某些关键词不再被当成触发条件。这种问题最阴险，因为不会报错，skill 静默地不再被触发，你以为模型忘了，其实是工具链变了。应对办法是定期跑一遍 skill 清单（用 `/skills` 这种 slash command 让 Hermes 自己列出来它现在能识别哪些 skill），对比你期望的清单，发现少了的再去查原因。
+
+### 升级策略：四个不浪漫的原则
+
+把这些坑综合起来，能提炼出四条升级策略，每条都不浪漫，但每条都救命。
+
+第一，不在生产直接升。Hermes 通常装在你日常用的环境里，这个环境就是你的生产。直接在这个环境上升级等于在生产上做未测试的变更。理想做法是再准备一个测试环境（可以是另一台机器、另一个用户目录、或者 Docker 容器），先在测试环境升，把你日常用的核心 skill 和平台对接跑一遍，确认没问题再升生产。如果没有第二台机器，至少在升级前做一次完整备份，给自己留好回退的余地。
+
+第二，看 changelog。Hermes 的版本说明在 GitHub release 和官方文档的 changelog 页面都有。每次升级前，把目标版本和你当前版本之间的所有 release notes 读一遍，重点找 breaking、deprecated、removed 这几个关键词。尤其关注 skill、memory、security 这三个领域的变更，因为这三个直接关系到你的核心资产。
+
+第三，升完跑 doctor。这是一条几乎零成本的纪律，但很多人就是懒得跑。`hermes doctor` 的输出虽然有时候冗长，但它会把潜在的配置问题列得很清楚。养成习惯：每次 `hermes update` 之后立刻 `hermes doctor`，把这两条命令绑定成肌肉记忆。
+
+第四，保留回退路径。Hermes 的代码如果是从 git 装的，那么 `~/.hermes/hermes-agent` 这个目录本身就是一个 git checkout，理论上可以 `git reset --hard <旧 commit>` 回退。如果是 pip 装的，记下旧版本号，用 `pip install hermes-agent==<旧版本>` 回退。但回退只能回退代码，回退不了已经被自动迁移的数据格式。所以严格来说，回退路径必须配合数据备份一起用，否则代码回退了，数据是新格式的，反而更乱。
 
 ## 备份：记忆和 skill 是核心资产
 
-`~/.hermes/` 整个目录要备份。里面最值钱的：
+升级之所以让人紧张，根本原因是怕丢东西。但真正能让你晚上睡得踏实的不是升级流程本身，而是备份。备份做扎实了，升级失败也不怕，大不了从头恢复。这一节讲备份到底备什么、怎么备、不备会怎样。
 
-- **skills/**：你手写 + Hermes 自创的 skill（第 5-9 篇）——时间投入最大
-- **记忆文件**：curated memory、user model、会话历史（第 10-12 篇）——个性化资产
-- **config**：provider、平台 bot 配置（不含密钥的部分）
+### ~/.hermes/ 里到底有什么
 
-备份策略：
+要理解备份策略，先要理解 `~/.hermes/` 这个目录的内部结构。这个目录是 Hermes 运行时的家，所有状态都在里面。它的典型布局是这样的：
 
-- **git 管 skills 和记忆**：第 7 篇讲过 skills 用 git，记忆文件同理。推到私有仓库，异地备份。
-- **定期全量备份 `~/.hermes/`**：cron 跑备份脚本（第 16 篇那种），推到对象存储。
-- **凭证单独管理**：API key、bot token 走 env vars 或 secret manager，不依赖 `~/.hermes/` 备份（也避免明文进 git）。
+```
+~/.hermes/
+├── config.yaml          # 运行配置：provider、平台、参数
+├── .env                 # 密钥：API key、bot token
+├── SOUL.md              # 人格设定
+├── MEMORY.md            # 持久记忆
+├── USER.md              # 用户画像
+├── AGENTS.md            # 多 Agent 编排配置
+├── state.db             # 状态数据库（sqlite，带 WAL）
+├── skills/              # 所有 skill 的目录
+│   ├── 你写的 skill/
+│   ├── Hermes 自创的 skill/
+│   └── openclaw-imports/   # 从 OpenClaw 迁来的
+├── sessions/            # 会话历史
+├── memory/              # 记忆系统的内部存储
+└── ...                  # 其他资产（TTS 音频等）
+```
 
-不备份的代价：机器挂了 / 误删 / 升级出错 = 你的 skill 库（可能迭代了几个月）和记忆（你的个性化资产）全没。从头重建成本极高。
+这个目录里最值钱的不是代码，是你日积月累沉淀下来的内容。具体来说，按价值排序大致是：第一，skills 目录下的所有 skill 文件，包括你手写的、Hermes 自创的、从 OpenClaw 迁过来的，这些是你投入时间最多的产物，丢失代价最高；第二，记忆三件套 SOUL.md、MEMORY.md、USER.md，这些定义了 Agent 是谁、记得什么、用户是什么样的人，是个性化的核心；第三，state.db 这种数据库文件，存的是会话状态和结构化记忆，体积可能不小，丢了等于丢了一部分对话历史；第四，config.yaml 里的非密钥配置，比如 provider 选择、平台 bot 配置、运行参数；第五，sessions 和 memory 目录里的会话历史和记忆内部存储。
+
+不那么值钱但还是要备的是 `.env`，这个文件里全是密钥。说它不值钱是因为密钥丢了可以重新生成，但说它危险是因为如果你把它原样备份到不安全的地方（比如明文进 git），等于把钥匙挂门口。所以 `.env` 的备份要单独走一套流程，下面会讲。
+
+### Hermes 自带的 backup 命令
+
+Hermes 意识到备份是个常见需求，所以自带了一个 `hermes backup` 命令。这个命令的用法很简单：
+
+```bash
+hermes backup                  # 全量备份到 ~/hermes-backup-*.zip
+hermes backup -o /tmp/my.zip   # 指定输出路径
+hermes backup --quick          # 只备关键数据（skills + memory + config）
+```
+
+`hermes backup` 会把 `~/.hermes/` 整个目录打包成一个 zip，文件名带时间戳。这是最省事的全量备份方式，适合不想折腾的情况。`--quick` 模式只打包核心数据，跳过 sessions 这种体积大但价值相对低的部分，适合频繁的增量备份。
+
+但 `hermes backup` 有几个局限。第一，它只是本地打包，不会自动推到远程，如果机器本身坏了，本地 zip 也跟着没了。第二，它默认会包含 `.env`，这意味着 zip 里有明文密钥，传到对象存储或同步服务之前要想清楚。第三，它是一次性快照，没有版本历史，找不回三天前那个版本。要解决这三个问题，需要配合 git 和外部存储。
+
+### 三层备份策略
+
+推荐采用三层叠加的备份策略，每一层解决不同问题。
+
+第一层是 git 版本控制，主要针对 skills 和记忆三件套。把 `~/.hermes/skills/` 整个目录、`SOUL.md`、`MEMORY.md`、`USER.md` 这些 markdown 文件单独抽出来，建一个 git 仓库（必须是私有仓库，因为这些内容包含你的个性化信息），定期 commit 并 push 到 GitHub 或 GitLab。git 的好处是有版本历史，你能看到每个 skill 在哪天改了什么，记忆文件什么时候被纠正过。这一层解决的是细粒度版本管理和异地冗余。
+
+第二层是定期全量备份推对象存储。写一个 cron 脚本，每天凌晨跑 `hermes backup`，把生成的 zip 推到 S3、Cloudflare R2、阿里云 OSS 之类的对象存储。对象存储有生命周期管理，旧备份可以自动归档或删除，不会无限堆积。这一层解决的是整机故障场景下的恢复，机器挂了你能从对象存储拉回最近的完整状态。
+
+第三层是凭证单独管理。`.env` 里的 API key、bot token、provider 密钥，不应该依赖 `~/.hermes/` 的备份，也不应该明文进 git。正确做法是把这些密钥放在环境变量里（在 shell 的 rc 文件里 export，或者在 systemd service 文件里通过 EnvironmentFile 加载），或者在专门的 secret manager 里（比如 1Password CLI、pass、HashiCorp Vault）。`~/.hermes/.env` 只是从这些源头生成的一份本地副本。机器挂了，源头还在，新机重新生成一份 .env 就行。这一层解决的是安全和恢复的分离。
+
+第 16 篇讲过具体的备份脚本写法，包括怎么用 cron 调度、怎么把不同来源的数据打包、怎么处理 WAL 模式下的 sqlite 一致性。这里不重复脚本细节，重点是思路：三层各司其职，git 管版本、对象存储管整机恢复、secret manager 管密钥。三者缺一不可，少了任何一层都会在某种故障场景下卡住。
+
+### 不备份的代价
+
+讲策略之前先讲讲不备份会怎样，这样你才知道策略为什么这么设计。
+
+最常见的灾难场景是机器故障。你的笔记本进水了，或者云服务器被厂商回收了，或者你误删了 `~/.hermes/`。如果没有备份，你面临的不是从零开始，而是从负数开始：因为 Hermes 跑了几个月之后，里面沉淀的不只是初始配置，还有它自己学到的 skill、被你纠正过的记忆、被它迭代过的 prompt。这些东西有的你能重新写出来，有的（比如 Hermes 自创的 skill）你根本不知道它内部学了什么，丢就丢了。
+
+第二个场景是升级出错。前面讲过，升级有概率触发自动数据迁移，迁移有概率失败。如果迁移失败破坏了 memory 文件，而你又没有备份，就只能眼睁睁看着自己几个月的个性化调教化为乌有。这种痛感比机器故障更甚，因为是你自己执行了一条命令亲手把数据弄坏的，悔恨感拉满。
+
+第三个场景是误操作。你在调 skill 的时候改错了，或者清会话历史的时候连记忆一起清了，又或者执行某条命令的时候没意识到它会改 SOUL.md。这类操作错误在没有备份的情况下是不可逆的。git 的版本历史在这里特别有用，因为它能让你回到任何一个时间点的状态，不只是最近一次。
+
+不备份的代价本质上是重建成本。重建一个 skill 平均要一两小时（如果还能记得自己当时想干什么），重建一套记忆几乎不可能（因为记忆是被 Agent 在交互中逐步累积的，你不可能复现当时的每一次对话）。重建成本远高于备份成本——这是备份策略最朴素的论据。
 
 ## 迁移：从 OpenClaw 来
 
-很多人是从 OpenClaw 迁来的（第 1 篇讲过两者关系）。Hermes 提供一键迁移：
+讲完备份讲迁移。迁移分两种，第一种是从 OpenClaw 迁到 Hermes，第二种是从一台机器迁到另一台机器。两种逻辑不一样，分开讲。
+
+很多人是从 OpenClaw 转过来的（第 1 篇讲过两者关系），Hermes 也专门提供了迁移工具。这种迁移的特点是数据格式需要转换，OpenClaw 的配置和记忆结构跟 Hermes 不完全一样，需要工具替你做映射。
+
+### hermes claw migrate 的用法
+
+迁移命令是 `hermes claw migrate`，它的几个常用形态：
 
 ```bash
-hermes claw migrate --dry-run    # 先干跑看会迁什么
-hermes claw migrate              # 实际迁
-hermes claw migrate --preset user-data   # 不迁密钥
-hermes claw migrate --overwrite  # 覆盖已有冲突
+hermes claw migrate --dry-run               # 先干跑，看会迁什么
+hermes claw migrate                          # 实际迁移
+hermes claw migrate --preset user-data      # 只迁用户数据，不迁密钥
+hermes claw migrate --overwrite             # 覆盖已有的冲突文件
 ```
 
-会迁的内容：
+`--dry-run` 是迁移之前必须跑的一步。它不会真的写文件，只是模拟一遍迁移过程，告诉你哪些文件会被迁、迁到哪里、有没有冲突。看 dry-run 的输出能让你对迁移规模有概念，比如要迁几个 skill、几条平台配置、几个 API key。
 
-- **SOUL.md**：人设
-- **记忆**：MEMORY.md、USER.md
-- **Skills**：你创建的 skill → `~/.hermes/skills/openclaw-imports/`
-- **命令白名单**：approval 模式
-- **消息平台设置**：平台配置、白名单、工作目录
-- **API keys**：allowlist 内的密钥（Telegram、OpenRouter、OpenAI、Anthropic、ElevenLabs）
-- **TTS 资产、AGENTS.md** 等
+`--preset user-data` 是一个安全选项。它只迁用户数据（人设、记忆、skill、平台配置），不迁密钥。强烈推荐这个选项，因为密钥从老工具迁过来意味着你把 OpenClaw 里存的明文密钥搬进 Hermes，这中间任何一步出错都可能泄露。更稳的做法是用这个 preset，迁完之后手动在新环境里重新配置密钥（从 secret manager 里取，而不是从老工具搬）。
 
-迁移流程：
+`--overwrite` 用在目标位置已有同名文件的情况下。默认 migrate 不会覆盖，遇到冲突会停下报告。如果你确认要覆盖（比如 Hermes 里现在的版本是测试用的、想被 OpenClaw 的版本替换），加这个参数。但用之前一定先备份目标环境，覆盖是不可逆的。
 
-1. **先 `--dry-run`**：看清楚迁什么，确认没意外。
-2. **首次安装时 setup 向导会自动检测 `~/.openclaw`**：会问要不要迁。
-3. **迁完测试**：核心 skill、记忆、平台 bot 各跑一遍确认。
-4. **密钥谨慎**：用 `--preset user-data` 不迁密钥，手动重配更安全。
-5. **skill 路径变了**：迁过来的 skill 在 `openclaw-imports/` 子目录，确认 description（第 6 篇）还能命中。
+### 会迁什么、不迁什么
+
+`hermes claw migrate` 默认会迁移的内容包括这么几类。第一是人设文件 SOUL.md，这是你在 OpenClaw 里调教出来的人格，原样迁过来。第二是记忆文件 MEMORY.md 和 USER.md，这两份是个性化的核心。第三是 skills 目录，你在 OpenClaw 里创建的 skill 会被迁到 `~/.hermes/skills/openclaw-imports/` 这个子目录下，注意是子目录，不是平铺到 skills 根目录——这意味着迁完之后这些 skill 的路径前缀跟 Hermes 原生 skill 不一样，可能影响触发逻辑，需要检查 description 写法是否还能命中。第四是命令白名单和 approval 模式，这些定义了 Agent 能自动执行哪些命令、哪些需要确认。第五是消息平台设置，包括平台配置、白名单、工作目录。第六是 allowlist 内的 API keys，包括 Telegram、OpenRouter、OpenAI、Anthropic、ElevenLabs 这几家。第七是 TTS 相关资产（比如音色文件）和 AGENTS.md（多 Agent 编排配置）。
+
+不迁的或者需要手动处理的，主要是 backend 路径相关的配置、平台 webhook 这种跟具体机器强绑定的东西、以及不在 allowlist 里的自定义密钥。这些需要迁完之后手动检查并重配。
+
+### 迁移流程：六步走
+
+把上面的命令和注意事项串起来，一个稳妥的 OpenClaw 到 Hermes 迁移流程是这样的。
+
+第一步，在 OpenClaw 这一侧做一次完整备份，把 `~/.openclaw/` 整个目录打包。万一迁移搞砸了，至少老环境的数据还在。
+
+第二步，在 Hermes 这一侧也做一次完整备份，特别是 `~/.hermes/skills/` 和三件套记忆文件。因为 migrate 默认不覆盖，但加了 `--overwrite` 就会覆盖，提前备份能让你随时回退。
+
+第三步，跑 `hermes claw migrate --dry-run`，仔细看输出。重点看要迁几个 skill、几条平台配置、几条密钥、有没有冲突文件。如果有冲突，决定是保留 Hermes 现有版本（不加 `--overwrite`）还是用 OpenClaw 的版本覆盖（加 `--overwrite`）。
+
+第四步，决定密钥策略。如果用 `--preset user-data`，跳过密钥迁移，等迁完手动配；如果想图省事一次性全迁，用默认模式，但要意识到密钥会被搬过来，记得迁完之后轮换一次。
+
+第五步，执行实际迁移，跑 `hermes claw migrate`（或加 `--preset user-data` / `--overwrite`）。
+
+第六步，迁完测试。核心 skill 一个个跑一遍确认能触发；记忆三件套打开看看内容是不是预期的；平台 bot 发几条消息确认能收发；密钥如果是迁过来的，跑一个需要调 LLM 的请求确认 key 还有效。测试覆盖不到的地方迟早会以意外方式暴露，所以这一步不能省。
+
+### setup 向导的自动检测
+
+补充一个细节：如果你是第一次安装 Hermes，在 setup 向导阶段，Hermes 会自动检测系统里有没有 `~/.openclaw/` 目录。如果检测到，会主动问你要不要从 OpenClaw 迁移。这是面向新用户最友好的入口——你不用记 `hermes claw migrate` 这条命令，向导会引导你完成。但要注意，向导里的迁移走的也是同一套逻辑，所以 dry-run、preset、overwrite 这些考量在向导模式下同样适用。向导还容易给人「点了下一步就万事大吉」的错觉，实际上自动检测到 `~/.openclaw/` 并不等于迁移一定安全——OpenClaw 那边的状态可能本身就损坏、或者版本太老不被支持、或者 skill 里有 OpenClaw 特有的语法 Hermes 解析不了。所以即使走向导，也要先去 OpenClaw 一侧把当前版本和资产清单核对清楚，做到心里有数再点确认。如果你在向导里点了迁移，建议先用向导的预览功能（如果有的话）或者打断向导、手动跑 `--dry-run` 看清楚再决定。
 
 ## 跨机迁移：换服务器
 
-不只 OpenClaw → Hermes，还包括 Hermes 旧机 → 新机：
+OpenClaw 到 Hermes 是数据格式转换，跨机迁移是同构环境之间的搬迁。听起来简单——把 `~/.hermes/` 整个目录拷过去不就行？实际操作有几个坑。
 
-- **打包 `~/.hermes/`**：skills、记忆、config。
-- **凭证在新机重配**：env vars 别指望打包过去（也不该）。
-- **backend 路径调整**：新机的路径、Docker 配置可能不同，对应改。
-- **平台 bot 重新对接**：bot token 可以复用，但 webhook / 长连接可能要重连。
+### 打包什么、怎么打包
 
-## 真实坑
+跨机迁移的第一步是打包源机器的 `~/.hermes/`。最稳妥的方式是先在源机器上跑 `hermes backup` 生成一个 zip，然后把这个 zip 传到目标机器。这样比直接 rsync 整个目录更安全，因为 backup 命令会处理一些边角情况（比如 WAL 模式下 sqlite 的一致性）。
 
-- **升级前没备份**：升坏了 skill / 记忆回不去。升前一定 git commit + 全量备份。
-- **迁移没 dry-run**：直接 migrate 把现有配置覆盖了。先 `--dry-run`。
-- **凭证依赖备份**：以为备份了 `~/.hermes/` 就能恢复一切，结果 token 之类的没在里头（或加密读不出）。凭证单独记。
-- **跨版本跳跃升级**：从很老的版本直接跳最新，中间多个 breaking change 叠加。逐步升，每次小跨。
+如果不想用 backup 命令，也可以手动 tar，但要注意两点。第一，state.db 这种 sqlite 文件在 WAL 模式下有 `state.db-wal` 和 `state.db-shm` 两个伴随文件，必须一起打包，否则数据库恢复出来是不完整的。第二，要先停掉 Hermes 进程再打包，避免打包过程中文件被写入导致状态不一致。tar 命令大致是 `tar czf hermes-home.tar.gz -C ~ .hermes` 这种形式，注意要先 cd 到 home 再打包相对路径，这样解包的时候路径对得上。
 
-## 权衡
+打包好之后用 scp 或者对象存储传到新机器。传之前考虑一下包里有没有敏感数据（默认有，因为 .env 在里面），传输通道要安全（scp 走 SSH 是安全的，传到公共对象存储要先加密）。
 
-运维的交易：**投入精力做防御性工作 vs 接受某天翻车的概率**。备份和升级流程做扎实的代价是时间，回报是避免灾难性数据丢失。Hermes 的 skill 和记忆是长期迭代的资产，丢失代价远大于备份成本——这笔账应该往备份倾斜。
+### 在新机器上恢复
+
+新机器上恢复的流程是先装 Hermes（用和源机器一样的安装方式，pip 装的就用 pip，git 装的就用 git），然后把备份包解到 `~/.hermes/`。解包之前如果 `~/.hermes/` 已经存在（首次安装会创建一个空的），先删掉或者备份再解。
+
+恢复之后要做几件核对。第一，凭证重配。即使 `.env` 被一起搬过来了，也建议在新机器上从 secret manager 重新生成一份，理由前面讲过。第二，backend 路径调整。如果你的 Hermes 配置里 backend 用了绝对路径（比如某个本地模型文件的路径），新机器的目录结构可能不一样，要手动改。Docker 部署的情况还要注意挂载点是不是和源机器一致。第三，平台 bot 重连。Telegram、Discord 这种平台 bot 的 token 可以复用，但 webhook URL 或者长连接绑定的服务器地址变了，需要在平台后台更新 webhook，或者在新机器上重新启动长连接让平台认识新地址。第四，文件权限。如果新机器的用户名和源机器不一样，解包出来的文件 owner 可能不对，要 chown 一下。
+
+### 跨机迁移的验证
+
+迁完之后做一次完整验证。验证清单包括：跑 `hermes doctor` 看自检结果，留意其中标黄的警告项，不要因为没报错就跳过；用 `/skills` 让 Hermes 自己列出当前能识别的 skill 清单，和源机器的清单逐项对比，发现少了的立刻查路径和 description；让 Hermes 回忆几个你长期纠正过的关键事实，看记忆三件套是不是被正确加载，比如你反复强调过的偏好、你纠正过的错误认知；触发两到三个核心 skill 看能不能正常执行，最好覆盖读写两种类型；如果接了平台 bot，发几条测试消息看收发是否正常，包括入站消息（用户发消息 Agent 能收到）和出站消息（Agent 主动推送能到达用户）；最后跑一次需要消耗 token 的实际任务，确认 provider 配置和密钥都活着。任何一项异常都要查清原因，不能放过。跨机迁移的隐性失败比显性失败更常见——文件都拷过来了，看起来一切正常，但某个路径错了、某个权限不对、某个 webhook 没更新，skill 就静默不触发，bot 就静默掉线，你以为迁移成功了，实际丢了一半能力却浑然不觉，等真正用到那个能力的时候才发现已经几周之后了。隐性失败的代价在于暴露延迟，延迟越久回溯原因越困难。
+
+## 真实世界踩过的坑
+
+最后讲几个真实出现过的翻车场景，每个都对应一条教训。
+
+第一个坑是升级前没备份。具体场景是这样：用户跑着某个版本的 Hermes，看到新版本有个想要的功能，直接 `hermes update`，升完发现记忆文件被自动迁移，但迁移过程中某个字段解析出错，记忆出现乱码。没有备份，回退不了，几个月的个性化记忆部分损坏。教训是：升级和备份必须绑死，任何一次升级之前都要有一次完整备份，哪怕是 `hermes backup` 这种本地快照也行。
+
+第二个坑是迁移没 dry-run。用户从 OpenClaw 迁到 Hermes，嫌 dry-run 麻烦直接跑了 migrate，结果 `--overwrite` 把 Hermes 里已有的几个 skill 覆盖成了 OpenClaw 版本，而 OpenClaw 版本是几个月前的旧版，丢失了最近在 Hermes 里的迭代。教训是：迁移默认带 dry-run，不是建议，是必须。
+
+第三个坑是凭证依赖备份。用户的备份脚本把整个 `~/.hermes/` 包括 `.env` 打包推到了对象存储，觉得万事大吉。某天机器故障，从对象存储拉备份恢复，结果发现 .env 里的几个 key 在备份时就已经过期了，恢复出来还是不能用，而真正有效的 key 在故障前两周已经在 secret manager 里更新过，但因为备份脚本没同步，等于备份了一份过期密钥。教训是：凭证的来源单一真实源应该是 secret manager 或环境变量，备份里的 .env 只是某一时刻的快照，不能当成活的密钥来源。
+
+第四个坑是跨版本跳跃升级。用户从很早的版本直接跳到最新版，中间隔了五六个 release，每个 release 都有一两个 breaking change，叠加在一起排查起来极其痛苦——不知道哪个改动导致了哪个症状。教训是：升级要逐步进行，每次小跨一两个版本，每升一次跑一遍核心场景确认没问题，再升下一次。累积的破坏性变更最难调试，逐步升级能把问题定位到具体版本。
+
+第五个坑是 sqlite WAL 模式下的备份不一致。用户用 tar 直接打包 `~/.hermes/`，没停 Hermes 进程，打包出来的 state.db 和它的 WAL 文件不匹配，恢复之后数据库出现轻微损坏，表现为某些会话历史查询不到。教训是：备份 sqlite 数据库要么用 `hermes backup`（它会处理一致性），要么先停进程再 tar，要么用 sqlite 的 `.backup` 命令做在线一致性备份。直接 tar 一个正在被写的 sqlite 文件是不可靠的。
+
+第六个坑是迁移之后 skill 路径前缀变化导致触发失效。Hermes 加载 skill 的时候会把 skills 目录下所有子目录都扫一遍，路径前缀本身不影响加载，但有些 skill 的 description 里写死了某种触发条件，迁过来之后上下文变了，description 不再精准命中，skill 就静默不触发了。前面提过，从 OpenClaw 迁来的 skill 会落在 `~/.hermes/skills/openclaw-imports/` 子目录里，而不是和 Hermes 原生 skill 平级。Hermes 加载 skill 的时候会把 skills 目录下所有子目录都扫一遍，路径前缀本身不影响加载，但有些 skill 的 description 里写死了某种触发条件，迁过来之后上下文变了（比如原来是 OpenClaw 的环境，现在是 Hermes 的环境），description 不再精准命中，skill 就静默不触发了。教训是：迁移之后逐个检查 OpenClaw 来源的 skill 的 description，必要时根据 Hermes 的新上下文重新写过，别指望原样还能工作。第七个坑是平台 bot 的 webhook 没更新。用户跨机迁移，把 token 和配置都搬过来了，但 Telegram webhook 还指向老服务器的地址，新机器启动之后 bot 一直收不到消息，因为所有入站消息都被 Telegram 推到老地址去了（老地址可能已经下线，也可能还在被别的进程占用）。教训是：跨机迁移涉及 webhook 类平台时，迁完必须去平台后台把 webhook 地址更新到新机器，光搬配置不够。
+
+## 权衡：防御工作 vs 翻车概率
+
+把三件事放在一起看，本质上是在做一个权衡：投入多少精力做防御性工作，vs 接受多大翻车概率。
+
+这个权衡的两端不对称。防御性工作的成本是确定的、可见的、马上付出的——你今天花半小时写个备份脚本、花十分钟看 changelog、花五分钟跑 doctor，这些都是即时支出。而翻车的代价是不确定的、概率性的、滞后显现的——可能你这辈子都不会遇到机器故障，也可能下周就遇到。人类天生不擅长评估这种低概率高代价事件，倾向于低估。
+
+但有一个变量改变了这个权衡的天平：Hermes 的资产特性。Hermes 跑久了之后，里面沉淀的 skill 和记忆不是普通的配置数据，它们是你长期迭代的产物，部分还是 Agent 自己学习生成的、你根本不知道内部学了什么。这种资产的重建成本不是用小时衡量的，而是用「无法重建」衡量的——有些东西丢了就是丢了，回不来。当资产价值上升到这个量级，备份和升级纪律的 ROI 就变成正的了，而且是强正。
+
+所以建议把权衡往防御一侧倾斜。具体到执行层面，可以定一个最低标准：每周一次 git commit 推 skills 和记忆、每天一次 cron 全量备份推对象存储、每次升级前先备份再 update、每次迁移前先 dry-run。这个标准不会让你成为运维高手，但能挡掉绝大多数灾难场景。再往上进阶一点，可以做的事情更多：给备份包加密（用 gpg 或者对象存储的服务端加密），避免传输链路上被截获；给备份设置生命周期策略（比如热存储保留七天、归档保留九十天），平衡恢复速度和成本；给升级设置一个「冷却期」（新版本发布后等一周再升，让社区先踩雷），避免成为首批受害者；给关键 skill 写回归测试（一组固定的 prompt 验证输出符合预期），升级后自动跑一遍，比手工触发省心。这些进阶措施不是必须，但每多一道防线，灾难落到你头上的概率就低一档。
+
+另一个值得提的角度是「演练」。备份做了但没演练过恢复，等于没有备份。定期（比如每季度）做一次恢复演练，从备份里恢复一套环境到测试机器，跑一遍核心流程，确认备份真的能用。演练的频率不需要高，但每次都要认真做。没演练过的备份在真正出事的时候往往会暴露问题——备份文件损坏、路径对不上、密钥过期、依赖缺失——这些问题在平时演练能发现，在出事时发现就晚了。
 
 ## 结论
 
-三件事：升级（先测试环境，看 changelog，跑 doctor）、备份（`~/.hermes/` 全量 + git 管skills/记忆 + 凭证单独）、迁移（OpenClaw 用 `hermes claw migrate --dry-run` 先看）。Hermes 的资产是你长期调教的 skill 和记忆，护住它们比省那点运维时间值。
+升级、备份、迁移，三件事放在一起就是长期运维的全部。升级要保持版本新鲜但又要避免 breaking change 把资产弄坏，核心是 update 加 doctor 这对组合拳，配合先测试后生产、看 changelog、保留回退路径这几条纪律。备份要把 `~/.hermes/` 当成核心资产来对待，三层策略各司其职：git 管 skills 和记忆的版本历史、对象存储管整机故障的恢复、secret manager 管密钥的安全和恢复分离。迁移分两种，OpenClaw 到 Hermes 用 `hermes claw migrate --dry-run` 先看再迁，跨机迁移打包整个目录加新机重配凭证。三件事的共同底色是枯燥的纪律性工作，但 Hermes 跑得越久，你沉淀的 skill 和记忆越值钱，这些纪律的回报就越高。这不是运维美学，是单纯的算账。
 
 ## 延伸阅读
 
-- [Hermes CLI Reference（update / doctor / claw migrate）](https://hermes-agent.nousresearch.com/docs/)
-- [Hermes Memory 文档（备份策略）](https://hermes-agent.nousresearch.com/docs/)
+- [Hermes CLI Reference（update / doctor / backup / claw migrate）](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)
+- [Hermes Configuration 文档（config.yaml 与 .env 结构）](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+- [Hermes Memory 文档（SOUL.md / MEMORY.md / USER.md）](https://hermes-agent.nousresearch.com/docs/)
+- [NousResearch/hermes-agent GitHub 仓库（changelog 与 issues）](https://github.com/nousresearch/hermes-agent)
 - [第 7 篇：skills 用 git 管理](./07-write-first-skill.md)
 - [第 16 篇：备份脚本实战](./16-end-to-end-recipes.md)
+- [第 22 篇：OpenClaw vs Hermes 迁移横评](./22-openclaw-vs-hermes.md)

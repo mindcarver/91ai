@@ -25,88 +25,376 @@
 
 > 系列第 19 篇 · 读者预设：要把 Hermes 长期挂着跑、纠结部署在哪的人 · 最后核实：2026-07
 
-**TL;DR：** Hermes 提供 6 种 terminal backend：**local / Docker / SSH / Singularity / Modal / Daytona**。前四种是常驻，后两种是 serverless（空闲休眠、用时唤醒）。README 宣称 serverless "闲置近零成本"——这句话要打折听：唤醒延迟、冷启动状态丢失、唤醒次数多了也不便宜。5 美元 VPS 够不够取决于你怎么用。
+**TL;DR：** Hermes 提供 6 种 terminal backend：local / Docker / SSH / Singularity / Modal / Daytona。前四种是常驻形态，后两种是 serverless（空闲休眠、用时唤醒）。README 里那句 serverless "闲置近零成本"——这句话要打折听：休眠确实不收计算费，但唤醒有延迟、冷启动可能丢状态、唤醒次数多了反而不便宜、镜像和持久化存储一直在算钱。5 美元 VPS 够不够跑、要不要上 serverless，取决于你的 Hermes 是高频实时用，还是低频间歇用。本文把六种 backend 的形态、成本结构、适合场景一次性拆清楚，给出具体的成本数字和配置示例。
+
+## 先搞清楚 terminal backend 到底是什么
+
+第 3 篇架构里提过 backend 抽象，这里展开讲。Hermes 本体是个 Python 进程，负责跟模型对话、维护记忆、调度 skill。但每次模型说"我要跑 `git status`"、"我要读 `~/work/report.md`"、"我要 `pip install` 装个包"——这些 shell 命令实际在哪儿执行？这就是 terminal backend 决定的事。
+
+换句话说，**backend 是工具命令的执行环境**，是 Hermes 的"手"伸出去落地的地方。它跟 Hermes 的"脑"（模型推理）和"记忆"（`~/.hermes/` 里的 skill、记忆库）是分开的。这点很重要，后面讲数据分离会展开。
+
+Hermes 一共支持 6 种 backend，配置命令统一是 `hermes config set terminal.backend <名字>`。前四种（local / Docker / SSH / Singularity）是常驻形态，进程一直在那等着；后两种（Modal / Daytona）是 serverless 形态，按需唤醒、闲时休眠。
 
 ## 六种 backend 各是什么
 
-terminal backend 是 Hermes 工具命令实际执行的环境（第 3 篇）。
+下表是横向对照，理解了这张表，剩下的就是按你自己的用量去选。
 
-| Backend | 形态 | 闲置成本 | 适合 |
-| --- | --- | --- | --- |
-| local | 你本机直接跑 | 0（你电脑本来就开着） | 开发、测试 |
-| Docker | 容器隔离 | 容器开着就有 | 隔离需求、单机长期跑 |
-| SSH | 远程服务器（如 VPS） | VPS 月费 | 24/7 常驻、多人/多平台 |
-| Singularity | HPC 容器 | 看集群 | 研究、GPU 集群场景 |
-| Modal | serverless | 近零（休眠时） | 间歇任务、不想常驻 |
-| Daytona | serverless 持久化 | 近零（休眠时） | 间歇但要环境保持 |
+| Backend | 形态 | 谁来出钱 | 闲置时成本 | 唤醒延迟 | 适合场景 |
+| --- | --- | --- | --- | --- | --- |
+| local | 你本机直接跑 | 你（电费） | 0（电脑本来就开着） | 无 | 开发、调试、个人实验 |
+| Docker | 本机容器隔离 | 你（电费） | 容器开着就有 | 几乎无 | 隔离需求、单机长期跑、安全敏感 |
+| SSH | 远程服务器（如 VPS） | VPS 月费 | 月费固定，闲时也付 | 无 | 24/7 常驻、多端入口、手机随时叫 |
+| Singularity | HPC 集群容器 | 集群计费 | 看集群策略 | 看排队 | 研究、GPU 集群、科研场景 |
+| Modal | serverless 云函数 | 按计算时间 + 存储 | 近零计算费（存储照收） | 几秒到几十秒 | 间歇任务、不想维护基础设施 |
+| Daytona | serverless 持久化环境 | 按计算时间 + 存储 | 近零计算费（存储照收） | 几秒到几十秒 | 间歇任务、但要环境保持 |
 
-选哪个看你**怎么用 Hermes**：
+下面逐个拆，每种都讲清楚形态、成本结构、配置要点、典型坑。
 
-- 偶尔用、本地开发 → local
-- 24/7 个人助手、要从手机随时叫 → SSH（VPS）或 Docker
-- 间歇任务（每天几次 cron）→ Modal / Daytona（serverless）
+### local：本机直跑，零成本零隔离
 
-## serverless "闲置近零成本" 真假
+最朴素的形态。Hermes 主进程跑在你电脑上，工具命令也在你电脑上原样执行，没有任何中间层。优点是反应最快（没有网络往返、没有容器开销），配置最简单（默认就是它），调试期尤其顺手——直接看本机文件、改本机配置、立即可见效果。零额外成本，电费可以忽略。
 
-README 说 Modal / Daytona "serverless persistence——agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions"。这句话技术上对，但要打折：
+但 local 的致命缺点是**没有安全边界**。Hermes 跑的工具命令权限等于你当前用户的权限——能读你的 SSH 私钥、改你的 shell 配置、删你的工作目录、读浏览器 cookie、push 你的 git 仓库。开发期你信任自己的 skill 没问题，但只要接入外部输入（用户消息、网页内容、邮件附件），就有 prompt injection 风险：模型被诱导跑一条 `curl ... | sh`，你本机就沦陷。
+
+所以 local 的适用边界很清楚：纯开发调试、跑你自己写的 skill、不接外部输入。一旦上线接 IM、接邮件、接 webhook，立刻切到 Docker 或 SSH backend。即便开发用 local，也强烈建议给 Hermes 单独开一个低权限用户跑，别用主账户。
+
+### Docker：容器隔离，本机的沙箱版
+
+Hermes 主体还在你电脑（或服务器）上，但工具命令被丢进一个 Docker 容器里执行。容器是个"沙箱"，Hermes 在里面跑 `rm -rf /` 也只影响容器内部，碰不到你的宿主文件系统（前提是配置正确，见坑五）。闲置成本取决于容器开不开着——长期挂着跟常驻没区别，按需起停则跟 serverless 接近。
+
+配置命令：`hermes config set terminal.backend docker`。还可以配 `terminal.container_cpu` 和 `terminal.container_memory` 限制资源（这两个参数对 docker / singularity / modal / daytona 生效，对 local / ssh 被忽略）。
+
+适合的场景：需要隔离（跑不信任的 skill、处理外部输入）、要复现一致环境（容器镜像固定版本）、单机长期跑但不想让 Hermes 碰宿主系统、做 CI 测试。社区里常见的玩法是只把"终端"这一层丢进容器，Hermes 主体（Python 进程、记忆、skill 库）留在宿主上——这样既隔离了工具执行的副作用，又保留了主进程对宿主 `~/.hermes/` 的直接读写。
+
+Docker 的隐藏成本：镜像构建和存储。如果你频繁更新 skill 依赖、装新包，镜像会越来越大，磁盘和构建时间都会涨。建议用多阶段构建、定期清理旧镜像、固定基础镜像版本。
+
+### SSH：远程服务器，24/7 在线的基石
+
+Hermes 跑你本机，但工具命令通过 SSH 通道发到一台远程服务器执行。这台远程通常就是你买的 VPS（DigitalOcean、Vultr、Hetzner、Linode 这类按月付费的小机器），或者你自己家里一台常开的树莓派 / 迷你主机。月费固定（5-12 美元常见，Hetzner 性价比最高），24/7 在线，手机上挂个 IM 网关随时能叫它干活。
+
+SSH backend 是"个人助手"最主流的部署形态，原因有四：第一，固定 IP，方便接入各种 webhook 和 IM 平台；第二，月费固定不限调用次数，成本可预测；第三，低延迟（首次连接后保持长连接，命令即时执行）；第四，资源独占不像 serverless 那样按时间切分。
+
+配置要点：用 key 登录别用密码、改默认 22 端口、装 fail2ban 防 SSH 暴力破解、开自动安全更新、给 Hermes 单独建低权限用户（别用 root）。这些是 Linux 服务器安全的基本功，不展开，但每一条都不能省。详细的安全配置第 20 篇会讲。
+
+SSH backend 的坑：服务器是单点（见坑二），磁盘满了 / 被入侵 / 机房断网都会让 Hermes 全断。所以 SSH backend 必配的是**异地备份 + 监控告警**，不然某天醒来看 VPS 没了、数据没救。第 21 篇展开。
+
+### Singularity：HPC 圈子的容器方案
+
+这玩意儿是 HPC（高性能计算）圈子的容器方案，由 LBNL 实验室开发，思路跟 Docker 类似但更贴科研场景：不要求 root 权限（普通用户就能跑容器，这在共享集群上很重要）、镜像可签名（科研要可复现、可审计）、跟 Slurm 调度器配合好（提交作业式使用）、原生支持只读挂载（只读基础镜像 + 可写 overlay，节省存储）。
+
+普通个人用户基本用不上 Singularity，除非你本来就在某个大学或研究所的计算集群上有账号，要跑 GPU 推理、生物信息分析、大规模数据处理。在这种场景下，集群管理员通常已经配好了 Singularity 模板，你只要把 Hermes 切到 `singularity` backend、按集群要求提交作业就行。
+
+成本结构跟集群计费策略挂钩：有些是按 GPU 小时扣费（实付或扣Allocation），有些是按课题组固定份额分摊，差异很大，没法一概而论。把 Singularity 当"Docker 的科研版"理解即可——它解决的是 HPC 场景下 Docker 跑不起来的问题，不是个人用户该考虑的选项。本文后续不再展开。
+
+**Docker**：Hermes 主体还在你电脑（或服务器）上，但工具命令被丢进一个 Docker 容器里执行。容器是个"沙箱"，Hermes 在里面跑 `rm -rf` 也只影响容器，碰不到你的宿主文件系统。闲置成本取决于容器开不开着；长期挂着跟常驻没区别。适合需要隔离、跑不信任的 skill、或者要复现一致环境的场景。社区里常见的玩法是 `hermes config set terminal.backend docker`，而不是把整个 Hermes 塞进容器——只隔离终端这一层，主体留在宿主上更省事。
+
+**SSH**：Hermes 跑你本机，但工具命令通过 SSH 通道发到一台远程服务器执行。这台远程通常就是你买的 VPS（比如 DigitalOcean、Vultr、Hetzner 那种按月付费的小机器）。月费固定（5-12 美元常见），24/7 在线，手机上挂个 IM 网关随时能叫它干活。是"个人助手"最主流的部署形态。
+
+**Singularity**：这玩意儿是 HPC（高性能计算）圈子的容器方案，跟 Docker 思路类似但更贴科研：不要求 root、镜像可签名、跟 Slurm 调度器配合好。普通个人用户基本用不上，除非你本来就在某个大学或研究所的集群上有账号，要跑 GPU 推理或大批量数据处理。本文后续不再展开，把它当"Docker 的科研版"理解即可。
+
+**Modal**：Hermes 主体在你本机或服务器，工具命令被丢到 Modal 平台跑。Modal 是个 serverless Python 平台，按调用时间和资源计费，闲时自动缩到零。每次命令（或一批命令）触发一个容器实例，跑完就回收或挂起。优势是真的"用多少付多少"，几天不碰 Hermes 不用付计算费。劣势是唤醒要等几秒到几十秒，且环境持久化要靠 Modal 的存储卷机制单独配。
+
+**Daytona**：跟 Modal 同属 serverless 一类，但定位更偏"远程开发环境"——它给的是一个能持久化的、配好的工作区（workspace），唤醒后跟 SSH 上去一台机器的感觉很像，但底层是 serverless 调度。适合"我想要 SSH 的体验但又不想自己维护 VPS"的场景。同样按计算时间 + 存储计费，闲时计算费近零。
+
+## serverless "闲置近零成本"——真假各半
+
+README 原话是 serverless persistence——agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions。这句话技术上没错，但要打折听。
 
 **对的部分**：
 
-- 休眠时不收计算费，确实近零。
-- 适合间歇任务（每天几次触发，中间空闲）。
+第一，休眠期间确实不收计算费。Modal 和 Daytona 都是按调用时间（精确到秒）计费，容器缩到零之后你不付 CPU/内存钱。这一点跟常驻 VPS（不管你用不用都付月费）是本质区别。
+
+第二，适合间歇任务。比如你给 Hermes 设了几个 cron：每天早 8 点抓新闻摘要、工作日下班前备份代码、周末生成周报——一天加起来跑不到半小时。这种用量上 serverless 真的便宜，月成本可能就几美分到一两美元。
+
+第三，零运维。不用关心服务器打补丁、磁盘满、SSH 暴力破解这些破事，平台全包了。
 
 **打折的部分**：
 
-- **唤醒有延迟**：休眠→唤醒要时间（几十秒到几分钟）。实时对话体感差。
-- **冷启动可能丢状态**：虽然宣称 persistent，但极端情况（provider 重启、长时间休眠）环境可能回退。重要状态别只放 backend 里。
-- **唤醒次数多了不便宜**：每次唤醒按计算时间计费。高频任务（每小时一次 cron）serverless 反而比常驻 VPS 贵。
-- **存储持续计费**：环境镜像、持久化数据存的存储费，休眠时也收。
+第一，**唤醒延迟真实存在**。serverless 从休眠到能跑命令，要经历"调度→拉镜像→起容器→恢复环境"几个步骤。Modal 官方数据是典型冷启动 2-5 秒，复杂镜像或 GPU 实例能到几十秒甚至更久。这意味着你跟 Hermes 实时对话时，第一句话可能要干等半分钟才有响应——体感很差。低频后台任务无所谓，实时聊天很难受。
 
-**结论**：serverless 适合"低频、能容忍延迟、状态可重建"的任务。不适合"高频、实时、状态敏感"。
+第二，**冷启动可能丢状态**。serverless 平台都宣称 persistence（持久化），机制是把环境状态定期或按需快照到存储卷。但有几个边界情况要清楚：一是平台为了节省成本会主动回收长期不活动的环境，下次唤醒可能是从镜像重新拉起，内存里的临时变量没了；二是平台故障或升级时实例会被重建，从最后一次快照恢复——这中间产生的状态会丢；三是某些数据如果只放在 `/tmp` 这种临时路径，重启就清掉了。所以"环境持久"不等于"内存里的所有变量都还在"，重要中间结果必须主动落盘。
 
-## 5 美元 VPS 够不够
+第三，**唤醒次数多了反而不便宜**。serverless 单价高，按计算时间收费，频繁唤醒累计起来很容易超过一台固定月费的 VPS。举例：假设 Modal 上每次唤醒跑 2 分钟、按 H100 实例算大概每小时 10 美元，单次成本约 0.33 美元。如果你设了每 15 分钟触发一次的 cron，一天 96 次，光唤醒计算费就 30 多美元，一个月上千——这比一台常驻 H100 VPS 贵多了。CPU 实例便宜些（参考数据：4 核 16GB 的 Modal sandbox 不间断跑大约一天 22 美元，月成本 600 多），但只要频率够高，serverless 单价累加同样会反超常驻。判断阈值大致是：**任务一旦密集到每小时都要跑，serverless 基本就不划算了**。
 
-Hermes 本身是 Python 进程，资源占用不算重。5 美元 VPS（1-2 核、1-2G 内存）能跑：
+第四，**存储持续计费**。serverless 休眠只是停计算费，你的镜像、持久化卷、对象存储里的数据，平台一直在按 GB/月收费。这部分经常被忽略，但跑久了会累积成一笔稳定开销，尤其是镜像层多、卷大的时候。Plus 流量费（虽然 Modal 不收 egress，但 Daytona 和其他平台不一定）。
 
-- Hermes 主进程 + gateway（轻量）
-- 几个 cron 任务
-- 中等强度的 agent loop（不跑本地模型，模型走 API）
+**结论**：serverless 适合"低频、能容忍几秒到几十秒延迟、状态可重建或主动持久化"的任务。不适合"高频实时对话、状态敏感、要保证第一句话秒回"的场景。把它当 Hermes 工具箱里的"间歇模式"，而不是"全场景省钱模式"。
 
-不够的场景：
+### serverless 成本测算实例
 
-- 跑本地模型（Hermes 通常调云 API，但如果你要本地推理，5 美元 VPS 远不够 GPU）
-- 重度 cron + 多个子 agent 并行（CPU/内存吃紧）
-- 大量记忆 / skill 存储（磁盘紧）
+光说"打折"太抽象，给两个具体测算（数字基于 2026 年公开定价，仅供量级参考）。
 
-务实选择：
+**场景一：低频个人任务**。每天触发 5 次、每次跑 1 分钟、用 2 核 4GB 的 CPU 实例。Modal 这种配置大概每小时 0.4 美元量级。
 
-- **轻量个人助手**（IM 入口 + 偶尔任务）：5 美元 VPS 够。
-- **重度自动化**（多 cron + 子 agent + 桌面控制）：升 VPS 或上 Docker。
-- **间歇任务**：serverless 更省。
+- 每天计算时间：5 分钟 ≈ 0.083 小时
+- 每天计算费：0.083 × 0.4 ≈ 0.033 美元
+- 每月计算费：约 1 美元
+- 加上存储（几 GB 镜像 + 持久化卷）：约 0.2-0.5 美元
+- 月总成本：1.5 美元上下
 
-## 真实坑
+这个量级上 serverless 比一台 5 美元 VPS 便宜。前提是真的低频。
 
-- **serverless 冷启动丢上下文**：用 serverless 跑长任务，中间休眠了再唤醒，之前内存里的状态没了。重要中间结果及时持久化。
-- **VPS 单点**：一台 VPS 挂了 Hermes 全断。重要场景考虑备份 + 监控（第 21 篇）。
-- **backend 和数据分离**：backend 是执行环境，记忆 / skill 在 `~/.hermes/`。backend 换了（比如 local 换 Docker），要确保 `~/.hermes/` 挂载/同步过去，不然记忆和 skill 丢了。
-- **本地 backend 安全风险**：local backend 工具能直接动你本机文件。Hermes 跑危险命令 = 你本机遭殃。生产用别用 local，用 Docker 隔离。
+**场景二：中频自动化**。每天触发 30 次、每次跑 3 分钟、同样配置。
 
-## 权衡
+- 每天计算时间：90 分钟 = 1.5 小时
+- 每天计算费：1.5 × 0.4 = 0.6 美元
+- 每月计算费：18 美元
+- 加存储：还是 0.2-0.5 美元
+- 月总成本：18.5 美元
 
-backend 选择的交易：
+到这个量级 serverless 已经比 VPS 贵了——同样 18 美元能租到一台 4 核 8GB 的常驻 VPS，性能更强、不限调用次数、零延迟。
 
-- **常驻（VPS/Docker）**：稳定、实时、状态保持；月费固定，闲时也付。
-- **serverless**：闲置便宜；延迟 + 冷启动风险 + 唤醒计费。
+**场景三：高频实时**。每小时触发几次、每天累计跑 6 小时以上。
 
-核心判断：你的 Hermes 用法是"高频实时"还是"低频间歇"。前者常驻，后者 serverless。
+- 每月计算费：6 × 30 × 0.4 = 72 美元
+- 这价格够租一台带 GPU 的小型常驻机器了
+
+结论一目了然：serverless 的省钱区间在"每天累计计算时间少于 1-2 小时"。超过这个阈值，常驻 VPS 性价比反超。
+
+### 唤醒延迟的体感差异
+
+延迟数字单独看没感觉，放到对话场景里就很明显：
+
+- **0 延迟（local / SSH 长连接）**：发消息→秒回，对话流畅。
+- **2-5 秒（Modal 冷启动）**：发消息后明显卡一下，能感觉到"它在准备"，对话节奏被打断但不致命。
+- **10-30 秒（复杂镜像或大卷）**：发消息后等半分钟才有响应，已经无法实时对话，更像发邮件那种异步感觉。
+- **30 秒以上（GPU 实例冷启动）**：完全无法实时，只能当后台批处理用。
+
+所以"serverless 适合间歇任务"的另一层意思是：serverless 上的 Hermes 更像一个"会跑后台作业的机器人"，而不是"能陪你聊天的助手"。这两种定位的工作流完全不同。
+
+### Daytona 跟 Modal 的差异
+
+同属 serverless，但定位有别。Modal 更偏"函数即服务"（FaaS）——你定义函数，平台按调用起容器跑，跑完回收。每次调用之间默认无状态，要持久化得显式配 Volume。环境重建快、单价低，但跨调用状态保持要自己设计。
+
+Daytona 更偏"远程开发环境即服务"——它给的是一个能持久化的、配好的工作区（workspace），唤醒后跟 SSH 上去一台机器的感觉很像，环境状态（装的包、配置文件、运行中的进程）在两次唤醒间尽量保留。代价是单价通常比 Modal 函数式调用高些，但开发体验更顺。
+
+实操上：纯跑 skill（一个清晰的输入输出任务）选 Modal；要长期维护一个"虚拟工作站"（持续装包、改配置、半成品状态保留）选 Daytona。两者成本量级相近，差异主要在开发体验和工作流匹配度。
+
+## 5 美元 VPS 到底够不够跑
+
+这是被问得最多的问题。答案分场景。
+
+先看 Hermes 本身的资源画像。它是个 Python 进程，主体负责调度、记忆管理、跟模型 API 通信。模型推理走云 API（OpenAI、Anthropic 这种），不在本地跑——这是关键，决定了 Hermes 主进程本身不重。一台 5 美元档的 VPS（典型配置：1-2 核 vCPU、1-2GB 内存、20-50GB SSD、1-2TB 流量）能扛住的范围如下：
+
+**5 美元能跑的**：
+
+- Hermes 主进程 + IM gateway（Telegram bot、飞书 bot、微信桥这类轻量入口）。gateway 占内存几十 MB 量级，主进程常驻 200-400MB，加起来 1GB 内存绰绰有余。
+- 几个 cron 任务：定时抓 RSS、定时摘要、定时备份。这些任务跑完就退出，不持续占资源。
+- 中等强度的 agent loop：单轮或低频多轮对话，调云模型，跑轻量 shell 命令（读写文件、调 API、git 操作）。
+- 小到中等规模的记忆库：skill 几十个、记忆条目上千条，纯文本几 MB 到几十 MB，磁盘完全够。
+
+**5 美元不够的**：
+
+- 跑本地模型。Hermes 默认调云 API，但如果你坚持要本地推理（隐私、成本、断网场景），5 美元 VPS 没有 GPU、内存也撑不住哪怕 7B 量级的模型量化版。本地推理最少要上 GPU 实例或带大内存的机器，月成本直接跳到几十到几百美元。
+- 重度并发。多个子 agent 同时跑、好几个 cron 同一时刻触发、外加 IM 端有人在实时对话——1 核 CPU 会顶到 100%，内存吃紧可能 OOM。这种要么升 VPS（2 核 4GB 起步），要么上 Docker 多容器隔离 + 资源限制。
+- 大规模记忆持久化。如果你让 Hermes 长期累积大量结构化记忆（向量库、日志、完整对话历史），磁盘和内存都会吃紧。SSD 一旦塞满，整个系统会卡。
+- 长时间高 CPU 任务。比如跑数据处理、视频转码、大文件压缩——5 美元 VPS 的 CPU 是共享的，跑久了会被 hypervisor 限速。
+
+### 怎么判断你的 VPS 已经不够了
+
+具体看几个信号：第一，`htop` 看 CPU 经常顶到 80% 以上、load average 持续高于核心数；第二，内存用满开始 swap（swap 一开整机就卡）；第三，磁盘空间低于 20%（SSD 满了写性能会断崖式下降）；第四，dmesg 出现 OOM killer 杀进程的记录；第五，IM 端响应明显变慢、cron 任务经常错过时间。
+
+出现这些信号，要么升配置、要么优化（关掉用不到的 skill、清旧记忆、把重活外包到 serverless）。盲目升配置之前先看是哪类瓶颈——CPU 瓶颈升核数、内存瓶颈升内存、磁盘瓶颈扩容或清数据，对症下药。
+
+### 各家 VPS 性价比参考
+
+2026 年市面常见的 Hermes 友好型 VPS（价格仅供量级参考，实际可能有变动）：
+
+- **Hetzner Cloud**：欧洲性价比之王。CX22（2 核 4GB、40GB SSD、20TB 流量）约 4.5 美元/月。CPX31（4 核 8GB）约 8 美元/月。中国大陆访问延迟较高，但作为 Hermes 后端没问题（IM 网关在国内即可）。
+- **DigitalOcean**：稳定、文档全、社区大。基础 droplet（1 核 2GB、50GB SSD、2TB 流量）6 美元/月，2 核 4GB 12 美元/月。新人有免费额度。
+- **Vultr**：跟 DO 类似，全球节点多，5-6 美元起步。
+- **Linode（Akamai）**：同档位，质量稳定，5 美元起步。
+- **腾讯轻量 / 阿里轻量**：国内用户访问快、备案方便。轻量 2 核 2GB 大概 50-80 元人民币/月。注意 Hermes 默认调用的 OpenAI / Anthropic API 在国内需要代理。
+- **甲骨文云免费档**：ARM 实例 4 核 24GB 永久免费（如果抢得到）。够跑 Hermes，但节点少、偶尔回收，且 ARM 架构跟某些 Python 依赖兼容性要单独验证，遇到 wheel 没编译好的包会折腾。
+
+不推荐用的：超低价（一年 10 美元那种）的 shared hosting 或劣质 VPS——IP 被封、超卖严重、跑两天就掉线、磁盘 IO 慢到没法用、客服找不到人，运维成本远超省下的钱，且这类机器经常被各家 IM 平台拉黑，发出去的消息压根收不到。
+
+**务实选择**：
+
+轻量个人助手（IM 入口 + 偶尔任务 + 单用户）：5 美元 VPS 完全够用，是性价比最高的方案。
+
+中度自动化（多 cron + 偶尔并发 + 偶尔本地小模型）：升到 12 美元档（2 核 4GB），留够余量。
+
+重度自动化（多 agent 并行 + 桌面控制 + 大量数据处理）：要么上 Docker 多机部署，要么直接考虑 serverless 把重活外包出去。
+
+一个常见误区是"VPS 越大越好"。Hermes 不跑本地模型的话，2 核 4GB 已经能跑得很舒服，再加更多资源只是浪费。把省下的钱花在监控和备份上更值（见第 21 篇）。
+
+## 常驻 vs serverless 的决策框架
+
+这两类不是替代关系，是分工关系。判断标准看两条：**频率**和**实时性**。
+
+**高频 + 要实时响应 → 常驻**。比如你把 Hermes 当个人助手，IM 发消息要它秒回；或者你接了客服场景，用户问题要立刻处理；或者 cron 密集到每小时几次——这些都该上常驻（VPS 或 Docker）。理由是固定月费换稳定低延迟，且不用担心唤醒次数累计计费。
+
+**低频 + 容忍延迟 → serverless**。比如每天几次的后台任务（早报、晚摘要、周报）、偶尔触发的一次性分析、临时给朋友演示一下——这些用 serverless 真省钱，因为你只为实际跑的那点时间付费。
+
+**混合模式**（推荐）：核心助手常驻 VPS 保证实时响应；重活、批量任务、不急的分析丢给 serverless 跑。Hermes 支持多 backend 配置，可以按 skill 或场景路由到不同 backend。比如"摘要这个 100 页 PDF"丢 Modal 跑（吃 CPU 不用实时），"帮我回这条消息"走本地 VPS（要快）。
+
+一个具体成本对照（仅供参考，价格随平台和时间变动）：
+
+- 全常驻：一台 5 美元 VPS，月固定 5 美元，不限调用次数。
+- 全 serverless（低频）：假设每天跑 10 分钟、CPU 实例，月成本可能 1-3 美元。
+- 全 serverless（高频）：每天累计跑 2 小时以上，月成本可能 20-50 美元起，反超 VPS。
+- 混合：常驻 VPS 5 美元 + serverless 处理尖峰，月 8-12 美元。
+
+数字是粗估，目的是让你对"什么情况下 serverless 真省钱"有量级感。具体到你自己，跑一周看 Modal/Daytona 的账单明细，再决定要不要切。
+
+## backend 和数据分离——容易踩的坑
+
+这是新手最容易忽略、出问题最难恢复的一点。
+
+**backend 是执行环境，不是数据存储**。Hermes 的核心数据——skill 定义、记忆条目、对话历史、配置、用户偏好——都存在 `~/.hermes/` 这个目录里（具体路径看你的配置）。这个目录是 Hermes 主进程读写的，跟 backend 是哪个没直接关系。
+
+但坑在哪？当你切换 backend 时，容易以为"换了 backend 就是换了台机器"，结果忘了把 `~/.hermes/` 也带过去。比如：
+
+- 一开始用 local backend，所有 skill 和记忆都在你笔记本的 `~/.hermes/`。
+- 后来想 24/7 在线，买了 VPS，切到 SSH backend。但 VPS 上 `~/.hermes/` 是空的——Hermes 起来后发现自己啥也不会、谁也不认识。
+- 反过来也一样：在 VPS 上跑了几个月，积累了大量记忆，某天想切回 local 测试，发现本机 `~/.hermes/` 还是几个月前的老版本，新记忆全在 VPS 上。
+
+解决办法：**backend 切换时同步 `~/.hermes/`**。几种做法：
+
+1. 手动 `rsync` 同步：`rsync -av ~/.hermes/ user@vps:~/.hermes/`。
+2. 把 `~/.hermes/` 放进 git 私有仓库，多机 clone + 偶尔 push/pull（注意里面的 token、密钥要单独环境变量管理，别提交进 git）。
+3. 用 syncthing 这类工具做实时双向同步（要小心冲突）。
+4. 把 `~/.hermes/` 挂到对象存储或网络盘（延迟高，但跨机一致）。
+
+不管哪种，核心是**记住 backend 是无状态的执行环境，状态在 `~/.hermes/`**。换 backend 前先想清楚数据怎么搬。
+
+## 真实坑合集
+
+**坑一：serverless 冷启动丢上下文**。用 Modal/Daytona 跑长任务，中间因为没操作被平台休眠了，再发命令时环境被唤醒，但内存里的中间变量、临时文件、未保存的对话状态可能都没了。Hermes 主进程的状态还在（它在你本机或主 VPS 上），但 backend 里那一轮的工作丢失。对策：长任务里凡是中间结果都主动写文件（落到持久化卷）、重要状态定期 flush，别指望内存里一直留着。
+
+**坑二：VPS 单点**。一台 VPS 挂了（机房断网、磁盘坏、被入侵重装），Hermes 全断，记忆可能丢。重要场景考虑：双机热备（贵）、定期异地备份（便宜，第 21 篇专门讲）、监控告警（一挂就知道，别等用户找你）。
+
+**坑三：backend 换了忘同步数据**。前面详细讲过，这里再强调一遍。常见触发时机：从 local 切 SSH、从 SSH 切 Docker、临时切 serverless 跑个任务再切回来。每次切都问自己一句"`~/.hermes/` 怎么办"。
+
+**坑四：local backend 安全风险**。local 模式下 Hermes 的工具能直接动你本机所有文件——`rm -rf ~`、`git push --force`、读你 SSH 私钥、改你 shell 配置。开发期方便，但只要 Hermes 跑了一条被 prompt injection 诱导的危险命令，你本机就遭殃。生产环境绝对不要用 local，至少上 Docker 做沙箱。即便开发用 local，也建议给 Hermes 配一个低权限用户跑，别用主账户。
+
+**坑五：Docker 容器配置不当等于没隔离**。`hermes config set terminal.backend docker` 之后还要看容器挂载了哪些目录、有没有给 privileged 权限。挂了整个家目录进去、还给了 `--privileged`，等于没隔离——Hermes 还是能干所有坏事。正确做法是只挂工作目录、给最小权限、用 read-only 挂载敏感路径。
+
+**坑六：serverless 平台依赖绑定**。Modal 和 Daytona 都是商业平台，账号被封、平台倒闭、价格大涨、地区限制——这些都不是你能控制的。重要业务别把所有鸡蛋放一个篮子，至少保证 `~/.hermes/` 和关键数据有平台外的备份，能随时切回 SSH backend。
+
+**坑七：成本监控缺失**。serverless 的账单是被动累计的，一个 cron 写错了每小时跑一次重任务，月底账单一出来才傻眼。给 Modal/Daytona 设成本告警（平台都支持），超阈值发邮件；定期看账单明细，发现异常早停。
+
+## 常见问答
+
+**Q：我已经在 local 上跑了一阵子，想换到 VPS，怎么搬？**
+
+A：分两步。第一步，买 VPS、装系统、创建 hermes 用户、装 Python 和 Hermes；第二步，把本机的 `~/.hermes/` 整个 rsync 过去：`rsync -av ~/.hermes/ hermes@vps:~/.hermes/`（注意里面的 token 和密钥，最好提前改成读环境变量，避免明文同步）。同步完先把 backend 切到 SSH 试跑几条 skill，确认记忆和 skill 都还在，再正式上线。
+
+**Q：Modal 唤醒每次要等 5 秒，能优化吗？**
+
+A：能。Modal 的 warm container 机制可以减少冷启动：保持最低实例数大于零（但要付闲置费，违背 serverless 初衷）；优化镜像大小（用更小的基础镜像、删掉用不到的依赖）；用 Modal 的 background keep-warm 机制定期 ping 保持热。这些都能把冷启动压到 1-2 秒，但都不是免费的——要么钱、要么复杂度。Daytona 这边类似，环境持久化做得好通常冷启动会快些。
+
+**Q：Docker backend 跟 SSH backend 怎么选？**
+
+A：都要租机器（Docker 也能在远程服务器上跑），区别在隔离层级。Docker 是进程级隔离（容器），SSH 是机器级隔离（整台机器）。Docker 在同一台宿主上能跑多个互不干扰的 Hermes 实例（多用户场景），资源利用率高；SSH backend 简单直接但每实例独占机器。多用户 / 多租户选 Docker，单用户图省事选 SSH。
+
+**Q：serverless 上跑 Hermes 跟跑普通 Python 函数有什么不一样？**
+
+A：Hermes 是有状态的（记忆、对话历史、运行中任务），普通函数是无状态的。serverless 默认适合无状态，所以 Hermes on serverless 要解决"状态保持"问题——靠持久化卷存中间结果、靠 Hermes 主进程在另一台机器上保留全局记忆、靠 skill 设计成幂等可重入。这些不是开箱即用，要自己设计。
+
+**Q：能不能用本地 GPU 跑 Hermes + 本地模型？**
+
+A：技术上可以（local backend + Ollama / vLLM 这类本地推理服务），但前提是你有合适的硬件。最低门槛：一张 8GB 显存的消费级 GPU（如 RTX 3060 / 4060）能勉强跑 7B 量化模型；要跑得舒服需要 12-24GB 显存（4070Ti / 4090 这种）。CPU 推理基本不可用（慢到对话没法进行）。Hermes 本身不挑硬件，瓶颈在本地模型。
+
+**Q：我想同时挂 Telegram bot、飞书 bot、微信桥，一台 VPS 够吗？**
+
+A：够。这些 IM 网关都是长连接轻量进程，每个占几十 MB 内存。一台 2 核 4GB 的 VPS 同时挂三个 gateway + Hermes 主进程 + 几个 cron，绰绰有余。瓶颈不在网关，在 Hermes 处理消息的并发度——如果三个 IM 同时有人发消息要 Hermes 处理，要给主进程配好并发上限（不然会 OOM）。
+
+**Q：backend 切换后 Hermes 的对话历史还在吗？**
+
+A：在不在取决于对话历史存哪。如果存在 `~/.hermes/`（默认就是），那只要这个目录跟着搬，历史就在。如果存在 backend 内部（比如 serverless 实例的 `/tmp`），那切换 backend 后丢失。Hermes 的默认设计是状态走 `~/.hermes/`，所以理论上 backend 切换不丢历史——前提是你同步了 `~/.hermes/`，且没有 skill 把状态写到 backend 本地路径。
+
+## 混合部署实战
+
+最理想的方案不是选一个 backend，而是按场景路由。具体做法：
+
+第一步，主进程常驻 VPS（SSH backend），保证 IM 入口的实时响应。所有"帮我回消息"、"快速查询"、"实时对话"走这条。
+
+第二步，重活外包到 serverless。在 Hermes 的 skill 配置里，给特定 skill 指定 backend：跑 PDF 摘要、跑大批量数据处理、跑 GPU 任务的 skill 路由到 Modal；跑长时间持续状态、需要环境保持的 skill 路由到 Daytona。
+
+第三步，本地留一个 local backend 副本，用于开发测试新 skill——开发完切到 SSH 或 serverless 部署。
+
+Hermes 支持按 skill 路由 backend（具体语法看官方文档 Tools & Toolsets），配置大致是给 skill 加 backend 字段。这样做的代价是配置复杂度上升、要维护多套 backend 的连通性、跨 backend 状态同步要小心（一个 skill 在 serverless 上跑、结果要回写到主进程的 `~/.hermes/`，这个链路要测）。
+
+混合部署的收益是成本和性能的最优组合：实时任务享受常驻的低延迟，重任务享受 serverless 的弹性，整体月成本往往低于全常驻或全 serverless。
+
+需要提醒的是，混合方案不适合新手。在你还没把单一 backend 跑稳、还没摸清自己的真实用量模式之前，先从一台 VPS 起步、观察一两个月、看清楚瓶颈在哪（CPU 还是延迟、是日常负载还是偶发尖峰），再考虑混合。过早引入多 backend 会把问题复杂化，调试成本超过省下的钱。
+
+## 权衡和选型建议
+
+把所有维度汇总成一张决策表，按你的实际情况对号入座。
+
+| 你的场景 | 推荐 backend | 月成本量级 | 关键理由 |
+| --- | --- | --- | --- |
+| 本机开发调试 | local | 0 | 最快、零成本、关机就断无所谓 |
+| 个人轻量助手、24/7 在线 | SSH（VPS） | 5-12 美元 | 月费固定、低延迟、可控 |
+| 多用户 / 多入口共用 | SSH 或 Docker | 12-40 美元 | 要资源余量、要隔离 |
+| 安全敏感、跑不信任的 skill | Docker | 5-20 美元 | 容器沙箱、最小权限 |
+| 间歇后台任务、不想运维 | Modal 或 Daytona | 1-10 美元 | 真按用量付费、零运维 |
+| 重计算、GPU 任务、间歇 | Modal（GPU） | 按次计费 | 比 GPU VPS 便宜（低频时） |
+| 高校 / 研究所集群 | Singularity | 看集群 | 复用已有资源 |
+| 重度自动化、混合负载 | SSH + serverless 混合 | 10-30 美元 | 常驻保实时、serverless 抗尖峰 |
+
+几个通用原则：
+
+**1. 从最简方案起步**。别一上来就 Modal + Docker + 多机，先 local 跑通，再上 SSH VPS，遇到瓶颈再加复杂度。复杂度是成本，不是收益。
+
+**2. 把数据和执行环境分开想**。backend 是手、`~/.hermes/` 是脑。换手不换脑，换脑不换手——这两件事独立处理。
+
+**3. serverless 不是省钱银弹**。低频省钱、高频烧钱。先估算你的唤醒频率和单次时长，再决定要不要切。
+
+**4. 监控和备份比 backend 选择更重要**。一台监控到位、备份及时的 5 美元 VPS，比一台啥都没有的 50 美元 VPS 更可靠。第 21 篇会专门讲升级和备份。
+
+**5. 安全边界优先于性能**。宁可慢一点也别让 Hermes 能直接动你主账户的所有文件。Docker 隔离、最小权限用户、敏感数据环境变量——这些是底线。
+
+## 一个具体的部署示例
+
+给你一个可参考的"个人助手"标准部署，月成本 5-6 美元：
+
+- 一台 Hetzner CX22（2 vCPU、4GB 内存、40GB SSD、20TB 流量，约 4.5 美元/月；或同等 DigitalOcean / Vultr 实例 6-12 美元）。
+- Ubuntu 22.04 LTS，开自动安全更新。
+- 创建低权限用户 `hermes`，Hermes 主进程以这个用户跑。
+- SSH backend，key 登录、关密码登录、改默认端口、装 fail2ban 防 SSH 暴力。
+- `~/.hermes/` 每日 rsync 到对象存储（Backblaze B2、Cloudflare R2 之类，几 GB 数据月成本 0.05 美元）。
+- IM gateway（Telegram bot 为例，bot 免费）。
+- cron 跑每日摘要、每周备份。
+- 监控：简单的话用 UptimeRobot（免费档）检测 VPS 在线、用 Prometheus + node_exporter 自我监控（可选）。
+
+这套配置能扛单用户日常使用，响应快、24/7 在线、数据有备份、月成本一杯咖啡钱。等用量上来（多用户、高并发）再升配置或加 serverless 抗尖峰。
+
+如果是 serverless 起步的示例：
+
+- Modal 免费层（新用户每月 30 美元额度，足够低频测试）。
+- Hermes 主进程跑在本机或一台便宜 VPS。
+- 重活（PDF 摘要、批量数据处理）通过 skill 路由到 Modal backend。
+- Modal 上配持久化卷存中间结果，避免冷启动丢状态。
+- 设成本告警：日消费超 2 美元发邮件。
+
+serverless 起步的注意点是"上线前先观察一周真实账单"——你以为低频，实际可能有 skill 在背后偷偷高频触发。
 
 ## 结论
 
-六种 backend 不是越先进越好。local 开发、VPS/Docker 24/7 常驻、serverless 间歇任务——按用量选。serverless "近零成本"打折听（延迟 + 冷启动 + 唤醒计费）。5 美元 VPS 够轻量个人助手。backend 换了记得同步 `~/.hermes/`，别丢记忆和 skill。
+六种 backend 不是越先进越好。local 适合开发，VPS/Docker 适合常驻，serverless 适合间歇。按用量和实时性选，别按"听起来酷"选。
+
+serverless "近零成本"那句口号要打折听：休眠不收计算费是真的，但唤醒有延迟、冷启动可能丢状态、高频反而不便宜、存储一直在算钱。把它当"间歇模式"，不是"省钱银弹"。
+
+5 美元 VPS 够轻量个人助手（IM + 偶尔任务 + 不跑本地模型），不够重度自动化和本地推理。中度需求升到 12 美元档，重度上 Docker 多机或混合 serverless。
+
+最后强调三件事：第一，backend 切换时记得同步 `~/.hermes/`，不然记忆和 skill 丢；第二，生产别用 local backend，至少 Docker 隔离；第三，监控和备份比 backend 选择更重要——一台监控到位的便宜 VPS 比啥都没有的贵 VPS 可靠。
+
+第 20 篇讲安全（backend 权限模型、skill 信任边界、prompt injection 防护），第 21 篇讲升级和备份（`~/.hermes/` 的版本管理、跨 backend 数据迁移、双机热备）。建议两篇连起来读，跟本篇的成本测算一起构成"选型 + 安全 + 容灾"的完整决策链。
 
 ## 延伸阅读
 
-- [Hermes Tools & Toolsets 文档（terminal backends）](https://hermes-agent.nousresearch.com/docs/)
-- [Modal（serverless）](https://modal.com/)
-- [Daytona（serverless 持久化）](https://www.daytona.io/)
+- [Hermes Configuration 文档（terminal backends 配置）](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+- [Hermes Tools & Toolsets 文档](https://hermes-agent.nousresearch.com/docs/)
+- [NousResearch/hermes-agent（GitHub）](https://github.com/nousresearch/hermes-agent)
+- [Modal 官方文档（cold start 性能、计费）](https://modal.com/docs/guide/cold-start)
+- [Modal 定价页](https://modal.com/pricing)
+- [Daytona 官方文档](https://www.daytona.io/docs)
+- [Hermes on Modal：serverless 部署指南](https://aiskill.market/blog/hermes-on-modal-serverless-claude-agents)
+- [第 3 篇：架构总览（backend 抽象的位置）](./03-architecture-overview.md)
 - [第 16 篇：端到端实战（backend 选择影响）](./16-end-to-end-recipes.md)
+- [第 20 篇：安全（backend 权限模型）](./20-security-permissions.md)
+- [第 21 篇：升级与备份（`~/.hermes/` 跨 backend 迁移）](./21-upgrade-backup.md)
