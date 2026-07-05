@@ -25,74 +25,432 @@
 
 > 系列第 9 篇 · 读者预设：用了一阵、发现 skill 会自己变的人 · 最后核实：2026-07
 
-**TL;DR：** skill 的 "patched during use" 是 Hermes 最该被怀疑的功能。它会自己改 skill，但**没有外部 ground truth**——agent 同时是作者、执行者、评审者。这篇讲怎么观察它改了什么、怎么判断改得对不对、改坏了怎么回滚，以及 Self-Evolution（DSPy+GEPA）优化 skill 文本的边界。
+**TL;DR：** skill 的 "patched during use" 是 Hermes 最该被怀疑的功能。它会自己改 skill，但**没有外部 ground truth**——agent 同时是作者、执行者、评审者。这篇拆三层自我改进（前台 patch / 后台 Curator / 独立 Self-Evolution），给观察改了什么的可运行 git 命令，给判断改得对不对的三条标准，给改坏了的完整回滚流程，再用 GitHub Issue #25833 的四类失败——错误固化、风格漂移、指标错位、Self-Evolution 静默失败——讲清楚为什么"越改越笨"不是 bug 而是架构固有张力。结尾给一张 ASCII 决策树：什么时候开自动改进、什么时候锁死手动。
 
-## 自我改进发生在哪
+## 自我改进发生在哪：三层不是一层
 
-两个地方 skill 会被自动修改：
+很多人把 Hermes 的"自我改进"当成一个开关，要么开要么关。实际上它至少分三层，颗粒度、触发方式、影响范围都不同。你要管它，先得分清是哪一层在动。
 
-- **前台修补（patched during use）**：某次 skill 被用到，模型发现"这步过时了"或"这里参数错了"，就地改 skill 文件。下一轮立刻生效。
-- **后台 Curator 整理**：定期合并重叠 skill、归档冷门 skill（第 5 篇讲的第二循环）。
-- **Self-Evolution 模块**（独立）：用 DSPy + GEPA，根据**真实执行轨迹**自动优化 skill 文本的措辞和步骤顺序，让效果指标（成功率、token 消耗等）更高。不需要 GPU，调 API 就行。
+**第一层：前台 patch（patched during use）**
 
-这三层都是"agent 自己改自己"，区别在改的颗粒度和触发方式。
+最细颗粒，也最常见。某次 skill 被实际用到，模型在执行中发现"这一步参数写错了"、"那个 endpoint 已经迁移了"、"换种说法模型更容易跟住"，就地改 skill 文件，下一次轮立刻生效。社区里 Akshay Pachaar 在 X 上的拆解提到一个反直觉细节：**pinned skill 也会被 patch**——pin 只是阻止 Curator 把它归档或合并，不阻止前台的小修小补。所以你 pin 了不等于锁死。
 
-## 怎么观察改了什么
+触发信号大致三类：
 
-不主动看，你不会知道 skill 被改过。三个抓手：
+1. **失败信号**：工具调用报错、API 返回 4xx/5xx、子任务抛异常。模型在错误恢复时往往顺手把"导致出错的步骤"改掉，加个 fallback 或换条路径。
+2. **用户纠正**：你打断它说"不对，应该这样"。这种是最强的信号，模型会把你纠正的内容 patch 进去。
+3. **模型自己的"反思"**：没有外部错误，但模型在执行完某步后觉得"换个措辞会更清晰"。这一类最危险——它是模型的自我感觉，没有外部 ground truth 校验。
 
-- **git diff**（最实在）：`~/.hermes/skills/` 是 git 仓库（第 7 篇让你建的），`git log -p SKILL.md` 看每次改了啥、什么时候改的。
-- **Curator 日志**：后台整理有日志，看它合并了哪些、归档了哪些。
-- **Self-Evolution 报告**：如果开了，会有"这次优化改了哪些措辞、指标变化多少"的记录。看它优化的是不是你关心的指标。
+注意第三类。GitHub Issue #429 把它叫 **proactive patching noise**——模型为了"显得在改进"而改，每次用完都动一下，结果 skill 越改越臃肿，原始的清晰步骤被反复揉写。Issue 维护者明确说：guidance 应该强调"only if genuinely improved"，不是"用一次改一次"。
 
-养成习惯：每周 `git -C ~/.hermes/skills pull --quiet && git -C ~/.hermes/skills log --since="1 week ago" -p` 扫一眼改动。
+**第二层：后台 Curator 整理**
 
-## 怎么判断改得对不对
+中颗粒，定期跑（第 5 篇讲的第一循环之外的第二个循环）。Curator 是个后台 agent，干三件事：
 
-这是最难的部分。模型"觉得"自己改对了，未必真对。判断标准：
+- **grade**：给每个 skill 打分（使用频率、最近一次调用时间、成功率）。
+- **prune**：把长期不用的 skill 从 active 移到 stale，再到 archived。LinkedIn/Mem0 那篇拆解把它叫 active → stale → archived 的三态生命周期。
+- **consolidate**：合并语义重叠的 skill。
 
-- **改的依据可追溯吗**：好的改进是基于某次具体失败（比如某步报错了它加了个 fallback）。差的改进是"模型凭空觉得换个说法更好"——这种多半是无依据改写。
-- **和你的本意一致吗**：skill 改完还符合你最初的设计意图吗？模型可能"优化"成一个你根本不想要的流程。
-- **跑过验证吗**：改完的 skill 在真实任务上效果是变好还是变差？Self-Evolution 用执行轨迹打分，理论上能反映效果，但要看它选的指标对不对——优化"token 少"可能牺牲"准确度"。
+关键点：**Curator 自己也是 agent**。它不是确定性脚本，是 LLM 调用。所以"合并重叠 skill"这步，本质是另一个 LLM 在判断"这两个 skill 是不是一回事"——它会判错。Reddit r/hermesagent 上有人贴过真实案例：Curator 把两个不同语境下名字相似的 skill 合并了，结果两边都不准，原本一个针对"代码 review"、一个针对"文档 review"的 skill 被揉成一团，下次两个场景都触发错的那个。
 
-## 改坏了怎么回滚
+CLI 命令层面，`hermes curator archive <skill_name>` 是手动归档的入口；但**自动 Curator 跑起来不受这个手动控制**，它会按自己的节奏扫整个 skills 目录。
 
-应急流程（第 7 篇给过简版，这里完整版）：
+**第三层：Self-Evolution（独立模块，DSPy + GEPA）**
 
-1. 定位坏的 skill：`git -C ~/.hermes/skills log --since="3 days ago" --name-only`
-2. 看具体改动：`git -C ~/.hermes/skills diff <old>..<new> -- <skill>/SKILL.md`
-3. 撤回：`git -C ~/.hermes/skills checkout <old> -- <skill>/SKILL.md`
-4. 防止再被自动改：在 SOUL.md 写明"禁止自动修改 `<skill>`"，或把它移出 Curator 扫描范围（具体配置看版本文档）
-5. 如果是 Self-Evolution 改的，关掉对应 skill 的 evolution 开关
+最粗颗粒，也最有想象力。这是 NousResearch 单独一个仓库 [`hermes-agent-self-evolution`](https://github.com/NousResearch/hermes-agent-self-evolution)，不是默认开启的，要你自己接。它干的事和前两层本质不同：
 
-## 越改越笨的可能
+- 前两层改的是"这一步对不对"、"这个 skill 还要不要"。
+- Self-Evolution 改的是"**这个 skill 的文本怎么写，模型执行起来效果更好**"。
 
-这是核心风险，GitHub Issue #25833 点得很准：self-created / self-improved skills 缺机制层面的保证，因为 agent 同时是作者、执行者、评审者。具体表现：
+具体说，它读 agent 跑过的真实执行轨迹（execution traces），用 DSPy 把 skill 文本拆成可优化的"提示组件"，再用 GEPA（Genetic-Pareto Prompt Evolution，arXiv [2507.19457](https://arxiv.org/abs/2507.19457)）做进化搜索：生成一堆 skill 文本的变体，让 agent 拿这些变体跑任务，按效果指标打分，留下 Pareto 前沿上的那些，再迭代。**不改模型权重**，只改 `SKILL.md` 里的字。所以 Towards AI 那篇博客标题很直白：*Hermes Agent Doesn't Learn. It Mutates Strings.*
 
-- **错误固化**：第一次解法次优，重复 2 次固化成 skill，之后每次按次优来。没人纠正就一直次优。
-- **风格漂移**：Curator 合并 skill 时可能把两个不同语境的 skill 揉成一个，结果两边都不准。
-- **指标错位**：Self-Evolution 优化的是它选的指标（比如"少调工具"），可能和你的真实目标（"答得对"）冲突。
+跑一次的成本：社区实测在 $2-10 区间（看任务复杂度和候选变体数），不需要 GPU，纯调 API。
 
-这不是 bug，是"agent 自我改进"这个架构的固有张力。没有外部 ground truth 校验，"改进"只是 agent 的自我感觉。
+**三层合起来才是"自我改进"全貌**
 
-## 怎么和这个张力共处
+| 层 | 触发 | 改什么 | 颗粒 | 谁在改 |
+|---|---|---|---|---|
+| 前台 patch | 失败/纠正/反思 | 单步措辞、参数、fallback | 字符级 | 执行中的 agent |
+| 后台 Curator | 定时 | 归档、合并、分级 | skill 级 | 另一个 LLM agent |
+| Self-Evolution | 手动触发 | skill 文本的进化优化 | 提示组件级 | 独立仓库的 DSPy+GEPA |
 
-- **关键 skill 锁死**：重要的、你已经调顺的 skill，禁止自动修改，只手动迭代。
-- **定期人工审**：每周扫 diff，发现"模型自己加的步骤"就质疑一遍。
-- **保留原始版本**：每次手写完一个 skill，提交一个"baseline" commit，方便后续 diff。
-- **不期待全自动**：把 self-improvement 当"草稿助手"——它给的修改建议你来批，不是它改了就直接上。
+这三层**都是 agent 自己改自己**，区别只在改的颗粒度和触发方式。下面所有"怎么观察、怎么判断、怎么回滚"的讨论，都要先分清是哪一层动过。
 
-## 权衡
+## 怎么观察改了什么：不主动看你不会知道
 
-self-improvement 的交易：**省手动迭代 vs 接受不透明的自动修改**。完全开 = 省事但可能悄悄跑偏；完全关 = 安全但失去 Hermes 最大卖点之一。务实做法是分级：低风险 skill 开自动改进 + 定期审，高风险 skill 锁死手动。
+这是自我改进最隐蔽的地方：**它不弹通知、不打日志到你的终端、不发邮件**。skill 文件静默地变了，下次执行就用新的。如果你不主动去查，可能用了一个月才发现某个 skill 已经被改得面目全非。
+
+三个观察抓手，从最实在到最间接：
+
+**抓手一：git diff（最实在）**
+
+第 7 篇让你把 `~/.hermes/skills/` 建成 git 仓库。如果你建了，这是最可靠的观察手段。常用命令：
+
+```bash
+# 看最近一周改了哪些 skill
+git -C ~/.hermes/skills log --since="1 week ago" --name-only
+
+# 看某个 skill 的完整改动历史
+git -C ~/.hermes/skills log -p SKILL.md
+
+# 看两个 commit 之间某个 skill 改了啥
+git -C ~/.hermes/skills diff <old>..<new> -- <skill>/SKILL.md
+
+# 看当前工作区有没有未提交的改动（前台 patch 往往直接写文件）
+git -C ~/.hermes/skills status
+```
+
+养成两个习惯：
+
+1. **每周扫一次**：`git -C ~/.hermes/skills log --since="1 week ago" -p | less`，从头到尾翻一遍。看到不认识的 commit，停下来想"这个改动是哪来的"。
+2. **每次手写完一个 skill，提交一个 baseline commit**，tag 上 `baseline-<skill>-YYYYMMDD`。这样后续 diff 有个明确的"原始本意"参照点。
+
+注意一个坑：**前台 patch 有时不走 git commit**，而是直接覆盖文件。这种情况下 `git status` 会显示工作区有改动但没提交。所以光看 `git log` 不够，要配合 `git status`。
+
+**抓手二：Curator 日志**
+
+后台 Curator 跑的时候有日志，记录它 grade 了哪些、prune 了哪些、consolidate 了哪些。日志位置看你的版本（通常在 `~/.hermes/logs/curator/` 或类似路径）。重点看三件事：
+
+- **归档了哪些**：有没有把你其实还在用的 skill 误判成 stale。Curator 的判断依据是"最近调用时间"，但有些 skill 是低频但关键的（比如月度报表生成），可能被误归档。
+- **合并了哪些**：这是风险最高的一步。看到合并记录，去 diff 看合并前后的文本，确认语义没丢。
+- **打了什么分**：grade 的分数变化趋势能告诉你 skill 的"健康度"。某个 skill 分数持续下降，要么是它真的过时了，要么是 Curator 的打分指标有问题。
+
+**抓手三：Self-Evolution 报告**
+
+如果你接了 `hermes-agent-self-evolution`，它会输出每次优化的报告，内容大致是：
+
+- 这次优化改了哪些 skill 的哪些措辞
+- 用了哪些任务做评估
+- 优化前后在评估指标上的差异（成功率、token 消耗、调用次数等）
+
+**关键看它优化的是什么指标**。Self-Evolution 默认会用一组指标（成功率、token 数、工具调用数等）做 Pareto 选择。但这些指标**未必是你的真实目标**。比如它可能报告"token 消耗降了 30%"，但你仔细看会发现它把 skill 改得更简短，结果模型在某些边界情况下漏掉了关键步骤——token 少了，准确度也少了。指标错位的问题后面单独展开。
+
+**一个观察的实操节奏**
+
+```
+每天  → git status（看前台 patch 有没有乱写）
+每周  → git log --since="1 week ago" -p（扫所有改动）
+每月  → 看 Curator 日志 + 跑过 Self-Evolution 的话看报告
+每季度 → 全量人工审一遍活跃 skill
+```
+
+## 怎么判断改得对不对：三条标准
+
+观察到了改动，下一步是判断"这个改动对不对"。这是最难的部分。模型自己觉得改对了，未必真对。三条标准，从客观到主观：
+
+**标准一：改的依据可追溯吗**
+
+好的改进，背后一定有具体的事件——某次报错、某个用户纠正、某次失败。比如 skill 里多了句"如果 API 返回 429，等 60 秒重试"，那一定是因为模型在某次任务里真的撞上了 429。这种改进**有依据**，可信。
+
+差的改进，是模型"凭空觉得换个说法更好"。比如把"先检查用户登录状态"改成"在执行任何操作前，请务必验证当前用户的身份认证状态是否有效"。这种改写没有依据事件，纯粹是措辞优化，**多半是无依据改写**，应该撤回。
+
+怎么判断有没有依据：
+
+```bash
+# 看这个 commit 前后几天的执行轨迹日志，找对应的事件
+grep -r "429\|rate.limit\|too many requests" ~/.hermes/logs/executions/
+```
+
+如果日志里能找到对应事件，说明这个 patch 是有依据的。找不到，就是模型自作主张。
+
+**标准二：和你的本意一致吗**
+
+skill 是你设计的流程。模型可能"优化"成一个你根本不想要的方向。比如你写了个 skill 是"代码 review 时先看测试覆盖率"，模型把它"优化"成"代码 review 时先看代码风格"。从模型的角度，这或许能让 review 更快完成（指标更好看），但完全偏离了你的本意。
+
+判断方法：把 baseline commit 的版本和当前版本并排对比，问自己一个问题——**"如果是我自己写，我会这么改吗？"** 答案是不会，那就得回头看。
+
+这个标准看似主观，但其实最关键。skill 不是通用的"最佳实践"，是你**特定场景下的特定流程**。模型不知道你的场景约束，它的"优化"是脱离语境的。
+
+**标准三：跑过验证吗**
+
+改完的 skill 在真实任务上效果是变好还是变差？这是终极标准。但这里有个陷阱：
+
+- 前台 patch 和 Curator 整理**通常不做验证**——它们改完就生效，下次任务自然就用新的。等于直接上生产，没测过。
+- Self-Evolution **会做验证**，但验证的是它自己选的指标。这个指标对不对，得你来判断。
+
+如果你想严肃地验证某个被改过的 skill，得自己搭个评估：
+
+1. 准备 5-10 个该 skill 应该能处理的代表性任务（包括边界情况）。
+2. 用 baseline 版本跑一遍，记录结果。
+3. 用当前版本跑同样的任务，对比。
+4. 看的不仅是"成功了没"，还有"过程对不对"——有没有走你设计的步骤、有没有偷工减料。
+
+这个工作量不小，但关键 skill 值得做。哪些是"关键 skill"？后面"怎么和张力共处"那节会讲分级。
+
+**三条标准合起来**
+
+```
+依据可追溯  →  有对应事件吗？日志里查得到吗？
+本意一致    →  我自己会这么改吗？
+跑过验证    →  真实任务上效果变好了吗？
+```
+
+三条都过，放心接受。任何一条不过，进入下面的回滚流程。
+
+## 改坏了怎么回滚：完整流程
+
+假设你判断某个 skill 被改坏了。完整回滚流程：
+
+**第一步：定位坏的 skill**
+
+```bash
+# 看最近改了哪些
+git -C ~/.hermes/skills log --since="3 days ago" --name-only
+
+# 如果是 Curator 合并出的问题，看 Curator 日志找合并记录
+# 合并通常会把多个 skill 揉成一个，diff 会很明显
+```
+
+**第二步：看具体改了什么**
+
+```bash
+# 找到 baseline commit（你手写完那个 skill 时打的 tag）
+git -C ~/.hermes/skills log --oneline -- <skill>/
+
+# 看 baseline 到现在的完整 diff
+git -C ~/.hermes/skills diff baseline-<skill>-20260601..HEAD -- <skill>/SKILL.md
+```
+
+**第三步：撤回到 baseline**
+
+```bash
+# 单个 skill 撤回
+git -C ~/.hermes/skills checkout baseline-<skill>-20260601 -- <skill>/SKILL.md
+git -C ~/.hermes/skills commit -m "rollback <skill> to baseline"
+```
+
+如果 baseline tag 不存在（你忘了打），找最早的 commit：
+
+```bash
+git -C ~/.hermes/skills log --reverse --format=%H -- <skill>/ | head -1
+```
+
+**第四步：防止再被自动改**
+
+撤回不等于结束。不改配置的话，下次 Curator 跑或者前台执行时，它又会改回去。三种锁法，从严到松：
+
+1. **SOUL.md 写禁止自动修改**：在 SOUL.md（或等价的 agent 配置文件）里加一条规则，比如"禁止自动修改 `<skill>` 的 SKILL.md，任何改动必须人工提交"。这是最强的锁。具体语法看你的 Hermes 版本文档。
+2. **移出 Curator 扫描范围**：把 skill 从 `~/.hermes/skills/` 移到一个 Curator 不扫的目录，或者用配置文件把它加进 Curator 的 ignore list。
+3. **pin skill**：`hermes skill pin <name>`（或对应命令）。但**注意 pin 只挡 Curator，不挡前台 patch**——前面提过，pinned skill 还是会被前台小修小补。所以 pin 不是真正的锁，只能算半锁。
+
+**第五步：如果是 Self-Evolution 改的**
+
+```bash
+# 关掉这个 skill 的 evolution 开关
+# 具体命令看 hermes-agent-self-evolution 仓库的 README，通常是在配置文件里把这个 skill 加进 no-evolve list
+```
+
+Self-Evolution 的优化结果，如果你发现指标错位（比如 token 少了但准确度也少了），撤回方式同样是 git checkout baseline。但要注意，Self-Evolution 可能改过的不止一个 skill——它通常是批量优化多个 skill，看它的报告确认改了哪些，全部一起撤回。
+
+**回滚流程的 ASCII 总览**
+
+```
+定位 → 看 diff → checkout baseline → commit → 配置锁（SOUL.md/移出扫描/no-evolve）
+                                                    ↓
+                                            验证锁生效（跑一次任务，看 patch 有没有再写进来）
+```
+
+最后一步很重要：**锁完要验证锁生效**。跑一次会触发那个 skill 的任务，然后 `git status` 看文件有没有又被改。如果又被改，说明你的锁没起作用，回头看配置。
+
+## 越改越笨的可能：Issue #25833 的四类失败
+
+到这里都是机制层面的操作。这一节讲为什么"自我改进"这个架构**本质上**有越改越笨的可能——不是 bug，是结构性问题。
+
+GitHub Issue [#25833](https://github.com/NousResearch/hermes-agent/issues/25833) 把这个结构性问题点得很准，原文大意：
+
+> Hermes Agent 的 skill 自动创建/改进系统有结构性缺陷：agent 同时是自己 skill 的**作者、执行者和质量检查员**，没有任何外部 ground truth 校验。
+
+这句话的分量在于——它不是某个具体 bug，是整个架构的张力。pvishalkeerthan 在 [dev.to 的深度分析](https://dev.to/pvishalkeerthan/the-self-trust-problem-in-hermes-agents-skill-architecture-18bi) 里把它叫 **self-trust problem**：系统信任自己的判断，但没有机制验证这种信任是否合理。
+
+类比一下：实习生自己写工作手册，自己照着执行，自己评估自己写得对不对，没人复核。两周后手册变成了什么样子，你猜。
+
+具体表现，四类失败：
+
+**失败一：错误固化**
+
+第一次执行任务时，模型用了一个次优解法。比如调某个 API 时多查了一次元数据（多花 200 token，慢了 1 秒）。任务"成功"了（用户没抱怨），模型把这次的过程 patch 成 skill——次优解法被固化。之后每次同类任务都按次优来，没人纠正就一直次优。
+
+pvishalkeerthan 的文章给了一个更狠的真实复现：某次 skill 写的时候引用了一个第三方 API endpoint，那个 endpoint 后来失效了（404）。但因为没有任何外部检查机制跟踪这个失败，agent 仍然在用这个 skill 生成指向死链接的代码，**任务静默失败**——错误被 skill 反复"权威化"，没人发现。
+
+这种失败的核心是：**"成功"的标准太松**。模型觉得"没报错"就是成功，但用户视角的成功是"答得对、做得好"。标准错位导致次优解法被当成功固化。
+
+**失败二：风格漂移**
+
+Curator 合并 skill 时会把两个语义相近的 skill 揉成一个。但"语义相近"是 Curator 这个 LLM 判断的，它未必理解两个 skill 在不同语境下的差异。
+
+Reddit r/hermesagent 上贴过的真实案例：一个叫 `code-review` 的 skill（针对代码质量）和一个叫 `doc-review` 的 skill（针对文档准确性），Curator 觉得"都是 review"就合并了。合并后的 skill 在两个场景下都不准——代码 review 时跑去检查文档格式，文档 review 时跑去跑 linter。
+
+这种失败比错误固化更阴险，因为它**不会报错**。任务还是"成功"完成，只是结果质量持续下降。用户可能用了一个月才发现"诶，怎么最近 code review 的反馈越来越不靠谱了"，回头一看 skill 早被合并成一个四不像了。
+
+**失败三：指标错位**
+
+Self-Evolution 用 GEPA 做进化搜索，GEPA 选的是 Pareto 前沿上的解——多个指标之间权衡。但**指标的选择本身就是个判断**。Self-Evolution 默认的指标通常是：
+
+- 成功率（任务有没有完成）
+- token 消耗（越少越好）
+- 工具调用次数（越少越好）
+- 步数（越少越好）
+
+问题来了：**这些代理指标（proxy metric）和你的真实目标（answer quality）未必一致**。
+
+举个具体的例子。你有个 skill 是"分析 GitHub issue 并给出修复建议"。Self-Evolution 优化它，发现把"先复现 bug、再读相关代码、最后给建议"这个流程压缩成"直接读 issue 标题就给建议"，token 降了 60%，工具调用从 5 次降到 1 次，"成功率"（用户接受了建议）差不多。从指标看，这是巨大改进。
+
+但实际质量呢？建议的深度和准确性都下降了。用户之所以"接受"，是因为他们没有更好的对照，或者因为简单 issue 占多数、把复杂 issue 拖累了平均质量这种统计假象。
+
+GEPA 论文（[arXiv 2507.19457](https://arxiv.org/abs/2507.19457)）本身讲得很清楚：GEPA 优化的是你**给它的指标**，不是你**真正想要的**。它报告"比 GRPO 提升 10-20%、rollout 少 35×"，那是在它评估的 benchmark 上。换成你的真实场景，benchmark 的指标未必映射到你的真实目标。这是所有优化算法的通病——**优化器只对它看得见的指标负责**。
+
+**失败四：Self-Evolution 静默失败**
+
+pvishalkeerthan 的 dev.to 文章专门点了这个：Self-Evolution 这个模块**自己也会静默失败**。它跑完一轮优化，报告"指标提升了 X%"，但如果中途某步出错（API 调用失败、JSON 解析失败、候选变体生成为空），它会**带着部分失败的结果继续跑**，最后给你一个看起来成功但实际不完整的报告。
+
+更隐蔽的是：Self-Evolution 的优化结果依赖执行轨迹。如果输入的轨迹本身就**有偏**（比如某段时间你主要做简单任务），GEPA 选出来的"最优"skill 文本，是针对那段简单任务最优的——遇到复杂任务可能更差。但报告里只会说"在评估集上提升了 X%"，不会告诉你评估集本身有偏。
+
+这是 self-trust problem 的极端形态：**连改进系统本身的可靠性，都没有外部校验**。
+
+**四类失败的共同根源**
+
+```
+错误固化   ←  "成功"标准太松，没有外部 ground truth
+风格漂移   ←  Curator 是 LLM，判断"语义相近"会错
+指标错位   ←  GEPA 优化代理指标，不是真实目标
+Self-Evolution 静默失败  ←  改进系统本身也没被监督
+```
+
+四类失败，根源都是同一个：**author = executor = reviewer，没有任何外部独立的一方来校验**。这不是 Hermes 团队能修的 bug，是"agent 自我改进"这个架构的固有张力。要消除这个张力，唯一办法是引入外部 ground truth——而这通常意味着人工 review，意味着自我改进不再是"全自动"的。
+
+## 怎么和这个张力共处：分级、锁死、定期审
+
+读完上面你可能会想：那这功能是不是干脆别开？这反应过头了。完全关掉自我改进，等于放弃 Hermes 最大的卖点之一——agent 用得越久越懂你。务实的做法是**分级管理**：哪些 skill 开自动改进、哪些锁死、哪些定期人工审。
+
+**关键 skill 锁死**
+
+哪些是"关键 skill"：
+
+- 你已经手写调顺、反复验证过、效果稳定的 skill
+- 涉及生产环境写操作的 skill（部署、删数据、发邮件）
+- 你特有的工作流，模型不理解的场景约束
+
+这些 skill 严格锁死，禁止任何自动修改。锁法前面讲过：SOUL.md 写禁止规则，或者移出 Curator 扫描范围。**不要只用 pin**——pin 挡不了前台 patch。
+
+锁死的关键 skill，迭代方式是纯手动：你看 diff、你判断、你写改动、你 commit。等于把它当成生产代码对待。Medium 上 sathishkraju 那篇 *Your Hermes Agent Has No Performance Review* 就是这个思路：skills 目录 = 代码仓库，该有 review、该有 CI、该有版本管理。
+
+**低风险 skill 开自动改进**
+
+哪些适合开：
+
+- 探索性的、临时性的 skill（一次性任务用的）
+- 错了也不会造成损失的 skill（查询、汇总、生成草稿）
+- 你刚开始用、还没调顺、需要模型帮你跑出大致形态的 skill
+
+这些 skill 开自动改进 + 定期（比如每周）扫一眼 diff，发现问题就撤回。损失可控，收益是省你的迭代时间。
+
+**Self-Evolution 单独分级**
+
+Self-Evolution 因为是批量优化、影响大、不一定能撤干净，建议**默认关闭，只在显式触发时跑**。跑之前：
+
+1. 选一小批低风险 skill 做实验
+2. 跑之前 baseline 打 tag
+3. 跑完看报告，重点关注**指标有没有错位**
+4. 在你的真实任务上验证，而不是只信它给的 benchmark
+5. 发现问题立即 checkout baseline，并把这几个 skill 加进 no-evolve list
+
+**定期人工审的节奏**
+
+```
+每周  → 扫 git log，看所有自动改动
+每月  → 评估关键 skill 有没有被"漏网"动过（即使锁了也要查）
+每季度 → 全量审活跃 skill，问一遍"这个 skill 现在还符合我的本意吗"
+```
+
+每周扫 diff 的具体做法：找一个固定时间（比如周五下午），打开终端跑那条 `git log --since="1 week ago" -p`，从头翻到尾。看到不认识的 commit message、不熟悉的改动，停下来——这些就是"模型自作主张"的地方，需要你判断要不要保留。
+
+**不期待全自动**
+
+最重要的一条心态调整：**把 self-improvement 当"草稿助手"，不是"自动升级系统"**。
+
+它给的修改建议你来批，不是它改了就直接上。这种心态下，自我改进是省时间的工具：模型帮你起草改动、标注可能的优化点，你做最终判断。一旦你期待它全自动、自我进化、无人值守，你就掉进了 Issue #25833 描述的结构性陷阱——author = executor = reviewer，没人复核。
+
+## 什么时候开自动改进 / 什么时候锁死：ASCII 决策树
+
+把上面所有判断浓缩成一棵决策树，遇到新 skill 时照着走：
+
+```
+新 skill 写完
+    │
+    ├─ 这个 skill 错了会造成损失吗？（生产写操作、删数据、发邮件）
+    │       │
+    │       YES → 锁死（SOUL.md + 移出 Curator 扫描），永远手动迭代
+    │       │
+    │       NO ↓
+    │
+    ├─ 这个 skill 我已经调顺、反复验证过吗？
+    │       │
+    │       YES → 锁死，避免被自动改坏
+    │       │
+    │       NO ↓
+    │
+    ├─ 这个 skill 是探索性 / 临时性 / 低风险的吗？
+    │       │
+    │       YES → 开自动改进 + 每周扫 diff
+    │       │
+    │       NO ↓
+    │
+    ├─ 这个 skill 涉及我特有的工作流 / 场景约束吗？
+    │       │
+    │       YES → 锁死，模型不懂你的语境
+    │       │
+    │       NO → 可以开自动改进，但每月评估一次是否符合本意
+    │
+    └─ Self-Evolution：默认关。只在低风险 skill 上手动触发跑实验
+```
+
+这棵树的内核：**风险高的锁死，风险低的开但定期看，Self-Evolution 永远手动触发**。
+
+## 和第 5、7、8 篇的衔接
+
+这篇专拆自我改进机制。要把它放回系列里看：
+
+- **第 5 篇**讲 learning loop 的完整生命周期——本篇的"前台 patch"和"后台 Curator"就是 learning loop 的两个执行环节。如果你对 learning loop 整体还不熟，先看第 5 篇再回来。
+- **第 7 篇**讲怎么手写 skill——本篇的"baseline commit"思路、git 仓库建法、SOUL.md 锁的写法，都依赖第 7 篇搭的基础。
+- **第 8 篇**讲 Hub——本篇没展开 Hub，但如果你从 Hub 装来的 skill，要注意：**Hub skill 也会被本地自动改进**。装来的不是只读的，前台 patch 和 Curator 都会动它。Hub skill 建议也锁死或定期审。
+
+## 权衡：省迭代 vs 接受不透明
+
+self-improvement 的交易：**省手动迭代 vs 接受不透明的自动修改**。
+
+完全开 = 省事，但你要承担 Issue #25833 描述的四类风险——错误固化、风格漂移、指标错位、Self-Evolution 静默失败。这些风险不是概率事件，是**必然发生**的，只是发生得慢、不显眼。等你发现时，skills 目录可能已经面目全非。
+
+完全关 = 安全，但失去 Hermes 最大的卖点之一。agent 用了一个月和用了一周没区别，每次任务都从头来，没有积累。
+
+务实做法是中间路线：**分级**。低风险 skill 开自动改进 + 定期审，高风险 skill 锁死手动。把 self-improvement 当需要监督的实习生，不是当自动升级系统。
 
 ## 结论
 
-skill 自我改进是 Hermes 最该被怀疑也最有想象力的功能。它会改自己，但没有 ground truth。会用的人 = 会观察（git diff）、会判断（依据是否可追溯）、会回滚（锁死关键 skill）的人。把它当需要监督的实习生，不是当自动升级系统。
+skill 自我改进是 Hermes 最该被怀疑也最有想象力的功能。
+
+最该被怀疑，是因为它没有外部 ground truth——agent 同时是作者、执行者、评审者，author = executor = reviewer 的结构性问题，注定了它会越改越偏，只是偏得慢、偏得不显眼。
+
+最有想象力，是因为它确实能让 agent 用得越久越懂你——前提是你**会管它**。
+
+会用的人 = 三件事都做到的人：
+
+1. **会观察**——`git diff` 是你最可靠的眼睛，每周扫一次 diff，养成习惯。
+2. **会判断**——三条标准：依据可追溯、本意一致、跑过验证。任何一条不过，进入回滚流程。
+3. **会回滚**——baseline commit + checkout + SOUL.md 锁死关键 skill。锁完要验证锁生效。
+
+做到这三件，自我改进就是省时间的工具。做不到，就是把 skills 目录的命运交给一个会自我感动但没有外部校验的系统。
+
+最后一句话：**把自我改进当需要监督的实习生，不是当自动升级系统**。实习生写的草稿，你来批。批了才上，不批就是草稿。这个心态能让你既享受到自我改进的便利，又不掉进结构性陷阱。
 
 ## 延伸阅读
 
 - [GitHub Issue #25833 — self-created skills 结构性批评](https://github.com/NousResearch/hermes-agent/issues/25833)
-- [Hermes Curator 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator)
-- [Reddit r/hermesagent — Self-Evolution 用 DSPy+GEPA 讨论](https://www.reddit.com/r/hermesagent/comments/1t5ifvg/)
-- [第 5 篇：闭环学习总览](./05-learning-loop-overview.md)
+- [dev.to pvishalkeerthan — The Self-Trust Problem in Hermes Agent's Skill Architecture](https://dev.to/pvishalkeerthan/the-self-trust-problem-in-hermes-agents-skill-architecture-18bi)
+- [GitHub Issue #429 — Skill Lifecycle Quality, proactive patching noise](https://github.com/NousResearch/hermes-agent/issues/429)
+- [hermes-agent-self-evolution 仓库（DSPy + GEPA 独立模块）](https://github.com/NousResearch/hermes-agent-self-evolution) · [PLAN.md](https://github.com/NousResearch/hermes-agent-self-evolution/blob/main/PLAN.md)
+- [GEPA 论文 arXiv 2507.19457 — Reflective Prompt Evolution Can Outperform Reinforcement Learning](https://arxiv.org/abs/2507.19457) · [gepa-ai/gepa 代码](https://github.com/gepa-ai/gepa)
+- [Towards AI — Hermes Agent Doesn't Learn. It Mutates Strings.](https://pub.towardsai.net/hermes-agent-doesnt-learn-24fb958f18d7)
+- [Medium sathishkraju — Your Hermes Agent Has No Performance Review](https://medium.com/@sathishkraju/your-hermes-agent-has-no-performance-review-heres-how-to-fix-that-92254efdfe18)
+- [Reddit r/hermesagent — Curator 合并 skill 出问题的真实案例](https://www.reddit.com/r/hermesagent/comments/1t9smfc/the_skill_curator_feature_in_hermes_agent_has_a/)
+- [X / Akshay Pachaar — self-evolving skills, pinned skill 也会被 patch](https://x.com/akshay_pachaar/status/2056050422872465775)
+- [第 5 篇：闭环学习总览](./05-learning-loop-overview.md) · [第 7 篇：手写 skill](./07-handwritten-skills.md) · [第 8 篇：Hub](./08-skill-hub.md)

@@ -25,101 +25,861 @@
 
 > 系列第 7 篇 · 读者预设：读懂了 skill 结构、想动手写一个的人 · 最后核实：2026-07
 
-**TL;DR：** 挑一个你**真的会重复做**的任务，按"触发条件 → 步骤 → 边界"写 SKILL.md，丢进 `~/.hermes/skills/`，下一轮对话就能触发。关键不是写出来，而是**调试到真的好用**——这要求你会看 skill 是否被命中、改坏了能回滚。
+**TL;DR：** 挑一个你**真的会重复做**的任务，按「触发条件 → 步骤 → 边界」写 `SKILL.md`，丢进 `~/.hermes/skills/<name>/`，下一轮对话就能触发。难点不在写出来，而在**调试到真的好用**——这要求你会看 skill 是否被 agent loop 自动检索到、改坏了能回滚、跑三次还稳定。本篇给一个完整可运行的 PR 描述模板 skill，逐段拆解；再给一套 git 版本管理流程，覆盖 Hermes 自己 patch skill 把内容改坏的应急场景。
 
-## 选什么任务
+---
 
-别选"看起来酷"的，选**你这周已经第三次跟 Hermes 解释同一件事**的。这种最值得沉淀。例子：
+## 为什么这一篇必须实战
 
-- "把这个仓库的 PR 描述格式套到我新建的 PR 上"
-- "把我整理的周报按固定列推到飞书"
-- "审查这个目录的代码，按团队 checklist 出报告"
+第 5 篇讲了生命周期，第 6 篇讲了文件结构和 CSO（Clear、Specific、Observable）原则。但只有自己手写一个，才会撞上所有真实问题：
 
-判断标准：每次做法差不多、你会烦重复说、结果可验证。
+- 写完不命中——`description` 没埋对关键词，agent loop 检索不到
+- 命中但跑歪——步骤太抽象，模型自由发挥
+- 跑对一次就觉得稳——换个输入就崩
+- 某天突然发现 skill 自己变了——Hermes 的学习循环（第 9 篇详讲）后台 patch 了它
 
-## 写一个：PR 描述模板 skill
+这篇解决的就是这四件事。读完后你能：独立交付一个高质量 skill、确认它真的被命中、用 git 管住版本、被改坏时 30 秒回滚。
 
-`~/.hermes/skills/pr-description-template/SKILL.md`：
+---
+
+## 一、先选对任务：什么值得做成 skill
+
+写 skill 最大的浪费，是花一下午把一个**这辈子只做两次的事**沉淀成文档。判断标准只有一条：
+
+> **这周已经是第三次跟 Hermes 解释同一件事了。**
+
+### 1.1 值得做的三类任务
+
+**高频重复且步骤固定**
+
+每次做法差不多、你会烦重复说、结果可验证。典型例子：
+
+- 把当前分支的 `git diff` 套进团队 PR 模板，再用 `gh pr edit` 更新描述
+- 把整理好的周报条目按固定列结构推到飞书 Bitable
+- 跑代码审查时按团队 checklist 逐项过一遍，输出结构化报告
+- 把一段日志粘进来，按固定维度（时间、错误码、影响范围）做摘要
+
+这类任务特征是：步骤可枚举、输出有模板、错了立刻能看出来。
+
+**领域知识需要被显性化**
+
+你已经知道怎么做，但每次都要重新解释给 Hermes 听。比如：
+
+- 这个仓库的 commit message 必须带 scope（`feat(auth):` 而不是 `add login`）
+- 这个项目的错误处理风格是「先 log 后返回，不允许裸 throw」
+- 数据库迁移必须走 `dbmate`，不能用 `migrate up`
+
+把这些写进 skill，等于把你脑子里的隐性规则固化成 Hermes 能直接执行的显性指令。
+
+**多人协作的对齐成本高**
+
+团队里每个人做同一件事的方式都不一样，PR review 时反复扯皮。一个 skill 把团队约定钉死：
+
+- 代码审查 checklist（安全、性能、可读性、测试覆盖）
+- release note 的写法和发布流程
+- 故障复盘报告的结构
+
+### 1.2 不要做的几类（反例）
+
+**「看起来酷」但使用频率低**
+
+写一个「自动分析竞品财报」的 skill 听起来很厉害，但你一年用几次？维护成本远高于节省的时间。
+
+**步骤本身就在变**
+
+如果一个流程你这周和下周做法就不一样（比如还在探索期的实验性 workflow），别急着固化。等流程稳定了再写。提前固化反而会被旧 skill 牵着走。
+
+**纯一次性任务**
+
+「帮我把这份 50 页 PDF 翻译成中文」——翻译完了就完了，没有第二次。这种直接让 Hermes 做就好，不值得写 skill。
+
+**输出无法验证**
+
+「帮我写个有创意的广告文案」——创意没法用规则验证对错，模型发挥空间太大，skill 的边界约束也帮不上忙。这种适合 prompt 模板，不适合 skill。
+
+### 1.3 一个判断公式
+
+值不值得写 skill，看这个比值：
+
+```
+节省的重复时间 × 预计使用次数  >  写 + 调试 + 维护 skill 的时间
+```
+
+经验值：预计未来还会做 **5 次以上**，每次能省 10 分钟以上，就值得。一次性任务、低频任务、纯创意任务，统统别碰。
+
+---
+
+## 二、写一个：从草稿到能跑的 SKILL.md
+
+我们挑一个具体任务作为示例：**PR 描述模板 skill**。
+
+为什么挑这个：高频（每个 PR 都要做）、步骤固定（读 diff、套模板、调 gh CLI）、输出可验证（PR 描述格式对不对一眼能看出）、几乎每个团队都有这套模板。
+
+### 2.1 物理路径和文件结构
+
+接第 6 篇，一个 skill 就是一个目录：
+
+```
+~/.hermes/skills/
+  pr-description-template/
+    SKILL.md            # 核心：frontmatter + 正文
+```
+
+最简形式就一个文件。如果模板很长或者有附带脚本，可以拆辅助文件：
+
+```
+~/.hermes/skills/
+  pr-description-template/
+    SKILL.md            # 入口，agent loop 先读这个
+    template.md         # 完整的 PR 模板原文（被 SKILL.md 引用）
+    checklist.md        # 团队的 PR review checklist
+```
+
+Hermes 的 progressive disclosure（渐进式披露）机制：启动时只读所有 skill 的 `name` 和 `description`，命中后才加载完整 `SKILL.md`，需要更深层细节时才读辅助文件。所以**辅助文件不要塞进 SKILL.md**，让它保持精简。
+
+### 2.2 完整的 SKILL.md
+
+下面是一个可以直接复制去用的完整版本。先看全貌，再逐段拆。
 
 ```markdown
 ---
 name: pr-description-template
 description: 当用户要在 GitHub 新建或修改 PR 描述时，套用团队的 PR 模板。
-  触发词："写 PR 描述""套 PR 模板""补 PR 正文"。
+  覆盖场景：写 PR 描述、补 PR 正文、生成 PR body、整理 git diff 成 PR。
+  触发词：「写 PR 描述」「套 PR 模板」「补 PR 正文」「生成 PR body」。
+  不覆盖：commit message（那是另一个 skill 的事）、issue 模板。
 ---
+
+## 何时触发
+
+- 用户提到「PR 描述」「PR 模板」「PR 正文」「PR body」
+- 用户在做完一批 commit 后准备开 PR
+- 用户提供了 PR 链接或 PR 编号让你修改描述
 
 ## 模板格式
 
-- 背景：一句话说为什么做这个改动
-- 改动：分点列做了什么（最多 5 点）
-- 测试：怎么验证的（具体到命令或场景）
-- 风险：可能影响哪些地方，回归重点
-- 关联：issue / 设计文档链接
+每个 PR 描述必须包含以下五段，顺序固定：
+
+- **背景**：一句话说为什么做这个改动，关联到 issue 或需求文档
+- **改动**：分点列做了什么（最多 5 点，每点不超过一行）
+- **测试**：怎么验证的，具体到命令或场景（必须真实跑过）
+- **风险**：可能影响哪些地方，回归测试重点
+- **关联**：issue 链接、设计文档、相关 PR
+
+## 执行步骤
+
+1. 切到当前分支，跑 `git diff main...HEAD` 提取改动点（main 可换为目标分支）
+2. 如果 diff 文件数超过 30，先停下来问用户要不要拆成多个 PR
+3. 如果有未提交的改动（`git status` 显示 working tree 不干净），先提醒用户提交
+4. 按上面的模板格式生成 PR 正文，每段都要有内容
+5. 通过 `gh pr edit <PR编号或URL> --body-file -` 或 `gh pr create` 更新描述
+6. 更新后回显 PR 链接，让用户确认
+
+## 边界与硬性规则
+
+- **测试段必须真实**：不能写「已测试」「测试通过」，必须是具体命令或场景（如 `pytest tests/test_auth.py -k login`）
+- **风险段不能空**：实在没风险就写「无，纯文档改动」或「无，仅删除已废弃代码」
+- **改动段不超过 5 点**：超过说明这个 PR 太大，应该拆
+- **不许编造**：diff 里没有的改动，绝对不能写进 PR 描述
+- **commit message 不归我管**：如果用户要改 commit message，提示用对应的 commit-message skill
+
+## 输出示例
+
+给用户看的最终消息格式：
+
+```
+已更新 PR：https://github.com/org/repo/pull/123
+
+背景：登录接口在弱网下偶发 500（issue #45）
+改动：
+- 给 login handler 加超时兜底
+- 把密码哈希从 MD5 换成 bcrypt
+- 加了 3 个集成测试
+测试：pytest tests/test_auth.py -k login（全绿）
+风险：bcrypt 比 MD5 慢，登录 QPS 可能下降 5-10%，需要监控
+关联：#45 设计文档 https://...
+```
+```
+
+### 2.3 逐段拆：为什么这么写
+
+**frontmatter 的 description 是命中关键**
+
+第 6 篇讲过 CSO 原则。这里 `description` 写了三件事：
+
+1. **什么时候触发**：覆盖场景具体到「写 PR 描述」「补 PR 正文」这种动词短语，不是模糊的「处理 PR」
+2. **触发词列表**：把用户可能说的原话都列出来——「写 PR 描述」「套 PR 模板」「补 PR 正文」「生成 PR body」。agent loop 检索时是做语义匹配，但埋几个高频原话能显著提升命中率
+3. **不覆盖什么**：明确划出 commit message、issue 模板这些边界，避免和别的 skill 撞车
+
+这是 `description` 最重要的实战技巧：**正向覆盖 + 反向排除**都要写。
+
+**「何时触发」段重复一遍是故意的**
+
+`description` 是给 agent loop 看的索引，正文里的「何时触发」是给真正执行时看的细化版。两边都要写，不要省。
+
+**「执行步骤」要具体到命令**
+
+差的写法：「分析改动，生成描述」——模型自由发挥。
+
+好的写法：「跑 `git diff main...HEAD`」——可执行、可验证、不会跑偏。每个步骤最好能对应一个具体命令或一个明确动作。
+
+**「边界与硬性规则」是质量护城河**
+
+没有边界的 skill，模型遇到模糊情况就瞎猜。边界把模糊情况显式钉死：
+
+- 测试段不能写「已测试」（防止偷懒）
+- 风险段不能空（强制思考副作用）
+- 改动段不超过 5 点（强制控制 PR 粒度）
+- diff 里没有的不能写（防止编造）
+
+这些规则的价值在长期使用中体现——它们让 skill 第 100 次跑出来的质量和第 1 次一样。
+
+**「输出示例」给模型一个锚**
+
+把期望的输出格式贴一份完整示例。模型模仿能力很强，给个具体模板，输出稳定性会显著提升。这比写「按模板生成」有效得多。
+
+### 2.4 写完立刻自检的五条
+
+写完 SKILL.md，回答这五个问题，答不上来就回去改：
+
+1. **触发条件清楚吗**：用户说什么原话会命中这个 skill？
+2. **步骤可执行吗**：每一步是具体命令，还是模糊指令？
+3. **边界写了吗**：列出至少 3 条「不许做」的硬规则
+4. **输出可验证吗**：跑完后能不能一眼看出对错？
+5. **会撞车吗**：和已有 skill 的 `description` 有没有重叠？
+
+这五条过了，第一版就算合格。
+
+### 2.5 好的 SKILL.md 和差的 SKILL.md 长什么样
+
+对比一下同样一个「PR 描述模板」skill，差版本和好版本的差距在哪里。
+
+**差版本**：
+
+```markdown
+---
+name: pr-template
+description: 帮助用户处理 PR 相关任务，提供强大的 PR 描述生成能力。
+---
 
 ## 步骤
 
-1. 读当前分支的 git diff，提取改动点
-2. 按上面模板生成 PR 正文
-3. 如果有未提交的改动，先提醒用户提交
-4. 通过 gh CLI 更新 PR 描述（gh pr edit --body）
+1. 分析当前分支的改动
+2. 生成符合团队规范的 PR 描述
+3. 提交给用户确认
 
-## 边界
+## 注意
 
-- 测试列必须真实跑过的命令，不能写"已测试"
-- 风险列不能空；实在没风险就写"无，纯文档改动"
-- diff 超过 30 个文件时，先问用户要不要分段做 PR
+- 描述要专业
+- 格式要统一
 ```
 
-## 调试：怎么确认被命中
+问题：description 用「处理 PR 相关任务」「强大的生成能力」这种营销腔，agent loop 看不懂；步骤是「分析」「生成」「提交」这种模糊动词，模型自由发挥；边界完全没写；输出格式没规定。
 
-写完不代表 Hermes 真的会用。三个观察点：
+**好版本**（本篇 2.2 给的完整版）：
 
-- **`/skills` 命令**：列出当前可用的 skill，确认你的在里面。
-- **直接调用**：`/pr-description-template` 强制触发，看步骤跑得对不对。
-- **看日志**：发个"帮我写 PR 描述"看 agent loop 有没有自动检索到。没检索到就回去改 description（第 6 篇讲的触发词问题）。
+- description 写了具体的动词短语、触发词列表、不覆盖范围
+- 步骤每一步对应具体命令（`git diff main...HEAD`、`gh pr edit`）
+- 边界列了 5 条硬规则（测试段必须真实、风险段不能空、不许编造）
+- 输出示例给了完整的格式锚
 
-常见不命中的原因：description 太宽或太窄、和已有 skill 冲突、关键词没埋。
+两个版本写起来时间差不多（10 分钟 vs 15 分钟），但跑起来的稳定性天差地别。差版本第一次跑可能就崩，好版本能稳定跑 100 次。
 
-## 版本管理：用 git 看住你的 skill 库
+---
 
-`~/.hermes/skills/` 应该是个 git 仓库（或软链到你的 dotfiles 仓库）。理由：
+## 三、调试：怎么确认 skill 真的被命中
 
-- **改坏了能回滚**：skill 在用中会被 Hermes 自己 patch（第 9 篇），你可能某天发现 skill 变味了——git diff 一看就知道改了啥，git checkout 撤回。
-- **多机同步**：公司服务器和家里 VPS 用同一套 skill。
-- **可分享**：挑出不涉密的推到自己的 GitHub，备份 + 给社区。
+写完不代表 Hermes 真的会用。skill 的加载是渐进式的：启动时读所有 skill 的 `name` + `description` 进上下文，agent loop 收到任务时做语义匹配，命中后才加载完整 `SKILL.md`。问题往往出在「匹配」这一步。
+
+### 3.1 三个观察点
+
+**`/skills` 命令：确认加载**
+
+在 Hermes 对话里输入 `/skills`，会列出当前可用的所有 skill。先确认你的 `pr-description-template` 在列表里，而且 `name` 和 `description` 显示正确。
+
+如果不在列表里，说明文件路径或 frontmatter 格式有问题。常见原因：
+
+- 路径错了：应该是 `~/.hermes/skills/pr-description-template/SKILL.md`，不是 `~/.hermes/skills/pr-description-template.md`
+- frontmatter 没用 `---` 包裹
+- `name` 字段和目录名不一致
+- YAML 语法错误（冒号后面没空格、引号没闭合）
+
+**`/pr-description-template` 强制触发：确认能跑**
+
+直接用 `/<skill-name>` 强制调用，跳过语义匹配这一步。看 Hermes 是不是按步骤执行：
+
+- 有没有去跑 `git diff`
+- 生成的 PR 正文有没有按五段格式
+- 边界规则有没有遵守（测试段是不是真命令，不是「已测试」）
+
+强制触发能跑对，说明 `SKILL.md` 正文没问题。接下来要验证的是 agent loop 会不会自动检索到它。
+
+**自然语言触发 + 看日志：确认自动命中**
+
+这才是实战场景。发个「帮我写个 PR 描述」或者「我刚 push 完，帮我整一下 PR」，看 Hermes 有没有自动加载这个 skill。
+
+判断方法：
+
+- Hermes 在执行前会显示加载了哪些 skill（具体看版本，有的版本在思维链里说「Using skill pr-description-template」，有的版本在状态栏显示）
+- 如果跑出来的步骤和你 skill 里写的一致，基本可以确认命中了
+- 如果跑出来的是 Hermes 自由发挥（没有按五段格式、测试段写「已测试」），多半没命中，它只是用通用能力在做
+
+### 3.2 不命中的常见原因和修法
+
+不命中是写 skill 最常见的挫败点。下面把每种原因都配一个真实例子和修法。
+
+**原因一：description 太宽**
+
+反例：
+
+```
+description: 处理 PR 相关任务
+```
+
+「PR 相关任务」覆盖太广——开 PR、关 PR、review PR、合并 PR 都是 PR 相关。agent loop 看到这种 description，无法判断用户说「帮我弄一下 PR」时到底该不该加载这个 skill。结果是要么乱命中（用户的意图是 review，却加载了写描述的 skill），要么干脆不命中（agent loop 觉得不确定，干脆用通用能力做）。
+
+修法：具体到「写 PR 描述」「补 PR 正文」这种动词 + 对象的组合。把「任务类型」明确钉死。
+
+诊断方法：把你的 description 念给一个不懂技术的人听，问他「如果一个 AI 收到这句话，你觉得它会在什么情况下用这个 skill？」如果他的回答模糊或者错误，说明 description 还不够清楚。
+
+**原因二：description 太窄**
+
+反例：
+
+```
+description: 当用户说「请按照我们团队 ABC-123 模板帮我生成 PR 描述」时触发
+```
+
+只有用户一字不差说这句话才命中，实际没人会这么说话。用户会说「写个 PR」「整一下描述」「帮我弄 PR body」，没有一种命中。
+
+修法：列出多种自然表达方式，覆盖用户可能说的原话。把同义词、口语化表达、英文缩写都埋进去：
+
+```
+description: 当用户要在 GitHub 新建或修改 PR 描述时套用团队模板。
+  触发词：「写 PR 描述」「套 PR 模板」「补 PR 正文」「生成 PR body」
+       「整一下 PR」「PR 描述」「PR 模板」「PR body」「pull request 正文」。
+```
+
+诊断方法：让一个不熟悉你这个 skill 的同事用他自己的话描述「我想让 AI 帮我写 PR 描述」这个意图。他说的原话就是你 description 里缺的关键词。
+
+**原因三：和别的 skill description 重叠**
+
+如果你已经有一个 `commit-message` skill 写着「处理 commit 相关任务」，再加一个 PR 描述 skill 写「处理 PR 相关任务」，两个都 vague，agent loop 容易选错。它会同时给两个 skill 都打高分，然后随机挑一个——或者更糟，两个都加载，步骤互相冲突。
+
+修法：两个 skill 的 description 都改成具体的动词短语，且互斥。比如 commit 那个改成「写符合约定式提交规范的 commit message（feat/fix/docs 等前缀）」，PR 那个改成「写 PR 描述、套 PR 模板、生成 PR body」。
+
+诊断方法：把所有 skill 的 description 列在一起看，找出两个都包含同一关键词（比如「PR」「commit」「测试」）的，要么改 description 让它们互斥，要么合并成一个 skill。
+
+**原因四：关键词没埋**
+
+你的 skill 实际功能没问题，但 description 里没出现用户常用的词。比如你写「生成 pull request 正文」，但用户习惯说「PR body」——英文缩写和全称不一致。
+
+修法：把同义词都埋进 description。「写 PR 描述、PR body、pull request 正文」一起写上。不要怕啰嗦，命中比文采重要。
+
+类似的坑：中英文混用。用户可能说「帮我写个 PR 描述」（中文），也可能说「generate PR body」（英文）。如果你的 description 只埋了一种语言，另一种就不命中。多语言环境下的 skill，两种表达都要埋。
+
+**原因五：触发歧义**
+
+有时候 agent loop 命中了你的 skill，但执行时跑歪——比如用户说「帮我整一下这个 PR」，Hermes 不知道是「写 PR 描述」还是「review 这个 PR」。这种歧义要在 `SKILL.md` 正文里写清楚「遇到歧义先问用户」。
+
+修法：在「执行步骤」第一条加：
+
+```
+0. 如果用户意图模糊（既可能是写描述也可能是 review），先问用户要做什么，不要猜
+```
+
+强制模型在歧义场景停下来澄清，而不是猜一个方向闷头跑。
+
+**关键词没埋**
+
+你的 skill 实际功能没问题，但 description 里没出现用户常用的词。比如你写「生成 pull request 正文」，但用户习惯说「PR body」——英文缩写和全称不一致。
+
+修法：把同义词都埋进 description。「写 PR 描述、PR body、pull request 正文」一起写上。不要怕啰嗦，命中比文采重要。
+
+**触发歧义**
+
+有时候 agent loop 命中了你的 skill，但执行时跑歪——比如用户说「帮我整一下这个 PR」，Hermes 不知道是「写 PR 描述」还是「review 这个 PR」。这种歧义要在 `SKILL.md` 正文里写清楚「遇到歧义先问用户」。
+
+### 3.3 一个调试循环模板
+
+写完一个 skill，按这个流程连测三遍：
+
+```
+1. /skills                              → 确认加载
+2. /pr-description-template             → 强制触发，验证步骤正确
+3. 自然语言：「帮我写个 PR 描述」          → 看是否自动命中
+4. 自然语言变体：「我 push 完了，PR 整一下」 → 换个说法，看是否还命中
+5. 反例：「帮我 review 这个 PR」           → 确认不会被错误命中
+```
+
+第 3、4 步如果都没命中，回去改 description。第 5 步如果错误命中了，说明 description 太宽，要收窄。
+
+### 3.4 description 调优速查表
+
+把上面所有原因浓缩成一张可操作的速查表。遇到不命中，按这个顺序排查：
+
+| 症状 | 可能原因 | 修法 |
+|------|---------|------|
+| `/skills` 里看不到 | 路径错或 frontmatter 坏 | 检查目录结构、YAML 语法 |
+| `/skills` 里有但自然语言不命中 | description 太宽或太窄 | 改成动词+对象，埋多种同义词 |
+| 命中但步骤跑歪 | 正文步骤太抽象 | 把「分析改动」改成「跑 git diff」 |
+| 命中但输出格式乱 | 没给输出示例 | 加一段完整的输出样例 |
+| 跟别的 skill 撞车 | description 重叠 | 两个都改成互斥的动词短语 |
+| 偶尔命中偶尔不命中 | 关键词埋得不够 | 把口语化表达都列上 |
+| 反例被错误命中 | description 太宽 | 加「不覆盖」段明确排除 |
+
+这张表建议贴在显示器边上。调试 skill 时 80% 的问题都能在这里找到对应。
+
+---
+
+## 四、版本管理：用 git 看住你的 skill 库
+
+写完 skill 最大的隐性风险不是它不好用，而是**它会被悄悄改掉**。Hermes 有学习循环（第 9 篇详讲），会在执行任务后通过 `skill_manage` 工具自动 `patch` 它觉得可以改进的 skill。这意味着：
+
+- 你精心写的步骤可能被改
+- 边界规则可能被删
+- 某天 skill 突然不灵了，你都不知道为什么
+
+所以 `~/.hermes/skills/` 必须用 git 管起来。
+
+### 4.1 初始化：三步搞定
 
 ```bash
+# 进入 skill 目录
 cd ~/.hermes/skills
+
+# 初始化 git 仓库
 git init
+
+# 配置 .gitignore（可选，排除临时文件和大文件）
+cat > .gitignore <<'EOF'
+*.tmp
+*.bak
+*.log
+.DS_Store
+EOF
+
+# 全部加入并提交
 git add -A
-git commit -m "init skills"
+git commit -m "chore: init hermes skills repo"
 ```
 
-## 回滚：当 Hermes 把 skill 改坏了
+如果想多机同步（公司机器、家里 VPS、笔记本都共用一套 skill），把它推到一个私有 GitHub 仓库：
 
-第 9 篇会详讲 self-improvement 的副作用，这里先给应急流程：
+```bash
+# 在 GitHub 建一个私有仓库 hermes-skills，然后
+git remote add origin git@github.com:<你的用户名>/hermes-skills.git
+git branch -M main
+git push -u origin main
+```
 
-1. `git -C ~/.hermes/skills log SKILL.md` 看修改历史
-2. `git -C ~/.hermes/skills diff HEAD SKILL.md` 看当前偏离
-3. `git -C ~/.hermes/skills checkout SKILL.md` 撤回上一次提交版本
-4. 如果是 Hermes 后台 Curator 改的且你不想要这个行为，把"禁止自动修改此 skill"写进 SOUL.md 或对应 config（具体机制看版本 changelog）
+另一台机器拉下来：
 
-## 真实坑
+```bash
+# 备份已有的 skills（如果有）
+mv ~/.hermes/skills ~/.hermes/skills.bak
 
-- **写完不测就信任**：skill 第一次跑对不代表稳定。同一个任务连测 3 次，每次微调输入，看输出稳不稳。
-- **不写边界**：步骤写得很嗨，边界列空着。模型遇到模糊情况就瞎猜——这正是 skill 该替你挡住的。
-- **写得太大**：一个 skill 想覆盖十种场景。拆成多个小 skill，每个职责单一，命中更准、维护更轻。
+# 克隆
+git clone git@github.com:<你的用户名>/hermes-skills.git ~/.hermes/skills
 
-## 权衡
+# 如果有 bundled skill，从备份里挑需要的合并回来
+```
 
-手写 skill 的时间成本是真实的——一个好的 skill 可能要迭代一周才顺手。但它替代的是"以后无数次重复解释"。值得不值得，看你这个任务会不会再做 5 次以上。
+### 4.2 软链到 dotfiles 的另一种做法
 
-## 结论
+如果你已经有 dotfiles 仓库（管理 `.zshrc`、`.vimrc` 那些），更优雅的做法是把 skills 软链进去：
 
-挑高频任务 → 写 SKILL.md（重点 description 和边界）→ `/skills` 验证 → 用 git 管住 → 改坏了能回滚。第一个 skill 跑顺后，后面越写越快。
+```bash
+# 假设你的 dotfiles 仓库在 ~/dotfiles
+mv ~/.hermes/skills ~/dotfiles/hermes-skills
+ln -s ~/dotfiles/hermes-skills ~/.hermes/skills
+```
+
+这样 skills 跟着你 dotfiles 一起 version control、一起多机同步，不用单独维护一个仓库。
+
+### 4.3 提交规范：让 git log 能讲故事
+
+skill 仓库的 commit message 建议遵循约定式提交（conventional commits），方便日后回溯：
+
+```
+feat: 新增 skill 或新功能
+fix: 修复 skill 的 bug
+docs: 只改文档说明
+revert: 回滚 Hermes 的自动 patch
+chore: 初始化、配置等杂项
+```
+
+例子：
+
+```
+feat: add code-review-checklist skill
+fix: tighten test-must-be-real rule in pr-description-template
+revert: roll back hermes auto-patch on commit-message skill
+docs: clarify trigger conditions in pr-description-template
+```
+
+这样 `git log --oneline` 一眼能看出每次改动是「你主动改的」还是「Hermes 自动 patch 的」（Hermes 的 patch 通常会带 `skill_manage` 或 `auto-patch` 字样，或者你回滚时打 `revert` 标签）。 distinguishing 自己改的和 Hermes 改的是日常调试的关键。
+
+### 4.4 为什么值得花这五分钟
+
+很多人觉得「就几个 markdown 文件，git 管不管无所谓」。但 Hermes 跟普通工具不一样——它会自己改 skill。这是 Hermes 的核心特性（学习循环），也是 skill 管理最大的隐性风险。git 不是为了「备份」，是为了「可观测 + 可回滚」。
+
+四个具体场景：
+
+**场景一：Hermes 把 skill 改坏了**
+
+某天你发现 PR 描述 skill 跑出来的输出格式变了，去 `git diff` 一看，Hermes 把「测试段必须真实」这条边界规则给删了，因为它在某次任务里觉得这条规则碍事。`git checkout` 30 秒回滚，不用重新写。
+
+**场景二：想试一个新版本但保留退路**
+
+你想给 skill 加「自动检测 PR 大小并建议拆分」的新逻辑，但又怕改坏。在 git 里开个分支 `git checkout -b feat/auto-split`，改完测试不行就 `git checkout main` 回去。
+
+**场景三：多机同步**
+
+公司机器上沉淀了一个好用的 skill，家里也想用。没 git 的话要手动 scp 一份；有 git 的话 `git pull` 就行，而且保证两边版本一致。
+
+**场景四：分享和协作**
+
+挑出不涉密的 skill 推到公开 GitHub，别人能直接用。也能从别人的 skill 仓库拉好用的回来。第 8 篇会讲 Skills Hub 的官方分发机制，git 是更底层的备份和分享方式。
+
+---
+
+## 五、回滚：当 Hermes 把 skill 改坏了
+
+最痛的场景：你花一周调好的 skill，某天发现质量下降，去 `~/.hermes/skills/` 一看，文件已经被 Hermes 的学习循环改过了。这时候 git 就是你的救生圈。
+
+### 5.1 完整回滚流程
+
+**第一步：看修改历史**
+
+```bash
+git -C ~/.hermes/skills log --oneline -- <skill-name>/SKILL.md
+```
+
+输出类似：
+
+```
+a3f5c2c chore: tighten test-must-be-real rule
+7e1b9d0 chore: hermes auto-patch (skill_manage)
+9c4a1f2 feat: initial pr-description-template skill
+```
+
+`7e1b9d0` 那条「hermes auto-patch」就是 Hermes 自己改的。
+
+**第二步：看具体改了什么**
+
+```bash
+git -C ~/.hermes/skills diff 9c4a1f2..HEAD -- pr-description-template/SKILL.md
+```
+
+或者直接看 Hermes 那次 patch 改了什么：
+
+```bash
+git -C ~/.hermes/skills show 7e1b9d0 -- pr-description-template/SKILL.md
+```
+
+常见的「Hermes 改坏」模式：
+
+- 删掉它觉得碍事的边界规则（比如「测试段必须真实」）
+- 把具体步骤改模糊（「跑 `git diff`」改成「分析改动」）
+- 加了一些它觉得有用但破坏风格的内容
+
+**第三步：回滚到上一个好版本**
+
+如果你确定 Hermes 的 patch 整体都不好，直接 checkout 到上一个版本：
+
+```bash
+# 回到 9c4a1f2 那个版本（你手写的初始版）
+git -C ~/.hermes/skills checkout 9c4a1f2 -- pr-description-template/SKILL.md
+
+# 把这次回滚也提交，避免下次 git status 显示 dirty
+git -C ~/.hermes/skills commit -m "revert: roll back pr-description-template to manual version"
+```
+
+**第四步：部分保留 Hermes 的修改**
+
+如果 Hermes 的 patch 有一部分是好的（比如它加了一条新规则有用），另一部分不好（删了你的边界规则），就只挑好的留下：
+
+```bash
+# 进入交互式补丁选择
+git -C ~/.hermes/skills checkout -p 7e1b9d0 -- pr-description-template/SKILL.md
+```
+
+git 会一段一段问你要不要应用那个改动，按 `y` 或 `n`。
+
+### 5.2 阻止 Hermes 自动改特定 skill
+
+如果你某个 skill 已经打磨到位，不想被学习循环再动，有几种保护机制（具体名字看版本 changelog，机制类似）：
+
+**方法一：写进 SOUL.md 或对应 config**
+
+把「禁止自动修改 pr-description-template skill」明确写进配置。Hermes 在 `skill_manage` 之前会检查这个清单。
+
+SOUL.md 是 Hermes 的人格和约束文件（第 4 篇讲过），在里面加一段：
+
+```
+## Skill 修改约束
+
+以下 skill 已经打磨到位，禁止通过 skill_manage 自动 patch：
+- pr-description-template
+- code-review-checklist
+
+如需修改，必须由用户手动编辑。
+```
+
+Hermes 读到这条约束后，遇到这些 skill 会跳过自动 patch 步骤。注意这是「软约束」——靠模型遵守指令，不是技术上的硬限制。绝大多数情况下有效，但模型偶尔会忽略。所以配合 git 兜底。
+
+**方法二：文件锁（粗暴但有效）**
+
+```bash
+chmod 444 ~/.hermes/skills/pr-description-template/SKILL.md
+```
+
+把文件设为只读。Hermes 的 `skill_manage` 写入会失败，你下次手动改的时候再 `chmod 644` 解锁。这种做法的副作用是 Hermes 也无法做正当的改进，要权衡。
+
+**方法三：把它移出 skills 目录**
+
+把不想被改的 skill 挪到一个 Hermes 不会扫描的外部目录，通过配置指向它（如果版本支持 external skill 目录）：
+
+```bash
+mkdir -p ~/.hermes/skills-locked
+mv ~/.hermes/skills/pr-description-template ~/.hermes/skills-locked/
+
+# 在配置里加 external skill 目录指向 ~/.hermes/skills-locked/
+```
+
+外部目录的 skill 仍然能被加载和命中，但 `skill_manage` 默认只 patch 主目录的，外部的不动。这个机制因版本而异，看官方文档确认。
+
+### 5.3 一个真实事故复盘
+
+社区里反复出现的剧情：用户写了个挺好的 code-review skill，用了两周很顺手。第三周突然发现输出质量下降——审查报告变得很泛泛，不再逐条检查团队 checklist。`git log` 一看，Hermes 在某次大型 code review 任务后自动 patch 过这个 skill，把它觉得「重复」的 checklist 步骤合并了，结果失去了原本的颗粒度。
+
+回滚流程：
+
+```bash
+git -C ~/.hermes/skills log --oneline -- code-review/SKILL.md
+# 发现 hermes auto-patch 那条
+
+git -C ~/.hermes/skills diff HEAD~1 -- code-review/SKILL.md
+# 看到它删了几条 checklist 项
+
+git -C ~/.hermes/skills checkout HEAD~1 -- code-review/SKILL.md
+git -C ~/.hermes/skills commit -m "revert: hermes over-merged checklist items"
+```
+
+然后立刻把这个 skill 加进「禁止自动修改」清单，避免下次又被合并。
+
+教训：**任何你认真打磨过的 skill，要么加锁，要么 git 管住，最好两者都做**。
+
+---
+
+## 六、测试稳定性：连测三次才算合格
+
+skill 第一次跑对不代表稳定。同一个任务换三种说法，输出还一致，才算过关。
+
+### 6.1 三次微调输入测试法
+
+用 PR 描述 skill 举例，准备三个不同的输入：
+
+**输入 A（标准说法）**：
+
+> 帮我写一下当前分支的 PR 描述
+
+**输入 B（口语化）**：
+
+> 我刚 push 完，PR 整一下
+
+**输入 C（隐式触发）**：
+
+> 这个分支的改动你看下，我准备开 PR 了
+
+预期：三次都应该命中 `pr-description-template` skill，跑同样的步骤（diff、套模板、生成五段），输出格式一致。
+
+实际可能的偏差：
+
+- A 命中，B 没命中——`description` 里没埋「整一下」这种口语表达，补上
+- A、B 命中，C 没命中——`description` 太依赖显式触发词，「准备开 PR」这种隐式信号没覆盖
+- 三次都命中但输出格式不一致——`SKILL.md` 正文步骤还不够具体，模型还有发挥空间，把步骤钉死
+
+### 6.2 边界条件测试
+
+除了正常路径，还要测几个边界：
+
+**输入 D（歧义场景）**：
+
+> 帮我看看这个 PR
+
+这里「看看」是 review 还是写描述？skill 应该停下来问用户，而不是猜一个方向瞎跑。如果 skill 没问就跑了，往正文里加「遇到 review vs 写描述的歧义先问用户」。
+
+**输入 E（极端数据）**：
+
+> 当前分支改了 80 个文件，帮我写 PR 描述
+
+这种应该触发「diff 超过 30 个文件先问用户要不要拆 PR」的边界规则。如果 skill 直接闷头生成一个超大 PR 描述，边界没生效，要回去强化。
+
+**输入 F（错误前置）**：
+
+> 帮我写 PR 描述（当前 working tree 有未提交改动）
+
+应该触发「先提醒用户提交」的规则。如果 skill 跳过这步直接生成描述，把这条规则在正文里更显眼地写一遍。
+
+### 6.3 长期稳定性监控
+
+skill 用了一段时间后，记录它的「漂移」：
+
+- 输出格式有没有慢慢变样（模型版本升级、对话上下文变长都会影响）
+- 命中率有没有下降（可能是新加的 skill 抢了它的关键词）
+- Hermes 有没有 patch 过它（`git log` 定期看）
+
+建议每周或每两周花 5 分钟跑一次完整的「三次微调测试」，发现漂移就回滚或重写。
+
+### 6.4 建立 golden test：把「好输出」存下来
+
+更系统的做法是给每个核心 skill 建一组「黄金样本」（golden test）：
+
+1. 第一次 skill 跑出你满意的输出时，把那次的输入和输出都存下来
+2. 之后每次模型升级、skill 改动、Hermes patch 后，重新跑这些输入，对比输出
+3. 输出偏差超过阈值（比如格式变了、关键段落缺失），就回滚或重写
+
+存放方式建议在 skills 仓库里加个 `tests/` 目录：
+
+```
+~/.hermes/skills/
+  pr-description-template/
+    SKILL.md
+    tests/
+      case-1-input.md      # 输入：分支名 + diff 摘要
+      case-1-expected.md   # 期望输出：完整的 PR 描述
+      case-2-input.md
+      case-2-expected.md
+```
+
+这不算自动化测试（skill 输出是自然语言，没法严格 diff），但手动对照黄金样本比凭感觉判断靠谱得多。当你怀疑 skill 漂移时，跑一遍这些 case 就知道。
+
+### 6.5 一个稳定性事故案例
+
+社区里有个真实案例：用户的「周报整理」skill 用了一个月很稳定，突然某周输出格式全乱——日期格式从「2026-07-05」变成「July 5, 2026」，分点编号从「1. 2. 3.」变成「-  -  -」。排查发现：
+
+- Hermes 在某次任务后 patch 过 skill，把「日期格式必须用 ISO 8601」这条规则删了（它觉得是冗余约束）
+- 模型版本升级，新模型对「分点编号」的默认偏好变了，skill 里没显式规定就用新默认
+
+修法：
+
+1. `git checkout` 回滚 Hermes 的 patch，恢复日期格式规则
+2. 在 SKILL.md 里显式补一条「分点编号必须用阿拉伯数字 `1. 2. 3.`」
+3. 把这个 skill 加进 SOUL.md 的「禁止自动修改」清单
+4. 跑 6.4 说的 golden test，确认输出恢复
+
+教训：**模型偏好会随版本变化，skill 里要把所有格式细节显式写死**，不能依赖模型的默认行为。
+
+---
+
+## 七、常见坑清单
+
+把这些坑刻在脑子里，能省很多调试时间。
+
+**坑一：写完不测就信任**
+
+skill 第一次跑对不代表稳定。换输入、换上下文、换数据量，都可能导致跑歪。务必走「三次微调 + 三个边界」的测试流程。
+
+**坑二：边界留空**
+
+步骤写得很嗨，边界列空着。模型遇到模糊情况就瞎猜——这正是 skill 该替你挡住的。每个 skill 至少写 3 条硬性边界规则。
+
+**坑三：一个 skill 想覆盖十种场景**
+
+「这个 skill 处理所有 PR 相关任务」——开 PR、关 PR、review、合并、描述全部塞进一个。结果 description 太宽，命中混乱，维护爆炸。拆成多个小 skill，每个职责单一，命中更准、维护更轻。
+
+**坑四：description 用营销腔**
+
+「强大的 PR 处理能力，智能生成专业描述」——这种话 agent loop 看不懂，也不会提升命中率。description 要写动词 + 对象的具体组合：「写 PR 描述」「套 PR 模板」，不要形容词。
+
+**坑五：把机密写进 SKILL.md**
+
+skill 文件如果推到公开仓库，里面的内部链接、客户名、token 都会泄露。机密信息走 config 或环境变量，不要写进 SKILL.md。
+
+**坑六：不更新，让它烂掉**
+
+团队的 PR 模板改版了，你的 skill 还在套旧模板。定期（每月一次）回看高频 skill，确认内容还有效。过时的 skill 比没有 skill 更糟——它会输出错误结果，还让你以为是 Hermes 本身的问题。
+
+**坑七：忽视辅助文件的价值**
+
+所有内容都塞进 SKILL.md，文件越来越大，agent loop 加载成本上升。把长模板、详细 checklist、示例库拆成辅助文件，SKILL.md 里只留入口指引。第 6 篇讲的 progressive disclosure 在这里发力。
+
+---
+
+## 八、权衡：什么时候不该自己写 skill
+
+手写 skill 的时间成本是真实的——一个好的 skill 可能要迭代一周才顺手。它替代的是「以后无数次重复解释」。值得不值得，看你这个任务会不会再做 5 次以上。
+
+**用 skill 的成本**：
+
+- 写 + 调试：初次 1-3 小时，迭代一周打磨到稳定
+- 维护：每月 5-10 分钟回看
+- 学习曲线：理解 frontmatter、调试命中、git 管理
+
+**不用 skill 的成本**：
+
+- 每次任务都要重新解释给 Hermes：每次 5-15 分钟
+- 解释质量不稳定：每次跑出来的结果不一样
+- 团队对齐成本：每个人做法都不一样
+
+**判断标准**：
+
+- 任务高频（每月 5 次以上）→ 写 skill
+- 任务低频但单次成本高（每次省 1 小时以上）→ 写 skill
+- 任务一次性 → 直接让 Hermes 做，不写
+- 任务还在探索期，做法不稳定 → 等稳定了再写
+
+另一个维度：**市面上有没有现成的**。第 8 篇会讲 Skills Hub，很多通用 skill（PR 模板、commit message、code review）社区已经有人写好。先去找，找不到再自己写。
+
+---
+
+## 九、动手清单
+
+如果你想现在就开始写第一个 skill，按这个顺序走：
+
+1. **挑任务**：回顾这周你跟 Hermes 解释过两次以上的同一件事
+2. **写草稿**：按本篇给的 SKILL.md 模板填一遍（frontmatter + 何时触发 + 步骤 + 边界 + 输出示例）
+3. **放进目录**：`~/.hermes/skills/<name>/SKILL.md`
+4. **git 初始化**：`cd ~/.hermes/skills && git init && git add -A && git commit -m "init"`
+5. **调试**：跑 `/skills` 确认加载 → `/<skill-name>` 强制触发 → 自然语言看是否命中
+6. **三次微调测试**：换三种说法，看输出稳定性
+7. **边界测试**：歧义、极端数据、错误前置三个场景
+8. **加锁或备份**：打磨到位的 skill 加进「禁止自动修改」清单，或确保 git 提交干净
+9. **持续观察**：用一周后回看，根据实际跑出来的质量迭代 SKILL.md
+
+第一个 skill 跑顺后，后面越写越快。你也会逐渐摸清 agent loop 的命中规律——什么词容易被检索到、什么写法容易被忽略。这是写好 skill 的隐性技能，只有动手才能积累。
+
+---
+
+## 十、结论
+
+挑高频任务 → 写 SKILL.md（重点 description 和边界）→ `/skills` 验证 → 用 git 管住 → 改坏了能回滚 → 连测三次确认稳定。这五步是手写 skill 的最小可重复流程。
+
+关键认知：
+
+- skill 的价值不在「写出来」，在「调试到真的好用」
+- description 决定命中率，边界决定稳定性，git 决定可回滚
+- Hermes 会自己改 skill，没 git 等于裸奔
+- 第一个 skill 别追求完美，跑起来再迭代
+
+下一篇第 8 篇讲 Skills Hub——除了自己写，怎么从社区找现成 skill 装进来，以及怎么把自己的 skill 分发出去。
+
+---
 
 ## 延伸阅读
 
-- [Hermes Skills System 文档（含调试）](https://hermes-agent.nousresearch.com/docs/)
-- [agentskills.io 标准](https://agentskills.io/)
-- [第 6 篇：skill 文件结构](./06-agentskills-standard-and-skill-file-structure.md)
+- [Hermes Agent — Creating Skills（开发者指南）](https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills)
+- [Hermes Agent — Skills System（含 agent 可修改 skill 的说明）](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
+- [Hermes Agent — Work with Skills（实战指南）](https://hermes-agent.nousresearch.com/docs/guides/work-with-skills)
+- [Hermes Agent — Skill Authoring（in-repo 写法）](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/software-development/software-development-hermes-agent-skill-authoring)
+- [Hermes Agent — Optional Skills Catalog（bundled skill 真实例子）](https://hermes-agent.nousresearch.com/docs/reference/optional-skills-catalog)
+- [Hermes Agent — Profile Distributions（用 git 仓库分享整个 agent）](https://hermes-agent.nousresearch.com/docs/user-guide/profile-distributions)
+- [agentskills.io — SKILL.md 开放标准规范](https://agentskills.io/specification)
+- [Edit Hermes Agent Skills Without Breaking the Loop（社区：防止学习循环覆盖你的修改）](https://lumadock.com/tutorials/hermes-skills-without-breaking-loop)
+- [Backup Hermes Agent（社区：备份 skills 的实践）](https://j3ffyang.medium.com/backup-hermes-agent-2319c30030e4)
+- [Feature Request: Built-in Backup & Version Control（官方 issue 跟踪）](https://github.com/NousResearch/hermes-agent/issues/12238)
+- [第 6 篇：agentskills 标准与 skill 文件结构](./06-agentskills-standard-and-skill-file-structure.md)
+- [第 8 篇：Skills Hub 使用](./08-skills-hub-usage.md)
+- [第 9 篇：skill 自我改进机制（学习循环怎么 patch skill）](./09-skill-self-improvement-mechanism.md)
