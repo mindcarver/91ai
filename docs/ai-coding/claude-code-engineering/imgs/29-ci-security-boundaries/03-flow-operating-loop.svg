@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <rect width="1440" height="900" fill="#F6F1E7" />
+  <rect x="40" y="36" width="1360" height="828" rx="44" fill="#F6F1E7" stroke="#E7DED0" stroke-width="1.5" />
+  <circle cx="1330" cy="110" r="16" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1368" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="1394" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="182" cy="760" r="6" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1220" cy="758" r="6" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="1.5"  />
+<line x1="118" y1="178" x2="220" y2="178" stroke="#E58A5C" stroke-width="4" stroke-linecap="round" />
+<line x1="1106" y1="756" x2="1198" y2="756" stroke="#D8CFC1" stroke-width="3" stroke-linecap="round" />
+  <rect x="88" y="78" width="172" height="48" rx="18" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="1.5"  />
+<text x="118" y="110" fill="#7C7468" font-size="20" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="118" dy="0">Operating Loop</tspan></text>
+<text x="88" y="212" fill="#1B1B1B" font-size="44" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="88" dy="0">CI 里的安全边界：Secrets、外部 P</tspan><tspan x="88" dy="56.32">R、权限和审批</tspan></text>
+<text x="90" y="284" fill="#7C7468" font-size="22" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="90" dy="0">安全审计清单</tspan></text>
+  <rect x="116" y="438" width="248" height="138" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="134" y="456" width="72" height="32" rx="16" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<text x="150" y="480" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="150" dy="0">01</tspan></text>
+<text x="140" y="524" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="140" dy="0">问题</tspan></text>
+<rect x="430" y="560" width="248" height="138" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="448" y="578" width="72" height="32" rx="16" fill="#BCD9D0" stroke="none" stroke-width="0"  />
+<text x="464" y="602" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="464" dy="0">02</tspan></text>
+<text x="454" y="646" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="454" dy="0">威胁模型</tspan></text>
+<rect x="744" y="438" width="248" height="138" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="762" y="456" width="72" height="32" rx="16" fill="#E7CB8F" stroke="none" stroke-width="0"  />
+<text x="778" y="480" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="778" dy="0">03</tspan></text>
+<text x="768" y="524" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="768" dy="0">安全防护配置</tspan></text>
+<rect x="1058" y="560" width="248" height="138" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="1076" y="578" width="72" height="32" rx="16" fill="#E6D9CA" stroke="none" stroke-width="0"  />
+<text x="1092" y="602" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1092" dy="0">04</tspan></text>
+<text x="1082" y="646" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1082" dy="0">安全审计清单</tspan></text>
+  <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#1B1B1B" />
+        </marker>
+        <marker id="arrow-soft" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#D8CFC1" />
+        </marker>
+      </defs>
+<rect x="88" y="332" width="1264" height="42" rx="18" fill="#FFF8F1" stroke="#D8CFC1" stroke-width="1.5"  />
+<text x="720" y="360" fill="#7C7468" font-size="20" font-weight="600" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">从理解到执行，再到校验与复盘的工程回路</tspan></text>
+<line x1="364" y1="508" x2="430" y2="508" stroke="#1B1B1B" stroke-width="3" marker-end="url(#arrow)" />
+<line x1="678" y1="630" x2="744" y2="630" stroke="#1B1B1B" stroke-width="3" marker-end="url(#arrow)" />
+<line x1="992" y1="508" x2="1058" y2="508" stroke="#1B1B1B" stroke-width="3" marker-end="url(#arrow)" />
+<path d="M 1186 640 C 1288 708, 1280 780, 988 792" fill="none" stroke="#D8CFC1" stroke-width="2.4" stroke-dasharray="9 9" marker-end="url(#arrow-soft)" />
+</svg>

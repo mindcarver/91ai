@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">Loop 是递归控制系统，不是一次性 Prompt</text>
+  <text class="sub" x="80" y="126">上一轮输出成为下一轮输入，递归才成立</text>
+  
+  <circle cx="800" cy="455" r="118" fill="#FFF8EE" stroke="#2D2D2D" stroke-width="5"/><text class="label" x="800" y="445" text-anchor="middle">STATE.md</text><text class="small" x="800" y="482" text-anchor="middle">durable memory</text>
+  <rect class="box" x="635" y="185" width="330" height="100" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="800" y="237" text-anchor="middle">Trigger</text>
+  <text class="small" x="800" y="277" text-anchor="middle">cron / manual</text>
+  <rect class="box" x="1060" y="325" width="310" height="100" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="1215" y="377" text-anchor="middle">Read State</text>
+  <text class="small" x="1215" y="417" text-anchor="middle">LOOP / STATE / VISION</text>
+  <rect class="box" x="995" y="590" width="310" height="100" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="1150" y="642" text-anchor="middle">Collect Data</text>
+  <text class="small" x="1150" y="682" text-anchor="middle">issue / PR / CI</text>
+  <rect class="box" x="295" y="590" width="310" height="100" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="450" y="642" text-anchor="middle">Classify</text>
+  <text class="small" x="450" y="682" text-anchor="middle">P0 / P1 / watch / noise</text>
+  <rect class="box" x="230" y="325" width="310" height="100" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="385" y="377" text-anchor="middle">Write Report</text>
+  <text class="small" x="385" y="417" text-anchor="middle">STATE + loop-runs</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M825 292 C1080 260 1230 305 1220 325"/><path class="arrow" marker-end="url(#arrow)" d="M1220 430 C1240 535 1170 575 1135 590"/><path class="arrow" marker-end="url(#arrow)" d="M995 655 C820 775 615 720 605 655"/><path class="arrow" marker-end="url(#arrow)" d="M465 590 C310 540 305 455 365 425"/><path class="arrow" marker-end="url(#arrow)" d="M540 375 C630 315 700 290 770 285"/>
+  <rect class="box" x="440" y="760" width="720" height="72" fill="#FFF8EE"/><text class="label" x="800" y="806" text-anchor="middle">状态传得稳，比 prompt 写得漂亮更重要</text>
+
+</svg>

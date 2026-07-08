@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}.accent{fill:#E8655A}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">越有效的 Loop，欠下的三种债越深</text>
+  
+  <text class="sub" x="80" y="126">自动化吞吐越高，人类理解、验证和协调压力越需要被显式偿还</text>
+  <rect class="box" x="120" y="210" width="395" height="350" fill="#FFD5C2" filter="url(#shadow)"/><text class="label" x="317.5" y="262" text-anchor="middle">理解债</text><text class="small" x="317.5" y="298" text-anchor="middle">系统真实状态 &gt; 人的心智模型</text>
+  <rect class="box" x="602" y="210" width="395" height="350" fill="#A8D8EA" filter="url(#shadow)"/><text class="label" x="799.5" y="262" text-anchor="middle">验证债</text><text class="small" x="799.5" y="298" text-anchor="middle">产出越多，验证负担越重</text>
+  <rect class="box" x="1085" y="210" width="395" height="350" fill="#D5C6E0" filter="url(#shadow)"/><text class="label" x="1282.5" y="262" text-anchor="middle">信任债</text><text class="small" x="1282.5" y="298" text-anchor="middle">多个 loop 的隐式依赖</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M215 500 C270 455 300 410 325 330"/><path class="arrow" marker-end="url(#arrow)" d="M700 500 C755 455 785 410 810 330"/><path class="arrow" marker-end="url(#arrow)" d="M1180 500 C1235 455 1265 410 1290 330"/>
+  <text class="label" x="318" y="615" text-anchor="middle">每周读 PR</text><text class="label" x="800" y="615" text-anchor="middle">deterministic verifier</text><text class="label" x="1282" y="615" text-anchor="middle">loop 依赖图</text>
+  <rect class="box" x="120" y="655" width="395" height="88" fill="#B5E5CF"/><text class="small" x="318" y="710" text-anchor="middle">还理解债</text>
+  <rect class="box" x="602" y="655" width="395" height="88" fill="#B5E5CF"/><text class="small" x="800" y="710" text-anchor="middle">还验证债</text>
+  <rect class="box" x="1085" y="655" width="395" height="88" fill="#B5E5CF"/><text class="small" x="1282" y="710" text-anchor="middle">还信任债</text>
+  <circle cx="470" cy="260" r="16" fill="#E8655A" stroke="#2D2D2D" stroke-width="4"/><circle cx="952" cy="260" r="16" fill="#E8655A" stroke="#2D2D2D" stroke-width="4"/><circle cx="1435" cy="260" r="16" fill="#E8655A" stroke="#2D2D2D" stroke-width="4"/>
+
+</svg>

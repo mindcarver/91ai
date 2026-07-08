@@ -1,0 +1,311 @@
+{
+  "count": 34,
+  "results": [
+    {
+      "article": "00-claude-code-as-agent-runtime.md",
+      "title": "Claude Code 不是代码补全，而是工程代理运行时",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/00-claude-code-as-agent-runtime/media/01-claude-code-agent-runtime-cover.png",
+      "summary": "Claude Code 的价值不在于\"多写几行代码\"，而在于把模型放进一个能读仓库、改文件、跑命令、接工具、受权限约束的执行环境。把它当工程代理运行时来配置和治理，而不是 IDE 补全插件来用。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1cxlIS5WtYiu_h-yNMrpo-Ejupu7A9v98ErWd78FQO2Y",
+      "articleType": "news"
+    },
+    {
+      "article": "01-context-validation-permission.md",
+      "title": "你真正要解决的是上下文搬运、验证缺失和权限失控",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/01-context-validation-permission/media/01-01-context-validation-permission-cover.png",
+      "summary": "AI Coding 在真实项目中的失败，几乎不是模型能力不足，而是三个工程问题的叠加：上下文不完整导致误判、生成结果缺乏验证链路、权限边界过宽导致事故半径扩大。Claude Code 工程化的起点，是把这三个问题显式化并配好对应机制。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1eAXqORd4DBV7D_aMxqnW44AC4tHFpF3Bk7tq7QGjnTe",
+      "articleType": "news"
+    },
+    {
+      "article": "02-setup-permission-first-repo-task.md",
+      "title": "安装、登录、权限模式和第一个真实仓库任务",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/02-setup-permission-first-repo-task/media/01-02-setup-permission-first-repo-task-cover.png",
+      "summary": "安装 Claude Code 后的第一次操作不应该是让它写代码。正确的顺序是：安装认证 → 配置权限 → 验证项目上下文是否充分 → 做一个低风险的诊断任务。跳过前两步直接上功能的团队，后面花在修复 AI 误操作上的时间是前期配置的 8-10 倍。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bIM764Si5i89ZN9uDCfCx01oFEwVE0xRoo4h_f0jPxN",
+      "articleType": "news"
+    },
+    {
+      "article": "03-project-map.md",
+      "title": "项目地图：让 Claude Code 读懂目录、命令和边界",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/03-project-map/media/01-03-project-map-cover.png",
+      "summary": "项目地图不是目录树打印。它是一份结构化声明，告诉 Claude Code 哪些目录存在、各管什么、服务怎么调用、命令怎么跑、哪些东西不能碰。没有地图，Claude Code 靠搜索猜结构——猜错一次就是跨模块耦合的开始。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1SrlW5VfVH1GJD-eLv46AlAP5QrFcQpPPiwlqsqX-wpD",
+      "articleType": "news"
+    },
+    {
+      "article": "04-claude-md-project-memory.md",
+      "title": "CLAUDE.md：把团队规则写成机器可用上下文",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/04-claude-md-project-memory/media/01-04-claude-md-project-memory-cover.png",
+      "summary": "`CLAUDE.md` 不是给人读的文档，是给模型读的工程规格。它控制 Claude Code 的行为边界，每次会话都被全量加载到上下文。写得好，省掉反复提醒；写得差，浪费 Token 还不生效。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1fKVjfVupccjSoOleK5xJ-54LWbpOjQXkcBYXeXp_BrJ",
+      "articleType": "news"
+    },
+    {
+      "article": "05-rules-path-scoped-context.md",
+      "title": ".claude/rules：把大规则拆成按路径加载的小规则",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/05-rules-path-scoped-context/media/01-05-rules-path-scoped-context-cover.png",
+      "summary": "`CLAUDE.md` 每次会话全量加载，规则多了就变成噪声。`.claude/rules/` 目录里的 Markdown 文件可以按路径匹配按需加载——编辑前端时只加载前端规则，改数据库时只加载数据库规则。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RaUMefR5ne1-BF1cbmg6KoVoLPJ1hGOB0KvxkyF7AhC",
+      "articleType": "news"
+    },
+    {
+      "article": "06-common-workflows.md",
+      "title": "常用工作流：解释代码、修 Bug、补测试、写文档",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/06-common-workflows/media/01-06-common-workflows-cover.png",
+      "summary": "解释代码、修 Bug、补测试、更新文档——四个高频低风险工作流。跑通这四个，等于验证了 CLAUDE.md、测试闭环和模块边界。跑不通就别做复杂任务。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1TXBejpkMEgbV5drN9aN0LFoPMmLLFLyeVCyt4FOfWKl",
+      "articleType": "news"
+    },
+    {
+      "article": "07-slash-commands.md",
+      "title": "Slash Commands：把一次性提示词变成团队命令",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/07-slash-commands/media/01-07-slash-commands-cover.png",
+      "summary": "Slash Commands 是 `.claude/commands/` 里的 Markdown 文件，按需加载，用 `$ARGUMENTS` 参数化。它解决的是\"第三次重复写同一段提示词\"的问题——把高频、短流程的任务固化成版本化文件，消除提示词漂移，统一团队输出标准。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1U9M6dsRSxDMyMphjTm_P8h0Jqi8DDHvq9JpJKF_tu58",
+      "articleType": "news"
+    },
+    {
+      "article": "08-skills-from-command-to-capability.md",
+      "title": "Skills 入门：什么时候该从命令升级为 Skill",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/08-skills-from-command-to-capability/media/01-08-skills-from-command-to-capability-cover.png",
+      "summary": "Command 是一段可复用提示词，Skill 是一套结构化能力。当任务需要多步骤、外部资源、脚本执行或渐进式加载时，Command 已经不够用了——该升级。升级不是目的，解决 Command 无法承担的复杂性才是。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RmPVKb9iQcLuW-KqdFdrK8eX0wMvNaJEPN9qcK6FWdi",
+      "articleType": "news"
+    },
+    {
+      "article": "09-skill-md-structure.md",
+      "title": "SKILL.md 结构：触发描述、步骤、资源和脚本",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/09-skill-md-structure/media/01-09-skill-md-structure-cover.png",
+      "summary": "SKILL.md 是 Claude Code 的最小可执行能力单元。它的结构直接决定了三个结果：能否被正确触发、加载后能否正确执行、执行时 Token 消耗是否可控。写好 SKILL.md 不是写好提示词，是设计好一个可复用的操作规程。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1aP5mXdgiqL7rFRngOicIhDvvyJEgqYTXCeq3iNiuLm-",
+      "articleType": "news"
+    },
+    {
+      "article": "10-progressive-disclosure.md",
+      "title": "渐进式披露：避免 Skill 一次塞爆上下文",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/10-progressive-disclosure/media/01-10-progressive-disclosure-cover.png",
+      "summary": "每个 token 进上下文都意味着一个 token 不可用于实际任务。500 行的 Skill 全量加载可消耗 8000+ token。正确做法：SKILL.md 只放触发和路由，模板、脚本、参考资料按需读取。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1ZDAQb1eJneJ1L2bbKqlGe6oux9j9xuXZ8GrDG6LfWoh",
+      "articleType": "news"
+    },
+    {
+      "article": "11-skill-evaluation.md",
+      "title": "Skill 评测：欠触发、误触发和执行失败怎么修",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/11-skill-evaluation/media/01-11-skill-evaluation-cover.png",
+      "summary": "Skill 写完不等于能用。三类核心故障——欠触发、误触发、执行失败——各有根因和修复路径。用 15 条评测集量化触发精度，用评分表量化输出质量，迭代三轮再上线。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1T6Wa_MwGzGe_U0ttx0LhGh7Et64jYECNb12RK9XB02y",
+      "articleType": "news"
+    },
+    {
+      "article": "12-subagents-mental-model.md",
+      "title": "Subagents 的本质：独立上下文里的专家助手",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/12-subagents-mental-model/media/01-12-subagents-mental-model-cover.png",
+      "summary": "Subagent 不是\"更聪明的 Claude\"。它是一块隔离的执行沙箱：独立上下文窗口、独立系统提示词、独立工具白名单。用来做\"完成后汇报\"的专门任务，而不是替代主会话做持续编辑。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Z436LM2RXi-ax5cXEStOx98ntPz7aHw0hm43RdQm60s",
+      "articleType": "news"
+    },
+    {
+      "article": "13-high-value-subagents.md",
+      "title": "三类高价值 Subagent：探索、审查、测试",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/13-high-value-subagents/media/01-13-high-value-subagents-cover.png",
+      "summary": "最值得先做的 Subagent 是 explorer、reviewer、test-runner。它们任务边界清楚，能独立工作，结果容易验证。不要一开始就创建十几个角色，先跑稳这三个。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1UTSUNN2Ji9q09VCIt30pjiZJp1SoCmKd3p8NrKNvPuk",
+      "articleType": "news"
+    },
+    {
+      "article": "14-subagent-tool-permissions.md",
+      "title": "工具权限：只读审计代理为什么不能有写权限",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/14-subagent-tool-permissions/media/01-14-subagent-tool-permissions-cover.png",
+      "summary": "Subagent 的工具权限应该按任务最小化。审计、研究、测试诊断通常不需要写文件权限。权限升级应该基于失败证据，而不是预期需求。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bk5gwxR8fuBoFO8Fw1io0yk9Hc4v5MHgARkjqx8Lzbu",
+      "articleType": "news"
+    },
+    {
+      "article": "15-parallel-exploration.md",
+      "title": "并行探索：让多个代理独立研究再汇总",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/15-parallel-exploration/media/01-15-parallel-exploration-cover.png",
+      "summary": "并行探索适合大任务的前期判断。让多个 subagent 分别研究不同方向，再由主会话整合方案。并行会增加总 token 消耗，但显著减少挂钟时间。关键前提：任务必须能拆成相互独立的问题。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1USXJ_l0hQYX0gLY0uLGg5wATiktMGmMDbPuqfI67jiT",
+      "articleType": "news"
+    },
+    {
+      "article": "16-when-not-to-use-subagents.md",
+      "title": "不该用 Subagent 的场景：共享细节和连续编辑",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/16-when-not-to-use-subagents/media/01-16-when-not-to-use-subagents-cover.png",
+      "summary": "Subagent 不适合所有复杂任务。需要频繁共享细节、连续编辑同一批文件、上下文高度耦合的任务，留在主会话更稳。不是所有任务都值得隔离——有时候隔离本身就是成本。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1avflQ6rIM3ttPyR7ir_jYu28rcQmyjBdGA9zAF7M13a",
+      "articleType": "news"
+    },
+    {
+      "article": "17-mcp-mental-model.md",
+      "title": "MCP 心智模型：外部系统不是复制粘贴，而是工具接口",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/17-mcp-mental-model/media/01-17-mcp-mental-model-cover.png",
+      "summary": "MCP 让 Claude Code 把外部系统当作结构化工具来调用，而不是让人类做中间搬运工。但 MCP 不是万能胶水——理解它的协议边界、工具定义模型和风险特征，才能判断什么该接、什么不该接。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1WI_ClbH0_mUG66Ao-a6S__eP6RLZj7D6UU0soyjES3F",
+      "articleType": "news"
+    },
+    {
+      "article": "18-github-mcp.md",
+      "title": "第一个 MCP：GitHub Issue、PR 和代码上下文",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/18-github-mcp/media/01-18-github-mcp-cover.png",
+      "summary": "GitHub MCP 是最适合作为第一个 MCP 接入的系统。它已经在开发者的日常工作流中，数据以读为主，权限可以精确分级，且 AI 辅助编码的核心上下文——issue、PR、代码、CI——都集中在这里。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1VoCCiTHDIE23Z4EUUFzsJTBoDXpVN-uvlcVjA7Q08Oj",
+      "articleType": "news"
+    },
+    {
+      "article": "19-high-value-mcp-scenarios.md",
+      "title": "数据库、监控和设计系统：高价值 MCP 场景",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/19-high-value-mcp-scenarios/media/01-19-high-value-mcp-scenarios-cover.png",
+      "summary": "GitHub MCP 建立基础后，高价值的下一步是接入那些减少\"信息搬运瓶颈\"的系统。每个场景有不同的权限模型、Token 消耗特征和风险等级。引入顺序应该由团队的实际工作流决定，而不是技术难度。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Svr-E3QOYPQOol4T5CDzfN4AD5fKXr_hyg1R40Tr1cU",
+      "articleType": "news"
+    },
+    {
+      "article": "20-mcp-plus-skills.md",
+      "title": "MCP + Skill：让工具按团队 SOP 被正确使用",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/20-mcp-plus-skills/media/01-20-mcp-plus-skills-cover.png",
+      "summary": "MCP 提供\"能做什么\"，Skill 提供\"应该怎么做\"。只接 MCP 不写 Skill，等于给实习生一个 API key 但不给他操作手册——工具在手里，但流程在脑子里，而 AI 的脑子里没有你的团队流程。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1S2E4cHM2fwknBBqX3HhsDntEnCR_E9hFhUuCjwfXcUV",
+      "articleType": "news"
+    },
+    {
+      "article": "21-mcp-risks.md",
+      "title": "MCP 风险：Token、越权、工具投毒和提示注入",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/21-mcp-risks/media/01-21-mcp-risks-cover.png",
+      "summary": "MCP 把 Claude Code 接到真实系统，也把真实系统的攻击面带到了 AI 的推理链路中。六个威胁维度、对应防护策略和审计清单。这不是理论——每个威胁都有对应的真实事故。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1eqRPXWizPUQR2CTRRIKxYBnOP6jY_mZa2JFV1HrD6Yh",
+      "articleType": "news"
+    },
+    {
+      "article": "22-hooks-introduction.md",
+      "title": "Hooks 入门：事件驱动的自动化和审计",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/22-hooks-introduction/media/01-22-hooks-introduction-cover.png",
+      "summary": "Hooks 是 Claude Code 的确定性控制层。模型负责推理，Hooks 负责在固定事件上记录、拦截、提醒和验证。它不是第二个 AI，而是纯脚本的规则引擎。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1W84ZERMziD9T2781U7cgu6jo1H8Njxtpho4Uxq3odMC",
+      "articleType": "news"
+    },
+    {
+      "article": "23-pretooluse-guardrails.md",
+      "title": "PreToolUse：阻断危险命令和高风险文件写入",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/23-pretooluse-guardrails/media/01-23-pretooluse-guardrails-cover.png",
+      "summary": "`PreToolUse` 是 Claude Code 安全控制的核心关卡。它通过退出码 2 阻断工具调用，是唯一能物理阻止 AI 行为的机制。设计原则：只拦截明确危险的操作，不做复杂业务判断。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1T_I3joL5F3P8d317OcX3GlOVwT2QQwdYq52xIQ-25qA",
+      "articleType": "news"
+    },
+    {
+      "article": "24-posttooluse-stop-verification.md",
+      "title": "PostToolUse / Stop：自动格式化、测试和结果记录",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/24-posttooluse-stop-verification/media/01-24-posttooluse-stop-verification-cover.png",
+      "summary": "修改完成后的验证比修改本身更重要。`PostToolUse` 在工具执行后做增量验证，`Stop` 在会话结束时做全局验证。两者配合形成完整的验证闭环。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1cp2qf67bH_Ds7l4NkGnE3vQ0XyrL2Mkk5hSG1MyrRMO",
+      "articleType": "news"
+    },
+    {
+      "article": "25-subagent-hooks.md",
+      "title": "Subagent Hooks：给子代理注入上下文并收集结果",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/25-subagent-hooks/media/01-25-subagent-hooks-cover.png",
+      "summary": "Subagent Hooks 管理多代理任务的边界。`SubagentStart` 在子代理启动前注入通用规则和输出约束，`SubagentStop` 在子代理结束后收集结论和审计信息。通用规则放 Hook，角色规则放 agent 配置文件。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1aADMsIwwdqgbJnsxNoACWaxqV6toB2Tqd2iRICiZ8Oz",
+      "articleType": "news"
+    },
+    {
+      "article": "26-hook-design-principles.md",
+      "title": "Hook 设计原则：小、确定、可解释、可回滚",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/26-hook-design-principles/media/01-26-hook-design-principles-cover.png",
+      "summary": "Hook 是确定性治理层，不是第二个 Agent。四条硬性约束：小（代码 ≤ 50 行，复杂度评分 ≤ 20）、确定（同样 stdin → 同样退出码）、可解释（每个 exit 2 必须带规则编号和替代方案）、可回滚（可单独禁用，禁用即时生效）。违反任一条，上线前重写。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1QogqrP_Hk4fcFdyi38LQVWjJAonMCQQO_B1_9lP-LT8",
+      "articleType": "news"
+    },
+    {
+      "article": "27-headless-mode.md",
+      "title": "Headless 模式：把 Claude Code 放进脚本",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/27-headless-mode/media/01-27-headless-mode-cover.png",
+      "summary": "Headless 模式用 `-p` 参数把 Claude Code 从交互式终端工具变成可编排的自动化组件。适合批处理、CI/CD 集成、定期巡检和低风险只读任务。关键是控制提示词作用域、设定 `--max-turns` 上限、用 `--output-format` 约束输出格式。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1S9POd5dKq063UGIn_eOWk_czmFMeibVTzjH7SWw7k5b",
+      "articleType": "news"
+    },
+    {
+      "article": "28-github-actions.md",
+      "title": "GitHub Actions：PR Review、Issue Triage 和简单修复",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/28-github-actions/media/01-28-github-actions-cover.png",
+      "summary": "GitHub Actions 把 Claude Code 接入团队协作流程。第一批场景应该是 review、triage、摘要和低风险修复，不是自动合并。配置关键是：触发条件过滤、权限最小化、提示词精确、输出格式约束。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Txse2_X7XiZsiS0AD7burYa_knwyB0hRXX9vm11qu_A",
+      "articleType": "news"
+    },
+    {
+      "article": "29-ci-security-boundaries.md",
+      "title": "CI 里的安全边界：Secrets、外部 PR、权限和审批",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/29-ci-security-boundaries/media/01-29-ci-security-boundaries-cover.png",
+      "summary": "在 CI 里运行 Claude Code，最大风险不是生成错代码，而是权限配置错误导致 secrets 泄露、外部 PR 注入、workflow 被篡改或供应链攻击。每个风险都需要独立设计防护层。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1TnvKFZkRWO08N2kE48va0JA_4GJiC9e5dfy8DiGmAAf",
+      "articleType": "news"
+    },
+    {
+      "article": "30-structured-output.md",
+      "title": "结构化输出：JSON Schema 与输出管道",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/30-structured-output/media/01-30-structured-output-cover.png",
+      "summary": "自动化场景里，Claude Code 不能只输出自然语言。结构化输出通过 `--output-format json` 和 JSON Schema 约束，让后续脚本、CI 看板和审计系统能解析和动作化结果。关键不是让模型\"输出 JSON\"，而是设计 schema、构建验证管道、处理边界情况、对接下游系统。本文覆盖完整的输出管道：从 schema 设计到解析验证、从错误恢复到下游集成。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1e5D1nk1P6QpNNn8RJpNV2sd9YK5oE1IVy-gpBGILgBp",
+      "articleType": "news"
+    },
+    {
+      "article": "31-agent-sdk.md",
+      "title": "Agent SDK：SDK 架构、集成模式与生产部署",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/31-agent-sdk/media/01-31-agent-sdk-cover.png",
+      "summary": "Agent SDK 把 Claude Code 的 agent loop、工具系统、Hooks 和 MCP 从交互式终端搬到程序化接口。核心 API 围绕 Agent、Tool、Session 三个原语构建，通过 event stream 实现状态同步。适合把能力接入内部平台、工单系统或自动化流水线。不要在单仓库个人使用阶段过早上 SDK——先在本地 CLI 验证工作流，再决定是否平台化。如果 CLI 和 Headless 模式已经满足需求，SDK 就是过度工程。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1QaVIPRnSRE8ox7QJ7XajqVmPpHB1IqsBVMCUMNC-13H",
+      "articleType": "news"
+    },
+    {
+      "article": "32-plugins.md",
+      "title": "Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/32-plugins/media/01-32-plugins-cover.png",
+      "summary": "Plugin 是 Claude Code 能力的分发单元。它把 commands、agents、skills、hooks 和 MCP servers 打包成一个可安装、可版本化、可分发的整体。适合跨仓库、跨团队复用已验证的能力集。第三方 Plugin 必须审计——它可能包含发送文件内容到外部 URL 的 Hook。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bl74OBrvktSD2XlKs_6fuC0BH-aUqo3dFtSFize9I59",
+      "articleType": "news"
+    },
+    {
+      "article": "33-organization-governance.md",
+      "title": "组织级治理：版本、审计、评测、禁用和升级策略",
+      "coverPath": "/Users/carver/workspace/mindcarver/91ai/post-to-wechat/claude-code-engineering/33-organization-governance/media/01-33-organization-governance-cover.png",
+      "summary": "组织级 Claude Code 落地不是\"全员装工具\"。它是管理七类治理对象的版本、权限、审计、评测、禁用和升级。没有治理框架的规模化推广，等于把生产环境的钥匙交给一个你无法审计的系统。",
+      "success": true,
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RrDwPmX--DSwejunHdabdjZF8SeTVZqOtW7FCI4C2GM",
+      "articleType": "news"
+    }
+  ]
+}

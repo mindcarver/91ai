@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1365" height="1024" viewBox="0 0 1365 1024" fill="none">
+  <defs>
+    <filter id="shadow-lg" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#AB9A87" flood-opacity="0.22"/>
+    </filter>
+    <filter id="shadow-sm" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#B8A692" flood-opacity="0.16"/>
+    </filter>
+    <linearGradient id="bg-glow" x1="120" y1="96" x2="1200" y2="944" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF9F1"/>
+      <stop offset="1" stop-color="#F9F1E6"/>
+    </linearGradient>
+    <linearGradient id="tile-dark" x1="164" y1="286" x2="524" y2="716" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B3834"/>
+      <stop offset="1" stop-color="#1E1C1A"/>
+    </linearGradient>
+    <linearGradient id="accent-line" x1="0" y1="0" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E78B63"/>
+      <stop offset="1" stop-color="#F2AF87"/>
+    </linearGradient>
+    <pattern id="paper-noise" width="56" height="56" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="10" r="1" fill="#EDE0D0" opacity="0.4"/>
+      <circle cx="38" cy="18" r="1.1" fill="#EDE0D0" opacity="0.36"/>
+      <circle cx="22" cy="34" r="1" fill="#EDE0D0" opacity="0.34"/>
+      <circle cx="46" cy="44" r="0.9" fill="#EDE0D0" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="1365" height="1024" fill="url(#bg-glow)"/>
+  <rect width="1365" height="1024" fill="url(#paper-noise)" opacity="0.72"/>
+  <rect x="20" y="20" width="1325" height="984" rx="34" stroke="#E9DCCB" stroke-width="2"/>
+
+  <g opacity="0.42">
+    <circle cx="144" cy="142" r="84" fill="#FBF5EC"/>
+    <circle cx="1218" cy="868" r="96" fill="#FBF5EC"/>
+  </g>
+
+  <g opacity="0.3" fill="#D9CCBD">
+    <circle cx="98" cy="498" r="6"/>
+    <circle cx="126" cy="498" r="6"/>
+    <circle cx="154" cy="498" r="6"/>
+    <circle cx="98" cy="526" r="6"/>
+    <circle cx="126" cy="526" r="6"/>
+    <circle cx="154" cy="526" r="6"/>
+    <circle cx="98" cy="554" r="6"/>
+    <circle cx="126" cy="554" r="6"/>
+    <circle cx="154" cy="554" r="6"/>
+    <circle cx="1170" cy="708" r="6"/>
+    <circle cx="1198" cy="708" r="6"/>
+    <circle cx="1226" cy="708" r="6"/>
+    <circle cx="1170" cy="736" r="6"/>
+    <circle cx="1198" cy="736" r="6"/>
+    <circle cx="1226" cy="736" r="6"/>
+    <circle cx="1170" cy="764" r="6"/>
+    <circle cx="1198" cy="764" r="6"/>
+    <circle cx="1226" cy="764" r="6"/>
+  </g>
+
+  <text x="682.5" y="96" fill="#151515" text-anchor="middle" font-size="48" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">阿新聊AI</text>
+  <line x1="650.5" y1="124" x2="714.5" y2="124" stroke="url(#accent-line)" stroke-width="5" stroke-linecap="round"/>
+
+  <text x="682.5" y="214" fill="#111111" text-anchor="middle" font-size="74" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">Claude Code 工程实战</text>
+
+  <g filter="url(#shadow-lg)">
+    <rect x="164" y="292" width="360" height="408" rx="66" fill="url(#tile-dark)" stroke="#4B4641" stroke-width="3"/>
+    <rect x="175" y="303" width="338" height="386" rx="58" stroke="#58524C" stroke-width="1.5" opacity="0.42"/>
+  </g>
+
+  <g fill="#F89A6F" filter="url(#shadow-sm)">
+    <rect x="280" y="396" width="128" height="16"/>
+    <rect x="270" y="412" width="148" height="32"/>
+    <rect x="270" y="444" width="148" height="36"/>
+    <rect x="248" y="466" width="192" height="28"/>
+    <rect x="274" y="484" width="140" height="42"/>
+    <rect x="286" y="526" width="30" height="34"/>
+    <rect x="372" y="526" width="30" height="34"/>
+    <rect x="284" y="494" width="22" height="22"/>
+    <rect x="382" y="494" width="22" height="22"/>
+    <rect x="258" y="460" width="22" height="34"/>
+    <rect x="408" y="460" width="22" height="34"/>
+    <rect x="300" y="550" width="18" height="38"/>
+    <rect x="326" y="550" width="36" height="38"/>
+    <rect x="370" y="550" width="18" height="38"/>
+    <rect x="290" y="578" width="16" height="20"/>
+    <rect x="382" y="578" width="16" height="20"/>
+  </g>
+
+  <rect x="312" y="442" width="18" height="46" fill="#1D1B19"/>
+  <rect x="358" y="442" width="18" height="46" fill="#1D1B19"/>
+
+  <text x="344" y="624" fill="#F6F0E8" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="4" font-family="Menlo, Monaco, Consolas, monospace">CLAUDE</text>
+  <text x="344" y="664" fill="#F6F0E8" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="4" font-family="Menlo, Monaco, Consolas, monospace">CODE</text>
+  <line x1="326" y1="690" x2="362" y2="690" stroke="#F89A6F" stroke-width="7" stroke-linecap="round"/>
+
+  <text x="940" y="432" fill="#141414" text-anchor="middle" font-size="52" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">从安装到第一个真实任务</text>
+  <text x="940" y="506" fill="#141414" text-anchor="middle" font-size="52" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">Claude Code 的权限模式</text>
+  <text x="940" y="580" fill="#141414" text-anchor="middle" font-size="52" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">怎么选</text>
+
+  <line x1="822" y1="644" x2="896" y2="644" stroke="url(#accent-line)" stroke-width="7" stroke-linecap="round"/>
+
+  <text x="940" y="712" fill="#433F39" text-anchor="middle" font-size="26" font-weight="600" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">安装认证、权限配置、上下文验证</text>
+  <text x="940" y="754" fill="#433F39" text-anchor="middle" font-size="26" font-weight="600" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">先做低风险诊断，再进入真实任务</text>
+
+  <line x1="510" y1="828" x2="626" y2="828" stroke="#141414" stroke-width="3"/>
+  <line x1="740" y1="828" x2="856" y2="828" stroke="#141414" stroke-width="3"/>
+  <path d="M 683 816 l 12 12 l -12 12 l -12 -12 z" fill="#141414"/>
+
+  <g filter="url(#shadow-sm)">
+    <rect x="288" y="844" width="790" height="56" rx="18" fill="#FFF9F1" stroke="#141414" stroke-width="3"/>
+  </g>
+  <text x="683" y="880" fill="#141414" text-anchor="middle" font-size="30" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">史上最全AI资料 搜 mindcarver/91ai</text>
+</svg>

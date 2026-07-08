@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <rect width="1440" height="900" fill="#F6F1E7" />
+  <rect x="40" y="36" width="1360" height="828" rx="44" fill="#F6F1E7" stroke="#E7DED0" stroke-width="1.5" />
+  <circle cx="1330" cy="110" r="16" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1368" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="1394" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="182" cy="760" r="6" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1220" cy="758" r="6" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="1.5"  />
+<line x1="118" y1="178" x2="220" y2="178" stroke="#E58A5C" stroke-width="4" stroke-linecap="round" />
+<line x1="1106" y1="756" x2="1198" y2="756" stroke="#D8CFC1" stroke-width="3" stroke-linecap="round" />
+  <rect x="88" y="78" width="172" height="48" rx="18" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="1.5"  />
+<text x="118" y="110" fill="#7C7468" font-size="20" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="118" dy="0">Guardrails</tspan></text>
+<text x="88" y="212" fill="#1B1B1B" font-size="44" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="88" dy="0">数据库、监控和设计系统：高价值 MCP 场景</tspan></text>
+<text x="90" y="284" fill="#7C7468" font-size="22" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="90" dy="0">Token 消耗和延迟对比</tspan></text>
+  <rect x="96" y="376" width="516" height="454" rx="30" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="830" y="376" width="516" height="454" rx="30" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="120" y="404" width="140" height="34" rx="17" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<rect x="854" y="404" width="140" height="34" rx="17" fill="#BCD9D0" stroke="none" stroke-width="0"  />
+<text x="146" y="428" fill="#7C7468" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="146" dy="0">关注点 A</tspan></text>
+<text x="880" y="428" fill="#7C7468" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="880" dy="0">关注点 B</tspan></text>
+<text x="122" y="492" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="122" dy="0">从 GitHub MCP 到</tspan><tspan x="122" dy="38.4">多…</tspan></text>
+<text x="856" y="492" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="856" dy="0">交叉参考</tspan></text>
+<circle cx="134" cy="566" r="8" fill="#E58A5C" stroke="#E58A5C" stroke-width="1"  />
+<text x="158" y="574" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="158" dy="0">从 GitHub MCP 到</tspan><tspan x="158" dy="28.16">多系统…</tspan></text>
+<circle cx="134" cy="638" r="8" fill="#E58A5C" stroke="#E58A5C" stroke-width="1"  />
+<text x="158" y="646" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="158" dy="0">场景评估框架</tspan></text>
+<circle cx="134" cy="710" r="8" fill="#E58A5C" stroke="#E58A5C" stroke-width="1"  />
+<text x="158" y="718" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="158" dy="0">场景间协作的真实案例</tspan></text>
+<circle cx="868" cy="566" r="8" fill="#1B1B1B" stroke="#1B1B1B" stroke-width="1"  />
+<text x="892" y="574" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="892" dy="0">场景选择决策矩阵</tspan></text>
+<circle cx="868" cy="638" r="8" fill="#1B1B1B" stroke="#1B1B1B" stroke-width="1"  />
+<text x="892" y="646" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="892" dy="0">MCP 引入的 Token </tspan><tspan x="892" dy="28.16">消耗预算</tspan></text>
+<circle cx="868" cy="710" r="8" fill="#1B1B1B" stroke="#1B1B1B" stroke-width="1"  />
+<text x="892" y="718" fill="#1B1B1B" font-size="22" font-weight="600" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="892" dy="0">交叉参考</tspan></text>
+<line x1="720" y1="402" x2="720" y2="810" stroke="#D8CFC1" stroke-width="2.6" stroke-dasharray="8 10" />
+<circle cx="720" cy="524" r="14" fill="#E7CB8F" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="720" cy="642" r="14" fill="#F2D1BD" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="720" cy="760" r="14" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="1.5"  />
+<text x="720" y="472" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">Token 消耗和延迟对</tspan><tspan x="720" dy="30.72">比</tspan></text>
+  undefined
+</svg>

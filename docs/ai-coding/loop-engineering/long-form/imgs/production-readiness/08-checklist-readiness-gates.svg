@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">生产 Readiness 五道门</text>
+  <text class="sub" x="80" y="126">升级前逐项过，任何 gap 都是风险面</text>
+  
+  <rect class="box" x="70" y="250" width="275" height="365" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="207.5" y="302" text-anchor="middle">基础设施</text>
+  <text class="small" x="207.5" y="335" text-anchor="middle">STATE.md</text>
+  <text class="small" x="207.5" y="369" text-anchor="middle">run log</text>
+  <text class="small" x="207.5" y="403" text-anchor="middle">kill switch</text>
+  <text class="small" x="207.5" y="437" text-anchor="middle">denylist</text>
+  <text class="small" x="207.5" y="471" text-anchor="middle">budget cap</text>
+  <rect class="box" x="375" y="250" width="275" height="365" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="512.5" y="302" text-anchor="middle">maker/checker</text>
+  <text class="small" x="512.5" y="335" text-anchor="middle">不同上下文</text>
+  <text class="small" x="512.5" y="369" text-anchor="middle">确定性命令</text>
+  <text class="small" x="512.5" y="403" text-anchor="middle">commit + exit code</text>
+  <text class="small" x="512.5" y="437" text-anchor="middle">done = claim</text>
+  <rect class="box" x="680" y="250" width="275" height="365" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="817.5" y="302" text-anchor="middle">风险面</text>
+  <text class="small" x="817.5" y="335" text-anchor="middle">窄范围</text>
+  <text class="small" x="817.5" y="369" text-anchor="middle">worktree</text>
+  <text class="small" x="817.5" y="403" text-anchor="middle">connector 最后开</text>
+  <text class="small" x="817.5" y="437" text-anchor="middle">attempt limit</text>
+  <rect class="box" x="985" y="250" width="275" height="365" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="1122.5" y="302" text-anchor="middle">runtime</text>
+  <text class="small" x="1122.5" y="335" text-anchor="middle">identity</text>
+  <text class="small" x="1122.5" y="369" text-anchor="middle">durable state</text>
+  <text class="small" x="1122.5" y="403" text-anchor="middle">guardrails</text>
+  <text class="small" x="1122.5" y="437" text-anchor="middle">human gates</text>
+  <rect class="box" x="1290" y="250" width="240" height="365" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="1410" y="302" text-anchor="middle">团队</text>
+  <text class="small" x="1410" y="335" text-anchor="middle">读输出</text>
+  <text class="small" x="1410" y="369" text-anchor="middle">信任信号</text>
+  <text class="small" x="1410" y="403" text-anchor="middle">债务 owner</text>
+  <text class="small" x="1410" y="437" text-anchor="middle">依赖图</text>
+  <rect class="box" x="440" y="720" width="720" height="78" fill="#FFF8EE"/><text class="label" x="800" y="770" text-anchor="middle">readiness gap 越多，越不该升级</text>
+
+</svg>

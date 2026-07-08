@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">从 Claim 到 Proof：三种可信度</text>
+  <text class="sub" x="80" y="126">完成不是一句话，必须能被重跑证伪</text>
+  
+  <rect class="box" x="90" y="235" width="430" height="390" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="305" y="287" text-anchor="middle">A. maker 自评</text>
+  <text class="small" x="305" y="330" text-anchor="middle">同一个 agent 写代码</text>
+  <text class="small" x="305" y="366" text-anchor="middle">同一个 agent 宣布通过</text>
+  <text class="small" x="305" y="402" text-anchor="middle">STATE.md 只有 self-report</text>
+  <text class="small" x="305" y="438" text-anchor="middle">可信度最低</text>
+  <rect class="box" x="585" y="235" width="430" height="390" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="800" y="287" text-anchor="middle">B. LLM verifier</text>
+  <text class="small" x="800" y="330" text-anchor="middle">换一个视角检查</text>
+  <text class="small" x="800" y="366" text-anchor="middle">仍然是 opinion</text>
+  <text class="small" x="800" y="402" text-anchor="middle">没有退出码</text>
+  <text class="small" x="800" y="438" text-anchor="middle">仍是 claim</text>
+  <rect class="box" x="1080" y="235" width="430" height="390" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="1295" y="287" text-anchor="middle">C. deterministic proof</text>
+  <text class="small" x="1295" y="330" text-anchor="middle">npm test exit 0</text>
+  <text class="small" x="1295" y="366" text-anchor="middle">eslint exit 0</text>
+  <text class="small" x="1295" y="402" text-anchor="middle">commit abc123</text>
+  <text class="small" x="1295" y="438" text-anchor="middle">可重放、可证伪</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M525 430 H575"/><path class="arrow" marker-end="url(#arrow)" d="M1020 430 H1070"/>
+  <rect class="box" x="440" y="735" width="720" height="78" fill="#FFF8EE"/><text class="label" x="800" y="785" text-anchor="middle">done 是断言，不是证明</text>
+
+</svg>

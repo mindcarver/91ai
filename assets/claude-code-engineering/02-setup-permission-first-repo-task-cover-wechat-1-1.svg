@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <filter id="shadow-lg" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#AB9A87" flood-opacity="0.22"/>
+    </filter>
+    <filter id="shadow-sm" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#B8A692" flood-opacity="0.16"/>
+    </filter>
+    <linearGradient id="bg-glow" x1="120" y1="96" x2="900" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF9F1"/>
+      <stop offset="1" stop-color="#F9F1E6"/>
+    </linearGradient>
+    <linearGradient id="tile-dark" x1="326" y1="260" x2="698" y2="644" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B3834"/>
+      <stop offset="1" stop-color="#1E1C1A"/>
+    </linearGradient>
+    <linearGradient id="accent-line" x1="0" y1="0" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E78B63"/>
+      <stop offset="1" stop-color="#F2AF87"/>
+    </linearGradient>
+    <pattern id="paper-noise" width="56" height="56" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="10" r="1" fill="#EDE0D0" opacity="0.4"/>
+      <circle cx="38" cy="18" r="1.1" fill="#EDE0D0" opacity="0.36"/>
+      <circle cx="22" cy="34" r="1" fill="#EDE0D0" opacity="0.34"/>
+      <circle cx="46" cy="44" r="0.9" fill="#EDE0D0" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg-glow)"/>
+  <rect width="1024" height="1024" fill="url(#paper-noise)" opacity="0.72"/>
+  <rect x="20" y="20" width="984" height="984" rx="34" stroke="#E9DCCB" stroke-width="2"/>
+
+  <g opacity="0.42">
+    <circle cx="142" cy="142" r="84" fill="#FBF5EC"/>
+    <circle cx="902" cy="894" r="92" fill="#FBF5EC"/>
+  </g>
+
+  <g opacity="0.3" fill="#D9CCBD">
+    <circle cx="132" cy="438" r="6"/>
+    <circle cx="160" cy="438" r="6"/>
+    <circle cx="188" cy="438" r="6"/>
+    <circle cx="132" cy="466" r="6"/>
+    <circle cx="160" cy="466" r="6"/>
+    <circle cx="188" cy="466" r="6"/>
+    <circle cx="132" cy="494" r="6"/>
+    <circle cx="160" cy="494" r="6"/>
+    <circle cx="188" cy="494" r="6"/>
+    <circle cx="840" cy="720" r="6"/>
+    <circle cx="868" cy="720" r="6"/>
+    <circle cx="896" cy="720" r="6"/>
+    <circle cx="840" cy="748" r="6"/>
+    <circle cx="868" cy="748" r="6"/>
+    <circle cx="896" cy="748" r="6"/>
+    <circle cx="840" cy="776" r="6"/>
+    <circle cx="868" cy="776" r="6"/>
+    <circle cx="896" cy="776" r="6"/>
+  </g>
+
+  <text x="512" y="98" fill="#151515" text-anchor="middle" font-size="48" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">阿新聊AI</text>
+  <line x1="480" y1="126" x2="544" y2="126" stroke="url(#accent-line)" stroke-width="5" stroke-linecap="round"/>
+
+  <text x="512" y="220" fill="#111111" text-anchor="middle" font-size="70" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">Claude Code 工程实战</text>
+
+  <g filter="url(#shadow-lg)">
+    <rect x="332" y="278" width="360" height="380" rx="66" fill="url(#tile-dark)" stroke="#4B4641" stroke-width="3"/>
+    <rect x="343" y="289" width="338" height="358" rx="58" stroke="#58524C" stroke-width="1.5" opacity="0.42"/>
+  </g>
+
+  <g fill="#F89A6F" filter="url(#shadow-sm)">
+    <rect x="448" y="382" width="128" height="16"/>
+    <rect x="438" y="398" width="148" height="32"/>
+    <rect x="438" y="430" width="148" height="36"/>
+    <rect x="416" y="452" width="192" height="28"/>
+    <rect x="442" y="470" width="140" height="42"/>
+    <rect x="454" y="512" width="30" height="34"/>
+    <rect x="540" y="512" width="30" height="34"/>
+    <rect x="452" y="480" width="22" height="22"/>
+    <rect x="550" y="480" width="22" height="22"/>
+    <rect x="426" y="446" width="22" height="34"/>
+    <rect x="576" y="446" width="22" height="34"/>
+    <rect x="468" y="536" width="18" height="38"/>
+    <rect x="494" y="536" width="36" height="38"/>
+    <rect x="538" y="536" width="18" height="38"/>
+    <rect x="458" y="564" width="16" height="20"/>
+    <rect x="550" y="564" width="16" height="20"/>
+  </g>
+
+  <rect x="480" y="428" width="18" height="46" fill="#1D1B19"/>
+  <rect x="526" y="428" width="18" height="46" fill="#1D1B19"/>
+
+  <text x="512" y="610" fill="#F6F0E8" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="4" font-family="Menlo, Monaco, Consolas, monospace">CLAUDE</text>
+  <text x="512" y="650" fill="#F6F0E8" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="4" font-family="Menlo, Monaco, Consolas, monospace">CODE</text>
+  <line x1="494" y1="676" x2="530" y2="676" stroke="#F89A6F" stroke-width="7" stroke-linecap="round"/>
+
+  <text x="512" y="732" fill="#141414" text-anchor="middle" font-size="40" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">从安装到第一个真实任务</text>
+  <text x="512" y="786" fill="#141414" text-anchor="middle" font-size="40" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">Claude Code 的权限模式</text>
+  <text x="512" y="840" fill="#141414" text-anchor="middle" font-size="40" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">怎么选</text>
+
+  <line x1="352" y1="872" x2="456" y2="872" stroke="#141414" stroke-width="3"/>
+  <line x1="568" y1="872" x2="672" y2="872" stroke="#141414" stroke-width="3"/>
+  <path d="M 512 860 l 12 12 l -12 12 l -12 -12 z" fill="#141414"/>
+
+  <g filter="url(#shadow-sm)">
+    <rect x="170" y="888" width="684" height="52" rx="18" fill="#FFF9F1" stroke="#141414" stroke-width="3"/>
+  </g>
+  <text x="512" y="922" fill="#141414" text-anchor="middle" font-size="28" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">史上最全AI资料 搜 mindcarver/91ai</text>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">脚手架目录骨架</text>
+  <text class="sub" x="80" y="126">配置、状态、审计、调度、护栏各司其职</text>
+  
+  <rect class="box" x="95" y="205" width="300" height="180" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="245" y="257" text-anchor="middle">根目录状态文件</text>
+  <text class="small" x="245" y="297" text-anchor="middle">STATE.md</text>
+  <text class="small" x="245" y="325" text-anchor="middle">LOOP.md</text>
+  <text class="small" x="245" y="353" text-anchor="middle">VISION.md</text>
+  <text class="small" x="245" y="381" text-anchor="middle">AGENTS.md</text>
+  <rect class="box" x="460" y="205" width="300" height="180" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="610" y="257" text-anchor="middle">预算与审计</text>
+  <text class="small" x="610" y="297" text-anchor="middle">loop-budget.md</text>
+  <text class="small" x="610" y="325" text-anchor="middle">loop-run-log.md</text>
+  <rect class="box" x="825" y="205" width="300" height="180" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="975" y="257" text-anchor="middle">运行报告</text>
+  <text class="small" x="975" y="297" text-anchor="middle">loop-runs/</text>
+  <text class="small" x="975" y="325" text-anchor="middle">YYYY-MM-DD.md</text>
+  <rect class="box" x="1190" y="205" width="300" height="180" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="1340" y="257" text-anchor="middle">调度入口</text>
+  <text class="small" x="1340" y="297" text-anchor="middle">.github/workflows/</text>
+  <text class="small" x="1340" y="325" text-anchor="middle">loop-daily-triage.yml</text>
+  <rect class="box" x="520" y="520" width="560" height="145" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="800" y="572" text-anchor="middle">护栏目录</text>
+  <text class="small" x="800" y="612" text-anchor="middle">.loop/denylist.md</text>
+  <text class="small" x="800" y="640" text-anchor="middle">禁止路径和动作</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M245 390 C340 500 510 545 515 590"/><path class="arrow" marker-end="url(#arrow)" d="M610 390 C620 455 655 500 695 520"/><path class="arrow" marker-end="url(#arrow)" d="M975 390 C960 465 910 500 850 520"/><path class="arrow" marker-end="url(#arrow)" d="M1340 390 C1230 505 1125 535 1085 590"/>
+  <rect class="box" x="430" y="740" width="740" height="76" fill="#FFF8EE"/><text class="label" x="800" y="789" text-anchor="middle">第一周先照抄结构，跑稳后再调整</text>
+
+</svg>

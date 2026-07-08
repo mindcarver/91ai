@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <rect width="1440" height="900" fill="#F6F1E7" />
+  <rect x="40" y="36" width="1360" height="828" rx="44" fill="#F6F1E7" stroke="#E7DED0" stroke-width="1.5" />
+  <circle cx="1330" cy="110" r="16" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1368" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="1394" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="182" cy="760" r="6" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1220" cy="758" r="6" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="1.5"  />
+<line x1="118" y1="178" x2="220" y2="178" stroke="#E58A5C" stroke-width="4" stroke-linecap="round" />
+<line x1="1106" y1="756" x2="1198" y2="756" stroke="#D8CFC1" stroke-width="3" stroke-linecap="round" />
+  <rect x="88" y="78" width="172" height="48" rx="18" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="1.5"  />
+<text x="118" y="110" fill="#7C7468" font-size="20" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="118" dy="0">Core Framework</tspan></text>
+<text x="88" y="212" fill="#1B1B1B" font-size="44" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="88" dy="0">渐进式披露：避免 Skill 一次塞爆上下文</tspan></text>
+<text x="90" y="284" fill="#7C7468" font-size="22" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="90" dy="0">渐进式披露架构</tspan></text>
+  <rect x="184" y="430" width="272" height="136" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="202" y="448" width="86" height="28" rx="14" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<text x="214" y="468" fill="#7C7468" font-size="16" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="214" dy="0">输入上下文</tspan></text>
+<text x="208" y="512" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="208" dy="0">上下文预算问题</tspan></text>
+<rect x="1070" y="430" width="272" height="136" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="1088" y="448" width="86" height="28" rx="14" fill="#BCD9D0" stroke="none" stroke-width="0"  />
+<text x="1100" y="468" fill="#7C7468" font-size="16" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1100" dy="0">运行约束</tspan></text>
+<text x="1094" y="512" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1094" dy="0">渐进式披露架构</tspan></text>
+<rect x="184" y="690" width="272" height="136" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="202" y="708" width="86" height="28" rx="14" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<text x="214" y="728" fill="#7C7468" font-size="16" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="214" dy="0">执行动作</tspan></text>
+<text x="208" y="772" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="208" dy="0">真实目录结构</tspan></text>
+<rect x="1070" y="690" width="272" height="136" rx="26" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="1088" y="708" width="86" height="28" rx="14" fill="#BCD9D0" stroke="none" stroke-width="0"  />
+<text x="1100" y="728" fill="#7C7468" font-size="16" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1100" dy="0">验证闭环</tspan></text>
+<text x="1094" y="772" fill="#1B1B1B" font-size="24" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1094" dy="0">真实 SKILL.md</tspan><tspan x="1094" dy="30.72"> 示例</tspan></text>
+  <rect x="494" y="436" width="452" height="286" rx="44" fill="#FFF8F1" stroke="#1B1B1B" stroke-width="2.5"  />
+<rect x="534" y="474" width="126" height="36" rx="18" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<text x="558" y="500" fill="#7C7468" font-size="20" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="558" dy="0">核心模块</tspan></text>
+<text x="720" y="570" fill="#1B1B1B" font-size="34" font-weight="700" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">渐进式披露架构</tspan></text>
+<text x="720" y="668" fill="#7C7468" font-size="20" font-weight="500" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">Cards, rules, flow, gu</tspan><tspan x="720" dy="25.6">ardrails</tspan></text>
+<line x1="456" y1="498" x2="494" y2="498" stroke="#D8CFC1" stroke-width="3" />
+<line x1="946" y1="498" x2="1070" y2="498" stroke="#D8CFC1" stroke-width="3" />
+<line x1="456" y1="758" x2="494" y2="650" stroke="#D8CFC1" stroke-width="3" />
+<line x1="946" y1="650" x2="1070" y2="758" stroke="#D8CFC1" stroke-width="3" />
+<circle cx="494" cy="498" r="8" fill="#F2D1BD" stroke="#1B1B1B" stroke-width="2"  />
+<circle cx="946" cy="498" r="8" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="2"  />
+<circle cx="494" cy="650" r="8" fill="#E7CB8F" stroke="#1B1B1B" stroke-width="2"  />
+<circle cx="946" cy="650" r="8" fill="#F2D1BD" stroke="#1B1B1B" stroke-width="2"  />
+</svg>

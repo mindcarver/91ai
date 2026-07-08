@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">Daily Triage：第一条 L1 Loop 全景</text>
+  <text class="sub" x="80" y="126">每天自动巡检，只写报告，不改代码</text>
+  
+  <rect class="box" x="90" y="250" width="260" height="150" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="220" y="302" text-anchor="middle">GitHub Actions</text>
+  <text class="small" x="220" y="342" text-anchor="middle">09:00 cadence</text>
+  <text class="small" x="220" y="370" text-anchor="middle">scheduled run</text>
+  <rect class="box" x="445" y="250" width="260" height="150" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="575" y="302" text-anchor="middle">Claude Code</text>
+  <text class="small" x="575" y="342" text-anchor="middle">--print</text>
+  <text class="small" x="575" y="370" text-anchor="middle">non-interactive</text>
+  <rect class="box" x="800" y="205" width="320" height="240" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="960" y="257" text-anchor="middle">gh 数据</text>
+  <text class="small" x="960" y="297" text-anchor="middle">issue / PR / CI</text>
+  <text class="small" x="960" y="325" text-anchor="middle">recent commits</text>
+  <text class="small" x="960" y="353" text-anchor="middle">structured JSON</text>
+  <rect class="box" x="1250" y="250" width="260" height="150" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="1380" y="302" text-anchor="middle">STATE.md</text>
+  <text class="small" x="1380" y="342" text-anchor="middle">P0 / P1 / watch</text>
+  <text class="small" x="1380" y="370" text-anchor="middle">last_run</text>
+  <rect class="box" x="485" y="570" width="260" height="145" fill="#FFF8EE" filter="url(#shadow)"/>
+  <text class="label" x="615" y="622" text-anchor="middle">LOOP.md</text>
+  <text class="small" x="615" y="662" text-anchor="middle">运行规则</text>
+  <rect class="box" x="810" y="570" width="260" height="145" fill="#FFF8EE" filter="url(#shadow)"/>
+  <text class="label" x="940" y="622" text-anchor="middle">VISION.md</text>
+  <text class="small" x="940" y="662" text-anchor="middle">项目优先级</text>
+  <rect class="box" x="1135" y="570" width="260" height="145" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="1265" y="622" text-anchor="middle">loop-runs/</text>
+  <text class="small" x="1265" y="662" text-anchor="middle">markdown report</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M355 325 H435"/><path class="arrow" marker-end="url(#arrow)" d="M710 325 H790"/><path class="arrow" marker-end="url(#arrow)" d="M1125 325 H1240"/><path class="arrow" marker-end="url(#arrow)" d="M1265 570 C1040 495 635 495 575 565"/>
+  <rect class="box" x="455" y="760" width="690" height="76" fill="#FFF8EE"/><text class="label" x="800" y="809" text-anchor="middle">L1 边界：不 commit 源码，不开 PR，不评论 issue</text>
+
+</svg>

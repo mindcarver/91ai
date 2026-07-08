@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">控制系统的六个一等动词</text>
+  <text class="sub" x="80" y="126">缺一项，就退化成自动跑一次 prompt</text>
+  
+  <rect class="box" x="110" y="225" width="300" height="155" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="260" y="277" text-anchor="middle">触发</text>
+  <text class="small" x="260" y="317" text-anchor="middle">什么时候启动</text>
+  <text class="small" x="260" y="345" text-anchor="middle">定时 / 事件 / 手动</text>
+  <rect class="box" x="470" y="225" width="300" height="155" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="620" y="277" text-anchor="middle">状态</text>
+  <text class="small" x="620" y="317" text-anchor="middle">每轮读写哪里</text>
+  <text class="small" x="620" y="345" text-anchor="middle">跨轮怎么续命</text>
+  <rect class="box" x="830" y="225" width="300" height="155" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="980" y="277" text-anchor="middle">隔离</text>
+  <text class="small" x="980" y="317" text-anchor="middle">改动落在哪</text>
+  <text class="small" x="980" y="345" text-anchor="middle">不污染主分支</text>
+  <rect class="box" x="1190" y="225" width="300" height="155" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="1340" y="277" text-anchor="middle">分工</text>
+  <text class="small" x="1340" y="317" text-anchor="middle">谁实现</text>
+  <text class="small" x="1340" y="345" text-anchor="middle">谁验收</text>
+  <rect class="box" x="310" y="520" width="360" height="155" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="490" y="572" text-anchor="middle">连接</text>
+  <text class="small" x="490" y="612" text-anchor="middle">GitHub / CI / MCP</text>
+  <text class="small" x="490" y="640" text-anchor="middle">外部系统最小权限</text>
+  <rect class="box" x="930" y="520" width="360" height="155" fill="#E8655A" filter="url(#shadow)"/>
+  <text class="label" x="1110" y="572" text-anchor="middle">人类 Gate</text>
+  <text class="small" x="1110" y="612" text-anchor="middle">哪些路径必须接管</text>
+  <text class="small" x="1110" y="640" text-anchor="middle">如何强制暂停</text>
+  <path class="thin dash" d="M215 445 H1385"/><text class="label" x="800" y="463" text-anchor="middle">Loop = 长期控制回路</text>
+  <rect class="box" x="470" y="760" width="660" height="70" fill="#FFF8EE"/><text class="label" x="800" y="805" text-anchor="middle">先问控制面，再问模型能力</text>
+
+</svg>

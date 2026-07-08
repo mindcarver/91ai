@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <rect width="1440" height="900" fill="#F6F1E7" />
+  <rect x="40" y="36" width="1360" height="828" rx="44" fill="#F6F1E7" stroke="#E7DED0" stroke-width="1.5" />
+  <circle cx="1330" cy="110" r="16" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1368" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="1394" cy="110" r="8" fill="#FFFCF7" stroke="#1B1B1B" stroke-width="1.5"  />
+<circle cx="182" cy="760" r="6" fill="#F2D1BD" stroke="#E58A5C" stroke-width="1.5"  />
+<circle cx="1220" cy="758" r="6" fill="#BCD9D0" stroke="#1B1B1B" stroke-width="1.5"  />
+<line x1="118" y1="178" x2="220" y2="178" stroke="#E58A5C" stroke-width="4" stroke-linecap="round" />
+<line x1="1106" y1="756" x2="1198" y2="756" stroke="#D8CFC1" stroke-width="3" stroke-linecap="round" />
+  <rect x="88" y="78" width="172" height="48" rx="18" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="1.5"  />
+<text x="118" y="110" fill="#7C7468" font-size="20" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="118" dy="0">Knowledge Map</tspan></text>
+<text x="88" y="212" fill="#1B1B1B" font-size="44" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="88" dy="0">第一个 MCP：GitHub Issue、P</tspan><tspan x="88" dy="56.32">R 和代码上下文</tspan></text>
+<text x="90" y="284" fill="#7C7468" font-size="22" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="90" dy="0">为什么 GitHub 是第一个 MCP</tspan></text>
+  <rect x="96" y="358" width="530" height="186" rx="28" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="118" y="380" width="92" height="32" rx="16" fill="#F2D1BD" stroke="none" stroke-width="0"  />
+<text x="130" y="403" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="130" dy="0">01</tspan></text>
+<text x="132" y="454" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="132" dy="0">为什么 GitHub 是</tspan><tspan x="132" dy="38.4">第一个 M…</tspan></text>
+<text x="132" y="503" fill="#7C7468" font-size="18" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="132" dy="0">问题与入口</tspan></text>
+<rect x="742" y="358" width="530" height="186" rx="28" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="764" y="380" width="92" height="32" rx="16" fill="#BCD9D0" stroke="none" stroke-width="0"  />
+<text x="776" y="403" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="776" dy="0">02</tspan></text>
+<text x="778" y="454" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="778" dy="0">Token 配置和权限分</tspan><tspan x="778" dy="38.4">级</tspan></text>
+<text x="778" y="503" fill="#7C7468" font-size="18" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="778" dy="0">结构与组件</tspan></text>
+<rect x="96" y="610" width="530" height="186" rx="28" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="118" y="632" width="92" height="32" rx="16" fill="#F3E4BE" stroke="none" stroke-width="0"  />
+<text x="130" y="655" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="130" dy="0">03</tspan></text>
+<text x="132" y="706" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="132" dy="0">Issue Triage</tspan><tspan x="132" dy="38.4"> 工作流 …</tspan></text>
+<text x="132" y="755" fill="#7C7468" font-size="18" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="132" dy="0">流程与动作</tspan></text>
+<rect x="742" y="610" width="530" height="186" rx="28" fill="#FFFCF7" stroke="#D8CFC1" stroke-width="2"  />
+<rect x="764" y="632" width="92" height="32" rx="16" fill="#E9DCCC" stroke="none" stroke-width="0"  />
+<text x="776" y="655" fill="#1B1B1B" font-size="18" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="776" dy="0">04</tspan></text>
+<text x="778" y="706" fill="#1B1B1B" font-size="30" font-weight="700" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="778" dy="0">PR Review 工作</tspan><tspan x="778" dy="38.4">流 · 代…</tspan></text>
+<text x="778" y="755" fill="#7C7468" font-size="18" font-weight="500" text-anchor="start" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="778" dy="0">边界与检查</tspan></text>
+  <rect x="628" y="454" width="184" height="232" rx="36" fill="#FFF8F1" stroke="#E58A5C" stroke-width="2.5"  />
+<text x="720" y="534" fill="#1B1B1B" font-size="34" font-weight="700" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">Claude Code</tspan></text>
+<text x="720" y="610" fill="#7C7468" font-size="28" font-weight="600" text-anchor="middle" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="720" dy="0">Engineerin</tspan><tspan x="720" dy="35.84">g</tspan></text>
+<circle cx="720" cy="642" r="12" fill="#E58A5C" stroke="#E58A5C" stroke-width="1"  />
+<line x1="626" y1="572" x2="542" y2="452" stroke="#D8CFC1" stroke-width="2.4" stroke-dasharray="7 9" />
+<line x1="812" y1="572" x2="898" y2="452" stroke="#D8CFC1" stroke-width="2.4" stroke-dasharray="7 9" />
+<line x1="628" y1="628" x2="540" y2="704" stroke="#D8CFC1" stroke-width="2.4" stroke-dasharray="7 9" />
+<line x1="812" y1="628" x2="898" y2="704" stroke="#D8CFC1" stroke-width="2.4" stroke-dasharray="7 9" />
+</svg>

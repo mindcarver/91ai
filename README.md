@@ -2,10 +2,18 @@
   <img src="./assets/awesome-ai-guide-cover.png" alt="91ai cover" width="100%" />
 </p>
 
-<h1 align="center">91ai</h1>
+<h1 align="center">91ai：AI Coding / Agent / MCP / RAG 中文指南</h1>
 
 <p align="center">
-  面向技术人的 AI 工具评测、实战资料库与学习路线图
+  面向技术人的 AI Coding、Agent、MCP、RAG、评测资料库与学习路线图
+</p>
+
+<p align="center">
+  Chinese AI guide and curated resources for AI coding, agents, MCP, RAG, evaluation, and learning paths
+</p>
+
+<p align="center">
+  Awesome AI Guide for developers, covering AI tools, coding agents, workflows, evaluation, and practical learning resources
 </p>
 
 <p align="center">

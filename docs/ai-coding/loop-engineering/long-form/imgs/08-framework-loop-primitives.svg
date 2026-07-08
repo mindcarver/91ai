@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}.accent{fill:#E8655A}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">五积木 + 状态中枢：一个可审计的 Loop 截面</text>
+  <text class="sub" x="80" y="126">每个 block 都解决一个具体故障点，STATE 与 Verifier 是整条控制脊柱</text>
+  
+  <path class="arrow" marker-end="url(#arrow)" d="M170 405 H1385"/>
+  <rect class="box" x="80" y="270" width="210" height="170" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="185" y="322" text-anchor="middle">Schedule</text>
+  <text class="small" x="185" y="362" text-anchor="middle">何时触发</text>
+  <text class="small" x="185" y="390" text-anchor="middle">不等人喊开工</text>
+  <rect class="box" x="330" y="270" width="210" height="170" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="435" y="322" text-anchor="middle">Worktree</text>
+  <text class="small" x="435" y="362" text-anchor="middle">隔离执行</text>
+  <text class="small" x="435" y="390" text-anchor="middle">并发不互撞</text>
+  <rect class="box" x="580" y="270" width="210" height="170" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="685" y="322" text-anchor="middle">Skills</text>
+  <text class="small" x="685" y="362" text-anchor="middle">能力沉淀</text>
+  <text class="small" x="685" y="390" text-anchor="middle">少重复发明</text>
+  <rect class="box" x="830" y="270" width="210" height="170" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="935" y="322" text-anchor="middle">MCP</text>
+  <text class="small" x="935" y="362" text-anchor="middle">连接现实</text>
+  <text class="small" x="935" y="390" text-anchor="middle">读写外部系统</text>
+  <rect class="box" x="1080" y="270" width="210" height="170" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="1185" y="322" text-anchor="middle">Sub-agent</text>
+  <text class="small" x="1185" y="362" text-anchor="middle">策略 reset</text>
+  <text class="small" x="1185" y="390" text-anchor="middle">专业分工</text>
+  <path class="thin dash" d="M260 512 H1335"/>
+  <text class="small" x="800" y="495" text-anchor="middle">状态 / 验证脊柱贯穿整条 loop</text>
+  <rect class="box" x="470" y="585" width="300" height="150" fill="#FFF8EE" filter="url(#shadow)"/>
+  <text class="label" x="620" y="640" text-anchor="middle">STATE</text>
+  <text class="small" x="620" y="682" text-anchor="middle">跨 session 记忆</text>
+  <text class="small" x="620" y="712" text-anchor="middle">任务 · 已完成 · 下一步</text>
+  <rect class="box" x="830" y="585" width="300" height="150" fill="#FFF8EE" filter="url(#shadow)"/>
+  <text class="label" x="980" y="640" text-anchor="middle">Verifier</text>
+  <text class="small" x="980" y="682" text-anchor="middle">独立检查结果</text>
+  <text class="small" x="980" y="712" text-anchor="middle">test · lint · build · review</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M620 580 V525"/>
+  <path class="arrow" marker-end="url(#arrow)" d="M980 580 V525"/>
+  <circle cx="1395" cy="405" r="50" fill="#E8655A" stroke="#2D2D2D" stroke-width="5"/>
+  <text class="label" x="1395" y="414" text-anchor="middle">Gate</text>
+  <text class="small" x="800" y="805" text-anchor="middle">审计顺序：触发 → 隔离 → 能力 → 连接 → 分工 → 状态写回 → 独立验证 → 人类接管</text>
+
+</svg>

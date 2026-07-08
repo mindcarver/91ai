@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">生产 Loop 控制系统总览</text>
+  <text class="sub" x="80" y="126">先能停、能查、能审、能回放，再谈自动执行</text>
+  
+  <rect class="box" x="610" y="285" width="380" height="230" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="800" y="337" text-anchor="middle">Loop Runtime</text>
+  <text class="small" x="800" y="377" text-anchor="middle">长期运行逻辑</text>
+  <text class="small" x="800" y="405" text-anchor="middle">不是更长的 prompt</text>
+  <rect class="box" x="90" y="210" width="260" height="135" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="220" y="262" text-anchor="middle">Trigger</text>
+  <text class="small" x="220" y="302" text-anchor="middle">cron / event / manual</text>
+  <rect class="box" x="90" y="545" width="260" height="135" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="220" y="597" text-anchor="middle">STATE.md</text>
+  <text class="small" x="220" y="637" text-anchor="middle">跨轮续命</text>
+  <text class="small" x="220" y="665" text-anchor="middle">外部记忆</text>
+  <rect class="box" x="420" y="615" width="300" height="140" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="570" y="667" text-anchor="middle">Worktree</text>
+  <text class="small" x="570" y="707" text-anchor="middle">隔离执行</text>
+  <text class="small" x="570" y="735" text-anchor="middle">失败可丢弃</text>
+  <rect class="box" x="880" y="615" width="300" height="140" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="1030" y="667" text-anchor="middle">Maker / Checker</text>
+  <text class="small" x="1030" y="707" text-anchor="middle">实现与验证分离</text>
+  <text class="small" x="1030" y="735" text-anchor="middle">done 只是 claim</text>
+  <rect class="box" x="1250" y="210" width="260" height="135" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="1380" y="262" text-anchor="middle">Budget</text>
+  <text class="small" x="1380" y="302" text-anchor="middle">daily cap</text>
+  <text class="small" x="1380" y="330" text-anchor="middle">monthly cap</text>
+  <rect class="box" x="1250" y="545" width="260" height="135" fill="#E8655A" filter="url(#shadow)"/>
+  <text class="label" x="1380" y="597" text-anchor="middle">Kill Switch</text>
+  <text class="small" x="1380" y="637" text-anchor="middle">runaway 停机</text>
+  <text class="small" x="1380" y="665" text-anchor="middle">不自动恢复</text>
+  <rect class="box" x="650" y="160" width="300" height="105" fill="#FFF8EE" filter="url(#shadow)"/>
+  <text class="label" x="800" y="212" text-anchor="middle">Human Gate</text>
+  <text class="small" x="800" y="252" text-anchor="middle">风险路径人工接管</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M350 278 C455 280 520 330 605 365"/><path class="arrow" marker-end="url(#arrow)" d="M350 610 C465 610 520 500 605 460"/><path class="arrow" marker-end="url(#arrow)" d="M720 615 V525"/><path class="arrow" marker-end="url(#arrow)" d="M880 615 V525"/><path class="arrow" marker-end="url(#arrow)" d="M1250 278 C1145 280 1080 330 995 365"/><path class="arrow" marker-end="url(#arrow)" d="M1250 610 C1135 610 1080 500 995 460"/><path class="arrow" marker-end="url(#arrow)" d="M800 265 V515"/>
+  <rect class="box" x="460" y="790" width="680" height="72" fill="#FFF8EE"/><text class="label" x="800" y="836" text-anchor="middle">生产目标：减少失控，不是减少人</text>
+
+</svg>

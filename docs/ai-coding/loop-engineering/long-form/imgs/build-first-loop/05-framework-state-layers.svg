@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">三层状态结构</text>
+  <text class="sub" x="80" y="126">不要把运行规则、当前状态、预算审计混在一起</text>
+  
+  <rect class="box" x="250" y="210" width="1100" height="135" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="800" y="262" text-anchor="middle">LOOP.md：运行规则层</text>
+  <text class="small" x="800" y="302" text-anchor="middle">身份、cadence、每轮输入、每轮输出、verifier、human gate、kill switch</text>
+  <rect class="box" x="250" y="385" width="1100" height="145" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="800" y="437" text-anchor="middle">STATE.md：当前世界状态层</text>
+  <text class="small" x="800" y="477" text-anchor="middle">P0 队列、P1 队列、Watch List、Recent Actions、Resolved Log、Escalation Log</text>
+  <rect class="box" x="250" y="575" width="1100" height="145" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="800" y="627" text-anchor="middle">loop-budget.md + loop-run-log.md：预算与审计层</text>
+  <text class="small" x="800" y="667" text-anchor="middle">per-run limit、daily limit、weekly usage、status、duration、cost、notes</text>
+  <path class="arrow" marker-end="url(#arrow)" d="M1450 278 C1510 410 1510 560 1450 650"/>
+  <path class="arrow" marker-end="url(#arrow)" d="M150 650 C90 510 90 355 150 278"/>
+  <text class="small" x="1455" y="470" text-anchor="middle" transform="rotate(90 1455 470)">write after run</text>
+  <text class="small" x="145" y="470" text-anchor="middle" transform="rotate(-90 145 470)">read before run</text>
+
+</svg>

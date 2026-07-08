@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      text{font-family:'PingFang SC','Noto Sans CJK SC','Helvetica Neue',Arial,sans-serif;letter-spacing:0;fill:#2D2D2D}
+      .title{font-size:46px;font-weight:800}.sub{font-size:24px;fill:#6B6B6B}.label{font-size:25px;font-weight:700}.small{font-size:19px;fill:#6B6B6B}.tiny{font-size:16px;fill:#6B6B6B}.num{font-size:40px;font-weight:800;fill:#2D2D2D}
+      .box{stroke:#2D2D2D;stroke-width:5;rx:28;ry:28}.thin{stroke:#2D2D2D;stroke-width:3}.dash{stroke-dasharray:10 10}.arrow{stroke:#2D2D2D;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2D2D2D"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+    <pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="6" r="1" fill="#e9dccd" opacity="0.35"/><circle cx="28" cy="24" r="1" fill="#e9dccd" opacity="0.25"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#F5F0E8"/><rect width="1600" height="900" fill="url(#paper)"/>
+  <text class="title" x="80" y="86">第一周真实节奏</text>
+  <text class="sub" x="80" y="126">以观察为主，改动为辅，每次只改一处</text>
+  
+  <path class="arrow" marker-end="url(#arrow)" d="M145 450 H1450"/>
+  <rect class="box" x="90" y="320" width="240" height="155" fill="#FFD5C2" filter="url(#shadow)"/>
+  <text class="label" x="210" y="372" text-anchor="middle">周一</text>
+  <text class="small" x="210" y="412" text-anchor="middle">本地跑通</text>
+  <text class="small" x="210" y="440" text-anchor="middle">手动触发 CI</text>
+  <rect class="box" x="380" y="320" width="240" height="155" fill="#A8D8EA" filter="url(#shadow)"/>
+  <text class="label" x="500" y="372" text-anchor="middle">周二-周四</text>
+  <text class="small" x="500" y="412" text-anchor="middle">观察报告</text>
+  <text class="small" x="500" y="440" text-anchor="middle">先不急着调</text>
+  <rect class="box" x="670" y="320" width="240" height="155" fill="#B5E5CF" filter="url(#shadow)"/>
+  <text class="label" x="790" y="372" text-anchor="middle">周五</text>
+  <text class="small" x="790" y="412" text-anchor="middle">只改 1-2 条</text>
+  <text class="small" x="790" y="440" text-anchor="middle">明显规则</text>
+  <rect class="box" x="960" y="320" width="240" height="155" fill="#D5C6E0" filter="url(#shadow)"/>
+  <text class="label" x="1080" y="372" text-anchor="middle">周末</text>
+  <text class="small" x="1080" y="412" text-anchor="middle">读七份报告</text>
+  <text class="small" x="1080" y="440" text-anchor="middle">回答四问</text>
+  <rect class="box" x="1250" y="320" width="240" height="155" fill="#F7E3A1" filter="url(#shadow)"/>
+  <text class="label" x="1370" y="372" text-anchor="middle">下周一</text>
+  <text class="small" x="1370" y="412" text-anchor="middle">继续 L1</text>
+  <text class="small" x="1370" y="440" text-anchor="middle">或准备 L2</text>
+  <rect class="box" x="430" y="640" width="740" height="86" fill="#FFF8EE"/><text class="label" x="800" y="695" text-anchor="middle">单变量改动：别一次改五处再猜哪处有效</text>
+
+</svg>
