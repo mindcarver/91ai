@@ -1,7 +1,7 @@
 # 读代码、修 Bug、补测试、写文档：四套拿来即用的工作流模板
 
 <!-- codex:cover ../../../assets/claude-code-engineering/06-common-workflows-cover.svg -->
-![Claude Code 系列文章封面：常用工作流：解释代码、修 Bug、补测试、写文档](../../../assets/claude-code-engineering/06-common-workflows-cover.svg)
+![Claude Code 系列文章封面：读代码、修 Bug、补测试、写文档：四套拿来即用的工作流模板](../../../assets/claude-code-engineering/06-common-workflows-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 解释代码、修 Bug、补测试、更新文档——四个高频低风险工作流。跑通这四个，等于验证了 CLAUDE.md、测试闭环和模块边界。跑不通就别做复杂任务。

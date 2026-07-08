@@ -1,7 +1,7 @@
 # CI 里的安全边界：别让一个外部 PR 偷走你的 Secrets
 
 <!-- codex:cover ../../../assets/claude-code-engineering/29-ci-security-boundaries-cover.svg -->
-![Claude Code 系列文章封面：CI 里的安全边界：Secrets、外部 PR、权限和审批](../../../assets/claude-code-engineering/29-ci-security-boundaries-cover.svg)
+![Claude Code 系列文章封面：CI 里的安全边界：别让一个外部 PR 偷走你的 Secrets](../../../assets/claude-code-engineering/29-ci-security-boundaries-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 在 CI 里运行 Claude Code，最大风险不是生成错代码，而是权限配置错误导致 secrets 泄露、外部 PR 注入、workflow 被篡改或供应链攻击。每个风险都需要独立设计防护层。

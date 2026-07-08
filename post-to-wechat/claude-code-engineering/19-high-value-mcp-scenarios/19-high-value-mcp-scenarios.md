@@ -1,7 +1,7 @@
-# 数据库、监控和设计系统：高价值 MCP 场景
+# 数据库、监控、设计系统：真正值得接入的高价值 MCP 场景
 
 <!-- codex:cover ../../../assets/claude-code-engineering/19-high-value-mcp-scenarios-cover.svg -->
-![Claude Code 系列文章封面：数据库、监控和设计系统：高价值 MCP 场景](media/01-19-high-value-mcp-scenarios-cover.png)
+![Claude Code 系列文章封面：数据库、监控、设计系统：真正值得接入的高价值 MCP 场景](media/01-19-high-value-mcp-scenarios-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** GitHub MCP 建立基础后，高价值的下一步是接入那些减少"信息搬运瓶颈"的系统。每个场景有不同的权限模型、Token 消耗特征和风险等级。引入顺序应该由团队的实际工作流决定，而不是技术难度。

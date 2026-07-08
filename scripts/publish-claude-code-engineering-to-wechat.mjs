@@ -148,12 +148,18 @@ async function main() {
   const onlyValue = onlyArgIndex !== -1 ? process.argv[onlyArgIndex + 1] : "";
   const skipArgIndex = process.argv.indexOf("--skip");
   const skipValue = skipArgIndex !== -1 ? process.argv[skipArgIndex + 1] : "";
+  const fromArgIndex = process.argv.indexOf("--from");
+  const fromValue = fromArgIndex !== -1 ? process.argv[fromArgIndex + 1] : "";
+  const toArgIndex = process.argv.indexOf("--to");
+  const toValue = toArgIndex !== -1 ? process.argv[toArgIndex + 1] : "";
   const dryRun = process.argv.includes("--dry-run");
 
   const articleFiles = (await fs.readdir(seriesDir))
     .filter((entry) => articlePattern.test(entry))
     .filter((entry) => (onlyValue ? entry.startsWith(onlyValue) : true))
     .filter((entry) => (skipValue ? !entry.startsWith(skipValue) : true))
+    .filter((entry) => (fromValue ? entry.slice(0, 2) >= fromValue : true))
+    .filter((entry) => (toValue ? entry.slice(0, 2) <= toValue : true))
     .sort();
 
   const preparedList = [];
@@ -173,7 +179,8 @@ async function main() {
     });
   }
 
-  const outputPath = path.join(publishRoot, dryRun ? "dry-run-results.json" : "publish-results.json");
+  const rangeSuffix = fromValue || toValue ? `-${fromValue || "start"}-${toValue || "end"}` : "";
+  const outputPath = path.join(publishRoot, dryRun ? `dry-run-results${rangeSuffix}.json` : `publish-results${rangeSuffix}.json`);
   await fs.writeFile(outputPath, `${JSON.stringify(results, null, 2)}\n`, "utf8");
   console.log(JSON.stringify({ count: results.length, outputPath, results }, null, 2));
 }

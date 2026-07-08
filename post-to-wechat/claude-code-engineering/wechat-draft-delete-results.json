@@ -1,259 +1,49 @@
 {
-  "before_count": 36,
-  "deleted_count": 36,
-  "remaining_count": 0,
+  "keep_media_id": "P-BQ4k9e9KyTXgw_R-fl1WJxWRQOMuPQBbPMhovQzLYZE1AzVhKx6SwMnPYAC2NO",
+  "before_count": 6,
+  "deleted_count": 5,
+  "remaining_count": 1,
+  "remaining_media_ids": [
+    "P-BQ4k9e9KyTXgw_R-fl1WJxWRQOMuPQBbPMhovQzLYZE1AzVhKx6SwMnPYAC2NO"
+  ],
+  "kept_titles": [
+    "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
+  ],
   "deleted": [
     {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RrDwPmX--DSwejunHdabdjZF8SeTVZqOtW7FCI4C2GM",
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RqW7XHK2Szi1Bpa3uTM3kIiJ6FNl5QfRbCqUmFPRgFs",
       "titles": [
-        "组织级治理：版本、审计、评测、禁用和升级策略"
+        "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
       ],
-      "update_time": 1783381317
+      "update_time": 1783489498
     },
     {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bl74OBrvktSD2XlKs_6fuC0BH-aUqo3dFtSFize9I59",
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1fqDLB7ps0j2nQkLgR2puz6Cr1X_1GrP0Vbe5w-inG9z",
       "titles": [
-        "Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP"
+        "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
       ],
-      "update_time": 1783350093
+      "update_time": 1783488580
     },
     {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1QaVIPRnSRE8ox7QJ7XajqVmPpHB1IqsBVMCUMNC-13H",
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1c4gmpX2hANTzOVLXvuVkxzICBwfdGLxH7uyTqScn_zk",
       "titles": [
-        "Agent SDK：SDK 架构、集成模式与生产部署"
+        "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
       ],
-      "update_time": 1783350084
+      "update_time": 1783488009
     },
     {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1e5D1nk1P6QpNNn8RJpNV2sd9YK5oE1IVy-gpBGILgBp",
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1SHVOslSU99qiIhyXQX9qQI1lNdNRlw1cNVE3D7VEEH7",
       "titles": [
-        "结构化输出：JSON Schema 与输出管道"
+        "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
       ],
-      "update_time": 1783350075
+      "update_time": 1783485379
     },
     {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1TnvKFZkRWO08N2kE48va0JA_4GJiC9e5dfy8DiGmAAf",
+      "media_id": "P-BQ4k9e9KyTXgw_R-fl1eVeEpsaHWA4V0mIblnN_AWvg54K5qyp-J7bf621xEn-",
       "titles": [
-        "CI 里的安全边界：Secrets、外部 PR、权限和审批"
+        "从安装到第一个真实任务：Claude Code 的权限模式怎么选"
       ],
-      "update_time": 1783350066
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Txse2_X7XiZsiS0AD7burYa_knwyB0hRXX9vm11qu_A",
-      "titles": [
-        "GitHub Actions：PR Review、Issue Triage 和简单修复"
-      ],
-      "update_time": 1783350056
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1S9POd5dKq063UGIn_eOWk_czmFMeibVTzjH7SWw7k5b",
-      "titles": [
-        "Headless 模式：把 Claude Code 放进脚本"
-      ],
-      "update_time": 1783350047
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1QogqrP_Hk4fcFdyi38LQVWjJAonMCQQO_B1_9lP-LT8",
-      "titles": [
-        "Hook 设计原则：小、确定、可解释、可回滚"
-      ],
-      "update_time": 1783350038
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1aADMsIwwdqgbJnsxNoACWaxqV6toB2Tqd2iRICiZ8Oz",
-      "titles": [
-        "Subagent Hooks：给子代理注入上下文并收集结果"
-      ],
-      "update_time": 1783350030
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1cp2qf67bH_Ds7l4NkGnE3vQ0XyrL2Mkk5hSG1MyrRMO",
-      "titles": [
-        "PostToolUse / Stop：自动格式化、测试和结果记录"
-      ],
-      "update_time": 1783350021
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1T_I3joL5F3P8d317OcX3GlOVwT2QQwdYq52xIQ-25qA",
-      "titles": [
-        "PreToolUse：阻断危险命令和高风险文件写入"
-      ],
-      "update_time": 1783350011
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1W84ZERMziD9T2781U7cgu6jo1H8Njxtpho4Uxq3odMC",
-      "titles": [
-        "Hooks 入门：事件驱动的自动化和审计"
-      ],
-      "update_time": 1783350002
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1eqRPXWizPUQR2CTRRIKxYBnOP6jY_mZa2JFV1HrD6Yh",
-      "titles": [
-        "MCP 风险：Token、越权、工具投毒和提示注入"
-      ],
-      "update_time": 1783349993
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1S2E4cHM2fwknBBqX3HhsDntEnCR_E9hFhUuCjwfXcUV",
-      "titles": [
-        "MCP + Skill：让工具按团队 SOP 被正确使用"
-      ],
-      "update_time": 1783349983
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Svr-E3QOYPQOol4T5CDzfN4AD5fKXr_hyg1R40Tr1cU",
-      "titles": [
-        "数据库、监控和设计系统：高价值 MCP 场景"
-      ],
-      "update_time": 1783349974
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1VoCCiTHDIE23Z4EUUFzsJTBoDXpVN-uvlcVjA7Q08Oj",
-      "titles": [
-        "第一个 MCP：GitHub Issue、PR 和代码上下文"
-      ],
-      "update_time": 1783349965
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1WI_ClbH0_mUG66Ao-a6S__eP6RLZj7D6UU0soyjES3F",
-      "titles": [
-        "MCP 心智模型：外部系统不是复制粘贴，而是工具接口"
-      ],
-      "update_time": 1783349956
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1avflQ6rIM3ttPyR7ir_jYu28rcQmyjBdGA9zAF7M13a",
-      "titles": [
-        "不该用 Subagent 的场景：共享细节和连续编辑"
-      ],
-      "update_time": 1783349947
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1USXJ_l0hQYX0gLY0uLGg5wATiktMGmMDbPuqfI67jiT",
-      "titles": [
-        "并行探索：让多个代理独立研究再汇总"
-      ],
-      "update_time": 1783349937
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bk5gwxR8fuBoFO8Fw1io0yk9Hc4v5MHgARkjqx8Lzbu",
-      "titles": [
-        "工具权限：只读审计代理为什么不能有写权限"
-      ],
-      "update_time": 1783349928
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1UTSUNN2Ji9q09VCIt30pjiZJp1SoCmKd3p8NrKNvPuk",
-      "titles": [
-        "三类高价值 Subagent：探索、审查、测试"
-      ],
-      "update_time": 1783349919
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1Z436LM2RXi-ax5cXEStOx98ntPz7aHw0hm43RdQm60s",
-      "titles": [
-        "Subagents 的本质：独立上下文里的专家助手"
-      ],
-      "update_time": 1783349910
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1T6Wa_MwGzGe_U0ttx0LhGh7Et64jYECNb12RK9XB02y",
-      "titles": [
-        "Skill 评测：欠触发、误触发和执行失败怎么修"
-      ],
-      "update_time": 1783349901
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1ZDAQb1eJneJ1L2bbKqlGe6oux9j9xuXZ8GrDG6LfWoh",
-      "titles": [
-        "渐进式披露：避免 Skill 一次塞爆上下文"
-      ],
-      "update_time": 1783349892
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1aP5mXdgiqL7rFRngOicIhDvvyJEgqYTXCeq3iNiuLm-",
-      "titles": [
-        "SKILL.md 结构：触发描述、步骤、资源和脚本"
-      ],
-      "update_time": 1783349882
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RmPVKb9iQcLuW-KqdFdrK8eX0wMvNaJEPN9qcK6FWdi",
-      "titles": [
-        "Skills 入门：什么时候该从命令升级为 Skill"
-      ],
-      "update_time": 1783349873
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1U9M6dsRSxDMyMphjTm_P8h0Jqi8DDHvq9JpJKF_tu58",
-      "titles": [
-        "Slash Commands：把一次性提示词变成团队命令"
-      ],
-      "update_time": 1783349865
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1TXBejpkMEgbV5drN9aN0LFoPMmLLFLyeVCyt4FOfWKl",
-      "titles": [
-        "常用工作流：解释代码、修 Bug、补测试、写文档"
-      ],
-      "update_time": 1783349855
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1RaUMefR5ne1-BF1cbmg6KoVoLPJ1hGOB0KvxkyF7AhC",
-      "titles": [
-        ".claude/rules：把大规则拆成按路径加载的小规则"
-      ],
-      "update_time": 1783349846
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1fKVjfVupccjSoOleK5xJ-54LWbpOjQXkcBYXeXp_BrJ",
-      "titles": [
-        "CLAUDE.md：把团队规则写成机器可用上下文"
-      ],
-      "update_time": 1783349838
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1SrlW5VfVH1GJD-eLv46AlAP5QrFcQpPPiwlqsqX-wpD",
-      "titles": [
-        "项目地图：让 Claude Code 读懂目录、命令和边界"
-      ],
-      "update_time": 1783349829
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1bIM764Si5i89ZN9uDCfCx01oFEwVE0xRoo4h_f0jPxN",
-      "titles": [
-        "安装、登录、权限模式和第一个真实仓库任务"
-      ],
-      "update_time": 1783349819
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1cxlIS5WtYiu_h-yNMrpo-Ejupu7A9v98ErWd78FQO2Y",
-      "titles": [
-        "Claude Code 不是代码补全，而是工程代理运行时"
-      ],
-      "update_time": 1783349809
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1aASsLjZZyPVOVU-Vfqx2FQ3HEboEodn4SVDxKa8K4IN",
-      "titles": [
-        "Claude Code 不是代码补全，而是工程代理运行时"
-      ],
-      "update_time": 1783344844
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1YnFI7Xa-z-oateO5IvT7H2ZS3AGB8SLcjFdNwMUaktg",
-      "titles": [
-        "从 Prompt 到 Loop：AI 编程 Agent 四代循环的演进全景"
-      ],
-      "update_time": 1783219273
-    },
-    {
-      "media_id": "P-BQ4k9e9KyTXgw_R-fl1fYjf2F-VSfNcWw-ke_WF2GfNAjYy4UtrhMvBqwdwSNi",
-      "titles": [
-        "能停的 Loop 才敢上生产：从单次会话到可托付的代理控制系统"
-      ],
-      "update_time": 1783217389
+      "update_time": 1783480842
     }
   ]
 }

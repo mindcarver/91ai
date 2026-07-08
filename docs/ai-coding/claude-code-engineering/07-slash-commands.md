@@ -1,7 +1,7 @@
 # Slash Commands：把反复重打的提示词，固化成团队命令
 
 <!-- codex:cover ../../../assets/claude-code-engineering/07-slash-commands-cover.svg -->
-![Claude Code 系列文章封面：Slash Commands：把一次性提示词变成团队命令](../../../assets/claude-code-engineering/07-slash-commands-cover.svg)
+![Claude Code 系列文章封面：Slash Commands：把反复重打的提示词，固化成团队命令](../../../assets/claude-code-engineering/07-slash-commands-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Slash Commands 是 `.claude/commands/` 里的 Markdown 文件，按需加载，用 `$ARGUMENTS` 参数化。它解决的是"第三次重复写同一段提示词"的问题——把高频、短流程的任务固化成版本化文件，消除提示词漂移，统一团队输出标准。

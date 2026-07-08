@@ -1,134 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536" fill="none">
-  <rect width="1024" height="1536" fill="#F7F0E6"/>
-  <rect x="20" y="20" width="984" height="1496" rx="34" fill="#F7F0E6" stroke="#EFE4D6" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086" fill="none">
+  <defs>
+    <linearGradient id="accent-line" x1="0" y1="0" x2="82" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E78B63"/>
+      <stop offset="1" stop-color="#F2AF87"/>
+    </linearGradient>
+    <linearGradient id="title-mask" x1="620" y1="320" x2="1420" y2="780" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBF5EC"/>
+      <stop offset="1" stop-color="#FAF2E7"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="0" y="0" width="1448" height="1086" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="22" flood-color="#D7B99D" flood-opacity="0.12"/>
+    </filter>
+  </defs>
 
-  <g opacity="0.55">
-    <circle cx="116" cy="132" r="56" fill="#FBF5EC"/>
-    <circle cx="902" cy="1320" r="76" fill="#FBF5EC"/>
-    <circle cx="854" cy="238" r="46" fill="#FAF0E4"/>
-    <circle cx="172" cy="1312" r="52" fill="#FAF0E4"/>
+  <image href="cover-template-base.png" width="1448" height="1086"/>
+  <g filter="url(#soft-shadow)">
+    <rect x="620" y="330" width="800" height="430" rx="28" fill="url(#title-mask)"/>
   </g>
+  <circle cx="1278" cy="760" r="66" fill="#FBF5EC"/>
+  <rect x="312" y="904" width="824" height="76" rx="18" fill="#FFF9F1"/>
 
-  <g opacity="0.32">
-    <circle cx="168" cy="588" r="6" fill="#E8DDCF"/>
-    <circle cx="198" cy="588" r="6" fill="#E8DDCF"/>
-    <circle cx="228" cy="588" r="6" fill="#E8DDCF"/>
-    <circle cx="168" cy="618" r="6" fill="#E8DDCF"/>
-    <circle cx="198" cy="618" r="6" fill="#E8DDCF"/>
-    <circle cx="228" cy="618" r="6" fill="#E8DDCF"/>
-    <circle cx="168" cy="648" r="6" fill="#E8DDCF"/>
-    <circle cx="198" cy="648" r="6" fill="#E8DDCF"/>
-    <circle cx="228" cy="648" r="6" fill="#E8DDCF"/>
-    <circle cx="914" cy="1218" r="6" fill="#E8DDCF"/>
-    <circle cx="944" cy="1218" r="6" fill="#E8DDCF"/>
-    <circle cx="974" cy="1218" r="6" fill="#E8DDCF"/>
-    <circle cx="914" cy="1248" r="6" fill="#E8DDCF"/>
-    <circle cx="944" cy="1248" r="6" fill="#E8DDCF"/>
-    <circle cx="974" cy="1248" r="6" fill="#E8DDCF"/>
-    <circle cx="914" cy="1278" r="6" fill="#E8DDCF"/>
-    <circle cx="944" cy="1278" r="6" fill="#E8DDCF"/>
-    <circle cx="974" cy="1278" r="6" fill="#E8DDCF"/>
-  </g>
-
-  <text x="512" y="110" fill="#141414" text-anchor="middle" font-size="50" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="512" dy="0">阿新聊AI</tspan></text>
-  <line x1="488" y1="138" x2="536" y2="138" stroke="#E4865D" stroke-width="4" stroke-linecap="round"/>
-  <text x="512" y="206" fill="#141414" text-anchor="middle" font-size="34" font-weight="500" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="512" dy="0">AI 资料 https://91aihub.com/</tspan></text>
-  <text x="512" y="360" fill="#141414" text-anchor="middle" font-size="84" font-weight="500" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="512" dy="0">Claude Code</tspan></text>
-  <text x="512" y="468" fill="#141414" text-anchor="middle" font-size="92" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="512" dy="0">Hook设计原则</tspan></text>
-  <text x="512" y="602" fill="#5E554A" text-anchor="middle" font-size="28" font-weight="500" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="512" dy="0">Hook的治理定位</tspan></text>
-
-  <path d="M 270 968 C 320 870, 360 790, 512 782 C 664 790, 704 870, 754 968" fill="none" stroke="#5E554A" stroke-width="2" stroke-dasharray="6 12"/>
-  <circle cx="400" cy="670" r="13" fill="#E4865D"/>
-  <path d="M 652 720 l 20 -18 l -6 26 z" fill="#141414"/>
-
-  <path d="M 316 720 L 516 632 L 670 660 L 704 736 L 702 936 L 592 1060 L 430 1060 L 430 900 L 360 900 L 360 800 L 316 800 Z" fill="#E4865D" opacity="0.9"/>
-  <path d="M 362 792 L 432 682 L 520 652 L 612 676 L 644 742 L 642 860 L 574 940 L 452 940 L 452 808 L 392 808 Z" fill="#FFF9F2" stroke="none"/>
-  <circle cx="396" cy="874" r="7" fill="#141414"/>
-
-  <path d="M 510 706 l 18 42 l 40 -24 l -22 40 l 44 8 l -44 8 l 22 40 l -40 -24 l -18 42 l -18 -42 l -40 24 l 22 -40 l -44 -8 l 44 -8 l -22 -40 l 40 24 z" fill="none" stroke="#141414" stroke-width="4" stroke-linejoin="round"/>
-
-  <g transform="translate(500 986)">
-    <rect x="0" y="0" width="278" height="220" rx="18" fill="#FFF9F2" stroke="#141414" stroke-width="3"/>
-    <line x1="0" y1="48" x2="278" y2="48" stroke="#141414" stroke-width="3"/>
-    <circle cx="24" cy="24" r="7" fill="#E4865D"/>
-    <circle cx="52" cy="24" r="7" fill="#141414"/>
-    <circle cx="80" cy="24" r="7" fill="#141414"/>
-    <path d="M 28 124 l 20 -18 l -20 -18" fill="none" stroke="#141414" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <line x1="60" y1="126" x2="94" y2="126" stroke="#141414" stroke-width="5" stroke-linecap="round"/>
-  </g>
-
-  
-    
-    <rect x="126" y="740" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-      <path d="M 170 760 l 23 8 v 18 c 0 16 -11 28 -23 34 c -12 -6 -23 -18 -23 -34 v -18 z" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <rect x="163" y="782" width="14" height="12" rx="2" fill="#F0D1C0" stroke="#141414" stroke-width="2"/>
-      <path d="M 166 782 v -8 a 4 4 0 0 1 8 0 v 8" fill="none" stroke="#141414" stroke-width="2"/>
-    
-  
-    
-    <rect x="126" y="930" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-    <path d="M 170 948 c 18 0 22 8 22 16 c 0 7 -3 12 -10 16 l 5 16 l -11 -9 c -2 1 -4 1 -6 1 c -18 0 -22 -8 -22 -16 c 0 -8 4 -24 22 -24 z" fill="none" stroke="#141414" stroke-width="2.5"/>
-    <line x1="160" y1="969" x2="180" y2="969" stroke="#141414" stroke-width="2.5"/>
-    <line x1="160" y1="981" x2="176" y2="981" stroke="#141414" stroke-width="2.5"/>
-  
-  
-    
-    <rect x="126" y="1120" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-      <path d="M 148 1146 h 18 c 8 0 12 3 12 9 v 28 h -18 c -8 0 -12 -3 -12 -9 z" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <path d="M 192 1146 h -18 c -8 0 -12 3 -12 9 v 28 h 18 c 8 0 12 -3 12 -9 z" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <line x1="170" y1="1146" x2="170" y2="1186" stroke="#141414" stroke-width="2"/>
-      <line x1="156" y1="1162" x2="168" y2="1162" stroke="#141414" stroke-width="2"/>
-      <line x1="172" y1="1162" x2="184" y2="1162" stroke="#141414" stroke-width="2"/>
-    
-  
-    
-    <rect x="810" y="740" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-      <rect x="829" y="764" width="18" height="14" rx="4" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <rect x="861" y="780" width="18" height="14" rx="4" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <rect x="845" y="800" width="18" height="14" rx="4" fill="#F0D1C0" stroke="#141414" stroke-width="2.5"/>
-      <line x1="847" y1="778" x2="861" y2="787" stroke="#141414" stroke-width="2.5"/>
-      <line x1="845" y1="800" x2="845" y2="778" stroke="#141414" stroke-width="2.5"/>
-    
-  
-    
-    <rect x="810" y="930" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-      <path d="M 830 992 v -36 l 16 -6 l 16 6 l 16 -6 v 36 l -16 6 l -16 -6 z" fill="none" stroke="#141414" stroke-width="2.5" stroke-linejoin="round"/>
-      <line x1="846" y1="950" x2="846" y2="986" stroke="#141414" stroke-width="2"/>
-      <line x1="862" y1="956" x2="862" y2="992" stroke="#141414" stroke-width="2"/>
-    
-  
-    
-    <rect x="810" y="1120" width="88" height="88" rx="18" fill="#F4ECE0" stroke="#D7CCBE" stroke-width="1.5"/>
-    
-      <rect x="830" y="1144" width="48" height="38" rx="8" fill="none" stroke="#141414" stroke-width="2.5"/>
-      <line x1="830" y1="1156" x2="878" y2="1156" stroke="#141414" stroke-width="2"/>
-      <circle cx="840" cy="1150" r="3" fill="#E4865D"/>
-      <circle cx="850" cy="1150" r="3" fill="#141414"/>
-      <path d="M 840 1171 l 8 -7 l -8 -7" fill="none" stroke="#141414" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <line x1="853" y1="1172" x2="866" y2="1172" stroke="#141414" stroke-width="2.5"/>
-    
-  
-  
-
-  <path d="M 120 1160 l -28 10" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 140 1184 l -18 22" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 160 1206 l 0 28" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 806 622 l 8 -34" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 834 638 l 24 -28" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 862 662 l 34 -6" stroke="#141414" stroke-width="4" stroke-linecap="round"/>
-  <path d="M 128 1290 q -10 0 -10 12 v 18 q 0 12 -10 18 q 10 6 10 18 v 18 q 0 12 10 12" fill="none" stroke="#E8DDCF" stroke-width="4" stroke-linecap="round"/>
-  <line x1="150" y1="1310" x2="236" y2="1310" stroke="#E8DDCF" stroke-width="5" stroke-linecap="round"/>
-  <line x1="150" y1="1340" x2="252" y2="1340" stroke="#E8DDCF" stroke-width="5" stroke-linecap="round"/>
-
-  <line x1="342" y1="1378" x2="458" y2="1378" stroke="#141414" stroke-width="3"/>
-  <line x1="568" y1="1378" x2="684" y2="1378" stroke="#141414" stroke-width="3"/>
-  <path d="M 512 1366 l 10 12 l -10 12 l -10 -12 z" fill="#141414"/>
-  <text x="512" y="1450" fill="#141414" text-anchor="middle" font-size="18" font-weight="500" letter-spacing="3.5" font-family="Menlo, Monaco, Consolas, monospace">HOOK. HOOK. RULES.</text>
-  <line x1="480" y1="1496" x2="544" y2="1496" stroke="#E4865D" stroke-width="4" stroke-linecap="round"/>
+  <text x="1000" y="468" fill="#141414" text-anchor="middle" font-size="46" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1000" dy="0">Hook怎么写才不翻车</tspan><tspan x="1000" dy="54.279999999999994">小、确定、可解释、可回</tspan><tspan x="1000" dy="54.279999999999994">滚</tspan></text>
+  <text x="724" y="944" fill="#141414" text-anchor="middle" font-size="30" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">史上最全 免费AI 资料</text>
+  <line x1="960" y1="648.56" x2="1040" y2="648.56" stroke="url(#accent-line)" stroke-width="6" stroke-linecap="round"/>
 </svg>

@@ -1,7 +1,7 @@
-# 项目地图：让 Claude Code 读懂目录、命令和边界
+# Claude Code 为什么总不懂你的项目？缺一张「项目地图」
 
 <!-- codex:cover ../../../assets/claude-code-engineering/03-project-map-cover.svg -->
-![Claude Code 系列文章封面：项目地图：让 Claude Code 读懂目录、命令和边界](media/01-03-project-map-cover.png)
+![Claude Code 系列文章封面：Claude Code 为什么总不懂你的项目？缺一张「项目地图」](media/01-03-project-map-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** 项目地图不是目录树打印。它是一份结构化声明，告诉 Claude Code 哪些目录存在、各管什么、服务怎么调用、命令怎么跑、哪些东西不能碰。没有地图，Claude Code 靠搜索猜结构——猜错一次就是跨模块耦合的开始。

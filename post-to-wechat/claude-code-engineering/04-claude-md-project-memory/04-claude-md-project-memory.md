@@ -1,7 +1,7 @@
-# CLAUDE.md：把团队规则写成机器可用上下文
+# CLAUDE.md：这不是写给人看的文档，而是写给 AI 的上下文
 
 <!-- codex:cover ../../../assets/claude-code-engineering/04-claude-md-project-memory-cover.svg -->
-![Claude Code 系列文章封面：CLAUDE.md：把团队规则写成机器可用上下文](media/01-04-claude-md-project-memory-cover.png)
+![Claude Code 系列文章封面：CLAUDE.md：这不是写给人看的文档，而是写给 AI 的上下文](media/01-04-claude-md-project-memory-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** `CLAUDE.md` 不是给人读的文档，是给模型读的工程规格。它控制 Claude Code 的行为边界，每次会话都被全量加载到上下文。写得好，省掉反复提醒；写得差，浪费 Token 还不生效。

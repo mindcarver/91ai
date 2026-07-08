@@ -1,7 +1,7 @@
 # Headless 模式：把 Claude Code 装进脚本里跑
 
 <!-- codex:cover ../../../assets/claude-code-engineering/27-headless-mode-cover.svg -->
-![Claude Code 系列文章封面：Headless 模式：把 Claude Code 放进脚本](../../../assets/claude-code-engineering/27-headless-mode-cover.svg)
+![Claude Code 系列文章封面：Headless 模式：把 Claude Code 装进脚本里跑](../../../assets/claude-code-engineering/27-headless-mode-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Headless 模式用 `-p` 参数把 Claude Code 从交互式终端工具变成可编排的自动化组件。适合批处理、CI/CD 集成、定期巡检和低风险只读任务。关键是控制提示词作用域、设定 `--max-turns` 上限、用 `--output-format` 约束输出格式。

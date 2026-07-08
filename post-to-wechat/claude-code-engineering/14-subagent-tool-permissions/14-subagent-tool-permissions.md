@@ -1,7 +1,7 @@
-# 工具权限：只读审计代理为什么不能有写权限
+# 工具权限：为什么「只读审计」代理绝不能拿到写权限
 
 <!-- codex:cover ../../../assets/claude-code-engineering/14-subagent-tool-permissions-cover.svg -->
-![Claude Code 系列文章封面：工具权限：只读审计代理为什么不能有写权限](media/01-14-subagent-tool-permissions-cover.png)
+![Claude Code 系列文章封面：工具权限：为什么「只读审计」代理绝不能拿到写权限](media/01-14-subagent-tool-permissions-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** Subagent 的工具权限应该按任务最小化。审计、研究、测试诊断通常不需要写文件权限。权限升级应该基于失败证据，而不是预期需求。

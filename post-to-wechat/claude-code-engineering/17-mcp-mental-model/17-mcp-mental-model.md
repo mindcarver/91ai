@@ -1,7 +1,7 @@
-# MCP 心智模型：外部系统不是复制粘贴，而是工具接口
+# MCP 心智模型：外部数据不是用来复制粘贴的，而是工具接口
 
 <!-- codex:cover ../../../assets/claude-code-engineering/17-mcp-mental-model-cover.svg -->
-![Claude Code 系列文章封面：MCP 心智模型：外部系统不是复制粘贴，而是工具接口](media/01-17-mcp-mental-model-cover.png)
+![Claude Code 系列文章封面：MCP 心智模型：外部数据不是用来复制粘贴的，而是工具接口](media/01-17-mcp-mental-model-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** MCP 让 Claude Code 把外部系统当作结构化工具来调用，而不是让人类做中间搬运工。但 MCP 不是万能胶水——理解它的协议边界、工具定义模型和风险特征，才能判断什么该接、什么不该接。

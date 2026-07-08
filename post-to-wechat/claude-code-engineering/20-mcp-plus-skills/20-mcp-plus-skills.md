@@ -1,7 +1,7 @@
-# MCP + Skill：让工具按团队 SOP 被正确使用
+# MCP 给能力，Skill 教流程：工具才能按团队 SOP 被用对
 
 <!-- codex:cover ../../../assets/claude-code-engineering/20-mcp-plus-skills-cover.svg -->
-![Claude Code 系列文章封面：MCP + Skill：让工具按团队 SOP 被正确使用](media/01-20-mcp-plus-skills-cover.png)
+![Claude Code 系列文章封面：MCP 给能力，Skill 教流程：工具才能按团队 SOP 被用对](media/01-20-mcp-plus-skills-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** MCP 提供"能做什么"，Skill 提供"应该怎么做"。只接 MCP 不写 Skill，等于给实习生一个 API key 但不给他操作手册——工具在手里，但流程在脑子里，而 AI 的脑子里没有你的团队流程。

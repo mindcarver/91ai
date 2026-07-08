@@ -1,7 +1,7 @@
 # 从安装到第一个真实任务：Claude Code 的权限模式怎么选
 
-<!-- codex:cover ../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.png -->
-![Claude Code 系列文章封面：从安装到第一个真实任务：Claude Code 的权限模式怎么选](../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.png)
+<!-- codex:cover ../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.svg -->
+![Claude Code 系列文章封面：从安装到第一个真实任务：Claude Code 的权限模式怎么选](../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 安装 Claude Code 后的第一次操作不应该是让它写代码。正确的顺序是：安装认证 → 配置权限 → 验证项目上下文是否充分 → 做一个低风险的诊断任务。跳过前两步直接上功能的团队，后面花在修复 AI 误操作上的时间是前期配置的 8-10 倍。
@@ -652,3 +652,5 @@ Claude Code 不知道：
 - **安全与治理**：[22 — Hooks 入门](./22-hooks-introduction.md) 介绍确定性控制机制，[23 — PreToolUse 阻断](./23-pretooluse-guardrails.md) 说明如何在工具执行前拦截危险操作。
 - **三个根因**：[01 — 上下文搬运、验证缺失和权限失控](./01-context-validation-permission.md) 建立了本文所依赖的诊断框架。
 - **CI/CD 集成**：[27 — Headless 模式](./27-headless-mode.md) 和 [28 — GitHub Actions](./28-github-actions.md) 说明 bypassPermissions 模式的正确使用场景。
+
+

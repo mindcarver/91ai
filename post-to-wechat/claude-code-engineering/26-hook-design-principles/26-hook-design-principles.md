@@ -1,7 +1,7 @@
-# Hook 设计原则：小、确定、可解释、可回滚
+# Hook 怎么写才不翻车：小、确定、可解释、可回滚
 
 <!-- codex:cover ../../../assets/claude-code-engineering/26-hook-design-principles-cover.svg -->
-![Claude Code 系列文章封面：Hook 设计原则：小、确定、可解释、可回滚](media/01-26-hook-design-principles-cover.png)
+![Claude Code 系列文章封面：Hook 怎么写才不翻车：小、确定、可解释、可回滚](media/01-26-hook-design-principles-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** Hook 是确定性治理层，不是第二个 Agent。四条硬性约束：小（代码 ≤ 50 行，复杂度评分 ≤ 20）、确定（同样 stdin → 同样退出码）、可解释（每个 exit 2 必须带规则编号和替代方案）、可回滚（可单独禁用，禁用即时生效）。违反任一条，上线前重写。

@@ -1,7 +1,7 @@
 # Hooks 入门：从「相信 AI 守规矩」到「强制 AI 守规矩」
 
 <!-- codex:cover ../../../assets/claude-code-engineering/22-hooks-introduction-cover.svg -->
-![Claude Code 系列文章封面：Hooks 入门：事件驱动的自动化和审计](../../../assets/claude-code-engineering/22-hooks-introduction-cover.svg)
+![Claude Code 系列文章封面：Hooks 入门：从「相信 AI 守规矩」到「强制 AI 守规矩」](../../../assets/claude-code-engineering/22-hooks-introduction-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Hooks 是 Claude Code 的确定性控制层。模型负责推理，Hooks 负责在固定事件上记录、拦截、提醒和验证。它不是第二个 AI，而是纯脚本的规则引擎。

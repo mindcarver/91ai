@@ -1,7 +1,7 @@
-# 结构化输出：JSON Schema 与输出管道
+# 结构化输出：让 Agent 的产出能被下一段代码直接接住
 
 <!-- codex:cover ../../../assets/claude-code-engineering/30-structured-output-cover.svg -->
-![Claude Code 系列文章封面：结构化输出：JSON Schema 与输出管道](media/01-30-structured-output-cover.png)
+![Claude Code 系列文章封面：结构化输出：让 Agent 的产出能被下一段代码直接接住](media/01-30-structured-output-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** 自动化场景里，Claude Code 不能只输出自然语言。结构化输出通过 `--output-format json` 和 JSON Schema 约束，让后续脚本、CI 看板和审计系统能解析和动作化结果。关键不是让模型"输出 JSON"，而是设计 schema、构建验证管道、处理边界情况、对接下游系统。本文覆盖完整的输出管道：从 schema 设计到解析验证、从错误恢复到下游集成。

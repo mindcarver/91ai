@@ -1,7 +1,7 @@
 # Subagents 的本质：不是多了一个 AI，而是开了一个独立上下文
 
 <!-- codex:cover ../../../assets/claude-code-engineering/12-subagents-mental-model-cover.svg -->
-![Claude Code 系列文章封面：Subagents 的本质：独立上下文里的专家助手](../../../assets/claude-code-engineering/12-subagents-mental-model-cover.svg)
+![Claude Code 系列文章封面：Subagents 的本质：不是多了一个 AI，而是开了一个独立上下文](../../../assets/claude-code-engineering/12-subagents-mental-model-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Subagent 不是"更聪明的 Claude"。它是一块隔离的执行沙箱：独立上下文窗口、独立系统提示词、独立工具白名单。用来做"完成后汇报"的专门任务，而不是替代主会话做持续编辑。

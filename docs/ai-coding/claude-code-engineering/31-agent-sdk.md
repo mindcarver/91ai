@@ -1,7 +1,7 @@
 # Agent SDK：把 Claude Code 的 agent loop 嵌进自己的平台
 
 <!-- codex:cover ../../../assets/claude-code-engineering/31-agent-sdk-cover.svg -->
-![Claude Code 系列文章封面：Agent SDK：SDK 架构、集成模式与生产部署](../../../assets/claude-code-engineering/31-agent-sdk-cover.svg)
+![Claude Code 系列文章封面：Agent SDK：把 Claude Code 的 agent loop 嵌进自己的平台](../../../assets/claude-code-engineering/31-agent-sdk-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Agent SDK 把 Claude Code 的 agent loop、工具系统、Hooks 和 MCP 从交互式终端搬到程序化接口。核心 API 围绕 Agent、Tool、Session 三个原语构建，通过 event stream 实现状态同步。适合把能力接入内部平台、工单系统或自动化流水线。不要在单仓库个人使用阶段过早上 SDK——先在本地 CLI 验证工作流，再决定是否平台化。如果 CLI 和 Headless 模式已经满足需求，SDK 就是过度工程。

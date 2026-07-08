@@ -1,7 +1,7 @@
 # SKILL.md 结构详解：让 Skill 既会被触发、又能跑通的写法
 
 <!-- codex:cover ../../../assets/claude-code-engineering/09-skill-md-structure-cover.svg -->
-![Claude Code 系列文章封面：SKILL.md 结构：触发描述、步骤、资源和脚本](../../../assets/claude-code-engineering/09-skill-md-structure-cover.svg)
+![Claude Code 系列文章封面：SKILL.md 结构详解：让 Skill 既会被触发、又能跑通的写法](../../../assets/claude-code-engineering/09-skill-md-structure-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** SKILL.md 是 Claude Code 的最小可执行能力单元。它的结构直接决定了三个结果：能否被正确触发、加载后能否正确执行、执行时 Token 消耗是否可控。写好 SKILL.md 不是写好提示词，是设计好一个可复用的操作规程。

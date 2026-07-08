@@ -1,7 +1,7 @@
 # GitHub Actions：让 Claude Code 自动 Review PR、分类 Issue、修小 Bug
 
 <!-- codex:cover ../../../assets/claude-code-engineering/28-github-actions-cover.svg -->
-![Claude Code 系列文章封面：GitHub Actions：PR Review、Issue Triage 和简单修复](../../../assets/claude-code-engineering/28-github-actions-cover.svg)
+![Claude Code 系列文章封面：GitHub Actions：让 Claude Code 自动 Review PR、分类 Issue、修小 Bug](../../../assets/claude-code-engineering/28-github-actions-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** GitHub Actions 把 Claude Code 接入团队协作流程。第一批场景应该是 review、triage、摘要和低风险修复，不是自动合并。配置关键是：触发条件过滤、权限最小化、提示词精确、输出格式约束。

@@ -1,7 +1,7 @@
 # PostToolUse 与 Stop：让 AI 每次改完代码，自动验证、自动留痕
 
 <!-- codex:cover ../../../assets/claude-code-engineering/24-posttooluse-stop-verification-cover.svg -->
-![Claude Code 系列文章封面：PostToolUse / Stop：自动格式化、测试和结果记录](../../../assets/claude-code-engineering/24-posttooluse-stop-verification-cover.svg)
+![Claude Code 系列文章封面：PostToolUse 与 Stop：让 AI 每次改完代码，自动验证、自动留痕](../../../assets/claude-code-engineering/24-posttooluse-stop-verification-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 修改完成后的验证比修改本身更重要。`PostToolUse` 在工具执行后做增量验证，`Stop` 在会话结束时做全局验证。两者配合形成完整的验证闭环。

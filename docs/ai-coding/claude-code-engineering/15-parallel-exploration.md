@@ -1,7 +1,7 @@
 # 并行探索：让多个 Subagent 分头研究，再汇总成一个结论
 
 <!-- codex:cover ../../../assets/claude-code-engineering/15-parallel-exploration-cover.svg -->
-![Claude Code 系列文章封面：并行探索：让多个代理独立研究再汇总](../../../assets/claude-code-engineering/15-parallel-exploration-cover.svg)
+![Claude Code 系列文章封面：并行探索：让多个 Subagent 分头研究，再汇总成一个结论](../../../assets/claude-code-engineering/15-parallel-exploration-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 并行探索适合大任务的前期判断。让多个 subagent 分别研究不同方向，再由主会话整合方案。并行会增加总 token 消耗，但显著减少挂钟时间。关键前提：任务必须能拆成相互独立的问题。

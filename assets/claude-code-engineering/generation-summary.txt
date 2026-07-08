@@ -1,5 +1,3 @@
-00-claude-code-as-agent-runtime.md: keep existing PNG cover
-01-context-validation-permission.md: 01-context-validation-permission-cover.svg
 02-setup-permission-first-repo-task.md: 02-setup-permission-first-repo-task-cover.svg
 03-project-map.md: 03-project-map-cover.svg
 04-claude-md-project-memory.md: 04-claude-md-project-memory-cover.svg

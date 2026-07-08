@@ -1,7 +1,7 @@
 # 最先值得配置的三类 Subagent：探索、审查、测试
 
 <!-- codex:cover ../../../assets/claude-code-engineering/13-high-value-subagents-cover.svg -->
-![Claude Code 系列文章封面：三类高价值 Subagent：探索、审查、测试](../../../assets/claude-code-engineering/13-high-value-subagents-cover.svg)
+![Claude Code 系列文章封面：最先值得配置的三类 Subagent：探索、审查、测试](../../../assets/claude-code-engineering/13-high-value-subagents-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 最值得先做的 Subagent 是 explorer、reviewer、test-runner。它们任务边界清楚，能独立工作，结果容易验证。不要一开始就创建十几个角色，先跑稳这三个。

@@ -1,7 +1,7 @@
 # Skill 不触发、乱触发、跑挂了：一份评测与调优指南
 
 <!-- codex:cover ../../../assets/claude-code-engineering/11-skill-evaluation-cover.svg -->
-![Claude Code 系列文章封面：Skill 评测：欠触发、误触发和执行失败怎么修](../../../assets/claude-code-engineering/11-skill-evaluation-cover.svg)
+![Claude Code 系列文章封面：Skill 不触发、乱触发、跑挂了：一份评测与调优指南](../../../assets/claude-code-engineering/11-skill-evaluation-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Skill 写完不等于能用。三类核心故障——欠触发、误触发、执行失败——各有根因和修复路径。用 15 条评测集量化触发精度，用评分表量化输出质量，迭代三轮再上线。

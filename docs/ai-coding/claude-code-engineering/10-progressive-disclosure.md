@@ -1,7 +1,7 @@
 # 渐进式披露：别让 Skill 一上来就把上下文塞爆
 
 <!-- codex:cover ../../../assets/claude-code-engineering/10-progressive-disclosure-cover.svg -->
-![Claude Code 系列文章封面：渐进式披露：避免 Skill 一次塞爆上下文](../../../assets/claude-code-engineering/10-progressive-disclosure-cover.svg)
+![Claude Code 系列文章封面：渐进式披露：别让 Skill 一上来就把上下文塞爆](../../../assets/claude-code-engineering/10-progressive-disclosure-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** 每个 token 进上下文都意味着一个 token 不可用于实际任务。500 行的 Skill 全量加载可消耗 8000+ token。正确做法：SKILL.md 只放触发和路由，模板、脚本、参考资料按需读取。

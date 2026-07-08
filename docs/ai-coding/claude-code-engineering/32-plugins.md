@@ -1,7 +1,7 @@
 # Plugins：把 Commands、Skills、Hooks、MCP 打包成一套跨项目分发
 
 <!-- codex:cover ../../../assets/claude-code-engineering/32-plugins-cover.svg -->
-![Claude Code 系列文章封面：Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP](../../../assets/claude-code-engineering/32-plugins-cover.svg)
+![Claude Code 系列文章封面：Plugins：把 Commands、Skills、Hooks、MCP 打包成一套跨项目分发](../../../assets/claude-code-engineering/32-plugins-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Plugin 是 Claude Code 能力的分发单元。它把 commands、agents、skills、hooks 和 MCP servers 打包成一个可安装、可版本化、可分发的整体。适合跨仓库、跨团队复用已验证的能力集。第三方 Plugin 必须审计——它可能包含发送文件内容到外部 URL 的 Hook。

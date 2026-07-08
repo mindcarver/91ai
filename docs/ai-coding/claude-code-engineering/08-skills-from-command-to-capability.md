@@ -1,7 +1,7 @@
 # 命令写到第三遍就该升级了：什么时候该从命令变成 Skill
 
 <!-- codex:cover ../../../assets/claude-code-engineering/08-skills-from-command-to-capability-cover.svg -->
-![Claude Code 系列文章封面：Skills 入门：什么时候该从命令升级为 Skill](../../../assets/claude-code-engineering/08-skills-from-command-to-capability-cover.svg)
+![Claude Code 系列文章封面：命令写到第三遍就该升级了：什么时候该从命令变成 Skill](../../../assets/claude-code-engineering/08-skills-from-command-to-capability-cover.svg)
 <!-- /codex:cover -->
 
 **TL;DR：** Command 是一段可复用提示词，Skill 是一套结构化能力。当任务需要多步骤、外部资源、脚本执行或渐进式加载时，Command 已经不够用了——该升级。升级不是目的，解决 Command 无法承担的复杂性才是。
