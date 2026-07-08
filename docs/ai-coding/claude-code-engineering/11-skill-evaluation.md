@@ -1,4 +1,4 @@
-# Skill 评测：欠触发、误触发和执行失败怎么修
+# Skill 不触发、乱触发、跑挂了：一份评测与调优指南
 
 <!-- codex:cover ../../../assets/claude-code-engineering/11-skill-evaluation-cover.svg -->
 ![Claude Code 系列文章封面：Skill 评测：欠触发、误触发和执行失败怎么修](../../../assets/claude-code-engineering/11-skill-evaluation-cover.svg)

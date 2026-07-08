@@ -1,4 +1,4 @@
-# Subagent Hooks：给子代理注入上下文并收集结果
+# Subagent Hooks：给子代理注入上下文，再把结果收回来
 
 <!-- codex:cover ../../../assets/claude-code-engineering/25-subagent-hooks-cover.svg -->
 ![Claude Code 系列文章封面：Subagent Hooks：给子代理注入上下文并收集结果](../../../assets/claude-code-engineering/25-subagent-hooks-cover.svg)

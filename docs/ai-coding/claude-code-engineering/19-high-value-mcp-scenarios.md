@@ -1,4 +1,4 @@
-# 数据库、监控和设计系统：高价值 MCP 场景
+# 数据库、监控、设计系统：真正值得接入的高价值 MCP 场景
 
 <!-- codex:cover ../../../assets/claude-code-engineering/19-high-value-mcp-scenarios-cover.svg -->
 ![Claude Code 系列文章封面：数据库、监控和设计系统：高价值 MCP 场景](../../../assets/claude-code-engineering/19-high-value-mcp-scenarios-cover.svg)

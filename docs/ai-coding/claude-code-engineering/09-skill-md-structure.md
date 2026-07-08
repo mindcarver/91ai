@@ -1,4 +1,4 @@
-# SKILL.md 结构：触发描述、步骤、资源和脚本
+# SKILL.md 结构详解：让 Skill 既会被触发、又能跑通的写法
 
 <!-- codex:cover ../../../assets/claude-code-engineering/09-skill-md-structure-cover.svg -->
 ![Claude Code 系列文章封面：SKILL.md 结构：触发描述、步骤、资源和脚本](../../../assets/claude-code-engineering/09-skill-md-structure-cover.svg)

@@ -31,8 +31,8 @@ Claude Code 工程化的核心命题不是"让 AI 更会写代码"，而是"让 
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 00 | [Claude Code 不是代码补全，而是工程代理运行时](./00-claude-code-as-agent-runtime.md) | 模型层、工具层、记忆层、治理层四层架构；受控执行系统定位 |
-| 01 | [你真正要解决的是上下文搬运、验证缺失和权限失控](./01-context-validation-permission.md) | 工程化三组核心问题的识别和拆解 |
+| 00 | [Claude Code 不是补全工具，而是一套工程代理运行时](./00-claude-code-as-agent-runtime.md) | 模型层、工具层、记忆层、治理层四层架构；受控执行系统定位 |
+| 01 | [上下文、验证、权限：Claude Code 工程化绕不开的三道坎](./01-context-validation-permission.md) | 工程化三组核心问题的识别和拆解 |
 
 ### 第一模块：单人可用
 
@@ -40,11 +40,11 @@ Claude Code 工程化的核心命题不是"让 AI 更会写代码"，而是"让 
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 02 | [安装、登录、权限模式和第一个真实仓库任务](./02-setup-permission-first-repo-task.md) | 权限模式选择（default/plan/auto）；首次任务验证 |
-| 03 | [项目地图：让 Claude Code 读懂目录、命令和边界](./03-project-map.md) | 仓库 onboarding 模式；`/map` 命令和项目结构描述 |
-| 04 | [CLAUDE.md：把团队规则写成机器可用上下文](./04-claude-md-project-memory.md) | CLAUDE.md 模板结构；AI 操作规则 vs 人类说明的区别 |
-| 05 | [.claude/rules：把大规则拆成按路径加载的小规则](./05-rules-path-scoped-context.md) | 路径作用域规则；降低上下文污染的策略 |
-| 06 | [常用工作流：解释代码、修 Bug、补测试、写文档](./06-common-workflows.md) | 四类基础任务的 prompt 模板和验证方法 |
+| 02 | [从安装到第一个真实任务：Claude Code 的权限模式怎么选](./02-setup-permission-first-repo-task.md) | 权限模式选择（default/plan/auto）；首次任务验证 |
+| 03 | [Claude Code 为什么总不懂你的项目？缺一张「项目地图」](./03-project-map.md) | 仓库 onboarding 模式；`/map` 命令和项目结构描述 |
+| 04 | [CLAUDE.md：这不是写给人看的文档，而是写给 AI 的上下文](./04-claude-md-project-memory.md) | CLAUDE.md 模板结构；AI 操作规则 vs 人类说明的区别 |
+| 05 | [.claude/rules：CLAUDE.md 臃肿了，就把规则拆成按路径加载的小块](./05-rules-path-scoped-context.md) | 路径作用域规则；降低上下文污染的策略 |
+| 06 | [读代码、修 Bug、补测试、写文档：四套拿来即用的工作流模板](./06-common-workflows.md) | 四类基础任务的 prompt 模板和验证方法 |
 
 ### 第二模块：把重复任务变成能力
 
@@ -52,11 +52,11 @@ Claude Code 工程化的核心命题不是"让 AI 更会写代码"，而是"让 
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 07 | [Slash Commands：把一次性提示词变成团队命令](./07-slash-commands.md) | `.claude/commands/` 结构；参数化命令；团队共享 |
-| 08 | [Skills 入门：什么时候该从命令升级为 Skill](./08-skills-from-command-to-capability.md) | Command 与 Skill 的边界判断；升级信号 |
-| 09 | [SKILL.md 结构：触发描述、步骤、资源和脚本](./09-skill-md-structure.md) | frontmatter 设计；动态上下文注入；资源包组织 |
-| 10 | [渐进式披露：避免 Skill 一次塞爆上下文](./10-progressive-disclosure.md) | 按需加载策略；长流程和大资料的分段管理 |
-| 11 | [Skill 评测：欠触发、误触发和执行失败怎么修](./11-skill-evaluation.md) | 触发精度调优；执行失败的诊断和迭代方法 |
+| 07 | [Slash Commands：把反复重打的提示词，固化成团队命令](./07-slash-commands.md) | `.claude/commands/` 结构；参数化命令；团队共享 |
+| 08 | [命令写到第三遍就该升级了：什么时候该从命令变成 Skill](./08-skills-from-command-to-capability.md) | Command 与 Skill 的边界判断；升级信号 |
+| 09 | [SKILL.md 结构详解：让 Skill 既会被触发、又能跑通的写法](./09-skill-md-structure.md) | frontmatter 设计；动态上下文注入；资源包组织 |
+| 10 | [渐进式披露：别让 Skill 一上来就把上下文塞爆](./10-progressive-disclosure.md) | 按需加载策略；长流程和大资料的分段管理 |
+| 11 | [Skill 不触发、乱触发、跑挂了：一份评测与调优指南](./11-skill-evaluation.md) | 触发精度调优；执行失败的诊断和迭代方法 |
 
 ### 第三模块：复杂任务拆解
 
@@ -64,11 +64,11 @@ Claude Code 工程化的核心命题不是"让 AI 更会写代码"，而是"让 
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 12 | [Subagents 的本质：独立上下文里的专家助手](./12-subagents-mental-model.md) | 上下文隔离原理；系统提示设计；模型路由 |
-| 13 | [三类高价值 Subagent：探索、审查、测试](./13-high-value-subagents.md) | 最小有效子代理的设计模式和配置示例 |
-| 14 | [工具权限：只读审计代理为什么不能有写权限](./14-subagent-tool-permissions.md) | 工具白名单；最小权限原则；权限审计方法 |
-| 15 | [并行探索：让多个代理独立研究再汇总](./15-parallel-exploration.md) | 并行子代理的编排；结果汇总策略 |
-| 16 | [不该用 Subagent 的场景：共享细节和连续编辑](./16-when-not-to-use-subagents.md) | 过度拆分的代价；共享上下文需求的判断标准 |
+| 12 | [Subagents 的本质：不是多了一个 AI，而是开了一个独立上下文](./12-subagents-mental-model.md) | 上下文隔离原理；系统提示设计；模型路由 |
+| 13 | [最先值得配置的三类 Subagent：探索、审查、测试](./13-high-value-subagents.md) | 最小有效子代理的设计模式和配置示例 |
+| 14 | [工具权限：为什么「只读审计」代理绝不能拿到写权限](./14-subagent-tool-permissions.md) | 工具白名单；最小权限原则；权限审计方法 |
+| 15 | [并行探索：让多个 Subagent 分头研究，再汇总成一个结论](./15-parallel-exploration.md) | 并行子代理的编排；结果汇总策略 |
+| 16 | [Subagent 不是万能的：这些场景用了反而更糟](./16-when-not-to-use-subagents.md) | 过度拆分的代价；共享上下文需求的判断标准 |
 
 ### 第四模块：连接外部世界
 
@@ -76,11 +76,11 @@ Claude Code 默认只能操作本地文件和命令。MCP（Model Context Protoc
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 17 | [MCP 心智模型：外部系统不是复制粘贴，而是工具接口](./17-mcp-mental-model.md) | MCP 的定位和边界；与手动复制粘贴的本质区别 |
-| 18 | [第一个 MCP：GitHub Issue、PR 和代码上下文](./18-github-mcp.md) | GitHub MCP 配置；Issue/PR 工作流集成 |
-| 19 | [数据库、监控和设计系统：高价值 MCP 场景](./19-high-value-mcp-scenarios.md) | 真实业务场景下的 MCP 接入模式 |
-| 20 | [MCP + Skill：让工具按团队 SOP 被正确使用](./20-mcp-plus-skills.md) | 工具能力与流程知识的组合策略 |
-| 21 | [MCP 风险：Token、越权、工具投毒和提示注入](./21-mcp-risks.md) | MCP 安全清单；工具描述注入；权限最小化 |
+| 17 | [MCP 心智模型：外部数据不是用来复制粘贴的，而是工具接口](./17-mcp-mental-model.md) | MCP 的定位和边界；与手动复制粘贴的本质区别 |
+| 18 | [第一个 MCP：让 Claude Code 直接读懂你的 Issue、PR 和代码](./18-github-mcp.md) | GitHub MCP 配置；Issue/PR 工作流集成 |
+| 19 | [数据库、监控、设计系统：真正值得接入的高价值 MCP 场景](./19-high-value-mcp-scenarios.md) | 真实业务场景下的 MCP 接入模式 |
+| 20 | [MCP 给能力，Skill 教流程：工具才能按团队 SOP 被用对](./20-mcp-plus-skills.md) | 工具能力与流程知识的组合策略 |
+| 21 | [MCP 的暗面：Token 爆炸、越权、工具投毒与提示注入](./21-mcp-risks.md) | MCP 安全清单；工具描述注入；权限最小化 |
 
 ### 第五模块：确定性治理
 
@@ -88,11 +88,11 @@ Claude Code 默认只能操作本地文件和命令。MCP（Model Context Protoc
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 22 | [Hooks 入门：事件驱动的自动化和审计](./22-hooks-introduction.md) | Hook 生命周期；三类 Hook（记录/提示/阻断） |
-| 23 | [PreToolUse：阻断危险命令和高风险文件写入](./23-pretooluse-guardrails.md) | 最小权限门禁；路径和命令黑名单配置 |
-| 24 | [PostToolUse / Stop：自动格式化、测试和结果记录](./24-posttooluse-stop-verification.md) | 修改后自动验证；验证闭环设计 |
-| 25 | [Subagent Hooks：给子代理注入上下文并收集结果](./25-subagent-hooks.md) | 多代理任务的 Hook 管理；结果收集和汇总 |
-| 26 | [Hook 设计原则：小、确定、可解释、可回滚](./26-hook-design-principles.md) | 避免自动化脆弱化；Hook 质量标准 |
+| 22 | [Hooks 入门：从「相信 AI 守规矩」到「强制 AI 守规矩」](./22-hooks-introduction.md) | Hook 生命周期；三类 Hook（记录/提示/阻断） |
+| 23 | [PreToolUse：危险命令和高风险写入执行之前，先拦下来](./23-pretooluse-guardrails.md) | 最小权限门禁；路径和命令黑名单配置 |
+| 24 | [PostToolUse 与 Stop：让 AI 每次改完代码，自动验证、自动留痕](./24-posttooluse-stop-verification.md) | 修改后自动验证；验证闭环设计 |
+| 25 | [Subagent Hooks：给子代理注入上下文，再把结果收回来](./25-subagent-hooks.md) | 多代理任务的 Hook 管理；结果收集和汇总 |
+| 26 | [Hook 怎么写才不翻车：小、确定、可解释、可回滚](./26-hook-design-principles.md) | 避免自动化脆弱化；Hook 质量标准 |
 
 ### 第六模块：Headless 与 CI/CD
 
@@ -100,10 +100,10 @@ Claude Code 默认只能操作本地文件和命令。MCP（Model Context Protoc
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 27 | [Headless 模式：把 Claude Code 放进脚本](./27-headless-mode.md) | 非交互式运行；批处理和脚本集成 |
-| 28 | [GitHub Actions：PR Review、Issue Triage 和简单修复](./28-github-actions.md) | CI 中的 Claude Code 集成；GitHub Actions 配置 |
-| 29 | [CI 里的安全边界：Secrets、外部 PR、权限和审批](./29-ci-security-boundaries.md) | 供应链安全；外部贡献者隔离；审批机制 |
-| 30 | [结构化输出：让 Agent 结果能被机器继续处理](./30-structured-output.md) | JSON/Markdown 结构化输出；自动化流水线对接 |
+| 27 | [Headless 模式：把 Claude Code 装进脚本里跑](./27-headless-mode.md) | 非交互式运行；批处理和脚本集成 |
+| 28 | [GitHub Actions：让 Claude Code 自动 Review PR、分类 Issue、修小 Bug](./28-github-actions.md) | CI 中的 Claude Code 集成；GitHub Actions 配置 |
+| 29 | [CI 里的安全边界：别让一个外部 PR 偷走你的 Secrets](./29-ci-security-boundaries.md) | 供应链安全；外部贡献者隔离；审批机制 |
+| 30 | [结构化输出：让 Agent 的产出能被下一段代码直接接住](./30-structured-output.md) | JSON/Markdown 结构化输出；自动化流水线对接 |
 
 ### 第七模块：平台化和分发
 
@@ -111,9 +111,9 @@ Claude Code 默认只能操作本地文件和命令。MCP（Model Context Protoc
 
 | # | 标题 | 核心议题 |
 |---|------|----------|
-| 31 | [Agent SDK：把 Claude Code 能力嵌进内部平台](./31-agent-sdk.md) | SDK 架构；平台化场景和设计决策 |
-| 32 | [Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP](./32-plugins.md) | 插件结构；跨项目分发；版本管理 |
-| 33 | [组织级治理：版本、审计、评测、禁用和升级策略](./33-organization-governance.md) | 多团队长期维护；禁用和升级策略 |
+| 31 | [Agent SDK：把 Claude Code 的 agent loop 嵌进自己的平台](./31-agent-sdk.md) | SDK 架构；平台化场景和设计决策 |
+| 32 | [Plugins：把 Commands、Skills、Hooks、MCP 打包成一套跨项目分发](./32-plugins.md) | 插件结构；跨项目分发；版本管理 |
+| 33 | [组织级治理：多团队长期跑下去，靠的是版本、审计、评测和升级策略](./33-organization-governance.md) | 多团队长期维护；禁用和升级策略 |
 
 ---
 

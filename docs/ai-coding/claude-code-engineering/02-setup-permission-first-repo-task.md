@@ -1,4 +1,4 @@
-# 安装、登录、权限模式和第一个真实仓库任务
+# 从安装到第一个真实任务：Claude Code 的权限模式怎么选
 
 <!-- codex:cover ../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.svg -->
 ![Claude Code 系列文章封面：安装、登录、权限模式和第一个真实仓库任务](../../../assets/claude-code-engineering/02-setup-permission-first-repo-task-cover.svg)

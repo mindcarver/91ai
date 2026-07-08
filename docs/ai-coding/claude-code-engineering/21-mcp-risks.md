@@ -1,4 +1,4 @@
-# MCP 风险：Token、越权、工具投毒和提示注入
+# MCP 的暗面：Token 爆炸、越权、工具投毒与提示注入
 
 <!-- codex:cover ../../../assets/claude-code-engineering/21-mcp-risks-cover.svg -->
 ![Claude Code 系列文章封面：MCP 风险：Token、越权、工具投毒和提示注入](../../../assets/claude-code-engineering/21-mcp-risks-cover.svg)

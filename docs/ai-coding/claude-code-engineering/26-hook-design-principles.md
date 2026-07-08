@@ -1,4 +1,4 @@
-# Hook 设计原则：小、确定、可解释、可回滚
+# Hook 怎么写才不翻车：小、确定、可解释、可回滚
 
 <!-- codex:cover ../../../assets/claude-code-engineering/26-hook-design-principles-cover.svg -->
 ![Claude Code 系列文章封面：Hook 设计原则：小、确定、可解释、可回滚](../../../assets/claude-code-engineering/26-hook-design-principles-cover.svg)

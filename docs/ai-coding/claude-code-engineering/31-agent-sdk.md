@@ -1,4 +1,4 @@
-# Agent SDK：SDK 架构、集成模式与生产部署
+# Agent SDK：把 Claude Code 的 agent loop 嵌进自己的平台
 
 <!-- codex:cover ../../../assets/claude-code-engineering/31-agent-sdk-cover.svg -->
 ![Claude Code 系列文章封面：Agent SDK：SDK 架构、集成模式与生产部署](../../../assets/claude-code-engineering/31-agent-sdk-cover.svg)

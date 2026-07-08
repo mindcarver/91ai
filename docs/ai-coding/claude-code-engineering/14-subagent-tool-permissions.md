@@ -1,4 +1,4 @@
-# 工具权限：只读审计代理为什么不能有写权限
+# 工具权限：为什么「只读审计」代理绝不能拿到写权限
 
 <!-- codex:cover ../../../assets/claude-code-engineering/14-subagent-tool-permissions-cover.svg -->
 ![Claude Code 系列文章封面：工具权限：只读审计代理为什么不能有写权限](../../../assets/claude-code-engineering/14-subagent-tool-permissions-cover.svg)

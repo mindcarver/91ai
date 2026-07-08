@@ -1,4 +1,4 @@
-# 渐进式披露：避免 Skill 一次塞爆上下文
+# 渐进式披露：别让 Skill 一上来就把上下文塞爆
 
 <!-- codex:cover ../../../assets/claude-code-engineering/10-progressive-disclosure-cover.svg -->
 ![Claude Code 系列文章封面：渐进式披露：避免 Skill 一次塞爆上下文](../../../assets/claude-code-engineering/10-progressive-disclosure-cover.svg)

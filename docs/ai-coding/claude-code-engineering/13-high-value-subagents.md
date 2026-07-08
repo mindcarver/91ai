@@ -1,4 +1,4 @@
-# 三类高价值 Subagent：探索、审查、测试
+# 最先值得配置的三类 Subagent：探索、审查、测试
 
 <!-- codex:cover ../../../assets/claude-code-engineering/13-high-value-subagents-cover.svg -->
 ![Claude Code 系列文章封面：三类高价值 Subagent：探索、审查、测试](../../../assets/claude-code-engineering/13-high-value-subagents-cover.svg)

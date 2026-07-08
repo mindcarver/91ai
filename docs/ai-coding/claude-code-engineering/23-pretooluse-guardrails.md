@@ -1,4 +1,4 @@
-# PreToolUse：阻断危险命令和高风险文件写入
+# PreToolUse：危险命令和高风险写入执行之前，先拦下来
 
 <!-- codex:cover ../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.svg -->
 ![Claude Code 系列文章封面：PreToolUse：阻断危险命令和高风险文件写入](../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.svg)

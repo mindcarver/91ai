@@ -1,4 +1,4 @@
-# 你真正要解决的是上下文搬运、验证缺失和权限失控
+# 上下文、验证、权限：Claude Code 工程化绕不开的三道坎
 
 <!-- codex:cover ../../../assets/claude-code-engineering/01-context-validation-permission-cover.svg -->
 ![Claude Code 系列文章封面：你真正要解决的是上下文搬运、验证缺失和权限失控](../../../assets/claude-code-engineering/01-context-validation-permission-cover.svg)

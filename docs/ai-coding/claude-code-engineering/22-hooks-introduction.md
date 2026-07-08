@@ -1,4 +1,4 @@
-# Hooks 入门：事件驱动的自动化和审计
+# Hooks 入门：从「相信 AI 守规矩」到「强制 AI 守规矩」
 
 <!-- codex:cover ../../../assets/claude-code-engineering/22-hooks-introduction-cover.svg -->
 ![Claude Code 系列文章封面：Hooks 入门：事件驱动的自动化和审计](../../../assets/claude-code-engineering/22-hooks-introduction-cover.svg)

@@ -1,4 +1,4 @@
-# MCP 心智模型：外部系统不是复制粘贴，而是工具接口
+# MCP 心智模型：外部数据不是用来复制粘贴的，而是工具接口
 
 <!-- codex:cover ../../../assets/claude-code-engineering/17-mcp-mental-model-cover.svg -->
 ![Claude Code 系列文章封面：MCP 心智模型：外部系统不是复制粘贴，而是工具接口](../../../assets/claude-code-engineering/17-mcp-mental-model-cover.svg)

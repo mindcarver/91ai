@@ -1,4 +1,4 @@
-# 并行探索：让多个代理独立研究再汇总
+# 并行探索：让多个 Subagent 分头研究，再汇总成一个结论
 
 <!-- codex:cover ../../../assets/claude-code-engineering/15-parallel-exploration-cover.svg -->
 ![Claude Code 系列文章封面：并行探索：让多个代理独立研究再汇总](../../../assets/claude-code-engineering/15-parallel-exploration-cover.svg)

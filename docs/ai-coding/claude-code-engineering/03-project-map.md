@@ -1,4 +1,4 @@
-# 项目地图：让 Claude Code 读懂目录、命令和边界
+# Claude Code 为什么总不懂你的项目？缺一张「项目地图」
 
 <!-- codex:cover ../../../assets/claude-code-engineering/03-project-map-cover.svg -->
 ![Claude Code 系列文章封面：项目地图：让 Claude Code 读懂目录、命令和边界](../../../assets/claude-code-engineering/03-project-map-cover.svg)

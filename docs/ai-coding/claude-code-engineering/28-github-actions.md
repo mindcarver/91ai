@@ -1,4 +1,4 @@
-# GitHub Actions：PR Review、Issue Triage 和简单修复
+# GitHub Actions：让 Claude Code 自动 Review PR、分类 Issue、修小 Bug
 
 <!-- codex:cover ../../../assets/claude-code-engineering/28-github-actions-cover.svg -->
 ![Claude Code 系列文章封面：GitHub Actions：PR Review、Issue Triage 和简单修复](../../../assets/claude-code-engineering/28-github-actions-cover.svg)

@@ -1,4 +1,4 @@
-# 不该用 Subagent 的场景：共享细节和连续编辑
+# Subagent 不是万能的：这些场景用了反而更糟
 
 <!-- codex:cover ../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.svg -->
 ![Claude Code 系列文章封面：不该用 Subagent 的场景：共享细节和连续编辑](../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.svg)

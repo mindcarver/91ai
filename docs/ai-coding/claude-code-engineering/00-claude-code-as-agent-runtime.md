@@ -1,4 +1,4 @@
-# Claude Code 不是代码补全，而是工程代理运行时
+# Claude Code 不是补全工具，而是一套工程代理运行时
 
 ![Claude Code 工程代理运行时封面](../../../assets/claude-code-agent-runtime-cover.png)
 

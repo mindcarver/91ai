@@ -1,4 +1,4 @@
-# Headless 模式：把 Claude Code 放进脚本
+# Headless 模式：把 Claude Code 装进脚本里跑
 
 <!-- codex:cover ../../../assets/claude-code-engineering/27-headless-mode-cover.svg -->
 ![Claude Code 系列文章封面：Headless 模式：把 Claude Code 放进脚本](../../../assets/claude-code-engineering/27-headless-mode-cover.svg)

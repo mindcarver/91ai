@@ -1,4 +1,4 @@
-# .claude/rules：把大规则拆成按路径加载的小规则
+# .claude/rules：CLAUDE.md 臃肿了，就把规则拆成按路径加载的小块
 
 <!-- codex:cover ../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.svg -->
 ![Claude Code 系列文章封面：.claude/rules：把大规则拆成按路径加载的小规则](../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.svg)

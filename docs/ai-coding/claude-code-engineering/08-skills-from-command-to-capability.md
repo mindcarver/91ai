@@ -1,4 +1,4 @@
-# Skills 入门：什么时候该从命令升级为 Skill
+# 命令写到第三遍就该升级了：什么时候该从命令变成 Skill
 
 <!-- codex:cover ../../../assets/claude-code-engineering/08-skills-from-command-to-capability-cover.svg -->
 ![Claude Code 系列文章封面：Skills 入门：什么时候该从命令升级为 Skill](../../../assets/claude-code-engineering/08-skills-from-command-to-capability-cover.svg)

@@ -1,4 +1,4 @@
-# 常用工作流：解释代码、修 Bug、补测试、写文档
+# 读代码、修 Bug、补测试、写文档：四套拿来即用的工作流模板
 
 <!-- codex:cover ../../../assets/claude-code-engineering/06-common-workflows-cover.svg -->
 ![Claude Code 系列文章封面：常用工作流：解释代码、修 Bug、补测试、写文档](../../../assets/claude-code-engineering/06-common-workflows-cover.svg)

@@ -1,4 +1,4 @@
-# 组织级治理：版本、审计、评测、禁用和升级策略
+# 组织级治理：多团队长期跑下去，靠的是版本、审计、评测和升级策略
 
 <!-- codex:cover ../../../assets/claude-code-engineering/33-organization-governance-cover.svg -->
 ![Claude Code 系列文章封面：组织级治理：版本、审计、评测、禁用和升级策略](../../../assets/claude-code-engineering/33-organization-governance-cover.svg)

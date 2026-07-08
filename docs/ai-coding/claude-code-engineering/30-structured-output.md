@@ -1,4 +1,4 @@
-# 结构化输出：JSON Schema 与输出管道
+# 结构化输出：让 Agent 的产出能被下一段代码直接接住
 
 <!-- codex:cover ../../../assets/claude-code-engineering/30-structured-output-cover.svg -->
 ![Claude Code 系列文章封面：结构化输出：JSON Schema 与输出管道](../../../assets/claude-code-engineering/30-structured-output-cover.svg)

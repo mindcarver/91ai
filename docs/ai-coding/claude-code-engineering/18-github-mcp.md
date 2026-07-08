@@ -1,4 +1,4 @@
-# 第一个 MCP：GitHub Issue、PR 和代码上下文
+# 第一个 MCP：让 Claude Code 直接读懂你的 Issue、PR 和代码
 
 <!-- codex:cover ../../../assets/claude-code-engineering/18-github-mcp-cover.svg -->
 ![Claude Code 系列文章封面：第一个 MCP：GitHub Issue、PR 和代码上下文](../../../assets/claude-code-engineering/18-github-mcp-cover.svg)

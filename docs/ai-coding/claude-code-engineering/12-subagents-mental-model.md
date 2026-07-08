@@ -1,4 +1,4 @@
-# Subagents 的本质：独立上下文里的专家助手
+# Subagents 的本质：不是多了一个 AI，而是开了一个独立上下文
 
 <!-- codex:cover ../../../assets/claude-code-engineering/12-subagents-mental-model-cover.svg -->
 ![Claude Code 系列文章封面：Subagents 的本质：独立上下文里的专家助手](../../../assets/claude-code-engineering/12-subagents-mental-model-cover.svg)

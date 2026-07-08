@@ -1,4 +1,4 @@
-# MCP + Skill：让工具按团队 SOP 被正确使用
+# MCP 给能力，Skill 教流程：工具才能按团队 SOP 被用对
 
 <!-- codex:cover ../../../assets/claude-code-engineering/20-mcp-plus-skills-cover.svg -->
 ![Claude Code 系列文章封面：MCP + Skill：让工具按团队 SOP 被正确使用](../../../assets/claude-code-engineering/20-mcp-plus-skills-cover.svg)

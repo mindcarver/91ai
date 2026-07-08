@@ -1,4 +1,4 @@
-# CI 里的安全边界：Secrets、外部 PR、权限和审批
+# CI 里的安全边界：别让一个外部 PR 偷走你的 Secrets
 
 <!-- codex:cover ../../../assets/claude-code-engineering/29-ci-security-boundaries-cover.svg -->
 ![Claude Code 系列文章封面：CI 里的安全边界：Secrets、外部 PR、权限和审批](../../../assets/claude-code-engineering/29-ci-security-boundaries-cover.svg)

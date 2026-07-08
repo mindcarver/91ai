@@ -1,4 +1,4 @@
-# Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP
+# Plugins：把 Commands、Skills、Hooks、MCP 打包成一套跨项目分发
 
 <!-- codex:cover ../../../assets/claude-code-engineering/32-plugins-cover.svg -->
 ![Claude Code 系列文章封面：Plugins：打包 Commands、Agents、Skills、Hooks 和 MCP](../../../assets/claude-code-engineering/32-plugins-cover.svg)

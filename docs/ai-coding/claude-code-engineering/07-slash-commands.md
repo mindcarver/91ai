@@ -1,4 +1,4 @@
-# Slash Commands：把一次性提示词变成团队命令
+# Slash Commands：把反复重打的提示词，固化成团队命令
 
 <!-- codex:cover ../../../assets/claude-code-engineering/07-slash-commands-cover.svg -->
 ![Claude Code 系列文章封面：Slash Commands：把一次性提示词变成团队命令](../../../assets/claude-code-engineering/07-slash-commands-cover.svg)
