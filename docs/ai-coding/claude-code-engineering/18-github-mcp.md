@@ -1,7 +1,7 @@
 # 第一个 MCP：让 Claude Code 直接读懂你的 Issue、PR 和代码
 
-<!-- codex:cover ../../../assets/claude-code-engineering/18-github-mcp-cover.svg -->
-![Claude Code 系列文章封面：第一个 MCP：让 Claude Code 直接读懂你的 Issue、PR 和代码](../../../assets/claude-code-engineering/18-github-mcp-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/18-github-mcp-cover.png -->
+![Claude Code 系列文章封面：第一个 MCP：让 Claude Code 直接读懂你的 Issue、PR 和代码](../../../assets/claude-code-engineering/18-github-mcp-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** GitHub MCP 是最适合作为第一个 MCP 接入的系统。它已经在开发者的日常工作流中，数据以读为主，权限可以精确分级，且 AI 辅助编码的核心上下文——issue、PR、代码、CI——都集中在这里。

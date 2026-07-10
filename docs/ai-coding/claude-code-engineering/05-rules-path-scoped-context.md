@@ -1,7 +1,7 @@
 # .claude/rules：CLAUDE.md 臃肿了，就把规则拆成按路径加载的小块
 
-<!-- codex:cover ../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.svg -->
-![Claude Code 系列文章封面：.claude/rules：CLAUDE.md 臃肿了，就把规则拆成按路径加载的小块](../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.png -->
+![Claude Code 系列文章封面：.claude/rules：CLAUDE.md 臃肿了，就把规则拆成按路径加载的小块](../../../assets/claude-code-engineering/05-rules-path-scoped-context-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** `CLAUDE.md` 每次会话全量加载，规则多了就变成噪声。`.claude/rules/` 目录里的 Markdown 文件可以按路径匹配按需加载——编辑前端时只加载前端规则，改数据库时只加载数据库规则。

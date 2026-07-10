@@ -1,7 +1,7 @@
 # PreToolUse：危险命令和高风险写入执行之前，先拦下来
 
-<!-- codex:cover ../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.svg -->
-![Claude Code 系列文章封面：PreToolUse：危险命令和高风险写入执行之前，先拦下来](../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.png -->
+![Claude Code 系列文章封面：PreToolUse：危险命令和高风险写入执行之前，先拦下来](../../../assets/claude-code-engineering/23-pretooluse-guardrails-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** `PreToolUse` 是 Claude Code 安全控制的核心关卡。它通过退出码 2 阻断工具调用，是唯一能物理阻止 AI 行为的机制。设计原则：只拦截明确危险的操作，不做复杂业务判断。

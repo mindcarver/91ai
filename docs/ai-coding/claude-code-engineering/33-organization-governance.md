@@ -1,7 +1,7 @@
 # 组织级治理：多团队长期跑下去，靠的是版本、审计、评测和升级策略
 
-<!-- codex:cover ../../../assets/claude-code-engineering/33-organization-governance-cover.svg -->
-![Claude Code 系列文章封面：组织级治理：多团队长期跑下去，靠的是版本、审计、评测和升级策略](../../../assets/claude-code-engineering/33-organization-governance-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/33-organization-governance-cover.png -->
+![Claude Code 系列文章封面：组织级治理：多团队长期跑下去，靠的是版本、审计、评测和升级策略](../../../assets/claude-code-engineering/33-organization-governance-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** 组织级 Claude Code 落地不是"全员装工具"。它是管理七类治理对象的版本、权限、审计、评测、禁用和升级。没有治理框架的规模化推广，等于把生产环境的钥匙交给一个你无法审计的系统。

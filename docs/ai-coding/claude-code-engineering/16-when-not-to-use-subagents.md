@@ -1,7 +1,7 @@
 # Subagent 不是万能的：这些场景用了反而更糟
 
-<!-- codex:cover ../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.svg -->
-![Claude Code 系列文章封面：Subagent 不是万能的：这些场景用了反而更糟](../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.png -->
+![Claude Code 系列文章封面：Subagent 不是万能的：这些场景用了反而更糟](../../../assets/claude-code-engineering/16-when-not-to-use-subagents-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** Subagent 不适合所有复杂任务。需要频繁共享细节、连续编辑同一批文件、上下文高度耦合的任务，留在主会话更稳。不是所有任务都值得隔离——有时候隔离本身就是成本。

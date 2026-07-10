@@ -1,7 +1,7 @@
 # Subagent Hooks：给子代理注入上下文，再把结果收回来
 
-<!-- codex:cover ../../../assets/claude-code-engineering/25-subagent-hooks-cover.svg -->
-![Claude Code 系列文章封面：Subagent Hooks：给子代理注入上下文，再把结果收回来](../../../assets/claude-code-engineering/25-subagent-hooks-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/25-subagent-hooks-cover.png -->
+![Claude Code 系列文章封面：Subagent Hooks：给子代理注入上下文，再把结果收回来](../../../assets/claude-code-engineering/25-subagent-hooks-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** Subagent Hooks 管理多代理任务的边界。`SubagentStart` 在子代理启动前注入通用规则和输出约束，`SubagentStop` 在子代理结束后收集结论和审计信息。通用规则放 Hook，角色规则放 agent 配置文件。

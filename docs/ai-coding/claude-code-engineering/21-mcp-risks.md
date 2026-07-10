@@ -1,7 +1,7 @@
 # MCP 的暗面：Token 爆炸、越权、工具投毒与提示注入
 
-<!-- codex:cover ../../../assets/claude-code-engineering/21-mcp-risks-cover.svg -->
-![Claude Code 系列文章封面：MCP 的暗面：Token 爆炸、越权、工具投毒与提示注入](../../../assets/claude-code-engineering/21-mcp-risks-cover.svg)
+<!-- codex:cover ../../../assets/claude-code-engineering/21-mcp-risks-cover.png -->
+![Claude Code 系列文章封面：MCP 的暗面：Token 爆炸、越权、工具投毒与提示注入](../../../assets/claude-code-engineering/21-mcp-risks-cover.png)
 <!-- /codex:cover -->
 
 **TL;DR：** MCP 把 Claude Code 接到真实系统，也把真实系统的攻击面带到了 AI 的推理链路中。六个威胁维度、对应防护策略和审计清单。这不是理论——每个威胁都有对应的真实事故。
