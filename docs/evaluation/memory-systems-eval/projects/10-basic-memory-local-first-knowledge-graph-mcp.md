@@ -1,5 +1,7 @@
 # Basic Memory:本地优先的 markdown 知识图谱 MCP 深度技术解析
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 项目地址:https://github.com/basicmachines-co/basic-memory 。License:AGPL-3.0。约 3359 star(2026-07-03 实测)。`uv tool install basic-memory` 或 PyPI,实测版本 0.22.1。本文技术细节来自源码、CLI 实测与本次 L1 实测。
 
 ## 一、项目定位与一句话概括

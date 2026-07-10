@@ -17,11 +17,21 @@ collect_default_files() {
             docs/*/imgs/*|docs/*/illustrations/*)
                 # Authoring sidecars, not reader-facing documentation.
                 ;;
-            README.md|AGENTS.md|CLAUDE.md|docs/*.md)
+            README.md|AGENTS.md|CLAUDE.md|CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|.github/*.md|docs/*.md)
                 FILES+=("$file")
                 ;;
         esac
-    done < <(git ls-files -z -- README.md AGENTS.md CLAUDE.md docs)
+    done < <(git ls-files -z -- README.md AGENTS.md CLAUDE.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .github docs)
+
+    # Also validate new, non-ignored governance and maintenance files before
+    # their first commit, without pulling every local docs draft into scope.
+    while IFS= read -r -d '' file; do
+        case "$file" in
+            CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|.github/*.md|docs/evaluation/reproducibility-status.md|docs/maintenance/*.md)
+                FILES+=("$file")
+                ;;
+        esac
+    done < <(git ls-files -z --others --exclude-standard -- CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .github docs/evaluation/reproducibility-status.md docs/maintenance)
 }
 
 collect_explicit_files() {
@@ -74,6 +84,8 @@ function begin_file(path, base) {
     base=path
     sub(/^.*\//, "", base)
     if (base!="README.md" && base!="CLAUDE.md" && base!="AGENTS.md" &&
+        base!="CONTRIBUTING.md" && base!="SECURITY.md" &&
+        base!="CODE_OF_CONDUCT.md" && base!="pull_request_template.md" &&
         base !~ /^[a-z0-9][a-z0-9-]*[.]md$/) {
         printf "\033[0;31mFAIL\033[0m %s:- Filename not kebab-case: %s\n", path, base
         file_err++

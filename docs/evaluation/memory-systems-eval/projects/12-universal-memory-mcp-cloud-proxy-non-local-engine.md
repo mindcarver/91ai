@@ -1,5 +1,7 @@
 # Universal Memory MCP(Supermemory MCP):云代理,不是本地引擎
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 项目地址:https://github.com/supermemoryai/supermemory-mcp 。License:MIT。约 1700 star(2026-07-03 实测)。注意 README 已标注 deprecated。本文技术细节来自源码核查与官方文档。
 
 ## 一、项目定位与一句话概括

@@ -6,6 +6,14 @@
 
 # Local tool caches
 .wos-skills/
+/.omx/
+/.playwright-mcp/
+/91ai-wiki/
+
+# Generated publishing run logs
+/post-to-wechat/**/publish-results*.json
+/post-to-wechat/**/dry-run-results*.json
+/post-to-wechat/**/wechat-draft-delete-results*.json
 
 # Stray app artifacts
 未命名.base

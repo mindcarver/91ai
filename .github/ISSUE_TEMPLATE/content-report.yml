@@ -1,0 +1,65 @@
+name: 内容问题报告
+description: 报告事实错误、过时信息、失效链接或导航问题
+title: "[内容] "
+labels:
+  - documentation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢帮助改进 91ai。涉及凭据、可利用细节或其他敏感信息时，请停止填写公开 Issue，改按 [安全策略](https://github.com/mindcarver/91ai/blob/main/SECURITY.md) 私下联系。
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 问题类型
+      options:
+        - 事实错误
+        - 信息过时
+        - 失效或错误链接
+        - 导航或结构问题
+        - 其他内容问题
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: 内容位置
+      description: 请填写仓库文件路径、章节名或公开页面 URL。
+      placeholder: docs/ai-coding/example.md 的“当前判断”章节
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 发现的问题
+      description: 请区分可验证事实与个人判断，并说明实际内容和预期内容。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 来源与证据
+      description: 优先提供官方来源，并说明来源支持哪项事实。
+      placeholder: 官方文档 URL，以及对应的事实说明
+    validations:
+      required: true
+  - type: input
+    id: checked-date
+    attributes:
+      label: 核验日期
+      description: 对快速变化的信息，请填写最后核验日期。
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议修改
+      description: 如有明确建议，请说明最小修改范围。
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 公开信息确认
+      options:
+        - label: 我确认本 Issue 不包含密钥、令牌、私有 URL、内部文档或可利用的敏感细节。
+          required: true

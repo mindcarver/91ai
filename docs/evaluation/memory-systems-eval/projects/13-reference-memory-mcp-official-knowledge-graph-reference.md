@@ -1,5 +1,7 @@
 # Reference Memory MCP Server:官方实体-关系-观察知识图谱参考实现
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 项目地址:https://github.com/modelcontextprotocol/servers/tree/main/src/memory(server-memory 包)。License:MIT(server-memory 包);仓库整体 "Apache-2.0 for new contributions, existing code MIT"。约 86000 star(整个 servers monorepo,2026-07-03 实测)。包 `@modelcontextprotocol/server-memory`,版本 0.6.3。本文技术细节来自源码核查与官方文档。
 
 ## 一、项目定位与一句话概括

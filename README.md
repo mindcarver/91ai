@@ -20,7 +20,8 @@
   <a href="#三条主路径">三条主路径</a> &nbsp;·&nbsp;
   <a href="#你想做什么">按任务开始</a> &nbsp;·&nbsp;
   <a href="./docs/">内容地图</a> &nbsp;·&nbsp;
-  <a href="./docs/paths/">角色路线</a>
+  <a href="./docs/paths/">角色路线</a> &nbsp;·&nbsp;
+  <a href="#开源维护">开源维护</a>
 </p>
 
 ---
@@ -29,8 +30,8 @@
 
 | 成果 | 你会得到什么 |
 | --- | --- |
-| [四大开源知识库平台 RAG 实测横评](./docs/evaluation/kb-rag-platform-benchmark.md) | 在同一硬件、模型和数据集口径下，对比 Dify、FastGPT、MaxKB、RAGFlow 的召回表现、部署成本与工程摩擦 |
-| [13 个开源 AI 记忆系统横评](./docs/evaluation/memory-systems-eval/) | 查看统一后端下的实测结果、负分校验、关键失败模式和选型矩阵 |
+| [四大开源知识库平台 RAG 实测横评](./docs/evaluation/kb-rag-platform-benchmark.md) | 查看作者在同机与共享模型下的四类数据运行记录、协议偏差和工程摩擦；当前可复现等级为 [R1](./docs/evaluation/reproducibility-status.md) |
+| [13 个开源 AI 记忆系统横评](./docs/evaluation/memory-systems-eval/) | 查看作者运行记录、负分校验、协议差异和选型假设；当前可复现等级为 [R1](./docs/evaluation/reproducibility-status.md) |
 | [Claude Code 工程化实战系列](./docs/ai-coding/claude-code-engineering/) / [Codex 工程化实战系列](./docs/ai-coding/codex-engineering/) | 73 篇工程实践，覆盖项目上下文、权限、Skills、Subagents、MCP、Hooks、CI/CD、SDK 与团队治理 |
 
 ## 三条主路径
@@ -86,6 +87,15 @@
 </tr>
 </table>
 
+## 开源维护
+
+| 入口 | 作用 |
+| --- | --- |
+| [评测可复现性状态](./docs/evaluation/reproducibility-status.md) | 区分作者运行记录、已公开产物和可独立复跑结果 |
+| [贡献指南](./CONTRIBUTING.md) | 内容标准、来源要求、提交流程与生成物边界 |
+| [内容保鲜规则](./docs/maintenance/content-freshness.md) | 管理高时效信息、历史快照与待复核内容 |
+| [安全策略](./SECURITY.md) | 报告恶意链接、凭据泄露、提示注入与供应链风险 |
+
 ---
 
 <!-- CONTACT-START -->
@@ -121,7 +131,7 @@
 
 <p align="center">
   <sub>
-    <strong>贡献指南</strong> — 欢迎贡献 AI 工具真实使用体验、工具评测和框架对比、高质量学习资料、生产落地案例、避坑经验和安全边界。<br>
+    <strong><a href="CONTRIBUTING.md">贡献指南</a> · <a href="SECURITY.md">安全策略</a></strong> — 欢迎贡献 AI 工具真实使用体验、工具评测和框架对比、高质量学习资料、生产落地案例、避坑经验和安全边界。<br>
     提交内容请尽量说明：<em>适合谁、解决什么问题、为什么值得推荐、有哪些限制或风险</em>。
   </sub>
 </p>

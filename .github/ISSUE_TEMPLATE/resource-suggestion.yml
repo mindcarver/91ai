@@ -1,0 +1,79 @@
+name: 推荐资源
+description: 推荐值得收录的工具、教程、项目、评测或生产案例
+title: "[资源] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: resource-name
+    attributes:
+      label: 资源名称
+    validations:
+      required: true
+  - type: input
+    id: resource-url
+    attributes:
+      label: 公开链接
+      description: 优先填写官方仓库、官方文档或官方发布页。
+      placeholder: https://example.com
+    validations:
+      required: true
+  - type: dropdown
+    id: source-type
+    attributes:
+      label: 资源性质
+      options:
+        - 官方资源
+        - 开源项目
+        - 社区或第三方教程
+        - 评测或研究
+        - 生产案例
+    validations:
+      required: true
+  - type: dropdown
+    id: topic
+    attributes:
+      label: 建议专题
+      options:
+        - AI Coding
+        - Agent
+        - RAG
+        - Evaluation
+        - MCP 与工具调用
+        - Workflow
+        - 安全与生产化
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: 推荐理由
+      description: 请说明适合谁、解决什么问题，以及为什么值得收录。
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: 限制与风险
+      description: 请说明已知限制、权限要求、供应链风险或尚未验证的内容。
+    validations:
+      required: true
+  - type: input
+    id: checked-date
+    attributes:
+      label: 最后核验日期
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索仓库，未发现相同资源或重复专题。
+          required: true
+        - label: 我已区分官方事实、第三方信息与个人判断。
+          required: true
+        - label: 我没有提交密钥、令牌、私有 URL 或未授权内容。
+          required: true

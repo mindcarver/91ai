@@ -74,11 +74,21 @@ collect_default_files() {
             docs/*/imgs/*|docs/*/illustrations/*)
                 # Authoring sidecars, not reader-facing documentation.
                 ;;
-            README.md|AGENTS.md|CLAUDE.md|docs/*.md)
+            README.md|AGENTS.md|CLAUDE.md|CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|.github/*.md|docs/*.md)
                 FILES+=("$file")
                 ;;
         esac
-    done < <(git ls-files -z -- README.md AGENTS.md CLAUDE.md docs)
+    done < <(git ls-files -z -- README.md AGENTS.md CLAUDE.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .github docs)
+
+    # Also validate new, non-ignored governance and maintenance files before
+    # their first commit, without pulling every local docs draft into scope.
+    while IFS= read -r -d '' file; do
+        case "$file" in
+            CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|.github/*.md|docs/evaluation/reproducibility-status.md|docs/maintenance/*.md)
+                FILES+=("$file")
+                ;;
+        esac
+    done < <(git ls-files -z --others --exclude-standard -- CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md .github docs/evaluation/reproducibility-status.md docs/maintenance)
 }
 
 collect_explicit_files() {

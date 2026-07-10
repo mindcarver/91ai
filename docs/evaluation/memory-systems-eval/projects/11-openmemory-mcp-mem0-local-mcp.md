@@ -1,5 +1,7 @@
 # OpenMemory MCP:Mem0 的本地 MCP 形态深度技术解析
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 代码位置:https://github.com/mem0ai/mem0/tree/main/openmemory(mem0ai/openmemory 不是独立仓库,404)。License:Apache-2.0(随主仓,约 59967 star)。本文技术细节来自源码、官方文档与本次调研。
 
 ## 一、项目定位与一句话概括

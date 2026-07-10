@@ -1,5 +1,7 @@
 # LlamaIndex Memory:LlamaIndex 框架内置记忆深度技术解析
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 项目地址:https://github.com/run-llama/llama_index(memory 模块在 llama-index-core/memory)。License:MIT。约 50607 star(主仓,2026-07-03 实测)。本文技术细节来自源码、官方文档与本次 ollama 下的 L1 实测尝试。
 
 ## 一、项目定位与一句话概括

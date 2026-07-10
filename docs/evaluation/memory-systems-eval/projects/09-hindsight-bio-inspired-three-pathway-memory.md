@@ -1,5 +1,7 @@
 # Hindsight(Vectorize):生物启发的三通路 agent 记忆深度技术解析
 
+> **证据边界：R1。** 本页属于作者运行/资料调研记录；harness、输入与原始结果尚未公开，分数和选型判断只绑定当时版本、配置、样本与协议，不能视为独立复现结论。详见[评测可复现性状态](../../reproducibility-status.md)。
+
 > 项目地址:https://github.com/vectorize-io/hindsight 。License:MIT。约 17900 star(2026-07-03 实测)。PyPI `hindsight-all` / `hindsight`。本文技术细节来自源码、官方文档与本次安装尝试(Python 3.13 legacy 失败)。
 
 ## 一、项目定位与一句话概括
@@ -170,13 +172,13 @@ Hindsight 的 retain() 在本地慢(官方说 Apple Silicon 15-20 秒 / call,CPU
 
 Hindsight 自报 91.4%(首个破 90% 的 agent 记忆系统),这个数字很强,但高度条件性:
 
-**backbone = Gemini-3 Pro。** 这是 Google 最强模型之一(极强推理 + 指令遵循)。retain 的抽取在这种 backbone 下质量极高。本地模型(qwen2.5:14b / gpt-oss:20b)远弱于 Gemini-3 Pro,本地 retain 质量会显著下降。
+**报告使用 Gemini-3 Pro backbone。** 厂商报告把 91.4% 绑定在这一模型配置上;本次没有完成 Hindsight 运行,也没有在本地模型下复测,因此无法判断本地 retain 质量或模型差异造成的影响。
 
 **评测协议未公开。** 用什么 benchmark(LongMemEval?DMR?)、什么 judge、什么 embedding,README 没详说。91.4% 是总体准确率,但具体条件不透明。
 
 **三通路优势依赖强抽取。** 三通路(World / Experiences / Mental Models)的正确分类需要强 LLM 理解。弱模型可能把事实归错通路(Mental Models 抽不出抽象模式),优势打折。
 
-所以 91.4% 是"强 backbone + 三通路设计"的联合上界。本地弱模型下,Hindsight 达不到(具体多低没测,因为装不上)。这和 Mem0 自报 94%(独立复现 49%)、Graphiti 63.8% 是同类现象——自报分都在理想条件下,本地实际更低。
+所以 91.4% 只代表厂商所用 backbone、评测协议与三通路设计的组合结果。由于本次安装未完成,本地模型下能否达到以及会相差多少都未知,不能从厂商分数外推。
 
 决策时:**别把 91.4% 当本地能拿到的数。** 它是"如果你用 Gemini-3 Pro + Hindsight"的数。如果你用本地 ollama,Hindsight 实际多少未知(且 py3.13 装不上)。这是"先观望"的另一个理由——等它在标准环境 + 本地模型下有可复现的分数,再评估。
 
