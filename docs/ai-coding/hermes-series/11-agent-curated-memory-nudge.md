@@ -63,7 +63,6 @@
 
 ## Project: 91ai
 - Docs follow kebab-case; new files must run ./scripts/check.sh all before commit
-- Contact card is injected by scripts/inject-contact.sh; do not hand-edit between <!-- CONTACT-START --> markers
 
 ## Lessons learned
 - Claude API tool-use: always pass tools as a flat list, not nested
@@ -385,7 +384,7 @@ Hermes 的 cron scheduler 支持自然语言配置（"daily reports, nightly bac
 
 ## 十、和 13 项目横评里 curated 路线的定位
 
-把视角拉远一点。在记忆系统这个方向上，业界有几种主流路线，Hermes 的 curated memory 是其中一种。这个横向对比在我们 [记忆系统评测专题](../../../evaluation/memory-systems-eval/) 里有更详细的展开，这里只做路线层面的归纳。
+把视角拉远一点。在记忆系统这个方向上，业界有几种主流路线，Hermes 的 curated memory 是其中一种。这个横向对比在我们 [记忆系统评测专题](../../evaluation/memory-systems-eval/) 里有更详细的展开，这里只做路线层面的归纳。
 
 | 路线 | 代表项目 | 核心机制 | 优点 | 缺点 |
 |---|---|---|---|---|
@@ -482,4 +481,4 @@ curated memory 的交易是：**省去你手动维护知识库，换你接受 ag
 - [第 13 篇：messaging gateway（nudge 在 gateway 模式下的脆弱性）](./13-messaging-gateway-multiplatform.md)
 - [第 15 篇：cron + subagent（自动化记忆审计）](./15-cron-subagent-delegation.md)
 - [第 20 篇：安全、命令审批、DM pairing（内存中毒的根因防御）](./20-security-command-approval-dm-pairing.md)
-- [记忆系统评测专题（13 项目横评）](../../../evaluation/memory-systems-eval/)
+- [记忆系统评测专题（13 项目横评）](../../evaluation/memory-systems-eval/)

@@ -133,9 +133,9 @@
 - Hermes `/insights`、`/usage`、`/skills` 官方文档（https://hermes-agent.nousresearch.com/docs/）
 - [第 9 篇：skill 自我改进的观察方法](./09-skill-self-improvement-mechanism.md)
 - [第 11 篇：curated memory 的干预和 nudge](./11-agent-curated-memory-nudge.md)
-- [第 16 篇：cron 自动化任务的实际案例](./16-cron-automation.md)
-- [第 18 篇：成本监控和 token 账单](./18-cost-monitoring.md)
-- [第 20 篇：内存中毒的预防和恢复](./20-memory-poisoning.md)
+- [第 16 篇：端到端 recipes（含 cron / subagent 组合）](./16-end-to-end-recipes.md)
+- [第 18 篇：Nous Portal、模型选择与成本](./18-nous-portal-model-selection.md)
+- [第 20 篇：安全边界与记忆中毒防御](./20-security-command-approval-dm-pairing.md)
 - Hermes User Stories（官方收集的真实使用案例）（https://hermes-agent.nousresearch.com/docs/user-stories）
 - Reddit r/hermesagent（社区真实讨论，含反面案例）（https://www.reddit.com/r/hermesagent/）
 - Reddit：我的令人沮丧的 Hermes 体验（memory 漂移）（https://www.reddit.com/r/hermesagent/comments/1tbj6cx/my_frustrating_experience_with_hermes/）

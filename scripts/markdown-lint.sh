@@ -1,135 +1,190 @@
 #!/usr/bin/env bash
-# markdown-lint.sh — Markdown format checker for awesome-aiguide
-# Usage: ./scripts/markdown-lint.sh [file...]
-# If no files given, checks all .md files in the project.
+# markdown-lint.sh — Markdown format checker for 91ai
+# Usage: ./scripts/markdown-lint.sh [file-or-directory ...]
+# With no arguments, checks canonical, Git-tracked reader-facing Markdown.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+FILES=()
+
+collect_default_files() {
+    local file
+    while IFS= read -r -d '' file; do
+        case "$file" in
+            docs/*/imgs/*|docs/*/illustrations/*)
+                # Authoring sidecars, not reader-facing documentation.
+                ;;
+            README.md|AGENTS.md|CLAUDE.md|docs/*.md)
+                FILES+=("$file")
+                ;;
+        esac
+    done < <(git ls-files -z -- README.md AGENTS.md CLAUDE.md docs)
+}
+
+collect_explicit_files() {
+    local input file
+    for input in "$@"; do
+        [ "$input" = "--" ] && continue
+        if [ -f "$input" ]; then
+            FILES+=("$input")
+        elif [ -d "$input" ]; then
+            while IFS= read -r -d '' file; do
+                FILES+=("$file")
+            done < <(find "$input" -type f -name '*.md' -print0)
+        else
+            echo "Path not found: $input" >&2
+            return 1
+        fi
+    done
+}
+
 if [ $# -gt 0 ]; then
-    FILES=("$@")
+    collect_explicit_files "$@"
 else
-    FILES=()
-    while IFS= read -r f; do
-        FILES+=("$f")
-    done < <(find . -name '*.md' -not -path './.claude/*')
+    collect_default_files
 fi
 
-total_errors=0
-total_warnings=0
-pass_count=0
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo "No Markdown files found." >&2
+    exit 1
+fi
 
 echo "Checking markdown format on ${#FILES[@]} files..."
 echo ""
 
-for file in "${FILES[@]}"; do
-    [ -f "$file" ] || continue
+# A single awk process handles every file. Besides being much faster than
+# spawning grep/awk pipelines per document, this keeps warning totals exact.
+awk '
+function begin_file(path, base) {
+    current_file=path
     file_err=0
     file_warn=0
+    trailing=0
+    prev_level=0
+    prev_blank=1
+    first_seen=0
+    has_html_h1=0
+    in_code=0
+    fence_char=""
+    fence_n=0
 
-    # Rule 7: filename kebab-case (README.md and CLAUDE.md are exempt)
-    base=$(basename "$file")
-    if [ "$base" != "README.md" ] && [ "$base" != "CLAUDE.md" ] && [ "$base" != "AGENTS.md" ]; then
-        if ! echo "$base" | grep -qE '^[a-z0-9][a-z0-9-]*\.md$'; then
-            printf '\033[0;31mFAIL\033[0m %s:- Filename not kebab-case: %s\n' "$file" "$base"
-            file_err=$((file_err + 1))
-        fi
-    fi
-
-    # Rule 5: unclosed code blocks
-    fence_count=$(grep -cE '^```' "$file" || true)
-    fence_count=${fence_count:-0}
-    if [ $((fence_count % 2)) -ne 0 ]; then
-        printf '\033[0;31mFAIL\033[0m %s:- Unclosed code block (odd fences: %d)\n' "$file" "$fence_count"
-        file_err=$((file_err + 1))
-    fi
-
-    # Rules 1-4, 6: single awk pass
-    # Pass a flag if the file has HTML h1 (skip markdown h1 check)
-    has_html_h1="no"
-    if grep -qE '<h1[ >]' "$file"; then
-        has_html_h1="yes"
-    fi
-
-    awk_output=$(awk -v skip_h1="$has_html_h1" '
-    BEGIN { prev_level=0; in_code=0; fence_n=0; prev_blank=1; trailing=0; errs=0; wrns=0 }
-    # CommonMark fence nesting: a fence of N backticks only opens/closes at N+ backticks,
-    # so a ``` (3) inside a ```` (4) block is content, not a toggle. Tracks fence_n.
-    /^```/ {
-        match($0, /^`+/); n=RLENGTH
-        if (!in_code) { in_code=1; fence_n=n }
-        else if (n >= fence_n) { in_code=0; fence_n=0 }
-        prev_blank=0; next
+    base=path
+    sub(/^.*\//, "", base)
+    if (base!="README.md" && base!="CLAUDE.md" && base!="AGENTS.md" &&
+        base !~ /^[a-z0-9][a-z0-9-]*[.]md$/) {
+        printf "\033[0;31mFAIL\033[0m %s:- Filename not kebab-case: %s\n", path, base
+        file_err++
     }
-    in_code { prev_blank=0; next }
-    /^#{1,4} [^#]/ {
+}
+
+function finish_file() {
+    if (in_code) {
+        printf "\033[0;31mFAIL\033[0m %s:- Unclosed code block\n", current_file
+        file_err++
+    }
+    if (trailing>0) {
+        printf "\033[0;33mWARN\033[0m %s:- Trailing whitespace on %d lines (outside code blocks)\n", current_file, trailing
+    }
+
+    total_errors+=file_err
+    total_warnings+=file_warn
+    total_files++
+    if (file_err==0) {
+        printf "\033[0;32mPASS\033[0m %s\n", current_file
+        pass_count++
+    }
+}
+
+FNR==1 {
+    if (started) finish_file()
+    started=1
+    begin_file(FILENAME)
+}
+
+{
+    marker_char=substr($0, 1, 1)
+    marker_n=0
+    if (marker_char=="`" || marker_char=="~") {
+        for (i=1; i<=length($0); i++) {
+            if (substr($0, i, 1)==marker_char) marker_n++
+            else break
+        }
+    }
+    if (marker_n>=3) {
+        if (!in_code) {
+            in_code=1
+            fence_char=marker_char
+            fence_n=marker_n
+        } else if (marker_char==fence_char && marker_n>=fence_n) {
+            in_code=0
+            fence_char=""
+            fence_n=0
+        }
+        prev_blank=0
+        next
+    }
+
+    if (in_code) {
+        prev_blank=0
+        next
+    }
+
+    if ($0 ~ /<h1[ >]/) has_html_h1=1
+
+    if ($0 ~ /[[:blank:]]+$/) {
+        trailing++
+        file_warn++
+    }
+
+    if ($0 ~ /^#{1,4} [^#]/) {
         if (!first_seen) {
             first_seen=1
-            if (skip_h1!="yes" && !/^# [^#]/) {
+            if (!has_html_h1 && $0 !~ /^# [^#]/) {
                 printf "\033[0;31mFAIL\033[0m %s:%d First heading is not h1\n", FILENAME, FNR
-                errs++
+                file_err++
             }
         }
-        match($0, /^#{1,4}/); lvl=RLENGTH
-        if (prev_level>0 && lvl-prev_level>1) {
-            printf "\033[0;31mFAIL\033[0m %s:%d Heading skips level: h%d -> h%d\n", FILENAME, FNR, prev_level, lvl
-            errs++
+        match($0, /^#{1,4}/)
+        level=RLENGTH
+        if (prev_level>0 && level-prev_level>1) {
+            printf "\033[0;31mFAIL\033[0m %s:%d Heading skips level: h%d -> h%d\n", FILENAME, FNR, prev_level, level
+            file_err++
         }
-        prev_level=lvl
+        prev_level=level
     }
-    /^\* / && !/^\* \* \*/ {
+
+    if ($0 ~ /^\* / && $0 !~ /^\* \* \*/) {
         printf "\033[0;33mWARN\033[0m %s:%d Use - instead of * for list items\n", FILENAME, FNR
-        wrns++
+        file_warn++
     }
-    /^#{2,4} [^#]/ && !prev_blank {
+
+    if ($0 ~ /^#{2,4} [^#]/ && !prev_blank) {
         printf "\033[0;31mFAIL\033[0m %s:%d Missing blank line before heading\n", FILENAME, FNR
-        errs++
+        file_err++
     }
-    /^[[:space:]]*$/ { prev_blank=1; next }
-    { prev_blank=0 }
-    / +$/ { trailing++ }
-    END {
-        if (trailing>0) printf "\033[0;33mWARN\033[0m %s:- Trailing whitespace on %d lines (outside code blocks)\n", FILENAME, trailing
-        printf "STATS %d %d %d\n", errs, wrns, trailing
+
+    if ($0 ~ /^[[:space:]]*$/) {
+        prev_blank=1
+        next
     }
-    ' "$file")
+    prev_blank=0
+}
 
-    # Parse stats from awk
-    stats=$(echo "$awk_output" | grep '^STATS' | tail -1)
-    awk_err=$(echo "$stats" | awk '{print $2}')
-    awk_warn=$(echo "$stats" | awk '{print $3}')
-    awk_err=${awk_err:-0}
-    awk_warn=${awk_warn:-0}
-    file_err=$((file_err + awk_err))
-    file_warn=$((file_warn + awk_warn))
+END {
+    if (started) finish_file()
 
-    # Print non-stats output
-    echo "$awk_output" | grep -v '^STATS' || true
+    print ""
+    print "================================"
+    printf "Files: %d passed, %d with issues\n", pass_count, total_files-pass_count
+    if (total_errors>0) printf "\033[0;31m%d error(s)\033[0m, ", total_errors
+    else printf "\033[0;32m%d error(s)\033[0m, ", total_errors
+    if (total_warnings>0) printf "\033[0;33m%d warning(s)\033[0m\n", total_warnings
+    else printf "\033[0;32m%d warning(s)\033[0m\n", total_warnings
+    print "================================"
 
-    total_errors=$((total_errors + file_err))
-    total_warnings=$((total_warnings + file_warn))
-
-    if [ $file_err -eq 0 ]; then
-        printf '\033[0;32mPASS\033[0m %s\n' "$file"
-        pass_count=$((pass_count + 1))
-    fi
-done
-
-echo ""
-echo "================================"
-printf "Files: %d passed, %d with issues\n" "$pass_count" "$((${#FILES[@]} - pass_count))"
-if [ $total_errors -gt 0 ]; then
-    printf '\033[0;31m%s error(s)\033[0m, ' "$total_errors"
-else
-    printf '\033[0;32m%s error(s)\033[0m, ' "$total_errors"
-fi
-if [ $total_warnings -gt 0 ]; then
-    printf '\033[0;33m%s warning(s)\033[0m\n' "$total_warnings"
-else
-    printf '\033[0;32m%s warning(s)\033[0m\n' "$total_warnings"
-fi
-echo "================================"
-
-[ $total_errors -eq 0 ] && exit 0 || exit 1
+    if (total_errors>0) exit 1
+}
+' "${FILES[@]}"

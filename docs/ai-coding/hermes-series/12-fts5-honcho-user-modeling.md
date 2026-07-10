@@ -399,4 +399,4 @@ Hermes 集成里，agent loop 在构造每轮 context 时，会注入 User peer 
 
 **系列内交叉链接**
 - [第 10 篇：记忆三层全景](./10-memory-three-layers.md)
-- [第 11 篇：curated memory（SOUL.md / MEMORY.md / AGENTS.md）](./11-curated-memory-soul.md)
+- [第 11 篇：curated memory（SOUL.md / MEMORY.md / AGENTS.md）](./11-agent-curated-memory-nudge.md)

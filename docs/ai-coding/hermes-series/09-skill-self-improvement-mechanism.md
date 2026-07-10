@@ -470,4 +470,4 @@ skill 自我改进是 Hermes 最该被怀疑也最有想象力的功能。
 - [Medium sathishkraju：Your Hermes Agent Has No Performance Review](https://medium.com/@sathishkraju/your-hermes-agent-has-no-performance-review-heres-how-to-fix-that-92254efdfe18)
 - [Reddit r/hermesagent：Curator 合并 skill 出问题的真实案例](https://www.reddit.com/r/hermesagent/comments/1t9smfc/the_skill_curator_feature_in_hermes_agent_has_a/)
 - [X / Akshay Pachaar：self-evolving skills, pinned skill 也会被 patch](https://x.com/akshay_pachaar/status/2056050422872465775)
-- [第 5 篇：闭环学习总览](./05-learning-loop-overview.md) · [第 7 篇：手写 skill](./07-handwritten-skills.md) · [第 8 篇：Hub](./08-skill-hub.md)
+- [第 5 篇：闭环学习总览](./05-learning-loop-overview.md) · [第 7 篇：手写 skill](./07-write-first-skill.md) · [第 8 篇：Hub](./08-skills-hub-usage.md)

@@ -2,26 +2,89 @@
   <img src="./assets/awesome-ai-guide-cover.png" alt="91ai cover" width="100%" />
 </p>
 
-<h1 align="center">91ai：给技术人的 AI 资料库、教程与评测指南</h1>
+<h1 align="center">91ai：面向开发者的中文 AI 工程知识库</h1>
 
 <p align="center">
-  为技术人系统整理 AI 相关资料、教程、工具评测、项目实战与学习路径
+  聚焦 AI Coding、Agent / RAG 与 Evaluation，沉淀工程实践、学习路径、工具选型与一手评测
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/项目-594+-blue?style=flat-square" alt="项目" />
-  <img src="https://img.shields.io/badge/ML_文章-51-9cf?style=flat-square" alt="ML 文章" />
-  <img src="https://img.shields.io/badge/Coding_工具-11-green?style=flat-square" alt="Coding 工具" />
-  <img src="https://img.shields.io/badge/角色路线-6-orange?style=flat-square" alt="角色路线" />
+  <img src="https://img.shields.io/badge/精选条目-597-blue?style=flat-square" alt="精选条目 597" />
+  <img src="https://img.shields.io/badge/ML_文章-51-9cf?style=flat-square" alt="ML 文章 51" />
+  <img src="https://img.shields.io/badge/Coding_工具-6-green?style=flat-square" alt="Coding 工具 6" />
+  <img src="https://img.shields.io/badge/角色路线-6-orange?style=flat-square" alt="角色路线 6" />
 </p>
 
 <p align="center">
-  <a href="#你想做什么">快速入口</a> &nbsp;·&nbsp;
+  <a href="#代表成果">代表成果</a> &nbsp;·&nbsp;
+  <a href="#三条主路径">三条主路径</a> &nbsp;·&nbsp;
+  <a href="#你想做什么">按任务开始</a> &nbsp;·&nbsp;
   <a href="./docs/">内容地图</a> &nbsp;·&nbsp;
-  <a href="./docs/paths/">角色路线</a> &nbsp;·&nbsp;
-  <a href="./docs/ai-coding/">AI 编程</a> &nbsp;·&nbsp;
-  <a href="./docs/project-collections/">项目收藏</a>
+  <a href="./docs/paths/">角色路线</a>
 </p>
+
+---
+
+## 代表成果
+
+| 成果 | 你会得到什么 |
+| --- | --- |
+| [四大开源知识库平台 RAG 实测横评](./docs/evaluation/kb-rag-platform-benchmark.md) | 在同一硬件、模型和数据集口径下，对比 Dify、FastGPT、MaxKB、RAGFlow 的召回表现、部署成本与工程摩擦 |
+| [13 个开源 AI 记忆系统横评](./docs/evaluation/memory-systems-eval/) | 查看统一后端下的实测结果、负分校验、关键失败模式和选型矩阵 |
+| [Claude Code 工程化实战系列](./docs/ai-coding/claude-code-engineering/) / [Codex 工程化实战系列](./docs/ai-coding/codex-engineering/) | 73 篇工程实践，覆盖项目上下文、权限、Skills、Subagents、MCP、Hooks、CI/CD、SDK 与团队治理 |
+
+## 三条主路径
+
+| 主线 | 从这里开始 | 适合解决的问题 |
+| --- | --- | --- |
+| AI Coding | [AI 编程专题](./docs/ai-coding/) | 工具选型、真实开发工作流、权限安全与团队工程化 |
+| Agent / RAG | [Agent 学习路径](./docs/agent/) | 从 LLM 调用、工具与工作流，走到记忆、RAG、评测和生产化 |
+| Evaluation | [AI / 大模型 / Agent 评测专题](./docs/evaluation/) | 建立模型、RAG、Agent、AI Coding 与安全红队的持续评测体系 |
+
+## 你想做什么
+
+<table>
+<tr>
+  <td width="220" align="center"><strong>我想...</strong></td>
+  <td><strong>从这里开始</strong></td>
+</tr>
+<tr>
+  <td align="center">选一个 AI 编程工具</td>
+  <td><a href="./docs/ai-coding/">AI Coding 工具评测</a> — 按难度、场景和风险边界做横向选型</td>
+</tr>
+<tr>
+  <td align="center">系统学习 AI 应用开发</td>
+  <td><a href="./docs/agent/">Agent 学习路径</a> — 从 LLM 应用基础逐步进入工具、工作流、RAG、评测和生产化</td>
+</tr>
+<tr>
+  <td align="center">做 AI 评测</td>
+  <td><a href="./docs/evaluation/">AI / 大模型 / Agent 评测专题</a> — 模型、RAG、Agent、AI Coding 和安全红队评测地图</td>
+</tr>
+<tr>
+  <td align="center">找 Agent 框架或工作流</td>
+  <td><a href="./docs/project-collections/agents.md">Agent 项目收藏</a> — 158 个 Agent 框架、运行时和多智能体项目</td>
+</tr>
+<tr>
+  <td align="center">找一个能直接用的 AI 项目</td>
+  <td><a href="./docs/project-collections/by-scenario.md">项目收藏 · 按场景找</a> — 481 个项目按场景过滤</td>
+</tr>
+<tr>
+  <td align="center">按自己的角色学习</td>
+  <td><a href="./docs/paths/">角色学习路线</a> — 前端 / 后端 / AI 应用 / DevOps / 产品 / 普通人</td>
+</tr>
+<tr>
+  <td align="center">建立 AI 技术判断力</td>
+  <td><a href="./docs/knowledge-map.md">知识图谱</a> — 身份、能力、工具、项目、风险全景图</td>
+</tr>
+<tr>
+  <td align="center">探索 AI 变现方向</td>
+  <td><a href="./docs/ai-money/">AI 搞钱系列</a> — 10 个变现方向、开源工具链和真实案例</td>
+</tr>
+<tr>
+  <td align="center">了解全局再选方向</td>
+  <td><a href="./docs/">内容地图</a> — 学习路线、技术雷达和建设 Roadmap</td>
+</tr>
+</table>
 
 ---
 
@@ -32,7 +95,7 @@
 <table>
 <tr>
 <td align="center">
-<strong>义父们给个 Star，加我进群吹水，资料里看不懂的有大神答复</strong>
+<strong>如果这些内容对你有帮助，欢迎 Star；也欢迎交流真实使用经验、评测方法和生产落地问题。</strong>
 </td>
 </tr>
 </table>
@@ -53,51 +116,6 @@
 
 </div>
 <!-- CONTACT-END -->
-
-## 你想做什么
-
-<table>
-<tr>
-  <td width="220" align="center"><strong>我想...</strong></td>
-  <td><strong>从这里开始</strong></td>
-</tr>
-<tr>
-  <td align="center">选一个 AI 编程工具</td>
-  <td><a href="./docs/ai-coding/">AI Coding 工具评测</a> — 按难度、场景和风险边界做横向选型</td>
-</tr>
-<tr>
-  <td align="center">系统学习 AI 应用开发</td>
-  <td><a href="./docs/paths/">角色学习路线</a> — 前端 / 后端 / AI 应用 / DevOps / 产品 / 普通人</td>
-</tr>
-<tr>
-  <td align="center">找一个能直接用的 AI 项目</td>
-  <td><a href="./docs/project-collections/by-scenario.md">项目收藏 · 按场景找</a> — 481 个项目按场景过滤</td>
-</tr>
-<tr>
-  <td align="center">用 AI 赚钱</td>
-  <td><a href="./docs/ai-money/">AI 搞钱系列</a> — 10 个变现方向、开源工具链和真实案例</td>
-</tr>
-<tr>
-  <td align="center">建立 AI 技术判断力</td>
-  <td><a href="./docs/knowledge-map.md">知识图谱</a> — 身份、能力、工具、项目、风险全景图</td>
-</tr>
-<tr>
-  <td align="center">做 AI 评测</td>
-  <td><a href="./docs/evaluation/">AI / 大模型 / Agent 评测专题</a> — 模型、RAG、Agent、AI Coding 和安全红队评测地图</td>
-</tr>
-<tr>
-  <td align="center">了解 AI 记忆系统评测</td>
-  <td><a href="./docs/evaluation/memory-systems-eval/">AI 记忆系统评测专题</a> — 13 个开源记忆项目横评：LongMemEval 排名反转、负分校验、选型矩阵</td>
-</tr>
-<tr>
-  <td align="center">找 Agent 框架或工作流</td>
-  <td><a href="./docs/project-collections/agents.md">Agent 项目收藏</a> — 158 个 Agent 框架、运行时和多智能体项目</td>
-</tr>
-<tr>
-  <td align="center">了解全局再选方向</td>
-  <td><a href="./docs/">内容地图</a> — 学习路线、技术雷达和建设 Roadmap</td>
-</tr>
-</table>
 
 ---
 

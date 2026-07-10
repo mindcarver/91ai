@@ -75,7 +75,7 @@
 联系方式卡片**只在 README 保留**，内容文章（`docs/` 下的 `.md`）不加卡片。详见 `.claude/rules/contact-card.md`。
 
 - 单一真实源：`docs/_snippets/contact.html`——改联系方式只改这里
-- 注入脚本：`./scripts/inject-contact.sh <README 文件...>`（幂等：已有占位符原地替换，无则开头插入；**无参模式已停用全量注入**）
+- 注入脚本：`./scripts/inject-contact.sh README.md`（幂等：已有占位符原地替换，缺少占位符则报错；无参模式只打印提示）
 - 占位符：`<!-- CONTACT-START --> … <!-- CONTACT-END -->`，**不要手改其中内容**
-- 保留卡片的 README：根 `README.md`（banner 之后）、`docs/evaluation/README.md`、`docs/ai-coding/loop-engineering/README.md`
-- 改联系方式后：编辑 snippet → 跑 `./scripts/inject-contact.sh README.md docs/evaluation/README.md docs/ai-coding/loop-engineering/README.md`
+- 保留卡片的 README：仅根 `README.md`（任务导航之后）
+- 改联系方式后：编辑 snippet → 跑 `./scripts/inject-contact.sh README.md`

@@ -232,4 +232,4 @@ OpenClaw 到 Hermes 是数据格式转换，跨机迁移是同构环境之间的
 - [NousResearch/hermes-agent GitHub 仓库（changelog 与 issues）](https://github.com/nousresearch/hermes-agent)
 - [第 7 篇：skills 用 git 管理](./07-write-first-skill.md)
 - [第 16 篇：备份脚本实战](./16-end-to-end-recipes.md)
-- [第 22 篇：OpenClaw vs Hermes 迁移横评](./22-openclaw-vs-hermes.md)
+- [第 22 篇：OpenClaw vs Hermes 迁移横评](./22-comparison-openclaw-claude-code.md)

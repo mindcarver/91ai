@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # inject-contact.sh — 联系方式卡片注入器（单一真实源）
 #
-# 2026-07 起：联系方式卡片只在 README 保留，不再注入内容文章。
-# 本脚本不再扫描全量内容文章；只用于显式刷新指定 README 的卡片。
+# 2026-07 起：联系方式卡片只在仓库根 README.md 保留，不再注入专题或内容文章。
+# 本脚本不再扫描全量内容文章；只用于显式刷新根 README.md 的卡片。
 # 占位符: <!-- CONTACT-START --> ... <!-- CONTACT-END -->
 # 可重入(幂等):
 #   - 已有占位符: 原地替换块内容(保留卡片在文件中的位置)。
-#   - 无占位符: 在文件开头插入新块。
+#   - 无占位符: 报错，避免把卡片误放到首屏。
 #   - 重复运行: 结果完全一致, 不会堆叠。
-# 根 README.md 的卡片放在 banner 之后(非顶部), 用占位符标记;
+# 根 README.md 的卡片放在任务导航之后(非首屏), 用占位符标记;
 # 显式对该文件运行脚本会原地更新, 不会移动位置。
-# 改联系方式只需改 docs/_snippets/contact.html, 再对需要刷新的 README 显式跑本脚本。
+# 改联系方式只需改 docs/_snippets/contact.html, 再对根 README.md 跑本脚本。
 #
 # Usage:
 #   ./scripts/inject-contact.sh                                    # 已禁用全量注入，仅打印提示
-#   ./scripts/inject-contact.sh README.md docs/.../README.md ...   # 刷新指定 README 的卡片
+#   ./scripts/inject-contact.sh README.md                           # 刷新根 README 的卡片
 
 set -euo pipefail
 
@@ -33,19 +33,17 @@ if [ $# -gt 0 ]; then
     FILES=("$@")
 else
     # 2026-07 起：内容文章不再注入卡片，全量注入已禁用。
-    # 如需刷新某个 README 的卡片，请显式传文件，例如：
-    #   ./scripts/inject-contact.sh README.md docs/evaluation/README.md
-    echo "ℹ️ 内容文章不再注入联系方式卡片（仅 README 保留）。"
-    echo "   刷新 README 卡片请显式传文件，例如："
-    echo "   ./scripts/inject-contact.sh README.md docs/evaluation/README.md"
+    echo "ℹ️ 专题与内容文章不再注入联系方式卡片（仅根 README.md 保留）。"
+    echo "   刷新根 README 卡片请运行：./scripts/inject-contact.sh README.md"
     exit 0
 fi
 
-injected=0
 updated=0
+invalid=0
 
 for f in "${FILES[@]}"; do
-    [ -f "$f" ] || { echo "WARN: not a file: $f"; continue; }
+    [ -f "$f" ] || { echo "ERROR: not a file: $f"; invalid=$((invalid+1)); continue; }
+    [ "$f" = "README.md" ] || { echo "ERROR: contact card only belongs in root README.md: $f"; invalid=$((invalid+1)); continue; }
 
     if grep -qF "$START" "$f"; then
         # 已有占位符: 原地替换块内容(保留卡片在文件中的位置)
@@ -66,24 +64,16 @@ for f in "${FILES[@]}"; do
         mv "$tmp" "$f"
         updated=$((updated+1))
     else
-        # 无占位符: 在文件开头插入新块(正文去首尾多余空行)
-        body="$(awk -v START="$START" -v ENDMARK="$END" '
-            BEGIN { skip=0 }
-            $0==START { skip=1; next }
-            $0==ENDMARK { skip=0; next }
-            skip { next }
-            { print }
-        ' "$f")"
-        {
-            printf '%s\n' "$START"
-            printf '%s\n' "$NOTE"
-            cat "$SNIPPET"
-            printf '%s\n\n' "$END"
-            printf '%s' "$body" | awk '{ a[NR]=$0 } END { s=1; while (s<=NR && a[s]~/^[ \t]*$/) s++; e=NR; while (e>=s && a[e]~/^[ \t]*$/) e--; for (i=s;i<=e;i++) print a[i] }'
-        } > "$f"
-        injected=$((injected+1))
+        echo "ERROR: contact markers are missing in root README.md"
+        echo "       Add $START and $END after the task navigation, then rerun."
+        invalid=$((invalid+1))
     fi
 done
 
-echo "✅ contact 注入完成: 新增 ${injected}, 更新 ${updated} (共处理 ${#FILES[@]} 个文件)"
-echo "   改联系方式请编辑: ${SNIPPET}  →  再跑: ./scripts/inject-contact.sh <README 文件...>"
+if [ "$invalid" -gt 0 ]; then
+    echo "❌ contact 注入失败: ${invalid} 个错误，更新 ${updated}"
+    exit 1
+fi
+
+echo "✅ contact 注入完成: 更新 ${updated} (共处理 ${#FILES[@]} 个文件)"
+echo "   改联系方式请编辑: ${SNIPPET}  →  再跑: ./scripts/inject-contact.sh README.md"

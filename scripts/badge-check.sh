@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# badge-check.sh — Verify README badge counts match reality
+# badge-check.sh — Verify README badge counts against canonical source data.
 # Usage: ./scripts/badge-check.sh
 
 set -euo pipefail
@@ -7,74 +7,109 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-red()   { printf '\033[0;31m%s\033[0m' "$1"; }
-yel()   { printf '\033[0;33m%s\033[0m' "$1"; }
-grn()   { printf '\033[0;32m%s\033[0m' "$1"; }
+red() { printf '\033[0;31m%s\033[0m' "$1"; }
+grn() { printf '\033[0;32m%s\033[0m' "$1"; }
 
 errors=0
 
 echo "Checking README badge counts..."
 echo "================================"
 
-# --- Extract badge values from README.md ---
 get_badge_value() {
     local label="$1"
-    grep -o "badge/${label}-[0-9]*" README.md | grep -o '[0-9]*$'
+    grep -Eo "badge/${label}-[0-9]+" README.md 2>/dev/null \
+        | head -n 1 \
+        | sed -E 's/.*-([0-9]+)$/\1/' \
+        || true
 }
 
-# --- Badge 1: 项目 ---
-badge_proj=$(get_badge_value '项目')
-# Count from project-collections/README.md stated value
-proj_readme_count=$(grep -o '当前收录 [0-9]*' docs/project-collections/README.md | grep -o '[0-9]*' || echo "0")
+check_badge() {
+    local label="$1"
+    local actual="$2"
+    local source="$3"
+    local badge
 
-if [ "$badge_proj" != "$proj_readme_count" ]; then
-    red "FAIL"; echo " 项目 badge=$badge_proj, project-collections/README says $proj_readme_count"
-    ((errors++)) || true
-else
-    grn "PASS"; echo " 项目: badge=$badge_proj, README count=$proj_readme_count"
-fi
+    badge=$(get_badge_value "$label")
+    if [ -z "$badge" ]; then
+        red "FAIL"
+        echo " $label badge is missing from README.md"
+        ((errors++)) || true
+    elif [ "$badge" != "$actual" ]; then
+        red "FAIL"
+        echo " $label badge=$badge, actual=$actual ($source)"
+        ((errors++)) || true
+    else
+        grn "PASS"
+        echo " $label: badge=$badge, actual=$actual ($source)"
+    fi
+}
 
-# --- Badge 2: ML 文章 ---
-badge_ml=$(get_badge_value 'ML_文章')
-# Count .md files in machine-learning/ excluding README.md
-ml_count=$(find docs/machine-learning -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+# Count table data rows by their first cell. Header and separator rows are
+# excluded; an optional heading stops the count before adjacent/non-core data.
+count_named_table_rows() {
+    local file="$1"
+    local stop_heading="${2:-}"
 
-if [ "$badge_ml" != "$ml_count" ]; then
-    red "FAIL"; echo " ML_文章 badge=$badge_ml, actual file count=$ml_count"
-    ((errors++)) || true
-else
-    grn "PASS"; echo " ML_文章: badge=$badge_ml, actual=$ml_count"
-fi
+    awk -v stop="$stop_heading" '
+    stop != "" && $0 == stop { exit }
+    /^\|/ {
+        first=$0
+        sub(/^\|[[:space:]]*/, "", first)
+        sub(/[[:space:]]*\|.*/, "", first)
+        if (first=="" || first=="名称" || first ~ /^:?-+:?$/) next
+        count++
+    }
+    END { print count+0 }
+    ' "$file"
+}
 
-# --- Badge 3: Coding 工具 ---
-badge_coding=$(get_badge_value 'Coding_工具')
-# Count top-level .md files in ai-coding/ excluding README and learning-path files
-coding_count=$(ls docs/ai-coding/*.md 2>/dev/null | grep -v 'README' | grep -v 'learning-path' | wc -l | tr -d ' ')
+count_ai_coding_tools() {
+    awk '
+    $0 == "## 工具总览" { in_overview=1; next }
+    in_overview && /^## / { exit }
+    in_overview && /^\|/ {
+        first=$0
+        sub(/^\|[[:space:]]*/, "", first)
+        sub(/[[:space:]]*\|.*/, "", first)
+        if (first=="" || first=="工具" || first ~ /^:?-+:?$/) next
+        count++
+    }
+    END { print count+0 }
+    ' docs/ai-coding/README.md
+}
 
-if [ "$badge_coding" != "$coding_count" ]; then
-    red "FAIL"; echo " Coding_工具 badge=$badge_coding, actual file count=$coding_count"
-    ((errors++)) || true
-else
-    grn "PASS"; echo " Coding_工具: badge=$badge_coding, actual=$coding_count"
-fi
+# 精选条目: four explicitly defined source sets. Cross-topic duplicates
+# remain separate entries, matching the count semantics documented in the index.
+base_count=$(count_named_table_rows docs/project-collections/all-projects.md)
+semiconductor_count=$(count_named_table_rows docs/project-collections/ai-semiconductor.md)
+hot_github_count=$(count_named_table_rows docs/project-collections/hot-github-repos.md)
+agent_skills_count=$(count_named_table_rows \
+    docs/project-collections/open-agent-skills.md \
+    '## 相邻格式：Cursor Rules / 提示词')
+project_count=$((base_count + semiconductor_count + hot_github_count + agent_skills_count))
 
-# --- Badge 4: 角色路线 ---
-badge_paths=$(get_badge_value '角色路线')
-# Count .md files in paths/ excluding README.md
-paths_count=$(ls docs/paths/*.md 2>/dev/null | grep -v 'README' | wc -l | tr -d ' ')
+check_badge \
+    "精选条目" \
+    "$project_count" \
+    "$base_count + $semiconductor_count + $hot_github_count + $agent_skills_count"
 
-if [ "$badge_paths" != "$paths_count" ]; then
-    red "FAIL"; echo " 角色路线 badge=$badge_paths, actual file count=$paths_count"
-    ((errors++)) || true
-else
-    grn "PASS"; echo " 角色路线: badge=$badge_paths, actual=$paths_count"
-fi
+# ML and role-path counts use Git-tracked Markdown, excluding each index page.
+ml_count=$(git ls-files -- 'docs/machine-learning/*.md' \
+    | awk '$0 !~ /\/README\.md$/ { count++ } END { print count+0 }')
+check_badge "ML_文章" "$ml_count" "Git-tracked article files"
+
+coding_count=$(count_ai_coding_tools)
+check_badge "Coding_工具" "$coding_count" "工具总览 data rows"
+
+paths_count=$(git ls-files -- 'docs/paths/*.md' \
+    | awk '$0 !~ /\/README\.md$/ { count++ } END { print count+0 }')
+check_badge "角色路线" "$paths_count" "Git-tracked route files"
 
 echo "================================"
 if [ $errors -gt 0 ]; then
     red "$errors badge(s) out of date"
     echo ""
-    echo "To fix, update the badge URLs in README.md to match actual counts."
+    echo "Update README.md badge values to match the source data above."
     exit 1
 else
     grn "All 4 badges are up to date"

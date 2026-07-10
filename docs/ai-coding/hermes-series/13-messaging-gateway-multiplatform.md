@@ -265,6 +265,6 @@ Gateway 让 Hermes 真正变成"随时可用的个人助手"，这是它和 IDE 
 - [用 systemd 让 Hermes 常驻（zenn.dev）](https://zenn.dev/sora_biz/articles/hermes-vps-06-systemd?locale=en)：完整 unit 文件教程
 - [24/7 运行 Hermes（lumadock.com）](https://lumadock.com/tutorials/run-hermes-agent-with-systemd)：重启策略和资源限制
 - [第 14 篇：微信桥 HermesClaw](./14-wechat-bridge-hermesclaw.md)
-- [第 15 篇：cron 加子 agent](./15-cron-subagent.md)
-- [第 16 篇：端到端实战](./16-end-to-end.md)
+- [第 15 篇：cron 加子 agent](./15-cron-subagent-delegation.md)
+- [第 16 篇：端到端实战](./16-end-to-end-recipes.md)
 - [第 20 篇：安全三件套](./20-security-command-approval-dm-pairing.md)

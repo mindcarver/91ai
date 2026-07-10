@@ -15,6 +15,20 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | Continue | 开源 AI Coding 助手 | 高 | 免费 | 团队/开源偏好/CI | 生产可用 | [查看](./continue.md) |
 | Gemini CLI | 终端 AI Coding Agent | 中 | 免费额度 | 全栈/Google 生态 | 快速迭代中 | [查看](./gemini-cli.md) |
 
+## 先选阅读方式
+
+同一个工具可能同时有学习路径、参考手册和工程实战。先按目标选择，避免从最长的系列开始：
+
+| 你的目标 | 建议入口 | 怎么使用 |
+| --- | --- | --- |
+| 先比较六种 AI 编程工具 | [工具总览](#工具总览) | 先按入口形态、工程集成和风险边界做初筛 |
+| 快速建立 Claude Code 工程认知 | [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 按推荐顺序学习核心机制 |
+| 查 Claude Code 命令和配置 | [Claude Code 工具全书](./claudecode-series/README.md) | 把 78 篇当参考手册，按主题查阅 |
+| 把 Claude Code 用进真实项目 | [Claude Code 工程化实战](./claude-code-engineering/) | 聚焦工作流、权限、Hooks、MCP、CI/CD 与治理 |
+| 系统掌握 Codex CLI | [Codex CLI 完全指南](./codex-series/) | 从安装、命令走到安全、SDK 和企业治理 |
+| 把 Codex 纳入团队工程流程 | [Codex 工程化实战](./codex-engineering/) | 聚焦 AGENTS.md、沙箱、验证、CI 和团队落地 |
+| 学习跨工具的工程方法 | [Harness](./harness-engineering/) / [Loop](./loop-engineering/) / [Superpowers](./superpowers/) | 理解比单个产品更稳定的方法与控制面 |
+
 ## 工程化实战系列
 
 几个独立的深度系列，分别覆盖 Claude Code、OpenAI Codex 和相关工程化方法。它们不是功能清单，而是真实项目中的机制解析、配置指南和工作流沉淀。
@@ -29,7 +43,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | --- | --- | --- |
 | [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 想系统学习 Claude Code 工程化的人 | 从 CLAUDE.md、Skills、Subagents、Hooks、MCP 到 Headless、Agent SDK、Plugins 的 32 讲路线。 |
 | [Claude Code 工程化实战系列](./claude-code-engineering/) | 想逐篇阅读和沉淀团队材料的人 | 34 篇独立文章，覆盖个人使用、工作流沉淀、Subagents、MCP、Hooks、CI/CD、SDK、Plugins 和组织治理。 |
-| [Claude Code 工具全书](./claudecode-series/) | 想全面了解 Claude Code 各方面能力的人 | 78 篇独立文章，覆盖安装、CLI 命令、交互模式、配置、权限安全、日常开发工作流、Skills/MCP/Hooks/Subagents、并行开发、Headless/CI/SDK、团队治理和排错。 |
+| [Claude Code 工具全书](./claudecode-series/README.md) | 想全面了解 Claude Code 各方面能力的人 | 78 篇独立文章，覆盖安装、CLI 命令、交互模式、配置、权限安全、日常开发工作流、Skills/MCP/Hooks/Subagents、并行开发、Headless/CI/SDK、团队治理和排错。 |
 
 ### Codex 系列
 

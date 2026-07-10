@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# check.sh — Main entry point for awesome-aiguide validation
-# Usage: ./scripts/check.sh <command>
+# check.sh — Main entry point for 91ai documentation validation
+# Usage: ./scripts/check.sh <command> [path ...]
 #   lint       — Markdown format check
 #   links      — Internal link check
 #   links-ext  — Internal + external link check
@@ -23,7 +23,7 @@ run_script() {
 }
 
 usage() {
-    echo "Usage: $0 <command>"
+    echo "Usage: $0 <command> [path ...]"
     echo ""
     echo "Commands:"
     echo "  lint       — Markdown format check"
@@ -32,6 +32,9 @@ usage() {
     echo "  badges     — Badge count verification"
     echo "  all        — Run lint + links + badges"
     echo "  all-full   — Run lint + links-ext + badges (slow)"
+    echo ""
+    echo "With no paths, lint and link checks use canonical Git-tracked Markdown."
+    echo "Explicit Markdown files or directories can be passed to lint, links, or all."
     echo ""
     echo "Options for links-ext:"
     echo "  --timeout=N  Set curl timeout in seconds (default: 10)"
@@ -53,8 +56,8 @@ case "${1:-}" in
         run_script badge-check.sh "${@:2}" || total_errors=$((total_errors + 1))
         ;;
     all)
-        run_script markdown-lint.sh || total_errors=$((total_errors + 1))
-        run_script link-check.sh || total_errors=$((total_errors + 1))
+        run_script markdown-lint.sh "${@:2}" || total_errors=$((total_errors + 1))
+        run_script link-check.sh "${@:2}" || total_errors=$((total_errors + 1))
         run_script badge-check.sh || total_errors=$((total_errors + 1))
         ;;
     all-full)

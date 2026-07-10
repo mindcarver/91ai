@@ -1,37 +1,30 @@
 # 联系方式卡片规则
 
-联系方式卡片**只在 README 保留**，内容文章（`docs/` 下的 `.md`）不加卡片。卡片内容仍由 `inject-contact.sh` 从单一 snippet 刷新，实现「一处定义、README 处引用」。
+联系方式卡片**只在根 `README.md` 保留**，`docs/` 下的专题索引和内容文章都不加卡片。卡片内容由 `inject-contact.sh` 从单一 snippet 刷新，实现「一处定义、一处引用」。
 
-> 2026-07 起调整：原先每篇内容文章顶部都注入卡片，现已全部移除，仅保留 README 的卡片。`inject-contact.sh` 的全量注入（无参扫描 `docs/` 下所有文章）已停用。
+> 2026-07 起调整：原先内容页与部分专题 README 会注入卡片，现已移除，仅根 `README.md` 保留。`inject-contact.sh` 的全量注入已停用。
 
 ## 单一真实源
 
 - 卡片内容定义在 `docs/_snippets/contact.html`，**只此一处**。
-- 改联系方式（微信公众号、抖音、小红书、微信、AI 社区链接）：**只改 `docs/_snippets/contact.html`**，再对需要刷新的 README 显式跑脚本（见下）。
+- 改联系方式：**只改 `docs/_snippets/contact.html`**，再刷新根 README。
 - **禁止手动编辑 README 中占位符之间的内容**——下次跑脚本会被覆盖。
 
 ## 哪些文件有卡片
 
-只有以下 README 保留卡片：
-
-- 根 `README.md`（卡片在 banner 之后，非顶部）
-- `docs/evaluation/README.md`
-- `docs/ai-coding/loop-engineering/README.md`
-
-内容文章（`docs/` 下非 `README.md` 的 `.md`）**一律不加卡片**，新文章直接以 `# 标题`（或既有的 HTML 注释 / frontmatter）开头。
+仅根 `README.md` 保留卡片，位于任务导航之后。其他 README 与内容文章一律不加卡片。
 
 ## 操作规则
 
-- **新增内容文章**：不要注入、也不要手动加卡片。
-- **改联系方式后**：编辑 `docs/_snippets/contact.html` → 显式对需要刷新的 README 跑脚本：
+- **新增文档**：不要注入、也不要手动加卡片。
+- **改联系方式后**：编辑 `docs/_snippets/contact.html` → 刷新根 README：
 
-  ```
-  ./scripts/inject-contact.sh README.md docs/evaluation/README.md docs/ai-coding/loop-engineering/README.md
+  ```sh
+  ./scripts/inject-contact.sh README.md
   ```
 
-- **新增需要卡片的 README**：先在该 README 想放卡片的位置插入占位符对（`<!-- CONTACT-START -->` 与 `<!-- CONTACT-END -->`），再对该文件显式跑 `./scripts/inject-contact.sh <该 README>`。
-- **脚本幂等**：已有占位符 → 原地替换块内容（保留卡片位置）；无占位符 → 在文件开头插入。重复运行结果一致，不会堆叠。
-- **`inject-contact.sh` 无参模式已停用**：只打印提示并退出，不再扫描注入内容文章。
+- **脚本幂等**：已有占位符 → 原地替换块内容；缺少占位符 → 报错，避免把卡片误放到首屏。重复运行不会堆叠。
+- **`inject-contact.sh` 仅接受根 `README.md`**：无参模式只打印提示；传入其他路径会报错。
 
 ## 占位符约定
 
@@ -44,9 +37,9 @@
 <!-- CONTACT-END -->
 ```
 
-根 `README.md` 的卡片放在 banner 之后（非顶部）；其余 README 的卡片位置由各自占位符决定。
+根 `README.md` 的卡片放在任务导航之后（非首屏）。
 
 ## 校验
 
 - 改完 snippet 并刷新 README 后，运行 `./scripts/check.sh all` 确认 lint / links / badge 全部通过。
-- 卡片内只允许**外部绝对链接**（如 `https://91aihub.com/`），不要用相对路径——snippet 会被注入到不同深度的目录，相对路径会失效。
+- 卡片内只允许**外部绝对链接**（如 `https://91aihub.com/`），不要用相对路径。
