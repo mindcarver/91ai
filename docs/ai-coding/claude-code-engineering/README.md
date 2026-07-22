@@ -400,3 +400,20 @@ Never suggest direct file edits. Return findings only.
 - [Claude Code Advanced Patterns](https://resources.anthropic.com/hubfs/Claude%20Code%20Advanced%20Patterns_%20Subagents%2C%20MCP%2C%20and%20Scaling%20to%20Real%20Codebases.pdf)——Subagents、MCP 和大规模代码库的进阶模式
 - [The Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf)——Skill 设计和构建的完整指南
 - [Dive into Claude Code](https://arxiv.org/abs/2604.14228)——Claude Code 设计空间的学术论文，适合理解系统设计原理
+
+## 2026-07-22 增补专题
+
+以下文章记录 2026 年新增或发生明显变化的工程能力。原有 00-33 篇保持不变，编号 34 预留，不创建 `34-unified-execution-surfaces.md`。
+
+| # | 标题 | 核心议题 |
+|---|------|----------|
+| 35 | [后台 Agents：长任务如何运行、接管和恢复](./35-background-agents-control-plane.md) | 后台运行；`claude agents`；通知和任务恢复 |
+| 36 | [Agent Teams：多 Agent 如何共享任务并直接协作](./36-agent-teams.md) | 共享任务；Agent 间通信；与 Subagents 的边界 |
+| 37 | [Worktree 隔离：并行 Agent 如何避免互相覆盖](./37-worktree-isolation.md) | `--worktree`；Subagent 隔离；并行开发边界 |
+| 38 | [Memory 与强制规则：经验如何留下，边界如何守住](./38-memory-and-enforcement.md) | `CLAUDE.md`；Auto Memory；Subagent Memory；Hooks |
+| 39 | [Chrome 视觉验证：让 Claude Code 检查真实页面](./39-chrome-visual-verification.md) | 浏览器操作；站点权限；截图和端到端验证 |
+| 40 | [Channels：让外部事件进入 Claude Code](./40-channels-external-events.md) | Webhook；聊天桥接；事件驱动 Agent |
+| 41 | [Routines 与 Goals：长期任务如何持续运行](./41-routines-goals-long-running.md) | 周期任务；目标管理；长期运行边界 |
+| 42 | [Skills 与 Plugins：团队能力如何打包和分发](./42-skills-plugins-distribution.md) | Skill 语义；插件市场；版本和信任边界 |
+| 43 | [Headless、Agent SDK 与可观测性](./43-headless-sdk-observability.md) | `--bare`；JSON Schema；SDK；OpenTelemetry |
+| 44 | [Claude Tag：团队如何从协作入口交给 Claude 编码](./44-claude-tag-team-entrypoint.md) | 团队入口；任务交接；旧 Slack 集成迁移 |
