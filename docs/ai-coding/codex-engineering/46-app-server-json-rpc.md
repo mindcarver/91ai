@@ -10,7 +10,7 @@
 
 本文面向要把 Codex 嵌入 IDE、桌面工具或内部工程台的中级开发者，采用系统设计视角。读者应熟悉子进程、JSONL 和异步事件。
 
-资料基线：2026-07-22。本机安装为 `codex-cli 0.144.5`。协议字段来自 OpenAI App Server 文档、`openai/codex` 仓库的 App Server README 与 v2 协议定义。本文对示例做静态语法检查，没有发起真实模型 Turn，也没有验证登录、额度和远程传输。
+资料基线：2026-07-22。本机安装为 `codex-cli 0.144.5`，该版本的 `--help` 仍把 `app-server` 命令组标为实验性。协议字段来自 OpenAI App Server 文档、`openai/codex` 仓库的 App Server README 与 v2 协议定义。本文对示例做静态语法检查，没有发起真实模型 Turn，也没有验证登录、额度和远程传输。自定义客户端应锁定版本，不能把当前字段当作长期兼容承诺。
 
 ## App Server 不是把 CLI 输出换成 JSON
 
