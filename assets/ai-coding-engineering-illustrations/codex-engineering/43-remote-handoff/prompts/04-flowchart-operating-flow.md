@@ -19,7 +19,7 @@ STEPS:
 
 CONNECTIONS: solid arrows for the primary path and one dashed feedback loop from verification to preparation.
 
-LABELS (semantic anchors from the article; use them to choose symbols, but DO NOT render any words or letters):
+VISIBLE LABELS (render these exact short Chinese labels clearly; do not invent pseudo-text):
 - 交接前冻结一个可验证状态
 - 不要在测试运行到一半或 Agent 正修改多个文件时立刻点 Handoff
 - 先要求线程停止启动新动作，等待当前命令安全结束，并检查源工作区：
@@ -33,5 +33,5 @@ COLORS:
 - Pastel pink #FADBD8 for exceptions
 - Pale mint #BFE3D0 and lavender #D8CFF0 for supporting modules
 
-STYLE: Notion-like minimalist hand-drawn line art. Slight intentional wobble, rounded modular cards, sparse pastel fills, soft shadows, generous whitespace, simple conceptual icons, no logos, no realistic people, no robots, no decorative scenery. Absolutely no visible text, letters, numbers, code, product names, or pseudo-text in the image.
+STYLE: GPT Image illustration in a polished Notion-like editorial style. White background, hand-drawn black line art, rounded modular cards, sparse pastel fills, subtle paper texture, soft shadows, generous whitespace, simple conceptual icons, no logos, no photorealism, no robots, no decorative scenery. Include only the supplied concise Chinese labels; typography must be clear, correctly spelled, and integrated into the information hierarchy. Create a distinct composition tailored to this section; do not imitate a repeated local template.
 ASPECT: 16:9, clean knowledge-card composition.

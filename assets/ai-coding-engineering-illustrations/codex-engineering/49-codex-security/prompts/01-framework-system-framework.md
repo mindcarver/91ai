@@ -16,7 +16,7 @@ NODES:
 
 RELATIONSHIPS: thin hand-drawn connectors show coordination without implying shared identity.
 
-LABELS (semantic anchors from the article; use them to choose symbols, but DO NOT render any words or letters):
+VISIBLE LABELS (render these exact short Chinese labels clearly; do not invent pseudo-text):
 - TL;DR
 - Codex 安全不是一个“安全模式”开关，而是多层边界的组合：项目范围决定代理能看见和改写什么，沙箱提供操作系统级限制，审批策略决定谁能授权越界动作，网络策略控制外联，凭据策略减少秘密暴露，托管配置锁定组织底线
 - 任何一层放宽，都不应默认由另一层兜底
@@ -30,5 +30,5 @@ COLORS:
 - Pastel pink #FADBD8 for exceptions
 - Pale mint #BFE3D0 and lavender #D8CFF0 for supporting modules
 
-STYLE: Notion-like minimalist hand-drawn line art. Slight intentional wobble, rounded modular cards, sparse pastel fills, soft shadows, generous whitespace, simple conceptual icons, no logos, no realistic people, no robots, no decorative scenery. Absolutely no visible text, letters, numbers, code, product names, or pseudo-text in the image.
+STYLE: GPT Image illustration in a polished Notion-like editorial style. White background, hand-drawn black line art, rounded modular cards, sparse pastel fills, subtle paper texture, soft shadows, generous whitespace, simple conceptual icons, no logos, no photorealism, no robots, no decorative scenery. Include only the supplied concise Chinese labels; typography must be clear, correctly spelled, and integrated into the information hierarchy. Create a distinct composition tailored to this section; do not imitate a repeated local template.
 ASPECT: 16:9, clean knowledge-card composition.

@@ -15,7 +15,7 @@ RIGHT SIDE: three stacked cards representing the alternative boundary.
 DIVIDER: a centered balance marker and vertical hand-drawn line.
 RELATIONSHIPS: mirrored icon grammar makes similarities visible; contrasting pastel chips mark differences.
 
-LABELS (semantic anchors from the article; use them to choose symbols, but DO NOT render any words or letters):
+VISIBLE LABELS (render these exact short Chinese labels clearly; do not invent pseudo-text):
 - 何时停在 Skill，何时升级为 Plugin
 - 单仓库、单团队、没有外部连接的流程，先提交 repo Skill
 - 它可跟代码一起审查，不需要额外 marketplace
@@ -29,5 +29,5 @@ COLORS:
 - Pastel pink #FADBD8 for exceptions
 - Pale mint #BFE3D0 and lavender #D8CFF0 for supporting modules
 
-STYLE: Notion-like minimalist hand-drawn line art. Slight intentional wobble, rounded modular cards, sparse pastel fills, soft shadows, generous whitespace, simple conceptual icons, no logos, no realistic people, no robots, no decorative scenery. Absolutely no visible text, letters, numbers, code, product names, or pseudo-text in the image.
+STYLE: GPT Image illustration in a polished Notion-like editorial style. White background, hand-drawn black line art, rounded modular cards, sparse pastel fills, subtle paper texture, soft shadows, generous whitespace, simple conceptual icons, no logos, no photorealism, no robots, no decorative scenery. Include only the supplied concise Chinese labels; typography must be clear, correctly spelled, and integrated into the information hierarchy. Create a distinct composition tailored to this section; do not imitate a repeated local template.
 ASPECT: 16:9, clean knowledge-card composition.

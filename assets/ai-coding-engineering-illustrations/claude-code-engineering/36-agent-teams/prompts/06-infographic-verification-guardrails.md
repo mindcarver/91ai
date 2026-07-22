@@ -19,7 +19,7 @@ ZONES:
 
 CONNECTIONS: thin dashed lines connect each gate to the central shield; no arrows cross.
 
-LABELS (semantic anchors from the article; use them to choose symbols, but DO NOT render any words or letters):
+VISIBLE LABELS (render these exact short Chinese labels clearly; do not invent pseudo-text):
 - 何时选 Team，何时退回 Subagent
 - 代码审查、并行研究和竞争性排障适合 Team，因为 Agent 之间交换证据本身有价值
 - 比如两个 teammate 分别验证「缓存失效」和「事务隔离」两种故障假设，再互相挑战结论
@@ -33,5 +33,5 @@ COLORS:
 - Pastel pink #FADBD8 for exceptions
 - Pale mint #BFE3D0 and lavender #D8CFF0 for supporting modules
 
-STYLE: Notion-like minimalist hand-drawn line art. Slight intentional wobble, rounded modular cards, sparse pastel fills, soft shadows, generous whitespace, simple conceptual icons, no logos, no realistic people, no robots, no decorative scenery. Absolutely no visible text, letters, numbers, code, product names, or pseudo-text in the image.
+STYLE: GPT Image illustration in a polished Notion-like editorial style. White background, hand-drawn black line art, rounded modular cards, sparse pastel fills, subtle paper texture, soft shadows, generous whitespace, simple conceptual icons, no logos, no photorealism, no robots, no decorative scenery. Include only the supplied concise Chinese labels; typography must be clear, correctly spelled, and integrated into the information hierarchy. Create a distinct composition tailored to this section; do not imitate a repeated local template.
 ASPECT: 16:9, clean knowledge-card composition.

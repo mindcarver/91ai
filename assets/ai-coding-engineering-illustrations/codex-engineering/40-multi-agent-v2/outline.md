@@ -16,7 +16,7 @@ image_count: 6
 
 **Type Application**: flowchart
 
-**Filename**: 01-flowchart-operating-flow.svg
+**Filename**: 01-flowchart-operating-flow.png
 
 ## Illustration 2
 
@@ -28,7 +28,7 @@ image_count: 6
 
 **Type Application**: infographic
 
-**Filename**: 02-infographic-concept-map.svg
+**Filename**: 02-infographic-concept-map.png
 
 ## Illustration 3
 
@@ -40,7 +40,7 @@ image_count: 6
 
 **Type Application**: framework
 
-**Filename**: 03-framework-system-framework.svg
+**Filename**: 03-framework-system-framework.png
 
 ## Illustration 4
 
@@ -52,7 +52,7 @@ image_count: 6
 
 **Type Application**: comparison
 
-**Filename**: 04-comparison-boundary-comparison.svg
+**Filename**: 04-comparison-boundary-comparison.png
 
 ## Illustration 5
 
@@ -64,7 +64,7 @@ image_count: 6
 
 **Type Application**: timeline
 
-**Filename**: 05-timeline-lifecycle-timeline.svg
+**Filename**: 05-timeline-lifecycle-timeline.png
 
 ## Illustration 6
 
@@ -76,4 +76,4 @@ image_count: 6
 
 **Type Application**: infographic (guardrail)
 
-**Filename**: 06-infographic-verification-guardrails.svg
+**Filename**: 06-infographic-verification-guardrails.png
