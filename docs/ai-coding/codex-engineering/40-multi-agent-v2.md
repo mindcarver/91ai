@@ -2,15 +2,15 @@
 
 ## TL;DR
 
-Multi-agent V2 不是现行 Subagents 的同义词。`codex-cli 0.144.5` 把 `multi_agent_v2` 标为 under development，OpenAI 对这一成熟度的指导是不要使用；现行 Subagents 已默认启用，支持自定义角色、每代理模型、推理强度、并发上限和 `/agent` 导航。
+Multi-agent V2 不是现行 Subagents 的同义词。Codex 0.145.0 已把 `multi_agent_v2` 标为 stable，但仍默认关闭；现行 Subagents 默认启用，支持自定义角色、每代理模型、推理强度、并发上限和 `/agent` 导航。
 
-生产工作流应基于稳定 Subagents 设计。V2 适合隔离环境中的协议观察，不适合写入团队默认配置。尤其不要同时沿用 `[agents].max_threads` 和 V2 的并发配置，官方源码当前会拒绝这种组合。
+生产工作流仍应先基于稳定 Subagents 设计。需要 V2 时，应固定在 0.145.0 或更新版本中显式启用，再用真实仓库回归角色恢复、模型覆盖、并发和导航。stable 表示官方认为它可用，不表示自动开启，也不消除多代理的成本与共享状态风险。
 
 ## 读者定位与证据边界
 
 本文面向已经会用 Codex 读仓库、实现功能或审查 PR 的中级开发者，重点是多代理架构设计。你应熟悉 TOML、沙箱和模型成本。
 
-资料基线：2026-07-22。本机检查使用 `codex-cli 0.144.5`。稳定 Subagents 行为来自官方文档；V2 的状态和配置来自本机 `codex features list`、官方 `config.schema.json` 与公开 issue。本文没有把 V2 用在真实项目写入任务中，也不声称它已达到 Beta 或 Stable。
+资料基线：2026-07-22。本机检查使用 `codex-cli 0.144.5`，该旧版仍显示 under development；最新状态以 2026-07-21 发布的 0.145.0 官方 release 为准。本文没有把 V2 用在真实项目写入任务中。
 
 ## 一张角色拓扑比「多开几个 Agent」更有用
 
@@ -41,7 +41,7 @@ Multi-agent V2 不是现行 Subagents 的同义词。`codex-cli 0.144.5` 把 `mu
 
 ```toml
 [agents]
-max_threads = 4
+max_concurrent_threads_per_session = 4
 max_depth = 1
 ```
 
@@ -79,7 +79,7 @@ developer_instructions = """
 
 ## 并发控制不是越大越快
 
-稳定 Subagents 的全局并发由 `[agents].max_threads` 控制，默认值是 6。`max_depth` 默认是 1，根线程可以创建直接子代理，子代理不能继续递归展开。这个默认值对多数团队合理。
+0.145.0 把共享并发设置统一为 `[agents].max_concurrent_threads_per_session`，旧的 `max_threads` 仍作为别名保留。`max_depth` 默认是 1，根线程可以创建直接子代理，子代理不能继续递归展开。这个默认值对多数团队合理。
 
 四个并发槽位不代表四个子代理都能满速运行。它们可能争用 CPU、磁盘、测试数据库、浏览器、API 限额和同一组工作区文件。并发上限控制的是打开的 agent thread 数，不会自动隔离外部资源。
 
@@ -94,20 +94,26 @@ developer_instructions = """
 
 ## Multi-agent V2 到底改变了什么
 
-本机 `codex features list` 的相关结果是：
+本机 0.144.5 的 `codex features list` 结果是：
 
 ```text
 multi_agent          stable             true
 multi_agent_v2       under development  false
 ```
 
-官方 feature maturity 页面把 under development 定义为「尚不能使用」。因此，下面的命令只适合临时实验，不应写入团队共享脚本：
+这只说明旧版状态。0.145.0 release 已明确写明 V2 稳定，并在官方 PR `#34383` 中说明它仍默认关闭。升级后可用下面的配置显式启用：
 
-```bash
-codex --enable multi_agent_v2
+```toml
+[features]
+multi_agent_v2 = true
+
+[agents]
+max_concurrent_threads_per_session = 4
 ```
 
-官方主分支 schema 显示，V2 自己包含 `max_concurrent_threads_per_session`、等待超时、工具命名空间和是否暴露 spawn 时模型覆盖等字段。源码配置校验还有一条硬约束：启用 V2 时不能同时设置 `agents.max_threads`。这说明 V2 正在重新划分会话级并发与生成工具协议，它还不是给旧配置加一个开关那么简单。
+一次性试用也可以运行 `codex --enable multi_agent_v2`。用 `codex features list` 确认当前安装实际报告的成熟度与开关状态，不要把 0.144.5 的输出外推到 0.145.0。
+
+0.145.0 同时把 V2 的并发上限归入共享 `[agents]` 配置。官方 schema 仍允许在 `features.multi_agent_v2` 中配置等待超时、工具命名空间和是否暴露 spawn 时模型覆盖等 V2 专属字段。共享并发放在 `[agents]`，协议实验参数留在 feature 对象，配置责任更清楚。
 
 公开 issue `#20077` 记录过 V2 的 full-history fork 与角色、模型、推理强度覆盖冲突。报告中的错误说明，完整历史分叉会继承父代理类型、模型和 reasoning；同时传入覆盖值会被拒绝。后续评论还报告过显式 `fork_turns: "none"` 才能让某些工作代理正常完成。它是版本相关的公开报告，不是本文复现结果，但足以说明 V2 不应进入默认开发链路。
 
@@ -141,12 +147,12 @@ codex --enable multi_agent_v2
 
 每代理模型提高了成本控制精度，也增加配置维护。模型名称、支持的 reasoning 档位和预览状态会变化，团队要按官方 Models 页面定期校准。
 
-V2 可能改善会话级编排，但当前成熟度低于实验性。最稳的工程决策是把它留在隔离试验中，记录版本、feature 输出和失败日志；团队默认继续使用 `multi_agent` 与自定义 agent 文件。等 V2 的官方成熟度和文档改变后，再重新评估迁移。
+V2 已在 0.145.0 达到 stable，采用仍应从小范围开始。固定客户端版本，记录 feature 输出和失败日志，先验证只读调查与角色恢复，再允许写入型代理进入主流程。仍停留在 0.144.5 的团队应按旧版状态处理，升级前不要把新配置当成已支持能力。
 
 ## 延伸阅读
 
 - [OpenAI：Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 - [OpenAI：Feature Maturity](https://learn.chatgpt.com/docs/feature-maturity)
+- [OpenAI Codex 0.145.0 release](https://github.com/openai/codex/releases/tag/rust-v0.145.0)
 - [OpenAI Codex 配置 schema](https://github.com/openai/codex/blob/main/codex-rs/core/config.schema.json)
 - [OpenAI Codex issue #20077：V2 full-history fork 覆盖冲突](https://github.com/openai/codex/issues/20077)
-- [OpenAI Codex App Server 协议](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)

@@ -76,7 +76,7 @@ claude --help | rg 'bare|json-schema|output-format'
 
 官方 TypeScript 包是 `@anthropic-ai/claude-agent-sdk`，Python 包是 `claude-agent-sdk`。SDK 提供会话、工具和流式消息接口，但底层仍启动 Claude Code CLI 子进程，通过本地管道通信。
 
-这个架构带来三个直接后果：
+这个架构会同时影响版本管理、输出通道和环境变量：
 
 - CLI 版本属于运行时依赖，升级 SDK 不代表 CLI 行为同步升级。
 - stdout 是 SDK 消息通道，不能把 OpenTelemetry `console` exporter 混进去。
@@ -141,7 +141,7 @@ export OTEL_LOG_RAW_API_BODIES=1
 
 Headless 模式提高了自动化能力，也移除了交互确认的天然摩擦。Schema 能限制输出形状，不能证明内容正确。OpenTelemetry 能解释耗时与调用路径，不能替代业务验收。Agent SDK 省去协议编排，却多了一层 CLI 子进程版本和环境管理。
 
-真正可控的组合是：固定 CLI 与 SDK 版本，使用 `--bare`，显式列工具，Schema 失败即失败，把验证命令结果作为独立门禁，再用低敏感度遥测观察成本、延迟和错误。
+一套可控配置是：固定 CLI 与 SDK 版本，使用 `--bare`，显式列工具，Schema 失败即失败，把验证命令结果作为独立门禁，再用低敏感度遥测观察成本、延迟和错误。
 
 ## 官方延伸阅读
 
