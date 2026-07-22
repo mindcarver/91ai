@@ -4,6 +4,10 @@
 
 Multi-agent V2 不是现行 Subagents 的同义词。Codex 0.145.0 已把 `multi_agent_v2` 标为 stable，但仍默认关闭；现行 Subagents 默认启用，支持自定义角色、每代理模型、推理强度、并发上限和 `/agent` 导航。
 
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/01-flowchart-operating-flow.svg -->
+![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/01-flowchart-operating-flow.svg)
+<!-- /wos:illustration -->
+
 生产工作流仍应先基于稳定 Subagents 设计。需要 V2 时，应固定在 0.145.0 或更新版本中显式启用，再用真实仓库回归角色恢复、模型覆盖、并发和导航。stable 表示官方认为它可用，不表示自动开启，也不消除多代理的成本与共享状态风险。
 
 ## 读者定位与证据边界
@@ -15,6 +19,10 @@ Multi-agent V2 不是现行 Subagents 的同义词。Codex 0.145.0 已把 `multi
 ## 一张角色拓扑比「多开几个 Agent」更有用
 
 多代理任务像一间有负责人和专业调查员的工程室。负责人保存目标、约束和最终决定。调查员分别查代码路径、测试风险或外部文档，然后把压缩后的证据交回来。
+
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/02-infographic-concept-map.svg -->
+![Notion 图解：一张角色拓扑比「多开几个 Agent」更有用](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/02-infographic-concept-map.svg)
+<!-- /wos:illustration -->
 
 ```text
                          main agent
@@ -34,6 +42,10 @@ Multi-agent V2 不是现行 Subagents 的同义词。Codex 0.145.0 已把 `multi
 ## 稳定层：用自定义 Agent 表达角色
 
 个人角色文件放在 `~/.codex/agents/`，项目角色文件放在 `.codex/agents/`。每个文件至少包含 `name`、`description` 和 `developer_instructions`。模型、推理强度、沙箱、MCP 与 Skills 可以覆盖父线程设置。
+
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/03-framework-system-framework.svg -->
+![Notion 图解：稳定层：用自定义 Agent 表达角色](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/03-framework-system-framework.svg)
+<!-- /wos:illustration -->
 
 这组项目配置把探索和审查分开，避免两个代理争写文件。
 
@@ -81,6 +93,10 @@ developer_instructions = """
 
 0.145.0 把共享并发设置统一为 `[agents].max_concurrent_threads_per_session`，旧的 `max_threads` 仍作为别名保留。`max_depth` 默认是 1，根线程可以创建直接子代理，子代理不能继续递归展开。这个默认值对多数团队合理。
 
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/04-comparison-boundary-comparison.svg -->
+![Notion 图解：并发控制不是越大越快](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/04-comparison-boundary-comparison.svg)
+<!-- /wos:illustration -->
+
 四个并发槽位不代表四个子代理都能满速运行。它们可能争用 CPU、磁盘、测试数据库、浏览器、API 限额和同一组工作区文件。并发上限控制的是打开的 agent thread 数，不会自动隔离外部资源。
 
 任务设计时先写资源边界：
@@ -95,6 +111,10 @@ developer_instructions = """
 ## Multi-agent V2 到底改变了什么
 
 本机 0.144.5 的 `codex features list` 结果是：
+
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/05-timeline-lifecycle-timeline.svg -->
+![Notion 图解：Multi-agent V2 到底改变了什么](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/05-timeline-lifecycle-timeline.svg)
+<!-- /wos:illustration -->
 
 ```text
 multi_agent          stable             true
@@ -120,6 +140,10 @@ max_concurrent_threads_per_session = 4
 ## 导航：主线程要看得到代理在做什么
 
 在交互式 CLI 中输入 `/agent`，可以检查并切换正在运行的 agent thread。桌面应用会展示各子代理线程及返回主线程的摘要；IDE 在 background-agent UI 可用时，会在 composer 上方显示活动代理。
+
+<!-- wos:illustration codex-engineering/40-multi-agent-v2/06-infographic-verification-guardrails.svg -->
+![Notion 图解：导航：主线程要看得到代理在做什么](../../../assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/06-infographic-verification-guardrails.svg)
+<!-- /wos:illustration -->
 
 导航还用来核对子代理是否跑偏、是否卡在审批或工具失败、是否返回足够证据，以及是否与其他代理争用同一资源。发现边界错误时应及时停止或转向，不要等所有 token 消耗完才读最终摘要。
 

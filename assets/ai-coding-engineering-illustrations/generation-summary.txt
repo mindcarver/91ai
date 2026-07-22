@@ -1,0 +1,28 @@
+Writer OS Illustration Generation Summary
+Style: notion
+Density: rich
+Articles: 21
+Images: 126
+Visible text in images: none
+
+claude-code-engineering/35-background-agents-control-plane.md: 6 images
+claude-code-engineering/36-agent-teams.md: 6 images
+claude-code-engineering/37-worktree-isolation.md: 6 images
+claude-code-engineering/38-memory-and-enforcement.md: 6 images
+claude-code-engineering/39-chrome-visual-verification.md: 6 images
+claude-code-engineering/40-channels-external-events.md: 6 images
+claude-code-engineering/41-routines-goals-long-running.md: 6 images
+claude-code-engineering/42-skills-plugins-distribution.md: 6 images
+claude-code-engineering/43-headless-sdk-observability.md: 6 images
+claude-code-engineering/44-claude-tag-team-entrypoint.md: 6 images
+codex-engineering/39-thread-history-memory-import.md: 6 images
+codex-engineering/40-multi-agent-v2.md: 6 images
+codex-engineering/41-goal-mode-long-running.md: 6 images
+codex-engineering/42-app-browser-review-visualization.md: 6 images
+codex-engineering/43-remote-handoff.md: 6 images
+codex-engineering/44-hooks-trust-lifecycle.md: 6 images
+codex-engineering/45-skills-plugins-record-replay.md: 6 images
+codex-engineering/46-app-server-json-rpc.md: 6 images
+codex-engineering/47-mcp-server-agents-sdk.md: 6 images
+codex-engineering/48-auto-review-approval-chain.md: 6 images
+codex-engineering/49-codex-security.md: 6 images
