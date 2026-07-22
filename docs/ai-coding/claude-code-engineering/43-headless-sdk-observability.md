@@ -1,6 +1,6 @@
 # Claude Code Headless 与 Agent SDK：从确定输入到可观测执行
 
-> 资料基线：2026-07-22。本文以 Claude Code 2.1.185 的本地帮助文本核对基础参数，并用官方文档与 changelog补充较新行为。`--json-schema` 的严格失败语义建议使用 2.1.205 或更高版本。增强 OpenTelemetry traces 仍是 Beta。本文未发起付费模型调用，也未把示例遥测发送到真实 Collector。
+> 资料基线：2026-07-22。本文以 Claude Code 2.1.185 的本地帮助文本核对基础参数，并用官方文档与 changelog 补充较新行为。`--json-schema` 的严格失败语义建议使用 2.1.205 或更高版本。增强 OpenTelemetry traces 仍是 Beta。本文未发起付费模型调用，也未把示例遥测发送到真实 Collector。
 
 ## TL;DR
 
@@ -135,7 +135,7 @@ export OTEL_LOG_TOOL_CONTENT=1
 export OTEL_LOG_RAW_API_BODIES=1
 ```
 
-生产环境不应一次全开。先定义问题需要哪一类证据，再选择最小字段，并在 Collector 端设置脱敏、访问控制和保留期。调试 CLI 本身可使用 `--debug` 或 `--debug-file`，它与 OTel 的团队级指标和链路用途不同。
+生产环境不应一次全开。`OTEL_LOG_TOOL_CONTENT` 依赖 tracing；`OTEL_LOG_RAW_API_BODIES=1` 会携带完整会话历史，官方只对扩展思考内容做脱敏说明。先定义问题需要哪一类证据，再选择最小字段，并在 Collector 端设置脱敏、访问控制和保留期。调试 CLI 本身可使用 `--debug` 或 `--debug-file`，它与 OTel 的团队级指标和链路用途不同。
 
 ## 权衡与局限
 
