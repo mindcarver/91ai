@@ -102,7 +102,7 @@ async def main() -> None:
             instructions=(
                 "Use the Codex MCP tool for repository inspection. "
                 "Pass the current working directory as cwd. "
-                "Use sandbox workspace-write and approval-policy never. "
+                "Use sandbox read-only and approval-policy never. "
                 "Ask Codex to read only and return evidence with file paths."
             ),
             mcp_servers=[codex_server],
@@ -126,7 +126,7 @@ python -m py_compile codex_agent.py
 python codex_agent.py
 ```
 
-示例要求 Codex 使用 `workspace-write`，但任务文本限定为只读，并把审批设为 `never`。这种组合的含义是：Codex 可在沙箱允许范围内自主动作，越界动作不会弹窗，会被拒绝。若业务真的只需要读取，应把 `sandbox` 改成 `read-only`。示例没有固定输出，结果取决于仓库内容和模型。
+示例要求 Codex 使用 `read-only`，并把审批设为 `never`。这种组合的含义是：Codex 可以读取允许范围，写入或其他越界动作不会弹窗，会直接被拒绝。示例没有固定输出，结果取决于仓库内容和模型。
 
 模型仍可能不调用 MCP 工具，或参数与指令不一致。生产代码应读取 trace 和 MCP 调用事件，验证实际工具、cwd、sandbox 与审批策略，而不是只看最终自然语言。
 
