@@ -1,0 +1,1015 @@
+{
+  "generator": "GPT Image",
+  "style": "notion",
+  "image_count": 126,
+  "tasks": [
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/01-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/01-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/01-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/02-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/03-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/04-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/04-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/04-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/05-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/05-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/05-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/35-background-agents-control-plane/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "35-background-agents-control-plane",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/35-background-agents-control-plane/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/01-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/02-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/03-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/04-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/05-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/05-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/05-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/36-agent-teams/06-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "36-agent-teams",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/prompts/06-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/36-agent-teams/06-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/01-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/02-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/04-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "37-worktree-isolation",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/prompts/06-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/01-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/01-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/01-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/02-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/03-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/04-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/04-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/04-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/05-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/38-memory-and-enforcement/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "38-memory-and-enforcement",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/38-memory-and-enforcement/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/01-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/01-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/01-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/02-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/02-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/02-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/03-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/03-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/03-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/04-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/05-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/05-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/05-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/39-chrome-visual-verification/06-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "39-chrome-visual-verification",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/prompts/06-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/39-chrome-visual-verification/06-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/01-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/01-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/01-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/02-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/03-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/04-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/04-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/04-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/05-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/40-channels-external-events/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "40-channels-external-events",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/40-channels-external-events/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/01-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/02-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/02-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/02-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/03-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/03-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/03-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/04-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/04-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/04-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/05-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/41-routines-goals-long-running/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "41-routines-goals-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/41-routines-goals-long-running/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/01-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/01-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/01-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/02-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/03-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/03-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/03-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/04-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/04-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/04-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/05-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/42-skills-plugins-distribution/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "42-skills-plugins-distribution",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/42-skills-plugins-distribution/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/01-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/02-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/03-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/05-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "43-headless-sdk-observability",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/prompts/06-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/01-infographic-concept-map",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/02-flowchart-operating-flow",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/02-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/02-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/03-infographic-verification-guardrails",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/03-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/03-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/04-timeline-lifecycle-timeline",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/05-framework-system-framework",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/05-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/05-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "claude-code-engineering/44-claude-tag-team-entrypoint/06-comparison-boundary-comparison",
+      "series": "claude-code-engineering",
+      "article": "44-claude-tag-team-entrypoint",
+      "prompt": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/claude-code-engineering/44-claude-tag-team-entrypoint/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/01-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/01-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/01-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/02-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/04-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/04-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/04-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/05-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/39-thread-history-memory-import/06-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "39-thread-history-memory-import",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/prompts/06-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/39-thread-history-memory-import/06-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/01-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/01-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/01-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/02-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/03-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/03-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/03-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/04-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/04-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/04-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/05-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/40-multi-agent-v2/06-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "40-multi-agent-v2",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/prompts/06-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/40-multi-agent-v2/06-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/01-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/02-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/04-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/04-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/04-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/05-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/41-goal-mode-long-running/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "41-goal-mode-long-running",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/41-goal-mode-long-running/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/01-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/01-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/01-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/02-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/04-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/05-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/05-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/05-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/42-app-browser-review-visualization/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "42-app-browser-review-visualization",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/42-app-browser-review-visualization/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/01-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/02-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/02-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/02-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/03-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/03-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/03-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/04-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/04-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/04-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/05-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/43-remote-handoff/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "43-remote-handoff",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/43-remote-handoff/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/01-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/01-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/01-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/02-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/02-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/02-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/03-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/03-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/03-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/04-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/04-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/04-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/05-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/05-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/05-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/44-hooks-trust-lifecycle/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "44-hooks-trust-lifecycle",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/44-hooks-trust-lifecycle/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/01-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/01-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/01-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/02-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/02-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/02-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/03-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/03-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/03-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/04-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/05-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/45-skills-plugins-record-replay/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "45-skills-plugins-record-replay",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/45-skills-plugins-record-replay/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/01-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/01-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/01-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/02-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/04-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/05-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "46-app-server-json-rpc",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/prompts/06-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/01-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/02-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/04-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/05-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "47-mcp-server-agents-sdk",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/prompts/06-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/01-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/01-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/01-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/02-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/02-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/02-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/03-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/03-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/03-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/04-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/04-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/04-timeline-lifecycle-timeline.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/05-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/05-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/05-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/48-auto-review-approval-chain/06-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "48-auto-review-approval-chain",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/prompts/06-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/48-auto-review-approval-chain/06-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/01-framework-system-framework",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/01-framework-system-framework.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/01-framework-system-framework.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/02-comparison-boundary-comparison",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/02-comparison-boundary-comparison.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/02-comparison-boundary-comparison.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/03-flowchart-operating-flow",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/03-flowchart-operating-flow.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/03-flowchart-operating-flow.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/04-infographic-verification-guardrails",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/04-infographic-verification-guardrails.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/04-infographic-verification-guardrails.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/05-infographic-concept-map",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/05-infographic-concept-map.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/05-infographic-concept-map.png",
+      "generated": true
+    },
+    {
+      "id": "codex-engineering/49-codex-security/06-timeline-lifecycle-timeline",
+      "series": "codex-engineering",
+      "article": "49-codex-security",
+      "prompt": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/prompts/06-timeline-lifecycle-timeline.md",
+      "image": "assets/ai-coding-engineering-illustrations/codex-engineering/49-codex-security/06-timeline-lifecycle-timeline.png",
+      "generated": true
+    }
+  ]
+}
