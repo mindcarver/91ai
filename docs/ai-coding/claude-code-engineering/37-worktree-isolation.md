@@ -10,8 +10,8 @@
 
 两个 Claude Code 会话在同一目录改 `package.json`，冲突发生在文件系统层。一个会话写完后，另一个会话可能基于旧内容覆盖它。Git 分支本身挡不住这个问题，因为两个进程仍在写同一份工作区文件。
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/01-infographic-concept-map.svg -->
-![Notion 图解：Worktree 解决的是哪一种冲突](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/01-infographic-concept-map.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/01-infographic-concept-map.png -->
+![Notion 图解：Worktree 解决的是哪一种冲突](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/01-infographic-concept-map.png)
 <!-- /wos:illustration -->
 
 Git worktree 给每个任务一套独立文件和独立分支，同时复用仓库对象库。它像一栋仓库的两个装配间：零件目录和装配台分开，中央库存记录仍是共享的。Claude Code 在这个 Git 机制上补了创建、进入、恢复和清理流程。
@@ -31,8 +31,8 @@ repo/
 
 先在仓库中正常运行一次 `claude` 并接受 workspace trust，再启动隔离会话：
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/02-framework-system-framework.svg -->
-![Notion 图解：路径一：给完整会话一个工作树](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/02-framework-system-framework.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/02-framework-system-framework.png -->
+![Notion 图解：路径一：给完整会话一个工作树](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/02-framework-system-framework.png)
 <!-- /wos:illustration -->
 
 ```bash
@@ -64,8 +64,8 @@ git -C .claude/worktrees/feature-auth status --short --branch
 
 在自定义 Agent 定义里声明：
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow.svg -->
-![Notion 图解：路径二：让 Subagent 自动隔离](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow.png -->
+![Notion 图解：路径二：让 Subagent 自动隔离](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/03-flowchart-operating-flow.png)
 <!-- /wos:illustration -->
 
 ```markdown
@@ -87,8 +87,8 @@ Only edit authentication-owned files. Run the focused test suite before returnin
 
 默认配置相当于：
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison.svg -->
-![Notion 图解：fresh 与 head 决定 Agent 看见哪条历史](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison.png -->
+![Notion 图解：fresh 与 head 决定 Agent 看见哪条历史](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/04-comparison-boundary-comparison.png)
 <!-- /wos:illustration -->
 
 ```json
@@ -147,8 +147,8 @@ config/secrets.json
 
 退出交互 worktree 会话时，Claude Code 检查未提交修改、untracked files 和新提交。干净的匿名工作树会自动删除；命名会话会先询问。工作树有改动时，选择 remove 会连同目录、分支、未提交文件和独有提交一起移除。
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails.svg -->
-![Notion 图解：清理动作可能删除真实工作](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails.png -->
+![Notion 图解：清理动作可能删除真实工作](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/05-infographic-verification-guardrails.png)
 <!-- /wos:illustration -->
 
 非交互 `-p` 没有退出提示，因此不会自动清理：
@@ -167,8 +167,8 @@ git worktree prune
 
 所有 worktrees 共享仓库 `.git`。一个 Agent 的 fetch、refs 更新和 Git 锁会影响其他会话。项目级插件也共享。v2.1.211 起，在任一 worktree 选择 `Yes, don't ask again` 保存的 Bash 权限会写回主 checkout 的 `.claude/settings.local.json`，因此对其他 worktrees 也生效。
 
-<!-- wos:illustration claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline.svg -->
-![Notion 图解：隔离之后仍然共享什么](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline.svg)
+<!-- wos:illustration claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline.png -->
+![Notion 图解：隔离之后仍然共享什么](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/37-worktree-isolation/06-timeline-lifecycle-timeline.png)
 <!-- /wos:illustration -->
 
 这带来一个重要结论：worktree 是改动隔离，不是权限隔离。高风险并行任务还要限制 tools、命令和凭据。最终合并也必须做正常的代码审查和测试，独立目录不会证明设计彼此兼容。

@@ -4,8 +4,8 @@
 
 `codex mcp-server` 把 Codex 暴露为 MCP 工具，OpenAI Agents SDK 负责调用这些工具、组织 handoff 和记录 trace。Codex 仍负责代码理解、工作目录、Thread、沙箱和命令审批；MCP 不会把这些责任转移给 SDK。
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline.svg -->
-![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline.png -->
+![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/01-timeline-lifecycle-timeline.png)
 <!-- /wos:illustration -->
 
 最小实现是用 `MCPServerStdio` 启动 `codex mcp-server`，把它挂到一个 Agent 上，并给 Codex 工具传入受限 cwd、`workspace-write` 与明确审批策略。生产化还要处理进程生命周期、工具过滤、双层审批、超时和 Thread ID。
@@ -20,8 +20,8 @@
 
 MCP 经常被说成“模型的 USB 接口”，这个比喻对传输层有用，对安全边界不够。把 Codex 接入 Agents SDK 后，至少有四层：
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework.svg -->
-![Notion 图解：组合后的系统里有四个责任人](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework.png -->
+![Notion 图解：组合后的系统里有四个责任人](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/02-framework-system-framework.png)
 <!-- /wos:illustration -->
 
 ```text
@@ -75,8 +75,8 @@ Codex 仓库还记录了基于 Thread 和 Turn v2 API 的实验性 MCP 接口。
 
 创建隔离环境并锁定依赖：
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow.svg -->
-![Notion 图解：可运行的最小 Python 结构](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow.png -->
+![Notion 图解：可运行的最小 Python 结构](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/03-flowchart-operating-flow.png)
 <!-- /wos:illustration -->
 
 ```bash
@@ -144,8 +144,8 @@ python codex_agent.py
 
 第一次调用 `codex` 后，把响应中的 `structuredContent.threadId` 与业务任务 ID 关联保存。后续细化同一任务时调用 `codex-reply`。如果每一步都重新调用 `codex`，Codex 会创建多个孤立 Thread，前一轮代码发现和约束不会自动进入下一轮。
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map.svg -->
-![Notion 图解：Thread 连续性要由调用方保存](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map.png -->
+![Notion 图解：Thread 连续性要由调用方保存](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/04-infographic-concept-map.png)
 <!-- /wos:illustration -->
 
 不要把 Thread ID 当授权凭据。它是会话身份，不应该出现在公开日志或跨租户索引。服务端仍要按租户、仓库和任务检查 Thread 的归属。
@@ -156,8 +156,8 @@ python codex_agent.py
 
 Agents SDK 的 MCP 支持工具过滤和审批。Codex 工具内部又有 `approval-policy`、沙箱、规则与可能的 Auto-review。它们控制不同边界：
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails.svg -->
-![Notion 图解：双层审批怎样避免互相打架](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails.png -->
+![Notion 图解：双层审批怎样避免互相打架](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/05-infographic-verification-guardrails.png)
 <!-- /wos:illustration -->
 
 1. SDK 层决定模型能否调用 `codex` 或 `codex-reply`，以及调用前是否需要业务审批。
@@ -189,8 +189,8 @@ Agents SDK 的价值出现在编排：多个角色、handoff、guardrail、trace
 
 MCP 让 Codex 能接入不同 Agent 框架，代价是错误边界变多。一次失败可能来自 SDK 模型、MCP transport、Codex 认证、Thread 状态、沙箱或工作区命令。
 
-<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison.svg -->
-![Notion 图解：权衡与局限](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison.svg)
+<!-- wos:illustration codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison.png -->
+![Notion 图解：权衡与局限](../../../assets/ai-coding-engineering-illustrations/codex-engineering/47-mcp-server-agents-sdk/06-comparison-boundary-comparison.png)
 <!-- /wos:illustration -->
 
 Agents SDK trace 提供编排可观测性，但不会自动捕获所有 Codex 内部细节。需要更细证据时保存 Codex structured content 和必要事件，同时控制日志中的源码、命令输出与密钥。
