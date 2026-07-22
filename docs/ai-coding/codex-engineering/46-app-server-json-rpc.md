@@ -4,8 +4,8 @@
 
 `codex app-server` 是 Codex 为 VS Code 扩展等富客户端提供的双向协议。客户端先完成 `initialize` 握手，再创建或恢复 Thread，以 `turn/start` 提交输入，并持续消费 Item 和 Turn 通知；命令审批则反向由服务器向客户端发请求。
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/01-infographic-concept-map.svg -->
-![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/01-infographic-concept-map.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/01-infographic-concept-map.png -->
+![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/01-infographic-concept-map.png)
 <!-- /wos:illustration -->
 
 自定义客户端应生成与本机 Codex 版本匹配的 schema，持久保存 Thread ID，并把通知流当作状态来源。WebSocket 传输目前是实验性且不受支持，远程暴露时必须加认证与 TLS；只做 CI 自动化时，Codex SDK 比 App Server 更合适。
@@ -20,8 +20,8 @@
 
 终端包装器常见的第一版做法是启动 `codex`，读取屏幕文字，再猜命令是否完成。这个方案看不到稳定的 Thread ID、结构化文件变更或服务端审批请求，也很难区分增量消息与最终结果。
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/02-framework-system-framework.svg -->
-![Notion 图解：App Server 不是把 CLI 输出换成 JSON](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/02-framework-system-framework.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/02-framework-system-framework.png -->
+![Notion 图解：App Server 不是把 CLI 输出换成 JSON](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/02-framework-system-framework.png)
 <!-- /wos:illustration -->
 
 App Server 暴露的是 Codex 状态机：
@@ -50,8 +50,8 @@ JSON-RPC 只负责消息关联。Thread、Turn、Item 才是业务模型：
 
 每条连接只初始化一次。正确顺序是：
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow.svg -->
-![Notion 图解：连接生命周期](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow.png -->
+![Notion 图解：连接生命周期](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/03-flowchart-operating-flow.png)
 <!-- /wos:illustration -->
 
 ```text
@@ -203,8 +203,8 @@ codex app-server generate-json-schema --out ./schemas
 
 命令或文件修改需要用户审批时，App Server 不是发一条普通通知，而是向客户端发送带 `id` 的请求。客户端必须回复同一个 `id`。通知没有 `id`，请求有 `id`，这一区别应在消息分发器第一层处理。
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails.svg -->
-![Notion 图解：审批是反向 RPC](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails.png -->
+![Notion 图解：审批是反向 RPC](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/04-infographic-verification-guardrails.png)
 <!-- /wos:illustration -->
 
 审批 UI 至少保留 `threadId` 和 `turnId`，防止多个活动 Thread 的请求串线。命令审批还可能支持本次接受、会话接受、带 exec policy 修订接受、网络策略修订、拒绝或取消。客户端不要把所有 positive decision 压成一个布尔值，否则会丢失策略作用域。
@@ -215,8 +215,8 @@ codex app-server generate-json-schema --out ./schemas
 
 stdio 是默认且最小的本地集成方式，每行一个 JSON 消息。进程生命周期与客户端绑定，身份边界也最清楚。
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison.svg -->
-![Notion 图解：传输层的选择](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison.png -->
+![Notion 图解：传输层的选择](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/05-comparison-boundary-comparison.png)
 <!-- /wos:illustration -->
 
 Unix socket 适合同机多进程连接，使用 WebSocket Upgrade。要设置 socket 文件权限，并处理旧 socket 清理。
@@ -229,8 +229,8 @@ WebSocket 入站队列满时，服务器返回 `-32001` 和 `Server overloaded; 
 
 客户端数据库至少保存 Thread ID、最后已完成 Turn ID、当前 cwd、客户端版本和 schema 版本。重连后先用 `thread/read` 检查持久状态，需要继续才调用 `thread/resume`。
 
-<!-- wos:illustration codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline.svg -->
-![Notion 图解：状态恢复与幂等](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline.svg)
+<!-- wos:illustration codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline.png -->
+![Notion 图解：状态恢复与幂等](../../../assets/ai-coding-engineering-illustrations/codex-engineering/46-app-server-json-rpc/06-timeline-lifecycle-timeline.png)
 <!-- /wos:illustration -->
 
 `turn/start` 已接受但连接在响应前断开时，盲目重试可能生成第二个 Turn。协议支持 `clientUserMessageId` 时，应给用户提交生成稳定 ID，并在恢复后检查对应 userMessage Item。客户端自己的发送队列也要区分“尚未写入管道”和“已写入但结果未知”。
