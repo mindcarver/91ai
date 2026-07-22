@@ -1,9 +1,11 @@
-Writer OS Illustration Generation Summary
-Style: notion
+Writer OS GPT Image Illustration Generation Summary
+Generator: GPT Image
+Style: Notion-like editorial knowledge cards
 Density: rich
 Articles: 21
 Images: 126
-Visible text in images: none
+Format: PNG
+Visible text in images: concise Chinese and English labels
 
 claude-code-engineering/35-background-agents-control-plane.md: 6 images
 claude-code-engineering/36-agent-teams.md: 6 images

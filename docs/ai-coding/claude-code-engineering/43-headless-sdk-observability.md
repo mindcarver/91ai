@@ -6,8 +6,8 @@
 
 可维护的 Headless Agent 至少要拆成四层：
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework.svg -->
-![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework.png -->
+![Notion 图解：TL;DR](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/01-framework-system-framework.png)
 <!-- /wos:illustration -->
 
 1. 启动层用 `--bare` 减少机器上的隐式配置。
@@ -25,8 +25,8 @@
 
 最小非交互调用是：
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow.svg -->
-![Notion 图解：第一层：让启动上下文可解释](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow.png -->
+![Notion 图解：第一层：让启动上下文可解释](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/02-flowchart-operating-flow.png)
 <!-- /wos:illustration -->
 
 ```sh
@@ -51,8 +51,8 @@ claude --bare -p "Review the supplied diff for correctness" \
 
 `--output-format json` 返回执行信封，其中可包含最终文本、会话 ID、成本和错误信息。它并不保证最终回答符合你的字段定义。
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison.svg -->
-![Notion 图解：第二层：区分输出信封与业务数据](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison.png -->
+![Notion 图解：第二层：区分输出信封与业务数据](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/03-comparison-boundary-comparison.png)
 <!-- /wos:illustration -->
 
 业务契约要用 `--json-schema`：
@@ -88,8 +88,8 @@ claude --help | rg 'bare|json-schema|output-format'
 
 官方 TypeScript 包是 `@anthropic-ai/claude-agent-sdk`，Python 包是 `claude-agent-sdk`。SDK 提供会话、工具和流式消息接口，但底层仍启动 Claude Code CLI 子进程，通过本地管道通信。
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline.svg -->
-![Notion 图解：第三层：理解 SDK 的进程边界](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline.png -->
+![Notion 图解：第三层：理解 SDK 的进程边界](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/04-timeline-lifecycle-timeline.png)
 <!-- /wos:illustration -->
 
 这个架构会同时影响版本管理、输出通道和环境变量：
@@ -144,8 +144,8 @@ export OTEL_TRACES_EXPORTER=otlp
 
 用户提示、工具参数、工具内容和原始 API body 默认不会全部进入遥测。开启下列选项会明显扩大敏感数据面：
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map.svg -->
-![Notion 图解：隐私与故障定位](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map.png -->
+![Notion 图解：隐私与故障定位](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/05-infographic-concept-map.png)
 <!-- /wos:illustration -->
 
 ```sh
@@ -161,8 +161,8 @@ export OTEL_LOG_RAW_API_BODIES=1
 
 Headless 模式提高了自动化能力，也移除了交互确认的天然摩擦。Schema 能限制输出形状，不能证明内容正确。OpenTelemetry 能解释耗时与调用路径，不能替代业务验收。Agent SDK 省去协议编排，却多了一层 CLI 子进程版本和环境管理。
 
-<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails.svg -->
-![Notion 图解：权衡与局限](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails.svg)
+<!-- wos:illustration claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails.png -->
+![Notion 图解：权衡与局限](../../../assets/ai-coding-engineering-illustrations/claude-code-engineering/43-headless-sdk-observability/06-infographic-verification-guardrails.png)
 <!-- /wos:illustration -->
 
 一套可控配置是：固定 CLI 与 SDK 版本，使用 `--bare`，显式列工具，Schema 失败即失败，把验证命令结果作为独立门禁，再用低敏感度遥测观察成本、延迟和错误。
