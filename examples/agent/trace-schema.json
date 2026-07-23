@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Trace",
+  "type": "object",
+  "required": ["run_id", "started_at", "agent_version", "input", "steps", "status", "stop_reason", "output"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "agent_version": { "type": "string" },
+    "model": { "type": "string" },
+    "input": {
+      "type": "object",
+      "required": ["task"],
+      "properties": {
+        "task": { "type": "string" },
+        "metadata": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_index", "action", "observation"],
+        "properties": {
+          "step_index": { "type": "integer", "minimum": 0 },
+          "action": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["tool_call", "final", "handoff", "stop"] },
+              "tool_name": { "type": "string" },
+              "arguments": { "type": "object", "additionalProperties": true }
+            },
+            "additionalProperties": true
+          },
+          "observation": { "type": "object", "additionalProperties": true },
+          "latency_ms": { "type": "number", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "status": { "type": "string", "enum": ["completed", "failed", "stopped", "needs_human"] },
+    "stop_reason": { "type": "string" },
+    "output": { "type": ["object", "string", "null"] },
+    "eval": {
+      "type": "object",
+      "properties": {
+        "case_id": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "failure_category": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
