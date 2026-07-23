@@ -54,6 +54,10 @@
   <td><a href="./docs/ai-coding/">AI Coding 工具评测</a> — 按难度、场景和风险边界做横向选型</td>
 </tr>
 <tr>
+  <td align="center">第一次学习 Agent</td>
+  <td><a href="./docs/agent/getting-started/">Agent 快速开始</a> — 用 Agent 地图、7 天计划和项目契约跑通第一个可评测闭环</td>
+</tr>
+<tr>
   <td align="center">系统学习 AI 应用开发</td>
   <td><a href="./docs/agent/">Agent 学习路径</a> — 从 LLM 应用基础逐步进入工具、工作流、RAG、评测和生产化</td>
 </tr>
