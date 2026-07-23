@@ -19,9 +19,9 @@
     <rect x="620" y="330" width="800" height="430" rx="28" fill="url(#title-mask)"/>
   </g>
   <circle cx="1278" cy="760" r="66" fill="#FBF5EC"/>
-  <rect x="312" y="904" width="824" height="76" rx="18" fill="#FFF9F1"/>
+  <rect x="272" y="904" width="904" height="76" rx="18" fill="#FFF9F1"/>
 
   <text x="1000" y="468" fill="#141414" text-anchor="middle" font-size="46" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif"><tspan x="1000" dy="0">Skill不触发、乱触</tspan><tspan x="1000" dy="54.279999999999994">发、跑挂了一份评测与调</tspan><tspan x="1000" dy="54.279999999999994">优指南</tspan></text>
-  <text x="724" y="944" fill="#141414" text-anchor="middle" font-size="30" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">史上最全 免费AI 资料</text>
+  <text x="724" y="944" fill="#141414" text-anchor="middle" font-size="24" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">史上最全 免费AI 资料 https://91aihub.com/</text>
   <line x1="960" y1="648.56" x2="1040" y2="648.56" stroke="url(#accent-line)" stroke-width="6" stroke-linecap="round"/>
 </svg>

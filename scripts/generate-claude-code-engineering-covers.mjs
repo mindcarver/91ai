@@ -8,7 +8,7 @@ const rootDir = "/Users/carver/workspace/mindcarver/91ai";
 const seriesDir = path.join(rootDir, "docs/ai-coding/claude-code-engineering");
 const assetsDir = path.join(rootDir, "assets/claude-code-engineering");
 const templateImageName = "cover-template-base.png";
-const bottomBannerText = "史上最全 免费AI 资料";
+const bottomBannerText = "史上最全 免费AI 资料 https://91aihub.com/";
 
 const articlePattern = /^\d{2}-.*\.md$/;
 const generatedCoverStart = /^<!-- codex:cover /;
@@ -144,10 +144,10 @@ function renderCoverSvg(article) {
     <rect x="620" y="330" width="800" height="430" rx="28" fill="url(#title-mask)"/>
   </g>
   <circle cx="1278" cy="760" r="66" fill="#FBF5EC"/>
-  <rect x="312" y="904" width="824" height="76" rx="18" fill="#FFF9F1"/>
+  <rect x="272" y="904" width="904" height="76" rx="18" fill="#FFF9F1"/>
 
   ${textBlock({ x: titleX, y: titleTopY, lines: titleLines, size: titleSize })}
-  <text x="724" y="944" fill="#141414" text-anchor="middle" font-size="30" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">${escapeXml(bottomBannerText)}</text>
+  <text x="724" y="944" fill="#141414" text-anchor="middle" font-size="24" font-weight="700" font-family="Hiragino Sans GB, PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">${escapeXml(bottomBannerText)}</text>
   <line x1="${titleX - 40}" y1="${accentY}" x2="${titleX + 40}" y2="${accentY}" stroke="url(#accent-line)" stroke-width="6" stroke-linecap="round"/>
 </svg>
 `;
@@ -241,17 +241,18 @@ async function main() {
 
     if (!article.title) continue;
 
-    const assetName = `${fileName.replace(/\.md$/, "")}-cover.svg`;
-    const assetPath = path.join(assetsDir, assetName);
-    const relativeAssetPath = `../../../assets/claude-code-engineering/${assetName}`;
+    const baseName = `${fileName.replace(/\.md$/, "")}-cover`;
+    const svgAssetName = `${baseName}.svg`;
+    const pngAssetName = `${baseName}.png`;
+    const svgAssetPath = path.join(assetsDir, svgAssetName);
+    const pngAssetPath = path.join(assetsDir, pngAssetName);
+    const relativeAssetPath = `../../../assets/claude-code-engineering/${pngAssetName}`;
     const altText = `Claude Code 系列文章封面：${article.title}`;
 
-    await writeFile(assetPath, renderCoverSvg(article));
-    if (fileName.startsWith("02-")) {
-      runOrThrow("/opt/homebrew/bin/rsvg-convert", [assetPath, "-o", path.join(assetsDir, "02-setup-permission-first-repo-task-cover.png")]);
-    }
+    await writeFile(svgAssetPath, renderCoverSvg(article));
+    runOrThrow("/opt/homebrew/bin/rsvg-convert", [svgAssetPath, "-o", pngAssetPath]);
     await writeFile(filePath, insertCover(content, relativeAssetPath, altText));
-    summary.push(`${fileName}: ${assetName}`);
+    summary.push(`${fileName}: ${pngAssetName}`);
   }
 
   await writeFile(path.join(assetsDir, "generation-summary.txt"), `${summary.join("\n")}\n`);
