@@ -1,6 +1,6 @@
 # OpenAI Codex 工程化实战系列
 
-> 工程实践参考，不是功能清单。39 篇文章覆盖 Codex 从单人使用、CLI 命令、权限安全、Web/Cloud/App 委派，到 Skills、Subagents、SDK 和团队落地的完整路径。
+> 工程实践参考，不是功能清单。51 篇文章覆盖 Codex 从单人使用、CLI 命令、权限安全、Web/Cloud/App 委派，到 Skills、Subagents、SDK、团队落地和上下文压缩的完整路径。
 
 本系列面向已经开始使用 OpenAI Codex 的工程师和技术负责人。目标不是重复讲“AI 会写代码”，而是回答一个更具体的问题：如何让 Codex 在真实仓库里受控、可验证、可复用地完成工程任务。
 
@@ -95,7 +95,7 @@ Codex 工程化的核心不是“更会写提示词”，而是把一次性对�
 
 - 本系列不保留独立工具对比文章。对比内容容易变成工具排名，实际价值不如聚焦 Codex 自身工作流。
 - MCP 不作为独立模块。它是通用工具连接能力，不是 Codex 系列最应该突出的差异点。
-- 底层 Agent Loop、Compaction、Preamble 等主题不再单独成篇。相关内容合并到 CLI、工具执行、模型选择和 SDK 文章里，避免把系列写成内部机制百科。
+- 底层 Agent Loop、Preamble 等主题不单独成篇，相关内容合并到 CLI、工具执行、模型选择和 SDK 文章里。Compaction 因 2026 年 Codex CLI 开源后源码可读、社区高频踩坑，已单独成篇（见 50）。
 
 ## 延伸阅读
 
@@ -105,7 +105,7 @@ Codex 工程化的核心不是“更会写提示词”，而是把一次性对�
 - [Codex GitHub Action](https://developers.openai.com/codex/github-action)
 - [OpenAI Codex 资料与项目索引](../openai-codex.md)
 
-## 2026-07-22 增补专题
+## 增补专题（2026-07）
 
 以下文章记录 2026 年新增或发生明显变化的 Codex 工程能力。原有 00-38 篇保持不变。
 
@@ -122,3 +122,4 @@ Codex 工程化的核心不是“更会写提示词”，而是把一次性对�
 | 47 | [Codex MCP Server 与 OpenAI Agents SDK](./47-mcp-server-agents-sdk.md) | MCP Server；SDK 编排；责任边界 |
 | 48 | [Auto-review 与审批链：自动审查如何受控落地](./48-auto-review-approval-chain.md) | 风险分级；审批；自动审查；人类责任 |
 | 49 | [Codex Security：沙箱、凭据和网络边界](./49-codex-security.md) | Sandbox；审批；凭据隔离；企业治理 |
+| 50 | [Codex 上下文压缩：触发、四条路径与压缩前交接](./50-codex-context-compaction.md) | 触发时机；四条压缩路径；压缩前后观测；压缩前交接任务 |

@@ -50,7 +50,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | 系列 | 适合谁 | 内容 |
 | --- | --- | --- |
 | [Codex CLI 完全指南系列](./codex-series/) | 想从安装到企业部署完整掌握 Codex CLI 的人 | 72 篇独立文章，覆盖安装、认证、命令、配置、安全、MCP/Skills/Hooks/Apps/Plugins、多 Agent、exec/CI/SDK、企业治理、真实工作流和附录参考。 |
-| [Codex 工程化实战系列](./codex-engineering/) | 想系统掌握 Codex 工程化实践的人 | 39 篇独立文章 + 系列总览，覆盖 CLI/App/Web/Cloud 入口、AGENTS.md、沙箱隔离、Rules、Hooks、codex exec、GitHub Actions、Skills、Subagents、SDK 和团队治理。 |
+| [Codex 工程化实战系列](./codex-engineering/) | 想系统掌握 Codex 工程化实践的人 | 51 篇独立文章 + 系列总览，覆盖 CLI/App/Web/Cloud 入口、AGENTS.md、沙箱隔离、Rules、Hooks、codex exec、GitHub Actions、Skills、Subagents、SDK、团队治理和上下文压缩。 |
 
 ### Superpowers 系列
 
