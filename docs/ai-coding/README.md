@@ -28,6 +28,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | 系统掌握 Codex CLI | [Codex CLI 完全指南](./codex-series/) | 从安装、命令走到安全、SDK 和企业治理 |
 | 把 Codex 纳入团队工程流程 | [Codex 工程化实战](./codex-engineering/) | 聚焦 AGENTS.md、沙箱、验证、CI 和团队落地 |
 | 学习跨工具的工程方法 | [Harness](./harness-engineering/) / [Loop](./loop-engineering/) / [Superpowers](./superpowers/) | 理解比单个产品更稳定的方法与控制面 |
+| 想省 token 成本、搞懂缓存命中 | [大模型缓存：读与写](./llm-cache-read-write-agents.md) | 缓存读写机制 + coding agent 怎么提高命中率 |
 
 ## 工程化实战系列
 
