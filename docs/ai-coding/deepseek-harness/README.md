@@ -1,6 +1,6 @@
 # DeepSeek Harness 架构深读系列
 
-> 不是使用教程，是架构拆解。49 篇文章把 DeepSeek Harness（`dsh`）这个开源 agent harness 从 Cordis 范式、运行时核心、能力接缝、执行子系统，到源码导读、扩展开发、工程化门禁和横向评测，逐层讲透。
+> 不是使用教程，是架构拆解。46 篇文章把 DeepSeek Harness（`dsh`）这个开源 agent harness 从 Cordis 范式、运行时核心、能力接缝、执行子系统，到源码导读、扩展开发、工程化门禁和横向评测，逐层讲透。
 
 本系列面向想读懂 `dsh` 源码、写插件做二次开发、或在 Claude Code / Cursor / Codex 之外评估一个"全插件化"开源 harness 的工程师与架构师。它不重复讲"AI 会写代码"，而是回答一个具体问题：**一个把"模型之外的一切"都做成可替换插件的 agent harness，内部到底是怎么运转的、它的可组合性设计代价是什么。**
 
@@ -14,7 +14,7 @@
 - **能力接缝（Capability Seams）**：模型适配、文件系统、命令执行、沙箱、子 agent……每一项都是一个"定义 + 提供者 + 消费者"三角色的可换接缝。换一个 provider 等于换了整个产品。
 - **运行时不变量**："模型可见即可重建"——任何到达模型请求的东西都必须能从会话日志重建，运行时会断言这条规矩。
 
-这三层决定了为什么 `dsh` 值得用 49 篇来拆，也决定了本系列的阅读顺序：先 Cordis（地基），再运行时核心（心脏），再接缝与工具（扩展模型），最后是子系统深潜、源码导读和评测。
+这三层决定了为什么 `dsh` 值得用 46 篇来拆，也决定了本系列的阅读顺序：先 Cordis（地基），再运行时核心（心脏），再接缝与工具（扩展模型），最后是子系统深潜、源码导读和评测。
 
 ## 与《Harness Engineering》系列的关系
 
@@ -24,26 +24,26 @@
 
 ## 阅读路径
 
-如果只想快速建立认知，按这条主干读（12 篇）：
+如果只想快速建立认知，按这条主干读（10 篇）：
 
 1. 先读 01-02，知道 `dsh` 是什么、怎么跑起来。
-2. 再读 03-04，过 Cordis 这道认知门槛——这是后面所有篇的前提。
+2. 再读 03，过 Cordis 这道认知门槛——这是后面所有篇的前提。
 3. 接着读 07、09、11，理解一次对话在内部怎么流转。
 4. 然后读 12（能力接缝）和 13（工具管线），这是 `dsh` 区别于"写死 agent"的核心设计。
 5. 收尾读 48-49，建立横向判断。
 
-如果想做二次开发，主干之后补 06、08、10、14、16（五篇源码导读）和 18（写一个 LLM 适配器）。如果关心生产落地，补 19（安全）、35-36（配置与可观测）、42（容错）。
+如果想做二次开发，主干之后补 06、10、14、16（四篇源码导读）和 18（写一个 LLM 适配器）。如果关心生产落地，补 19（安全）、35-36（配置与可观测）、42（容错）。
 
 ## 篇型说明
 
-- 📘 **概念**：讲清一个机制或设计决策（31 篇）。
-- 🔍 **源码导读**：配对概念篇，带你读对应包的实现（5 篇）。
+- 📘 **概念**：讲清一个机制或设计决策（29 篇）。
+- 🔍 **源码导读**：配对概念篇，带你读对应包的实现（4 篇）。
 - 🛠 **实战**：hands-on，跑起来或亲手扩展（6 篇）。
 - 📊 **评测 / 总结**：横向对比与工程哲学（3 篇）。
 
 ## 系列目录
 
-> 本系列共 49 篇，全部已发布。
+> 本系列共 46 篇，全部已发布。
 
 ### 第一部分：开场（2 篇）
 
@@ -52,21 +52,18 @@
 | 01 | [模型 + Harness = Agent：DeepSeek Harness 是什么](./01-model-plus-harness-what-is-dsh.md) | `dsh` 的项目定位、在 harness 谱系里的独特位置、"一切皆插件"的开场 |
 | 02 | [从 0 跑起来：first run 全流程](./02-first-run-web-ui.md) | 启动 Web UI、配模型、选 workspace、跑第一个任务 |
 
-### 第二部分：Cordis 范式与启动装配（4 篇）
+### 第二部分：Cordis 范式与启动装配（3 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 03 | [Cordis 速成：从《时空可组合性》论文说起](./03-cordis-primer-spatiotemporal-composability.md) | Cordis 的来历、与 Koishi 的渊源、论文核心主张 |
-| 04 | [Cordis 五大范式：为什么"注册即可逆副作用"是灵魂](./04-cordis-five-paradigms-reversible-effects.md) | plugin/context/inject/事件/可逆副作用，与 DI、插件框架的对比 |
-| 05 | [Profile 与 Bundle：一个跑起来的 dsh 怎么被"拼"出来](./05-profile-and-bundle-composition.md) | 分层组合、patch 叠加、`--dump-config` 看真实插件树 |
-| 06 | [🔍 启动链源码导读：从 `npx dsh web` 到插件树挂载](./06-boot-chain-source-walkthrough.md) | app-boot / loader / cordis.yml 加载全链路（#05 的实现） |
+| 03 | [从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md) | 论文两轴、五大范式（第五条是灵魂）、profile/bundle 拼装、`--dump-config` |
+| 06 | [🔍 启动链源码导读：从 `npx dsh web` 到插件树挂载](./06-boot-chain-source-walkthrough.md) | app-boot / loader / cordis.yml 加载全链路（#03 的实现） |
 
-### 第三部分：运行时核心——一次对话的流转（5 篇）
+### 第三部分：运行时核心——一次对话的流转（4 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 07 | [Turn 与 Step：一次模型调用要走完多少道关卡](./07-turn-and-step-lifecycle.md) | step/turn 定义、完整事件序列、inbox 驱动、pre-step 守门人 |
-| 08 | [🔍 agent-loop 驱动器源码导读](./08-agent-loop-source-walkthrough.md) | 默认 loop 插件实现：step 循环、claim、deriveMessages（#07 的实现） |
+| 07 | [Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md) | step/turn 定义、事件骨架、inbox/pre-step 守门人、三态驱动器源码：kick→turn→step、deriveMessages、工具调度 |
 | 09 | [会话日志：为什么"模型可见即可重建"是最硬的规矩](./09-session-log-visible-means-reconstructable.md) | deriveMessages、durable/live 事件、不变量断言、fork/resume |
 | 10 | [🔍 session 包源码导读：append-only log / fork / resume](./10-session-package-source-walkthrough.md) | 会话日志的实现细节，fork/resume 怎么落地（#09 的实现） |
 | 11 | [事件系统：四种派发模式与 waterfall 的短路艺术](./11-event-system-four-dispatch-modes.md) | emit/waterfall/parallel/serial、around 中间件、策略短路 |
@@ -162,7 +159,7 @@
 ## 取舍说明
 
 - **不写成使用手册**。`dsh` 是开源框架，用户文档官方已经完备；本系列的增量在架构拆解和源码理解，不在重复"怎么点按钮"。
-- **源码导读与概念篇配对**。07→08、09→10、13→14、05→06、16 五组，讲完机制立刻看实现，避免概念悬空。
+- **源码导读与概念篇配对**。09→10、13→14、03→06、16 四组，讲完机制立刻看实现，避免概念悬空（07 已把 turn/step 概念与 agent-loop 源码合为一篇）。
 - **安全深水区按需展开**。Landlock 原生沙箱、E2B 远程沙箱、凭证密钥的细节分散在 19、20、35 三篇，不单开独立专题；若后续需要可随时插篇。
 - **保持时点诚实**。`dsh` 在 developer preview 阶段，事件签名、配置项、包结构会随版本变。本系列标注写作时点，涉及具体签名时以仓库实际版本为准。
 

@@ -54,7 +54,7 @@ DeepSeek 选后者，是一个生态判断：**与其做一个锁死自家模型
 
 能做到这一点，是因为底层 Cordis 提供了一套别的插件框架没有的东西。Cordis 来自 [Koishi](https://koishi.chat) 生态（一个同样是"全插件化"的聊天机器人框架），它的设计思想写在一篇论文里——[《A Programming Paradigm for Spatiotemporal Composability》](https://github.com/cordiverse/paper)（一种面向时空可组合性的编程范式）。
 
-"时空可组合性"听起来很玄，落到工程上就一句话：**插件之间的组合不应该依赖于加载顺序，也不应该在卸载时留下垃圾。** Cordis 用五件事实现它（这里只点名，03、04 篇展开）：
+"时空可组合性"听起来很玄，落到工程上就一句话：**插件之间的组合不应该依赖于加载顺序，也不应该在卸载时留下垃圾。** Cordis 用五件事实现它（这里只点名，03 篇展开）：
 
 1. 插件是一个实现 `Service` 的对象，把自己的能力注册到共享 context 上（如 `ctx.tools`、`ctx.llm`）。
 2. 插件用 `inject` 声明依赖，Cordis 等依赖就位才激活——加载顺序由需求决定，不用手写 boot 序列。

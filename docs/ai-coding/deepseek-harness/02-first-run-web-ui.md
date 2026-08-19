@@ -121,11 +121,6 @@ pnpm dsh web
 
 如果你想立刻往深里走，下一篇 03 开始讲 Cordis——那是"一切皆插件"能成立的底层框架，也是整个系列的认知门槛。如果你想先停在"能用"，把第一次会话的每个行为和本文的"看懂你刚看到的东西"对照一遍，就足够建立后续阅读的直觉了。
 
-## 时点与诚实声明
-
-本文的启动命令、配置路径（Settings → Models、Choose workspace）、默认地址（`http://127.0.0.1:3080`）基于 2026-08-14 的官方 README 与 [Web UI guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/index.md)。UI 文案、菜单命名、默认端口可能随版本调整。具体的权限预设默认值、审批提示措辞以你实际运行的版本为准。
-
-文中对 agent 行为的描述（"先读再答""审批停下""输出可审计"）是 `dsh` 架构决定的预期行为，不是对某次具体运行的保证——实际表现还取决于模型、任务和权限配置。
 
 ## 延伸阅读
 
@@ -135,4 +130,4 @@ pnpm dsh web
 - [CLI 模式](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/README.md)
 
 上一篇：[模型 + Harness = Agent：DeepSeek Harness 是什么](./01-model-plus-harness-what-is-dsh.md)
-下一篇：[Cordis 速成：从《时空可组合性》论文说起](./03-cordis-primer-spatiotemporal-composability.md)
+下一篇：[从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md)

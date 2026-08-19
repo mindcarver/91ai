@@ -171,5 +171,5 @@ fork 能这么干净，恰恰因为会话是只追加日志加可重建投影：
 - [压缩子系统（docs/subsystems/compaction.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/compaction.md)：surfaceOp replace 的主要使用者
 - [不变量子系统（docs/subsystems/invariants.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/invariants.md)：盯住可重建规矩的断言体系
 
-上一篇：[agent-loop 驱动器源码导读](./08-agent-loop-source-walkthrough.md)
+上一篇：[Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md)
 下一篇：[session 包源码导读：append-only log / fork / resume](./10-session-package-source-walkthrough.md)

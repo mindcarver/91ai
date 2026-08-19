@@ -304,5 +304,5 @@ bin.ts: parseDshArgs → switch 'profile'
 - [Cordis Loader 与 Include 插件（vendor/loader、vendor/include）](https://github.com/deepseek-ai/deepseek-harness/blob/master/vendor/README.md)：内建插件与 patch 算法来源
 - [架构文档：Profiles and bundles](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)：组合规则的总述
 
-上一篇：[Profile 与 Bundle：一个跑起来的 dsh 怎么被拼出来](./05-profile-and-bundle-composition.md)
-下一篇：[Turn 与 Step：一次模型调用要走完多少道关卡](./07-turn-and-step-lifecycle.md)
+上一篇：[从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md)
+下一篇：[Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md)
