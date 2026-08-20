@@ -1,6 +1,6 @@
 # Python SDK、Headless 与 JSON-RPC：把 dsh 编进流水线
 
-> 如果你只能从这篇带走一句话，带走这句：`dsh` 不只有 Web UI，它有三种自动化姿势，headless 跑一次性任务，Python SDK 把 agent 当库调，JSON-RPC 是底层的 stdio 协议，三种都共享同一套 agent 组合，区别只在谁来驱动。
+> `dsh` 不只有 Web UI，它有三种自动化姿势，headless 跑一次性任务，Python SDK 把 agent 当库调，JSON-RPC 是底层的 stdio 协议，三种都共享同一套 agent 组合，区别只在谁来驱动。
 > 这一篇拆 `dsh --profile headless`、`deepseek-harness-sdk` Python 包、以及它们底层的 JSON-RPC runtime，看怎么把 agent 能力嵌进 CI、批处理、或你自己的程序。
 
 ## 三种自动化姿势

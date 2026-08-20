@@ -1,6 +1,6 @@
 # 子 Agent 与多智能体：一个 agent 怎么调度另一个 agent
 
-> 如果只能从这篇带走一句话：`ctx.subagents` 是个命名 provider 注册表，六种后端共存，把委派分成两类，**一次式**（一个可丢弃的 run，拿一个结果就 dispose）和**可继续**（一个持久子会话，带进程内 Activation，能多轮 FIFO 对话、能冷恢复、能上报给父）。
+> `ctx.subagents` 是个命名 provider 注册表，六种后端共存，把委派分成两类，**一次式**（一个可丢弃的 run，拿一个结果就 dispose）和**可继续**（一个持久子会话，带进程内 Activation，能多轮 FIFO 对话、能冷恢复、能上报给父）。
 > 关键判断：可继续子 agent 的唯一队列是 Agent inbox，授权靠确切的直接父 Agent，provider 只参与首次创建、之后整个生命周期归 continuation manager。
 
 ## 为什么子 agent 是多 provider 共存
@@ -152,7 +152,7 @@ provider 只参与首次创建（一次式的 `start`，或可继续的 `prepare
 
 可继续子 agent 的核心设计：Agent inbox 是唯一队列，授权靠确切 live 直接父，调用方信号只在 inbox 接受前拥有，continuation manager 拥有整个生命周期，provider 只贡献首次创建的数据。深度只能增不能降防绕过，fork seeding 复用 session seed 原语。
 
-几个判断值得带走：多 provider 共存而非单一执行器，因为委派需求多样；fail loud 不 silent degrade，不支持的能力大声拒；可继续的唯一队列是 inbox，消息有唯一顺序；授权靠 live 父对象不靠消息字段；provider 只参与创建不参与后续，生命周期归 manager。这套设计让"一个 agent 调度另一个 agent"从简单的同进程委派，一直延伸到跨产品、跨协议、可恢复的多智能体协作，每一层都有合适的抽象。
+几个判断：多 provider 共存而非单一执行器，因为委派需求多样；fail loud 不 silent degrade，不支持的能力大声拒；可继续的唯一队列是 inbox，消息有唯一顺序；授权靠 live 父对象不靠消息字段；provider 只参与创建不参与后续，生命周期归 manager。这套设计让"一个 agent 调度另一个 agent"从简单的同进程委派，一直延伸到跨产品、跨协议、可恢复的多智能体协作，每一层都有合适的抽象。
 
 ## 延伸阅读
 

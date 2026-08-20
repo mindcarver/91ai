@@ -1,6 +1,6 @@
 # Plan Mode 与 Goal：agent 怎么管理目标和计划
 
-> 如果只能从这篇带走一句话：`dsh` 用两个不同重量的机制管理"agent 在干什么"，`ctx.planMode` 是**软引导**（激活时往每个请求塞一段提示，模型可以不听，不强制任何限制），`ctx.goals` 是**持久的事件溯源目标生命周期**（阶段、修订号、轮次预算，靠会话日志 fold 出来）。
+> `dsh` 用两个不同重量的机制管理"agent 在干什么"，`ctx.planMode` 是**软引导**（激活时往每个请求塞一段提示，模型可以不听，不强制任何限制），`ctx.goals` 是**持久的事件溯源目标生命周期**（阶段、修订号、轮次预算，靠会话日志 fold 出来）。
 > 两者共享一个根基：状态都记在会话日志里、用纯 fold 恢复，都和硬性强制（沙箱、审批）分开。
 
 ## 为什么目标管理是两个机制
@@ -140,7 +140,7 @@ type GoalPhase = 'active' | 'paused' | 'blocked' | 'complete'
 
 `ctx.planMode` 是软引导：激活时往每个请求塞一个部署拥有的 `plan:policy` 提示段，状态是 `plan/mode` 事件的纯 fold，选择在 turn 边界的被接受 in-turn pre-step 追加，`exit_plan_mode` 要求完整计划经人审。它不强制任何限制，沙箱和审批各自独立。`ctx.goals` 是持久的事件溯源目标生命周期：compare-and-set revision、四个阶段、轮次预算、持久阶段与进程内 activation 两层分离，全部从 `goal/change` 事件 fold 出来。
 
-几个判断值得带走：引导和强制分开，plan mode 是建议不是锁；状态都从日志 fold，plan/mode 和 goal/change 都是纯日志事件；goal 的持久阶段回答"目标怎么了"、进程内 activation 回答"能不能再跑一轮"，两层分离防止进程恢复就狂跑；turn 边界 flush 保证请求看到的状态自洽，代价是 pending 选择有丢失风险。
+几个判断：引导和强制分开，plan mode 是建议不是锁；状态都从日志 fold，plan/mode 和 goal/change 都是纯日志事件；goal 的持久阶段回答"目标怎么了"、进程内 activation 回答"能不能再跑一轮"，两层分离防止进程恢复就狂跑；turn 边界 flush 保证请求看到的状态自洽，代价是 pending 选择有丢失风险。
 
 这套设计让"agent 管理目标和计划"这个容易做成大而全话题的事，分成了轻引导（plan mode）和重追踪（goal）两个正交机制，各自有合适的重量，又共享"日志 fold、与强制分离"的根基。
 

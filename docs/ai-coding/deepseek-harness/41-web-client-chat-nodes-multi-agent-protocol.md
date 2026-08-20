@@ -1,6 +1,6 @@
 # Web 客户端、Chat Nodes 与多 agent 协议
 
-> 如果你只能从这篇带走一句话，带走这句：`dsh` 的 Web 客户端是 Host（Node.js）和 Client（浏览器）两半插件图，中间用一条 wire 协议（`window.__DSH_BOOT__`）和一个 HTTP carrier 连起来，两半各自有完整的插件生命周期，不是"后端渲染前端"的单体。
+> `dsh` 的 Web 客户端是 Host（Node.js）和 Client（浏览器）两半插件图，中间用一条 wire 协议（`window.__DSH_BOOT__`）和一个 HTTP carrier 连起来，两半各自有完整的插件生命周期，不是"后端渲染前端"的单体。
 > 这一篇拆 Client Modules 怎么扫描和组装浏览器插件、Web Server 怎么做 HTTP carrier、HMR 怎么热更新、以及 Host-Client 之间的 RPC 协议。
 
 ## 两半插件图：Host 和 Client

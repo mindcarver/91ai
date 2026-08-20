@@ -1,6 +1,6 @@
 # Cordis 生态溯源：从 Koishi 到 DeepSeek Harness 的插件框架谱系
 
-> 如果你只能从这篇带走一句话，带走这句：Cordis 不是 DeepSeek 发明的，它从 Koishi 聊天机器人框架的四千多个社区插件和四年实战里长出来，被一篇论文形式化为"时空可组合性"范式，`dsh` 把它 vendor 进来并做了 18 处工程加固，让它能承载一个 agent harness 的全部生命周期。
+> Cordis 不是 DeepSeek 发明的，它从 Koishi 聊天机器人框架的四千多个社区插件和四年实战里长出来，被一篇论文形式化为"时空可组合性"范式，`dsh` 把它 vendor 进来并做了 18 处工程加固，让它能承载一个 agent harness 的全部生命周期。
 > 这一篇拆 Cordis 的来源、它的基础库谱系、`dsh` 为什么 vendor 而不 npm install、18 处本地修改修了什么，以及它和 Spring、VSCode、NestJS 等插件框架的关键区别。
 
 ## Cordis 从哪来：Koishi 的四年实战

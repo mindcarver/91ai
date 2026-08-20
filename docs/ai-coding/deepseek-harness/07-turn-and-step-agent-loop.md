@@ -1,6 +1,6 @@
 # Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转
 
-> 如果这一篇你只能带走一句话，带走这句：dsh 用 turn 和 step 两个时间单位组织对话，而驱动这套流转的，是整个 harness 里唯一装着具体循环逻辑的包 dsh-agent-loop，一个三状态机，靠 kick → turn → step 的循环把 inbox 里的输入变成模型请求，每一步的模型历史都从会话日志现算。
+> dsh 用 turn 和 step 两个时间单位组织对话，而驱动这套流转的，是整个 harness 里唯一装着具体循环逻辑的包 dsh-agent-loop，一个三状态机，靠 kick → turn → step 的循环把 inbox 里的输入变成模型请求，每一步的模型历史都从会话日志现算。
 > 这一篇把概念和源码合成一条线：先建立 turn/step 的事件骨架（输入怎么进 inbox、守门人怎么拦、turn 怎么收尾），再落到 `packages/core/agent-loop` 的真实代码，从一条用户消息追到一次工具结果落进日志。文中代码与行为基于 2026-08-14 的仓库 `master` 分支。工具执行管线和会话日志另有专篇，这里只看它们在驱动器里的位置。
 
 ## 两个时间单位：step 和 turn

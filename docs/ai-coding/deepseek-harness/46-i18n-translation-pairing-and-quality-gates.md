@@ -1,6 +1,6 @@
 # i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂
 
-> 如果你只能从这篇带走一句话，带走这句：`dsh` 用一个三文件配对机制（`foo.md` + `foo.zh.md` + `foo.i18n.yaml`）和 blob hash 一致性记录，让中英双语文档无法悄悄分叉：改了一边没改另一边，CI 门禁就挂。
+> `dsh` 用一个三文件配对机制（`foo.md` + `foo.zh.md` + `foo.i18n.yaml`）和 blob hash 一致性记录，让中英双语文档无法悄悄分叉：改了一边没改另一边，CI 门禁就挂。
 > 这一篇拆配对契约、一致性记录、结构镜像规则、verify-translation-pairing 门禁、Git merge driver，以及 lefthook hooks 怎么在提交前拦住分叉。
 
 ## 为什么双语文档是硬约束

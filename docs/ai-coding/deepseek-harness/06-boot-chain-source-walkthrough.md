@@ -1,6 +1,6 @@
 # 启动链源码导读：从 npx dsh web 到插件树挂载
 
-> 如果这一篇你只能带走一句话，带走这句：`dsh web` 这条命令，从一个 Node bin 走到一棵挂载完毕的插件树，中间只有三层代码，一层负责分发，一层负责把 profile 拼成 patch 栈，一层负责建 context、挂 include、等树稳定。
+> `dsh web` 这条命令，从一个 Node bin 走到一棵挂载完毕的插件树，中间只有三层代码，一层负责分发，一层负责把 profile 拼成 patch 栈，一层负责建 context、挂 include、等树稳定。
 > 这一篇是源码导读，沿着 `npx dsh web` 的真实调用链一行行往下读，定位到具体文件和函数。组合的规则（profile、bundle、patch 层顺序）是上一篇讲过的，这里只看这些规则在代码里是怎么被执行的。
 
 ## 这一篇读什么

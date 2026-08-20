@@ -1,6 +1,6 @@
 # 系统提示组装与动态 Cordis
 
-> 如果这一篇你只能带走一句话，带走这句：模型每个 step 看到的系统提示，是若干段按 order 排序的贡献（section、context、tools、variable）经一道 waterfall 组装出来的；而动态 Cordis 让 agent 能在运行时挂载一个会注册工具、提示、监听器的包，修改正在跑它自己的那棵插件树，且这一切因为注册是可逆副作用而能干净撤销。
+> 模型每个 step 看到的系统提示，是若干段按 order 排序的贡献（section、context、tools、variable）经一道 waterfall 组装出来的；而动态 Cordis 让 agent 能在运行时挂载一个会注册工具、提示、监听器的包，修改正在跑它自己的那棵插件树，且这一切因为注册是可逆副作用而能干净撤销。
 > 这一篇把两件事缝在一起：系统提示是怎么拼出来的，以及 agent 怎么通过 typert/apiProxy 和动态 Cordis 去观察甚至修改自己运行的那个 harness。
 
 ## 这一篇把两件事缝在一起

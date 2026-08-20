@@ -1,6 +1,6 @@
 # Telemetry 与可观测性：给 agent 接上 OTel 监控
 
-> 如果你只能从这篇带走一句话，带走这句：`dsh` 的 telemetry 子系统有一条硬边界叫"止于 emit()"，harness 负责捕获和投影会话事件，批处理、重试、排队、丢包策略全归上报 SDK 管，两者泾渭分明。
+> `dsh` 的 telemetry 子系统有一条硬边界叫"止于 emit()"，harness 负责捕获和投影会话事件，批处理、重试、排队、丢包策略全归上报 SDK 管，两者泾渭分明。
 > 这一篇拆 `ctx.sessionTelemetry` 接缝（`dsh-session-telemetry`）和它的 OpenTelemetry provider（`dsh-session-telemetry-otel`），看一个 agent harness 怎么把内部事件流变成外部可观测的监控数据。
 
 ## 为什么 agent harness 需要独立的可观测性

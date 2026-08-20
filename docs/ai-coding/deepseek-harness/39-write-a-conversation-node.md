@@ -1,6 +1,6 @@
 # 写一个 Conversation Node：在 Web 客户端做自定义渲染
 
-> 如果你只能从这篇带走一句话，带走这句：Conversation Node 是把一组相关的会话事件折叠成一个有状态视图单元的机制，你写一个 Definition 声明怎么匹配事件、怎么构建状态、怎么渲染，引擎保证回放正确、分页不乱、性能是常数级。
+> Conversation Node 是把一组相关的会话事件折叠成一个有状态视图单元的机制，你写一个 Definition 声明怎么匹配事件、怎么构建状态、怎么渲染，引擎保证回放正确、分页不乱、性能是常数级。
 > 这一篇拆 `ConversationNodeDefinition` 的结构、三条事件摄入路径、性能不变量，以及 keyed renderer 的消费方式。
 
 ## 什么是 Conversation Node

@@ -1,6 +1,6 @@
 # 跨会话记忆：session-query / projection / reference
 
-> 如果只能从这篇带走一句话：`dsh` 用三个不同层次的机制让 agent 记住别的会话，`ctx.sessionQuery` 是跨会话的全文检索与血缘追踪，`ctx.sessionProjections` 是框架驱动、领域计算的状态投影 fold，`ctx.sessionReferenceResolver` 是把另一个会话的快照注入当前消息。
+> `dsh` 用三个不同层次的机制让 agent 记住别的会话，`ctx.sessionQuery` 是跨会话的全文检索与血缘追踪，`ctx.sessionProjections` 是框架驱动、领域计算的状态投影 fold，`ctx.sessionReferenceResolver` 是把另一个会话的快照注入当前消息。
 > 三者共享一个根基：都在"live-preferred 逻辑语料库"上读，活的会话优先于持久化的，但都不把整个日志一次性塞进内存。
 
 ## 为什么跨会话记忆是三个机制
@@ -185,7 +185,7 @@ interface PreparedReferencedMessage {
 
 冷读阶梯用"缓存行加尾部 replay 加回写"让冷启动不全量重放，restoreFloor 的低一锚点能检测日志被截断，stateVersion 让旧持久化行失效。
 
-几个判断值得带走：三个机制各管一层（检索、派生、注入），共享 live-preferred 根基；全文 query 是数据不是可执行语法，防注入；投影框架只订阅一次、领域只算数学；引用快照不受信且有预算上限，保护当前上下文。这套分层让跨会话记忆这个最容易做得很重的话题，在每个具体需求上都有轻量合适的工具。
+几个判断：三个机制各管一层（检索、派生、注入），共享 live-preferred 根基；全文 query 是数据不是可执行语法，防注入；投影框架只订阅一次、领域只算数学；引用快照不受信且有预算上限，保护当前上下文。这套分层让跨会话记忆这个最容易做得很重的话题，在每个具体需求上都有轻量合适的工具。
 
 ## 延伸阅读
 

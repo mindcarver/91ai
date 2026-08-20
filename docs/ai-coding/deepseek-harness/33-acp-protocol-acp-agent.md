@@ -1,6 +1,6 @@
 # ACP 协议与 acp-agent：让 agent 之间能通话的标准
 
-> 如果你只能从这篇带走一句话，带走这句：MCP 解决的是 agent 怎么接外部工具，ACP 解决的是 agent 怎么被另一个程序（或另一个 agent）驱动；`dsh` 同时是 ACP 的服务端和客户端，用同一条 JSON-RPC 线让 agent 变成可编程的自动化单元。
+> MCP 解决的是 agent 怎么接外部工具，ACP 解决的是 agent 怎么被另一个程序（或另一个 agent）驱动；`dsh` 同时是 ACP 的服务端和客户端，用同一条 JSON-RPC 线让 agent 变成可编程的自动化单元。
 > 这一篇拆 `@deepseek-ai/dsh-acp` 这个自动化传输适配器，以及 `examples/acp-agent` 示例如何把一个可运行的 ACP server 组合起来。
 
 ## 先分清：MCP 和 ACP 解决的不是同一个问题

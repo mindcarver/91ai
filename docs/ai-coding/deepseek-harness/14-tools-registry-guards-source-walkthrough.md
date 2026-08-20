@@ -1,6 +1,6 @@
 # tools 注册表与守卫管线源码导读
 
-> 如果这一篇你只能带走一句话，带走这句：`dsh-tools` 的 `ToolRuntime` 用五个事件（三道 waterfall 加一个 code-dispatch-log waterfall 加两个 emit）定义了上一段的工具执行管线，并暴露一个调度器符号，让 agent-loop 的并行调度器能重叠派发同时保持前后策略有序。
+> `dsh-tools` 的 `ToolRuntime` 用五个事件（三道 waterfall 加一个 code-dispatch-log waterfall 加两个 emit）定义了上一段的工具执行管线，并暴露一个调度器符号，让 agent-loop 的并行调度器能重叠派发同时保持前后策略有序。
 > 这一篇是源码导读，把上一篇讲的七层管线落到 `packages/core/tools/src/index.ts` 的真实代码。它还会对上更早讲的 agent-loop 那篇：agent-loop 的 `tool-calls.ts` 正是通过一个调度器符号调进这里的。
 
 ## ToolRuntime：注入 systemPrompt 的服务

@@ -1,6 +1,6 @@
 # 模型 + Harness = Agent：DeepSeek Harness 是什么
 
-> 如果你只能从这篇带走一句话，带走这句：DeepSeek Harness（`dsh`）不是又一个 AI 编程客户端，而是一个把"模型之外的一切"都做成可替换插件的开源 agent harness。
+> DeepSeek Harness（`dsh`）不是又一个 AI 编程客户端，而是一个把"模型之外的一切"都做成可替换插件的开源 agent harness。
 > 这一篇不讲 harness 学科通论（那在 [harness-engineering 系列](../harness-engineering/01-what-is-harness-engineering.md)），只回答：`dsh` 这个具体项目是什么、它为什么长这样
 
 ![模型、插件化 Harness 与 Agent 的关系](imgs/01-framework-model-harness-agent.png)

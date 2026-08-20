@@ -1,6 +1,6 @@
 # Jobs 与 Workflow：后台任务与工作流编排
 
-> 如果只能从这篇带走一句话：`dsh` 把"长跑的活"分成两个不同层次，`ctx.jobs` 是通用的后台任务注册表（管身份、归属、生命周期，bash 和子 agent 都注册在这里），`ctx.workflowEngine` 是建在上面的编排脚本引擎（模型写一段脚本，用编程逻辑扇出多个子 agent）。
+> `dsh` 把"长跑的活"分成两个不同层次，`ctx.jobs` 是通用的后台任务注册表（管身份、归属、生命周期，bash 和子 agent 都注册在这里），`ctx.workflowEngine` 是建在上面的编排脚本引擎（模型写一段脚本，用编程逻辑扇出多个子 agent）。
 > 两者共享一个纪律：失败永远走结果字段而非异常，活的生命周期边界比自身更底层，归属授权靠 owner 不靠 id 保密。
 
 ## 为什么是两个不同的东西
@@ -166,7 +166,7 @@ workflow 脚本以 `return <json-value>` 结束，返回值是宿主领域的纯
 
 `ctx.jobs` 是通用后台任务注册表，管身份（`<kind>-N`）、归属（owner 授权不靠 id 保密）、生命周期（first-wins 结算、完成最后通知、没 controller 不让起）。bash 和子 agent 都注册在它上面。`ctx.workflowEngine` 是建在上面的编排脚本引擎，模型写脚本用编程逻辑扇出子 agent，子 agent 经 `ctx.subagents` 起、在 jobs 上注册。
 
-几个判断值得带走：两层共享"失败走结果字段不走异常"的纪律（jobs 的 done 不 reject、workflow 的 result 不 reject）；活的生命周期边界放在比自身更底层的地方（jobs 的 producer 资源、workflow 的 worker）；归属授权一律靠 owner 不靠 id 保密；workflow 的 fatal 错误大声死、每项 null 留给子失败，两者不能混。
+几个判断：两层共享"失败走结果字段不走异常"的纪律（jobs 的 done 不 reject、workflow 的 result 不 reject）；活的生命周期边界放在比自身更底层的地方（jobs 的 producer 资源、workflow 的 worker）；归属授权一律靠 owner 不靠 id 保密；workflow 的 fatal 错误大声死、每项 null 留给子失败，两者不能混。
 
 这套分层让"一个长跑的活"和"一段带逻辑的编排"各自有干净的抽象，又能协作：workflow 编排逻辑，jobs 管底层任务生命周期，子 agent 是两者的交汇点。
 
