@@ -139,12 +139,6 @@ ACP server（33 篇拆过）是另一种多 agent 协议入口。它让外部程
 
 **Typert Remote 是 build-time 产物。** Host-for-Client 的类型和 runtime 贡献是构建时生成的。改了 Host 的 `@Remote` 方法签名，需要重新 build 才能在 Client 侧看到类型变化。公开的 `typecheck`、`lint`、`doc-typecheck` 命令会先生成这些产物。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/subsystems/client-modules.md`、`docs/subsystems/web-server.md`，以及架构文档的 API Gateway 和 GUI Layering 部分。
-
-文中对两半架构、wire 协议、HMR 机制的分析基于官方文档和源码。具体的 API 签名（`ClientModuleRegistry`、`WebServer`）、配置项（`host`、`port`）、路由行为以仓库实际版本为准。
-
 ## 延伸阅读
 
 - [Client Modules 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/client-modules.md)

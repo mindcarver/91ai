@@ -154,12 +154,6 @@ provider 只参与首次创建（一次式的 `start`，或可继续的 `prepare
 
 几个判断值得带走：多 provider 共存而非单一执行器，因为委派需求多样；fail loud 不 silent degrade，不支持的能力大声拒；可继续的唯一队列是 inbox，消息有唯一顺序；授权靠 live 父对象不靠消息字段；provider 只参与创建不参与后续，生命周期归 manager。这套设计让"一个 agent 调度另一个 agent"从简单的同进程委派，一直延伸到跨产品、跨协议、可恢复的多智能体协作，每一层都有合适的抽象。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/subagent.md`（该文档较长，调研时被结果预算截断，核心契约部分已覆盖）。`dsh` 处于 developer preview，下列内容会随版本变：六个 provider 的集合与名字、`SubagentCapabilities` 标志、`SubagentStopReasonMap` 变体、continuation 的 Activation 状态机、interrupt/report 的签名。
-
-文中关于六个 provider 的具体差异（尤其 codex/claude-code/dsh-sdk 的上下文继承与传输机制）、`inheritsParentContext` 对外部 provider 的取值，部分基于文档对 spawn/fork/acp 的明确陈述和对"产品级 provider"的定位推断；外部产品 provider 的实际行为以那些产品为准，本文对它们传输机制的细节描述标记待核实。continuation manager 的 Activation 状态转换、冷恢复路径的具体实现本次未逐行核对 continuation.ts 源码，标记待核实。
-
 ## 延伸阅读
 
 - [Subagent 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/subagent.md)：本文主要依据，含一次式与可继续的全部契约

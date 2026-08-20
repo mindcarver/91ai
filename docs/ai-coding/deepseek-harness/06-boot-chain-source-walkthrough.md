@@ -289,12 +289,6 @@ bin.ts: parseDshArgs → switch 'profile'
 
 `dsh web` 的启动链是三层：`bin.ts` 分发，`profile-boot.ts` 把 profile 组合成一条 bundle 在下、overlay 在上的 patch 栈，`app-boot` 的 `boot` 建根 context、挂 Loader 和 include、等 fiber 树并发稳定、审计每个条目。整条链没有手写的加载顺序，顺序只来自 patch 数组顺序和插件的 `inject` 声明。启动后两个用户 patch 文件保持热重载，靠每代深拷贝避免 insert 别名污染。失败路径用 stage 标签和有界 release 钩子兜住，保证诊断清晰、终端状态不脏。这套链路把上一篇讲的组合规则，落成了可读、可审计的真实代码。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 仓库 `master` 分支源码：`apps/cli/src/bin.ts`、`apps/cli/src/profile-boot.ts`、`packages/boot/app-boot/src/index.ts`。文中代码片段从上述文件裁剪保留关键控制流，函数签名、字段名（`invocation.mode`、`PROFILE_ROOT_CONFIG`、`allPatches`、`composeEntries`、`mountRootInclude`、`assertEntriesActivated`、`FAIL_LOUD_RELEASE_TIMEOUT_MS` 等）均为源码陈述的可核实事实。`prepare` 钩子的职责（环境快照、`provideCmdline`）、SIGTERM/SIGINT 退出码（0/130）、遥测开关语义、2000 毫秒 release 超时、根配置每次重写为 `[]`，均来自源码与注释。
-
-`dsh` 处于 developer preview，源码结构、函数拆分、退出码、超时常量会随重构变。文中"没有第三种顺序来源""insert 别名是容易踩的坑"属对源码设计意图的分析判断，部分依据源码注释的原文意图。代码片段为可读性做了行级裁剪与注释精简，完整逻辑以仓库实际源码为准。
-
 ## 延伸阅读
 
 - [dsh CLI 入口（apps/cli/src/bin.ts）](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/src/bin.ts)：命令分发器

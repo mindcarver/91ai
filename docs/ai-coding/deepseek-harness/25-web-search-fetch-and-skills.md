@@ -180,12 +180,6 @@ interface SkillInvocationPolicy {
 
 这套设计让"接哪个搜索引擎""技能从哪来"成为部署方的配置选择，对模型完全透明。provider 的多与少、来源的远与近，都不污染模型接口。这就是接缝抽象在联网和技能这两个最容易泄漏差异的地方，又一次收得干净。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/web.md`、`skills.md`。`dsh` 处于 developer preview，下列内容会随版本变：搜索/抓取 provider 列表、`WebFetchBody` 的 kind、web/skills 错误码词汇表、技能发现 rank 表与根目录、`searchMaxResults`/`catalogDescriptionMaxLength` 默认值。
-
-文中关于"web-fetch-http 是当前唯一抓取 provider""技能正文改了下次 get() 立即生效因不缓存"的描述，来自 web/skills 文档的契约陈述（fetch-transport code 由 web-fetch-http 拥有；完整定义不被注册表缓存），均为文档明确记载的行为。本地 provider 的 Chokidar 监听、项目容量控制等运行时细节本次未逐行核对源码，标记待核实。
-
 ## 延伸阅读
 
 - [Web Access 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/web.md)：本文主要依据之一，含搜索/抓取契约与选择规则

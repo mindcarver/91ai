@@ -249,12 +249,6 @@ provider 专属的思考模式开关留在适配器的 Config 里，不进 provi
 
 守住了，你的 provider 就和官方三个 provider 一样，享受 harness 的拼装、归一化、重试、日志、可重建全套兜底。守不住，bug 会藏在 token 计费、上下文压力、错误恢复这些不容易复现的地方。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/cookbook/adding-an-llm-adapter.md`。`dsh` 处于 developer preview，下列内容会随版本变：`LlmAdapter` 的方法签名、`Config` 与 schemastery 用法、`registerAdapter` 的 handle 形状、契约义务的具体措辞、测试目录布局。
-
-文中第三、四步的 OpenAI 兼容端点示意代码是为讲解契约编写的教学骨架，不是从仓库逐行抄录的生产代码：累计工具调用参数、错误码映射函数（`httpToFailure`/`httpToCode`/`toOpenAIContent`/`toOpenAITool`）、token 用量的 cache 减法细节都做了简化或省略，真实实现请对齐 `packages/llm/llm-deepseek` 的 `translate.ts`、`sse.ts`、`adapter.ts`。`stream_options: { include_usage: true }` 是 OpenAI 兼容协议的常见用法，但不同兼容端点的支持程度以你的端点文档为准，标记待核实。
-
 ## 延伸阅读
 
 - [Cookbook: adding an LLM adapter](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cookbook/adding-an-llm-adapter.md)：本文主要依据，含契约原文与参考实现指引

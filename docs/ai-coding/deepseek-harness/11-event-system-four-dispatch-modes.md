@@ -152,14 +152,6 @@ waterfall 的威力也是它的陷阱。文档把它立成一条铁律：
 
 Cordis 源码定义了五种派发模式：emit 同步广播不收集返回，parallel 并发一起等，serial 顺序拍板第一个 bail 值获胜，bail 是 serial 的同步孪生，waterfall 是 around 中间件靠 `next()` 串起来。primer 把主要的四种列成表（emit/waterfall/parallel/serial），bail 因和 serial 同源常被并讲。waterfall 的灵魂是"调 next() 委托、不调 next() 否决"，这条机制让一个监听器能层层改写或短路整个默认行为，但代价是一条铁律：只观察的监听器必须调 next()，忘调会静默吞掉所有人的默认行为。DeepSeek Harness 把所有需要拦截或改写的决策点（pre-step、request、stream、tools 三关）都做成 waterfall，把收尾检查点（turn-stopping）做成 serial，把纯通知（session/event、status）做成 emit。派发模式是事件的公开契约，用 @mode 标签声明、由生成式目录校验，改模式就是破坏契约。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 官方文档：`docs/cordis-api/events.md`（生成自 `vendor/cordis/src/events.ts`）、Cordis Primer 的 Dispatch Modes 与 Waterfall Semantics 节、Cordis 教程第 4 章、架构文档 Events 节与 Turn flow 节。文中 `DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall'` 五种模式定义、各派发方法（`ctx.emit`/`ctx.parallel`/`ctx.serial`/`ctx.bail`/`ctx.waterfall`）的语义、serial/bail "第一个非 null/false/undefined 返回获胜停下" 的 bail 值判定、waterfall 的 `next()` 委托与 veto 语义、`prepend`/`global` 选项、Harness 事件到模式的映射（agent/pre-step·agent/request·llm/stream·tools/* 为 waterfall、agent/turn-stopping 为 serial、session/event 为 emit）、@mode 契约，均来自上述官方文档与 vendored 源码，为可核实事实。
-
-一处文档表述需留意：Cordis Primer 的派发模式表列出四种（emit、waterfall、parallel、serial），未单列 `bail`；而 `docs/cordis-api/events.md` 与 vendored 源码 `vendor/cordis/src/events.ts` 的 `DispatchMode` 类型明确有五种（多 `bail`），教程第 4 章也列五种。`bail` 是 `serial` 的同步版本。标题"四种派发模式"沿用 primer 的主要四分法，本文正文按源码实际涵盖五种，以仓库源码为准。
-
-文中"模式对应着事件要解决的合作模式""忘调 next() 会静默吞掉默认行为"属分析判断，把官方机制连成因果解释，不是文档原话表述。各事件的具体签名以生成的 Cordis 目录为准，`dsh` 处于 developer preview，事件名、模式归属会随版本变。
-
 ## 延伸阅读
 
 - [Cordis 事件 API（docs/cordis-api/events.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-api/events.md)：派发方法与 DispatchMode 的权威定义（生成自源码）

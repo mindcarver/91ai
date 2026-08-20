@@ -137,12 +137,6 @@
 
 能力接缝是 DeepSeek Harness 把每个能力做成可替换的设计：一个接缝有三个角色（定义、提供者、消费者），缺一不构成接缝，增加能力要三件齐备。不是所有服务都是接缝，官方把服务分成 seam（可替换）、core（脊柱不可换）、bundle（组合点，仅 agentLoop）。接缝设计最值钱的洞察是文件系统和子进程共享同一个执行世界：bash、终端、LSP、进程外子 agent 全走 ctx.subprocess，把 fs 和 subprocess 指向远程沙箱，整个执行世界一起搬，不用为远程执行写分支。逐个接缝看，ctx.llm 换模型、ctx.subprocess 换执行位置、ctx.subagents 从子 agent 换到委派到别的产品，换的都是 provider、变的是产品形态。回报是从一个产品变成一族可组合产品，代价是抽象层多、调试链长、三角色纪律严。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 官方文档：`docs/capability-seams.md`（能力图与服务表）、架构文档 Capability seams 节。文中三角色定义（Service Definition / Provider / Consumer）、服务的 seam/core/bundle 三分类、各接缝的 owner/实现/消费者清单（ctx.llm、ctx.fs、ctx.shell、ctx.subprocess、ctx.sandbox、ctx.sandboxPolicy、ctx.web、ctx.lsp、ctx.subagents、ctx.approval、ctx.permissionPresets、ctx.e2b）、"文件系统与子进程共享执行世界""换 provider 移动 Bash/PTY/LSP"的论断、approval 缺席 fail closed 到 unavailable、LSP 恰好四个操作无协议逃生口、ctx.subprocess 消费者清单（bash/terminal/lsp/subagent-acp/codex/claude-code），均来自上述官方文档与能力图，为可核实事实。
-
-`dsh` 处于 developer preview，接缝清单、provider 实现、消费者关系会随版本变，以仓库生成的能力图为准。文中"换 provider 换产品形态""共享执行世界避免为远程写分支"属分析判断，把官方机制连成因果解释；"接缝是过度设计如果只跑一种环境"是对取舍的分析，不是官方表述。具体每个接缝的 API 签名以各子系统文档与生成式 Cordis 目录为准。
-
 ## 延伸阅读
 
 - [能力接缝图与服务表（docs/capability-seams.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/capability-seams.md)：所有 seam/core/bundle 服务的权威清单

@@ -164,12 +164,6 @@ type ApprovalPolicy = 'ask' | 'never'
 
 这套拆分的价值在于：每个子系统都能独立推理、独立测试、独立替换。你换一个沙箱后端（比如上 microVM），不动审批逻辑；你换一个审批 answerer（比如接 ACP 的机器决策），不动沙箱。而 fail-closed 和"强制是事实不是承诺"这两条贯穿性纪律，保证了无论怎么换，安全底线都不会被一个 bug 或一个 partial 强制悄悄击穿。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/sandbox.md`、`approval.md`、`permission-presets.md`。`dsh` 处于 developer preview，下列内容会随版本变：`SandboxMode` 与 `ApprovalPolicy` 的取值、后端覆盖的平台与 ABI、预设默认表、各服务方法签名、事件名。
-
-文中对三件套协作流程（步骤 1 到 5）的描述，是依据三个子系统文档的契约与 capability seams 关系给出的架构串联，用于说明它们如何配合，本次未逐行核对工具管线里 `resolve` 与 `confine` 与 `request` 的精确调用顺序与条件分支代码，标记待核实。`defensive-patterns.md` 作为调研路径的一部分被引用，本文的 defensive 归纳主要来自三个子系统文档本身，该文档的完整条目本次未单独逐条核对。
-
 ## 延伸阅读
 
 - [Process Sandbox 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/sandbox.md)：沙箱模式、强制事实、confine 契约

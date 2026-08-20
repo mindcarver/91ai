@@ -170,14 +170,6 @@ workflow 脚本以 `return <json-value>` 结束，返回值是宿主领域的纯
 
 这套分层让"一个长跑的活"和"一段带逻辑的编排"各自有干净的抽象，又能协作：workflow 编排逻辑，jobs 管底层任务生命周期，子 agent 是两者的交汇点。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/jobs.md`、`workflow.md`。`dsh` 处于 developer preview，下列内容会随版本变：`JobKindMap` 的 kind、`JobStatus` 取值、`WorkflowStopReason` 联合、`maxConcurrentJobsPerOwner` 默认值、workflow 事件名。
-
-文中"workflow 子 agent 同时注册为 ctx.jobs 上的 subagent kind 后台任务""workflow 用 jobs 做底层任务生命周期"的描述，是依据 jobs 文档的 `JobKindMap`（含 `subagent`）与 workflow 文档的 `agent()` 经子 agent 接缝扇出，合起来理解得出的架构结论，本次未逐行核对 workflow 引擎内部如何向 jobs 注册子 agent 任务，标记待核实。
-
-关于 Ralph：它对应 `packages/workflow/tool-ralph`，是 workflow engine 的固定结构化输出 consumer（capability-seams 描述其 requires one fresh structured-output route）。其包内具体实现本次未逐行核对源码。
-
 ## 延伸阅读
 
 - [Background Task Runtime 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/jobs.md)：本文主要依据之一，含生产者契约与注册表语义

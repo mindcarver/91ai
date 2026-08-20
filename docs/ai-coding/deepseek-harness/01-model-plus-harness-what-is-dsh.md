@@ -7,7 +7,7 @@
 
 ## 先把坐标定准
 
-`dsh` 是 [DeepSeek AI](https://deepseek.com) 开源的 agent harness，MIT 许可，命令行入口 `dsh`，npm 包 `@deepseek-ai/dsh`。截至 2026-08-14，它处于官方所说的 _developer preview_，README 顶部用粗体写明：**会有破坏兼容性的改动（THERE WILL BE COMPATIBILITY-BREAKING CHANGES）**。
+`dsh` 是 [DeepSeek AI](https://deepseek.com) 开源的 agent harness，MIT 许可，命令行入口 `dsh`，npm 包 `@deepseek-ai/dsh`。官方将它标记为 _developer preview_，README 顶部明确提示会有破坏兼容性的改动（THERE WILL BE COMPATIBILITY-BREAKING CHANGES）。
 
 它官方的自我描述只有一句：
 
@@ -164,12 +164,6 @@ turn 结束
 | 只想横向对比选型 | 01 + 12（接缝）+ 48（横评）+ 49（哲学） |
 
 一个提醒：**03、04 两篇（Cordis）是硬门槛。** 跳过它们直接读后面的源码导读，大概率会卡在"为什么注册一个函数就能扩展能力，卸载还能自动撤销"上。Cordis 是这套架构的地基，先把它过掉。
-
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与官方文档。`dsh` 在 developer preview 阶段，下列内容会随版本变：包名与包结构、事件签名、配置项、bundle/profile 模板。涉及具体签名时，以仓库实际版本为准。
-
-文中的架构判断（如"全插件化 vs 封闭的取舍""接缝设计的代价"）是分析结论，不是官方表述。"对标 Claude Code / Cursor / Manus"是社区与媒体的普遍解读，官方 README 未如此明确表述。
 
 ## 延伸阅读
 

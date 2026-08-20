@@ -127,12 +127,6 @@ provider-native 的翻译发生在适配器层：同一个引用，不同适配�
 
 理解了这一层，你就能解释一个现象：为什么 `dsh` 的会话日志可以很小，却能驱动一个看图 agent。因为图不在日志里，日志里只有一把能取回图的钥匙。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/attachment.md`。`dsh` 处于 developer preview，下列内容会随版本变：支持的图片格式集合、`ImageAttachmentLimits` 的字段、`AttachmentId` 的内部表示、模态声明字段名、`<DSH_HOME>/attachments/v1` 的目录布局。涉及具体签名和源码行号时，以仓库实际版本为准。
-
-文中关于"适配器在 translate 阶段调 `readImage` 取字节并按 provider 格式编码"的描述，是依据 attachment 文档"ImageBlock 只含引用和元数据、绝不含 base64 或 provider URL"这条契约推出的架构推论，本次未逐行核对 `llm-deepseek` 适配器里图片翻译的具体实现代码，标记待核实。模态声明字段 `input: [text, image]` 来自 Quick Start 排错表，字段确切 schema 以配置参考文档与实际版本为准。
-
 ## 延伸阅读
 
 - [Durable Image Attachments 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/attachment.md)：本文主要依据，含全部类型与接缝定义

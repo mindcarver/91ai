@@ -213,12 +213,6 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 
 **target 固定为 'chat'。** 当前教程只覆盖 Chat 视图。Trajectory 等其他视图目标是 out of scope。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/cookbook/adding-a-conversation-node.md` 和 Conversation Node assembly decision Agent Note。代码示例改编自该 cookbook 的 review-job 示例。
-
-文中对性能不变量和三条摄入路径的分析基于官方文档。具体的 API 签名（`ConversationNodeDefinition`、`ChatNodeViewProps`、`ChatNodeDataMap`）和 slot 注册方式以仓库源码和 `docs/client-ui` 实际版本为准。
-
 ## 延伸阅读
 
 - [Add a Web Client conversation node](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cookbook/adding-a-conversation-node.md)

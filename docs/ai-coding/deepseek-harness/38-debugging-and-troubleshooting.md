@@ -151,12 +151,6 @@ pnpm run hygiene
 **问题：性能差。**
 路径：看 session log 里的 step 序列，确认 agent 没有在无意义的循环。看 compaction 事件确认上下文管理正常。如果工具调用慢，看 tool/result 的时间戳。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/subsystems/invariants.md`、`docs/development.md`，以及架构文档的 Agent Loop、Session Log 和 Architecture Overview 部分。
-
-文中对排查路径的建议是实践总结，不是官方文档的原文。具体的命令名（`pnpm run typecheck`、`pnpm run verify-type-equiv` 等）、门禁名称和行为以仓库 `package.json` 和 `scripts/` 实际版本为准。
-
 ## 延伸阅读
 
 - [Runtime Invariants 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/invariants.md)

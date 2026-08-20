@@ -215,12 +215,6 @@ Quick Start 里提到了几个内置 preset：有减少工具面的 preset，有
 
 但 bundle patch 不是 live watched 的，它在 HMR 重启时重新应用。这个区别在于：用户级 patch 是你随时可能编辑的，bundle patch 是包发布时固定的。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/user/develop/basic/config.md`、`docs/config-catalog.md`，以及架构文档的 Profiles and Bundles 和 Configuration Reference 部分。
-
-文中对 patch replace 语义、config-catalog 交叉校验、preset 信任级别的描述基于官方文档和源码。具体的 patch 层优先级、字段名、preset 配置项以仓库实际版本和 `--dump-config` 输出为准。
-
 ## 延伸阅读
 
 - [插件配置文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/config.md)

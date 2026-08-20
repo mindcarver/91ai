@@ -120,12 +120,6 @@ subprocess 接缝提到 LSP 用它的原始协议管道（`stdout: 'pipe'`）。
 
 这个接缝体现的设计哲学和前面几篇一脉相承：在包边界做归一化，把协议复杂度集中到一处，让消费者依赖稳定的抽象而不是多变的实现。LSP 这个最容易泄漏协议细节的地方，被这条规矩收得最干净。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/lsp.md`。`dsh` 处于 developer preview，下列内容会随版本变：`LspOperation` 的四个取值、`LspQueryResult` 的联合变体、`LspError` 的码词汇表、provider 包名与覆盖的语言服务器。
-
-文中关于 `dsh-lsp-stdio` provider "把四个归一化操作翻译成原始 LSP JSON-RPC、并通过 `ctx.subprocess` 起语言服务器进程拿原始管道"的描述，是依据 lsp 文档对该 provider 的定位（"a configured stdio language-server host"）与 subprocess 文档（LSP 用原始协议管道）给出的架构串联，本次未逐行核对 `lsp-stdio` 包的协议翻译实现代码，标记待核实。
-
 ## 延伸阅读
 
 - [LSP navigation 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/lsp.md)：本文主要依据，含四个操作与封闭联合定义

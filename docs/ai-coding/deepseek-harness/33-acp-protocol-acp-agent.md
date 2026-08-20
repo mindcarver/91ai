@@ -134,12 +134,6 @@ pnpm run demo:code-mode    # 同协议但用 Code Mode 工具传输
 
 这些局限不是 bug，是 scope。`dsh-acp` 是自动化传输层，不是全能 UI。交互式渲染和人类提问属于 Web host 和 client modules。把它当 ACP 的"自动化 API"用，而不是当聊天界面用，这些局限就都合理。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `packages/acp/acp/README.md`、`src/index.ts`，以及 `examples/acp-agent/README.md`。ACP 协议本身的背景参考 [Agent Client Protocol 官方站点](https://agentclientprotocol.com/) 和 [Zed 的 ACP 页面](https://zed.dev/acp)。
-
-文中对 ACP 与 MCP 区别的描述、对 committed-only 设计动机的分析是解读结论，不是协议规范的原文。协议方法的具体行为以 `dsh-acp` 源码和 README 为准，ACP 协议本身仍在演进，方法签名可能随版本调整。
-
 ## 延伸阅读
 
 - [Agent Client Protocol 官方站点](https://agentclientprotocol.com/)

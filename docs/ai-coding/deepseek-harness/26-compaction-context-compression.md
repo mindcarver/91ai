@@ -123,12 +123,6 @@ baseline 有两种。`usage` 表示最近一次成功的 provider 调用有相�
 
 这套设计把"对话太长"这个 agent 最头疼的问题，拆成了测量（token-meter）、廉价减负（修剪）、昂贵减负（summarization）三层，每层有明确的触发条件和成本。它不指望模型自己管理上下文，而是用工程机制保证上下文不会失控。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/compaction.md`、`token-meter.md`。`dsh` 处于 developer preview，下列内容会随版本变：`compaction/*` 事件载荷、`CompactionTrigger` 取值、`ManualCompactionErrorCode` 词汇表、`TokenMeasurement` 字段、压缩阈值与保留策略。
-
-文中关于"压力压缩在 `agent/pre-step` 串行跑、先调 toolResultPruner 再重新测量、可不经 summary 推进表面""溢出恢复在 `agent/request-error` 后跑、以表面推进为重试判据"的描述，均来自 compaction 文档的明确陈述（"Pressure compaction runs at serial agent/pre-step before request derivation""invokes optional ctx.toolResultPruner before range selection, remeasures through ctx.tokenMeter, and can advance the surface without a summary""returns a retry action only when the surface replacement generation advances"）。`compaction-basic` 的具体阈值数值、保留尾部策略本次未逐行核对源码，标记待核实。
-
 ## 延伸阅读
 
 - [Compaction 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/compaction.md)：本文主要依据，含事件、引擎、修剪器

@@ -140,12 +140,6 @@ Code Mode 是个值得单独看的特殊路径。它不是绕过管线，而是*
 
 DeepSeek Harness 的工具调用是一条分层管线：tool-call 块先进 tool/call 事件，然后过 tools/pre-execute（钩子/权限/沙箱）、单调守卫（只拒不放）、ctx.approval（一次性审批、缺席即拒）、tools/execute（超时/重试/指标的 around 派发）、工具 body（含 fs 门和工具拥有的会话事件）、tools/post-execute（接受/拦截/替换/加上下文）、归一化（抛错变 isError）、finalizeContent（内容终检），最后产出冻结的权威结果进 tools/result 和 tool/result 事件。管线的灵魂是机制和策略分离：机制是关卡结构，策略是挂在 waterfall 上的监听器，彼此不耦合。Code Mode 把子调用也送进同一条管线、省略 additionalContexts 保持调用/结果相邻、拒绝绑定式。这套纵深防御让每层只管一个关注点，一个策略的 bug 不会击穿其他层，代价是延迟和调试链变长。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 官方文档：`docs/tool-execution-pipeline.md`（管线流程图与说明）、架构文档 Turn flow 的工具部分、`docs/subsystems/tools.md` 与 `docs/subsystems/approval.md`。文中管线七层顺序（pre-execute → 单调守卫 → approval → execute → post-execute → 归一化 → finalizeContent → tools/result）、pre-execute 的 allow/deny/ask、单调守卫的 deny-or-abstain 与 identity protected、approval 的 fail closed（absent/unanswerable: deny）与在守卫前解析、post-execute 的 accept/block/replace/add-context、归一化把快照抛错变 isError、finalizeContent 为定义拥有的同步内容不变量、tools/result 为 frozen authoritative outcome、additionalContexts FIFO 在已记录结果后作为 user/message 注入、Code Mode 子调用走同管线并省略 additionalContexts 保持调用/结果相邻，均来自上述官方文档，为可核实事实。
-
-事件签名、工具 schema、具体 waterfall 字段以生成的 Cordis 目录为准，`dsh` 处于 developer preview，关卡顺序、事件名会随版本变。文中"分层是纵深防御，一个策略的 bug 不会击穿其他层""机制策略分离的固定成本是延迟和调试链"属分析判断，把官方机制连成因果解释，不是文档原话表述。tools 包源码内部的注册、守卫、around dispatch、finalizeContent 实现细节，以仓库 `packages/core/tools/` 实际源码为准。
-
 ## 延伸阅读
 
 - [工具执行管线图（docs/tool-execution-pipeline.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/tool-execution-pipeline.md)：管线流程图的权威来源

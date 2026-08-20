@@ -246,12 +246,6 @@ const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
 
 `dsh-tools` 的 `ToolRuntime` 用五个事件定义了工具执行管线：pre-execute、execute、post-execute 三道 waterfall 是可改写关卡，code-dispatch-log 是 Code Mode 日志副本替换 waterfall，result 和 change 是 emit 通知。它暴露一个 `TOOL_RUNTIME_SCHEDULER` 符号接口（prepare/dispatch/finalize/finish），让 agent-loop 的并行调度器能重叠派发同时保持前后策略有序，这是连接 agent-loop 那篇的桥。决策类型刻意不做输入改写（参数已记日志），单调守卫只有 deny、类型上不存在 allow 所以无法被翻回。结果成功带 execution-local 的 value（不进持久事件）、失败不带 value，用从 session 包复用的 snapshotJsonValue 做归一化。注册强制 canonical output 声明、保留 run_code 名、按 scope 落层。Code Mode 的 run_code 是不进可过滤层的保留传输，子调用带 parent token 走完整管线、additionalContexts 延迟以保持调用/结果相邻。这套代码把上一篇的管线概念落成了有类型、有 scope、有调度器接口的真实实现。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 仓库源码：`packages/core/tools/src/index.ts`（前半部分，含服务声明、事件声明、类型、调度器符号、ToolLayer、register）、该包 README 与 `docs/subsystems/tools.md`、`docs/tool-execution-pipeline.md`。文中 `ToolRuntime extends Service` 与 `static inject = ['systemPrompt']`、五个事件的 `@mode` 标签与签名、`TOOL_RUNTIME_SCHEDULER` 符号接口（prepare/dispatch/finalize/finish）、`ToolGuard = (execution) => string | undefined` 与"no allow result"语义、`PreToolDecision`/`PostToolDecision` 判别联合与"输入改写被排除"、`ToolExecutionResult` 成功带 value 失败不带、规范错误码 `ABORTED`/`ABORTED_BEFORE_DISPATCH`/`UNKNOWN_TOOL`/`INVALID_TOOL_OUTPUT`、`snapshotJsonValue` 复用、`register` 的 output 声明与 `RUN_CODE_NAME` 保留、Code Mode 的 SDK 渲染器表与 parent token 子调用，均为源码与文档陈述的可核实事实。
-
-源码 `index.ts` 较长（约 90KB），本文读取了其前半部分（声明与类型层），`prepareScheduledExecution`/`dispatchScheduledExecution`/`finalizeScheduledExecution`/`finishScheduledExecution` 的完整派发体在文件后半，其行为以 README 契约与本文调度器符号接口签名描述为准。`dsh` 处于 developer preview，事件签名、类型字段、符号接口会随重构变。文中"调度器符号是连接 agent-loop 和 tools 的桥""deny-only 让放行在类型上不存在"属对源码设计意图的分析判断，部分依据源码注释与类型定义。
-
 ## 延伸阅读
 
 - [tools 包源码（src/index.ts）](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/tools/src/index.ts)：ToolRuntime 服务、事件声明、调度器符号

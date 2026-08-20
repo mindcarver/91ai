@@ -154,12 +154,6 @@ backend 不实现 `flush()`。批处理器拥有常规刷新。shutdown 时 OTel
 
 **反馈时崩溃不上传。** `FEEDBACK_ONLY` 在反馈前不保留 telemetry 副本。反馈前崩溃什么都不上传。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/subsystems/session-telemetry.md`、`packages/session/session-telemetry/README.md`、`packages/session/session-telemetry-otel/README.md`。OpenTelemetry 背景参考 [OTel 官方文档](https://opentelemetry.io/docs/)。
-
-文中对边界公理、固定 chunk 投影、尽力而为交付的分析是解读结论。具体的行为描述（三种模式、脱敏瀑布语义、交付保证）直接引自子系统文档和源码。OTel SDK 的具体行为（批处理、重试、丢包）以上游 SDK 为准。
-
 ## 延伸阅读
 
 - [Session Telemetry 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session-telemetry.md)

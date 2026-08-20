@@ -194,12 +194,6 @@ interface TerminalSendOperation {
 
 三个判断值得带走：底层只给事实不给原因分类（原因归调用方）；前台结果各项正交独立报告（防止把截断读成成功）；选层要看需求本质（批处理用 shell，协议用 subprocess，交互用 terminal）。这套分层让"执行命令"这件看似简单的事，在面对批处理、协议、交互三种截然不同的需求时，各自有干净合适的工具，而不是一个拧巴的万能 API。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/subprocess.md`、`shell.md`、`terminal.md`。`dsh` 处于 developer preview，下列内容会随版本变：三个接缝的方法集合、`SubprocessSpawnSpec`/`ShellExecRequest` 的字段、`TerminalWaitReason` 的取值、stdio 处置枚举、provider 包名与覆盖平台。
-
-文中"何时用哪层"的判断表是依据三个子系统文档的职责划分与消费者关系给出的工程归纳，用于帮助选型，不是官方文档里的现成表格。`spawnTerminal` 与 `ctx.terminals` 后端的协作细节（就绪检测、prompt 推断的具体实现）本次未逐行核对终端后端源码，标记待核实。
-
 ## 延伸阅读
 
 - [Subprocess 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/subprocess.md)：底层坐标，spawn 规格、句柄、树级终止

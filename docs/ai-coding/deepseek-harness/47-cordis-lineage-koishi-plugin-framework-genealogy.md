@@ -114,12 +114,6 @@ Cordis 的独特之处在于**同时做到了时空可组合性**。空间上，
 
 这三个能力，传统插件框架至少需要两个才能实现（一个做空间组合，一个做热部署），而且通常做不到 Cordis 这么干净。Cordis 用一个框架同时解决，这是 `dsh` 选择它的核心理由。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `vendor/README.md` 全文。Cordis 和 Koishi 的背景参考 [cordiverse/cordis](https://github.com/cordiverse/cordis)、[Cordis 论文](https://github.com/cordiverse/paper) 和 [Koishi 官网](https://koishi.chat)。vendored 包的版本号和 commit hash 以 `vendor/README.md` manifest 表为准。
-
-文中对 Cordis 与其他插件框架（Spring、VSCode、NestJS、Webpack/Tapable）的对比是分析判断，基于各框架的公开文档和设计。具体的本地修改数量（18 处）以 `vendor/README.md` 的修改日志为准。"Koishi 四千个社区插件"来自 Cordis 论文的 case study 描述。
-
 ## 延伸阅读
 
 - [Cordis 框架仓库](https://github.com/cordiverse/cordis)

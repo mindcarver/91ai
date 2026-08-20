@@ -161,12 +161,6 @@ runtime 继承正常的 `dsh` 环境变量：
 
 **stdout 归协议。** JSON-RPC runtime 的 stdout 是协议通道。任何混入 stdout 的日志都会破坏协议。诊断信息走 stderr。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/user/guide/python-sdk.md`、`python/sdk/README.md`、`examples/jsonrpc-agent/README.md`、`examples/headless-agent/README.md`。Python SDK 的具体 API 签名和环境变量以 `python/sdk/` 源码和 PyPI 发布版本为准。
-
-文中对三种姿势适用场景的判断是分析结论。具体的配置字段（`max_tokens`、`cordis`、`session_root` 等）和默认行为以仓库实际版本为准。
-
 ## 延伸阅读
 
 - [Python SDK 教程](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/python-sdk.md)

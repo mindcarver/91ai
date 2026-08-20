@@ -144,12 +144,6 @@ type GoalPhase = 'active' | 'paused' | 'blocked' | 'complete'
 
 这套设计让"agent 管理目标和计划"这个容易做成大而全话题的事，分成了轻引导（plan mode）和重追踪（goal）两个正交机制，各自有合适的重量，又共享"日志 fold、与强制分离"的根基。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/plan.md`、`goal.md`。`dsh` 处于 developer preview，下列内容会随版本变：`GoalPhase` 取值、`plan:policy` 段顺序、`/plan` 命令参数、`exit_plan_mode` 的计划格式要求、`maxGoalRounds` 默认与校验规则。
-
-文中关于"plan mode 与 goal 可并存""goal 完全由会话日志支撑、无独立数据库"的描述，前者是依据两者都是可选独立能力的合理推断，后者来自 goal 文档"backed exclusively by the owning session log"的明确陈述。`PlanModeController.set` 的四种返回值（committed/queued/cancelled/noop）及其触发条件来自文档的明确列举。turn 边界 flush 的具体 pre-step 追加机制本次未逐行核对 plan-mode 源码，标记待核实。
-
 ## 延伸阅读
 
 - [Plan Mode 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/plan.md)：本文主要依据之一，软引导与 turn 边界 flush

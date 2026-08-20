@@ -151,12 +151,6 @@ worker-thread Service Provider 和 tool-registry Consumer 由两份设计笔记�
 
 这套设计让 agent 既拥有"写程序批量干活"的效率，又不牺牲任何一道策略关卡。底层接缝保持纯粹（只管执行），策略执行集中在管线，两者通过绑定命名空间这个接缝干净地接合。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/code-runtime.md`、`docs/tool-execution-pipeline.md`。`dsh` 处于 developer preview，下列内容会随版本变：`CodeRuntime` 的 `language`/`isolation` 取值、`CodeRunFailure` 的 kind 词汇表、`CodeBindingNamespace` 的约束、Code Mode 的传输与事件名。
-
-文中关于"Code Mode 子调用每个都走完整七层关卡"的描述，是把 code-runtime 文档的绑定语义和 tool-execution-pipeline 文档的 Code Mode 段落（"sends both run_code transport and its serialized sub-calls through the pipeline"）合起来理解的结论；七层关卡的具体名称来自 tool-execution-pipeline 的流程图，子调用是否逐层全过、还是部分层对 code 子调用有特殊处理，本次未逐行核对管线实现代码，标记待核实。
-
 ## 延伸阅读
 
 - [Code Runtime 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/code-runtime.md)：本文主要依据，含运行请求、绑定、失败分类
