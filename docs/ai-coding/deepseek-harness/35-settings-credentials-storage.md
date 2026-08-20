@@ -38,15 +38,7 @@ schema 默认值  →  组合层 base  →  用户层 user section
 
 schema 能做单字段验证（类型、范围、枚举），但做不了跨字段验证。比如"如果选了 provider A，model 必须在 A 支持的列表里"这种约束，schema 表达不了。
 
-`dsh-settings` 的解法是 `validate` 函数，在 schema 放行之后运行：
-
-```typescript
-interface SettingsRegisterOptions<T> {
-  base?: Partial<T>
-  applies?: SettingsApplies
-  validate?: (value: T) => void
-}
-```
+`dsh-settings` 的解法是 `validate` 函数，在 schema 放行之后运行。它是 `SettingsRegisterOptions<T>` 接口上的可选字段，这个接口一共三个可选字段：`base?: Partial<T>` 声明组合层值，`applies?: SettingsApplies` 声明生效时机，`validate?: (value: T) => void` 做跨字段验证。
 
 `validate` 看到的是已经过 schema 校验的完整值。如果它抛异常，**那次写入被拒绝**，而不是存一个会让 owner 停工的值。`dsh-llm-pi-ai` 用这个机制拒绝一个它无法服务的 provider 配置，在写入时就报错。
 
@@ -71,11 +63,7 @@ interface SettingsRegisterOptions<T> {
 
 做法很直接：配置项和 `cordis.yml` 条目里只放**引用**（环境变量名），provider 拥有实际值。消费者每次需要凭证时，调用 `resolve(ref)` 拿值。
 
-```typescript
-type CredentialRef = Branded<'CredentialRef'>
-```
-
-`CredentialRef` 是一个 branded 类型，底层是 POSIX 风格的环境变量名。brand 防止调用方把凭证引用和普通字符串混在一起。
+`CredentialRef` 的声明是 `type CredentialRef = Branded<'CredentialRef'>`，一个 branded 类型，底层是 POSIX 风格的环境变量名。brand 防止调用方把凭证引用和普通字符串混在一起。
 
 ### 每次解析：热更新的机制
 
@@ -95,17 +83,7 @@ type CredentialRef = Branded<'CredentialRef'>
 
 ### describe 不暴露值
 
-`describe(ref)` 返回的是 `CredentialInfo`：
-
-```typescript
-interface CredentialInfo {
-  configured: boolean
-  source?: string
-  writable: boolean
-}
-```
-
-只告诉你：这个引用是否已配置、从哪个层来的、能不能写入。**永远不返回值本身。**
+`describe(ref)` 返回的是 `CredentialInfo`，只有三个字段：`configured: boolean`、可选的 `source?: string`、`writable: boolean`。只告诉你：这个引用是否已配置、从哪个层来的、能不能写入。**永远不返回值本身。**
 
 `writable: false` 有一个具体场景：本地 provider 发现一个引用由当前进程环境变量提供时，报告 `writable: false`。因为写入会"看起来成功"但 resolve 继续返回被环境变量遮蔽的值，不如一开始就拒绝，让 UI 渲染成只读。
 
@@ -127,16 +105,12 @@ interface CredentialInfo {
 
 ### Domain：声明一次的 spec
 
-一个 domain 由它的拥有包声明为一个 spec 对象：
+一个 domain 由它的拥有包声明为一个 spec 对象，类型是 `DomainSpec`，四个字段全是 `readonly`：
 
-```typescript
-interface DomainSpec {
-  readonly name: string        // 必须匹配 UNIT_NAME_RE（同时是文件名和 SQL 标识符段）
-  readonly version: number     // 版本不匹配会在 open 时拒绝
-  readonly global?: DomainGlobalSpec<unknown>  // 可选的全局单例 slot
-  readonly tables: Record<string, DomainTableSpec>  // 表声明
-}
-```
+- `name`: string，必须匹配 `UNIT_NAME_RE`（同时是文件名和 SQL 标识符段）
+- `version`: number，版本不匹配会在 open 时拒绝
+- `global`: 可选的 `DomainGlobalSpec<unknown>`，全局单例 slot
+- `tables`: `Record<string, DomainTableSpec>`，表声明
 
 `defineDomain(spec)` 在模块加载时就钉死 spec 的字面量类型。任何违规（名字不合法、version 不是非负整数、global schema 接受 null）在模块加载时抛异常，在任何介质被触碰之前。`null` 是介质的"从未写入"哨兵，所以一个能存 null 的 global schema 会让存取不对称。
 
@@ -154,16 +128,7 @@ interface DomainSpec {
 
 ### 路由是 domain 插件的配置
 
-哪个 backend 服务哪个 domain，是 domain 插件的路由表决定的，不是 hub 全局选择：
-
-```yaml
-backend: sqlite       # 默认路由
-routes:
-  my-fast-domain: sqlite
-  my-readable-domain: json
-```
-
-这让"频繁更新的数据走 SQLite，需要人类可读的数据走 JSON"这种混合策略成为配置，不需要代码。
+哪个 backend 服务哪个 domain，是 domain 插件的路由表决定的，不是 hub 全局选择。路由写在插件 config 里：顶层 `backend` 键设默认路由（示例里是 `sqlite`），`routes` 下是 domain 到 backend 的映射，示例把 `my-fast-domain` 指到 `sqlite`、把 `my-readable-domain` 指到 `json`。这让"频繁更新的数据走 SQLite，需要人类可读的数据走 JSON"这种混合策略成为配置，不需要代码。
 
 ### 没有迁移
 

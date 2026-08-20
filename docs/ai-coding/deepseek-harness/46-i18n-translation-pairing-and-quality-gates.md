@@ -25,12 +25,7 @@
 
 ## 一致性记录：blob hash
 
-`foo.i18n.yaml` 持有每一侧在上次确认一致时的完整 git blob hash：
-
-```yaml
-foo.md: 3f786850e387550fdab836ed7e6dc881de23001b
-foo.zh.md: 89e6c98d92887913cadf06b2adb97f26cde4849b
-```
+`foo.i18n.yaml` 持有每一侧在上次确认一致时的完整 git blob hash。整个文件就是文件名到 hash 的映射，两条记录：`foo.md` 一条，记 `3f786850e387550fdab836ed7e6dc881de23001b`；`foo.zh.md` 一条，记 `89e6c98d92887913cadf06b2adb97f26cde4849b`。
 
 用 blob hash 而不是 commit hash，所以记录对同一个 PR 里编辑的文件可计算（`git hash-object foo.md`），一致性是纯内容比较。
 
@@ -56,19 +51,7 @@ foo.zh.md: 89e6c98d92887913cadf06b2adb97f26cde4849b
 
 为什么要管列表项数量？因为翻译时漏掉一个列表项是常见错误。为什么要管表格行列数？因为翻译时多一行少一列也是常见错误。结构签名检查把这些错误从"review 时容易漏"变成了"CI 自动抓"。
 
-语言切换器的规则也精确。中文文件在 H1 后面紧跟这样一行：
-
-```
-[English](foo.md) | 中文
-```
-
-authored 英文文件对等地写：
-
-```
-English | [中文](foo.zh.md)
-```
-
-列出的 generated 英文源省略这一行，保持和生成器输出字节一致。
+语言切换器的规则也精确。中文文件在 H1 后面紧跟一行切换器：链接文字 `English` 指向同目录的 `foo.md`，跟一个竖线，再跟纯文本 `中文`。authored 英文文件对等地反过来：纯文本 `English` 在前，链接文字 `中文` 指向 `foo.zh.md` 在后。列出的 generated 英文源省略这一行，保持和生成器输出字节一致。
 
 ## 门禁：verify-translation-pairing
 
