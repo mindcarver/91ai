@@ -19,21 +19,7 @@ MCP（Model Context Protocol）是 Anthropic 在 2024 年 11 月开源的协议�
 
 一个插件实例对应一个 MCP 服务器。要接三个服务器，就在配置里挂三个实例。这和 `dsh` "一切皆插件"的哲学一致：MCP 集成本身也是一个可挂载、可卸载的插件，不是一个焊死在内核里的特性。
 
-挂载方式是在 `cordis.yml` 里加一条配置：
-
-```yaml
-- id: mcp-github
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: github
-    transport: stdio
-    command: npx
-    args: ['-y', '@modelcontextprotocol/server-github']
-    env:
-      GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
-```
-
-这条配置做四件事：声明一个叫 `mcp-github` 的插件实例，指定 MCP 服务器命名空间为 `github`，用 stdio 方式拉起一个 `@modelcontextprotocol/server-github` 子进程，把环境变量里的 `GITHUB_TOKEN` 传进去。
+挂载方式是在 `cordis.yml` 里加一条配置。以接 GitHub 官方服务器为例，这条配置声明一个 `id` 为 `mcp-github` 的插件实例，`name` 指向 `'@deepseek-ai/dsh-mcp-client'`，`config` 里五个字段：`serverName: github` 指定 MCP 服务器命名空间；`transport: stdio` 选本地子进程传输；`command: npx` 配合 `args: ['-y', '@modelcontextprotocol/server-github']` 定义怎么拉起子进程；`env` 里用 `GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN` 把环境变量里的 `GITHUB_TOKEN` 传进去。
 
 除了 stdio（本地子进程），还支持 `streamable-http`（远程 HTTP 服务），填 `url` 和 `headers` 即可。两种传输对应两种场景：本地工具用 stdio，团队共享或托管的服务用 HTTP。
 
@@ -53,17 +39,12 @@ mcp__<serverName>__<rawName>
 
 如果原始名称包含非法字符或者拼接后超过 64 字符怎么办？插件不是简单截断，而是在名称后面追加一个 12 位的十六进制哈希（`SHA-256(serverName + rawName)` 的前 12 位）。这个哈希保证不同的工具永远不会因为名称归一化而塌缩成同一个名字。换句话说，工具的公开名称是 `(serverName, rawName)` 的确定性纯函数，连接顺序、重新同步、其他服务器的存在都不会改变它。
 
-这套命名机制不是纸面设计，源码里的 `publicToolName()` 函数就是干这个的：
+这套命名机制不是纸面设计，源码里的 `publicToolName()` 函数就是干这个的。签名 `publicToolName(serverName: string, rawName: string): string`，按执行顺序四步：
 
-```typescript
-export function publicToolName(serverName: string, rawName: string): string {
-  const joined = `mcp__${serverName}__${rawName}`
-  const normalized = joined.replace(INVALID_NAME_CHARS, '_')
-  if (normalized === joined && normalized.length <= MAX_PUBLIC_NAME_LENGTH) return normalized
-  const hash = createHash('sha256').update(`${serverName}\0${rawName}`).digest('hex').slice(0, HASH_LENGTH)
-  return `${normalized.slice(0, MAX_PUBLIC_NAME_LENGTH - HASH_LENGTH - 1)}_${hash}`
-}
-```
+1. 拼出 `joined`，就是前缀 `mcp__` 加 `serverName` 加 `__` 加 `rawName`。
+2. 把 `joined` 里命中 `INVALID_NAME_CHARS` 的字符全部替换成下划线，得到 `normalized`。
+3. 如果替换没有发生（`normalized === joined`）且 `normalized.length` 不超过 `MAX_PUBLIC_NAME_LENGTH`，直接返回 `normalized`，不进哈希逻辑。
+4. 否则算哈希：`createHash('sha256')` 对 `serverName` 和 `rawName` 用空字节（`\0`）拼起来的字符串做 update，取 hex digest 的前 `HASH_LENGTH` 位得到 `hash`；返回值是 `normalized` 截到 `MAX_PUBLIC_NAME_LENGTH - HASH_LENGTH - 1` 个字符，再拼一个下划线和 `hash`。
 
 干净情况直接返回拼接结果，只有发生截断或字符替换时才追加哈希。大部分工具走第一条路径。
 
@@ -117,25 +98,9 @@ MCP 的 `isError: true` 会被映射成抛异常，走工具注册表的错误�
 | MCP Reference Memory | 2026.7.4 | stdio | `npm install --global @modelcontextprotocol/server-memory@2026.7.4` |
 | Engram | v1.20.0 | stdio | Go 1.25.10+，`go install ...@v1.20.0` 或下载二进制 |
 
-启动方式都一样，用 `--patch` 传入对应的配置文件：
+启动方式都一样，用 `--patch` 传入对应的配置文件，比如 Memorix 就是 `dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"`。
 
-```sh
-dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"
-```
-
-配置文件本身极简（以 Memorix 为例）：
-
-```yaml
-- insert:
-    - id: memory-memorix
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: memorix
-        transport: stdio
-        command: memorix
-        args: [serve]
-        cwd: !!js process.cwd()
-```
+配置文件本身极简（以 Memorix 为例）：一条 `insert` patch，往插件树里插一个条目，`id` 是 `memory-memorix`，`name` 是 `'@deepseek-ai/dsh-mcp-client'`，`config` 里 `serverName: memorix`、`transport: stdio`、`command: memorix`、`args: [serve]`，最后 `cwd: !!js process.cwd()` 把当前工作目录传给子进程。
 
 这就是一个标准的 `mcp-client` 插件配置，和接 GitHub 服务器没有任何结构上的区别。三个记忆系统的区别全在上游（各自怎么存数据、怎么检索），`dsh` 这边做的事情完全一样：拉起进程、发现工具、注册到 `ctx.tools`。
 

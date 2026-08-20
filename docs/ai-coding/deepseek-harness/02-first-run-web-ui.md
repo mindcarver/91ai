@@ -15,29 +15,11 @@
 
 ### 方式一：`npx`（推荐第一次用）
 
-```sh
-npx @deepseek-ai/dsh web
-```
-
-这句命令做三件事：拉取 `@deepseek-ai/dsh` 包、用 `web` profile 启动、起一个 Web UI 服务。命令执行后会打印一个本地地址，默认是：
-
-```
-http://127.0.0.1:3080
-```
-
-浏览器打开它，就进了 Web UI。这是绝大多数人第一次接触 `dsh` 的姿势，也是本文主讲的路径。
+第一次跑只需一句 `npx @deepseek-ai/dsh web`。这句命令做三件事：拉取 `@deepseek-ai/dsh` 包、用 `web` profile 启动、起一个 Web UI 服务。命令执行后会打印一个本地地址，默认是 `http://127.0.0.1:3080`，浏览器打开它，就进了 Web UI。这是绝大多数人第一次接触 `dsh` 的姿势，也是本文主讲的路径。
 
 ### 方式二：从源码跑（想读代码 / 改代码再用）
 
-如果你打算读源码、写插件、或跟踪 `master` 最新改动，从仓库跑：
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
-```
+如果你打算读源码、写插件、或跟踪 `master` 最新改动，从仓库跑：先 `git clone https://github.com/deepseek-ai/deepseek-harness.git` 拿到仓库，`cd deepseek-harness` 进目录，`pnpm install` 装依赖，`pnpm run build` 构建一遍，最后 `pnpm dsh web` 启动。
 
 这个方式需要 pnpm，且要跑一遍 `build`。它的好处是你拿到了完整源码——本系列后面所有"源码导读"篇（06、08、10、14、16）都默认你手上有一份 checkout。第一次跑通选 `npx` 即可，等读到源码篇再切到这种方式。
 

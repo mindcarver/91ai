@@ -94,26 +94,12 @@ surface 事件比别的事件多带两个字段：
 
 ## 投影的算子：deriveEventMessage
 
-落到代码，把日志投影成消息的是一个逐节点的纯函数 `deriveEventMessage`，它是整个"可重建"的算子：
+落到源码，把日志投影成消息的是一个逐节点的纯函数 `deriveEventMessage`，它是整个"可重建"的算子，签名 `deriveEventMessage(event: SessionEvent): Message | null`，内部按 `event.type` 分派：
 
-```ts
-export function deriveEventMessage(event: SessionEvent): Message | null {
-  switch (event.type) {
-    case 'user/message': {
-      return event.data
-    }
-    case 'assistant/message': {
-      if (event.data.message.content.length === 0) return null   // 空内容跳过
-      return event.data.message
-    }
-    case 'tool/result': {
-      return event.data.message
-    }
-    default:
-      return null   // 非 surface 事件不投影；合并扩展，无 assertNever
-  }
-}
-```
+- `user/message`：直接返回 `event.data`，原样透传。
+- `assistant/message`：`event.data.message.content.length === 0` 时返回 `null`，空内容跳过；否则返回 `event.data.message`。
+- `tool/result`：返回 `event.data.message`。
+- 其他类型：走 default 分支返回 `null`，非 surface 事件不投影。
 
 两个细节值得记住。第一，这个 switch **故意不穷尽**，没有 `assertNever`。因为 `SessionEventMap` 是合并扩展的，插件能加新事件类型，一个插件加的变体是合法的未知值。第二，注释里专门强调：**不要在这里给注入内容重新加类型框架**（比如包一层 `<context>`）。框架是调用者负责的，投影是原样透传。一个生产者要把框架烤进 content（像 agent-instructions 包 `<system-reminder>` 那样），而不是让投影去加。这保证投影是一个纯净的透传算子。
 
@@ -123,23 +109,7 @@ export function deriveEventMessage(event: SessionEvent): Message | null {
 
 `deriveMessages` 不每次都从头算。它用一个 `SurfaceManager` 维护增量视图：
 
-```ts
-export class SurfaceManager implements SessionSurface {
-  private _state = createFoldState()   // { nodes: number[], replaceGeneration: number }
-  private _lastProcessedSeq: number
-  private _pendingPlan: { event; expectedSeq; plan } | undefined
-
-  validateNext(event: SessionEvent): void {
-    // ... 在不改动已提交 surface 的前提下，校验下一条候选事件
-    this._pendingPlan = { event, expectedSeq, plan: planSurfaceEvent(...) }
-  }
-
-  get nodes(): readonly number[] {
-    if (this._lastProcessedSeq < this.baseSeq + this.log.length - 1) this._processDelta()
-    return this._state.nodes
-  }
-}
-```
+这个类实现了 `SessionSurface` 接口，内部三个私有字段：`_state` 是 `createFoldState()` 建出的 fold 状态，形状 `{ nodes: number[], replaceGeneration: number }`；`_lastProcessedSeq` 记录处理到的 seq；`_pendingPlan` 是 `{ event; expectedSeq; plan } | undefined`，暂存待提交的校验计划。它公开两个入口：`validateNext(event: SessionEvent): void`，把 `{ event, expectedSeq, plan: planSurfaceEvent(...) }` 存进 `_pendingPlan`；以及一个返回 `readonly number[]` 的 `nodes` getter，实现是 `_lastProcessedSeq` 落后于 `this.baseSeq + this.log.length - 1` 时先调 `_processDelta()`，然后返回 `_state.nodes`。
 
 它持有 fold 状态（`nodes` 是当前 surface 的事件 seq 序列，`replaceGeneration` 是已提交的位置替换计数），但不保留替换历史。`nodes` 和 `replaceGeneration` 在访问时懒Fold新追加的事件（`_processDelta`）。
 
@@ -175,14 +145,7 @@ export class SurfaceManager implements SessionSurface {
 
 ## append 第一道关：JSON 校验兼快照（json.ts）
 
-"一次递归同时读、校验、拷贝每个嵌套值"这条契约，机制在 `json.ts`。核心是 `snapshotJsonValue` / `isJsonValue`：
-
-```ts
-/** 校验并在一次读取里 detach 出无损 JSON 快照。 */
-export function snapshotJsonValue<T>(value: T): T | undefined {
-  return walkJsonValue(value, true) as T | undefined
-}
-```
+"一次递归同时读、校验、拷贝每个嵌套值"这条契约，机制在 `json.ts`。核心是 `snapshotJsonValue` / `isJsonValue`。前者签名 `snapshotJsonValue<T>(value: T): T | undefined`，注释一句话讲明职责：校验并在一次读取里 detach 出无损 JSON 快照；实现只有一行，调 `walkJsonValue(value, true)` 再断言回 `T | undefined`，第二个实参 `true` 是打开快照物化的开关。
 
 它把候选值走一遍，既校验又（可选地）物化出一份脱离原对象的快照。关键设计有三条。
 
@@ -198,23 +161,7 @@ export function snapshotJsonValue<T>(value: T): T | undefined {
 
 通过 JSON 校验后，surface 事件还要过一层 surface 校验。`surface.ts` 用一个"先验后提交"（validate-then-commit）的模式：
 
-```ts
-function planSurfaceEvent(state, event, expectedSeq, events, baseSeq): SurfacePlan | undefined {
-  if (event.seq !== expectedSeq) {
-    throw new Error(`session event seq ${event.seq} is not contiguous; expected ${expectedSeq}`)
-  }
-  const surfaceOp = surfaceOpOf(event)
-  if (surfaceOp === undefined) return
-  if (surfaceOp === 'append') {
-    assertProvenance(event, [])
-    return { kind: 'append', seq: event.seq }
-  }
-  const range = replacementRange(state, surfaceOp)
-  assertProvenance(event, range.shadowedSeqs)
-  assertToolResultRewrite(event, range.shadowedSeqs, events, baseSeq)
-  return { kind: 'replace', seq: event.seq, start: surfaceOp.start, end: surfaceOp.end, ...range }
-}
-```
+入口函数 `planSurfaceEvent(state, event, expectedSeq, events, baseSeq)` 返回 `SurfacePlan | undefined`，按执行顺序走四步。第一步查 seq 连续，`event.seq !== expectedSeq` 就抛 `Error`，消息是 `session event seq ${event.seq} is not contiguous; expected ${expectedSeq}`。第二步取 `surfaceOpOf(event)`，结果是 `undefined`（非 surface 事件）就直接返回 `undefined`，不产生计划。第三步处理 `surfaceOp === 'append'`：用空数组跑 `assertProvenance(event, [])`，返回计划 `{ kind: 'append', seq: event.seq }`。第四步处理 replace：先 `replacementRange(state, surfaceOp)` 算出范围 `range`，对 `range.shadowedSeqs` 依次跑 `assertProvenance(event, range.shadowedSeqs)` 和 `assertToolResultRewrite(event, range.shadowedSeqs, events, baseSeq)`，返回计划 `{ kind: 'replace', seq: event.seq, start: surfaceOp.start, end: surfaceOp.end, ...range }`。
 
 `planSurfaceEvent` 把校验全做完，返回一个还没改动状态的"计划"（`SurfacePlan`），再由 `applySurfacePlan` 提交。先验后提交保证：校验失败时状态没被改坏，一次 append 要么完整生效要么完全不变。
 
@@ -254,38 +201,20 @@ session 包的 invariant companion 强制核心拥有的那些关系：turn 和 
 
 ## 崩溃修复：interruptedTurnClosers（repair.ts）
 
-会话崩在一个打开的 turn 中间怎么办？`repair.ts` 的 `interruptedTurnClosers` 解决这个。它扫描加载进来的持久化日志，返回需要追加的合成关闭事件：
+会话崩在一个打开的 turn 中间怎么办？`repair.ts` 的 `interruptedTurnClosers` 解决这个。它扫描加载进来的持久化日志，返回需要追加的合成关闭事件。函数签名 `interruptedTurnClosers(events: readonly SessionEvent[]): SessionEvent[]`，扫描时维护三个状态：`openTurn` 和 `openStep` 各是 `number | null`，`pendingCalls` 是 `Map<CallId, { step: number; callSeq?: number }>`，记还没匹配到结果的工具调用。每条事件按 `event.type` 分派：
 
-```ts
-export function interruptedTurnClosers(events: readonly SessionEvent[]): SessionEvent[] {
-  let openTurn: number | null = null
-  let openStep: number | null = null
-  const pendingCalls = new Map<CallId, { step: number; callSeq?: number }>()
-  for (const event of events) {
-    switch (event.type) {
-      case 'turn/start': openTurn = event.data.turn; openStep = null; pendingCalls.clear(); break
-      case 'turn/end':   openTurn = null; openStep = null; pendingCalls.clear(); break
-      case 'step/start': openStep = event.data.step; break
-      case 'step/end':   pendingCalls.clear(); openStep = null; break
-      case 'assistant/message':
-        for (const block of event.data.message.content) {
-          if (block.type === 'tool-call') pendingCalls.set(block.id, { step: event.data.step })
-        }
-        break
-      case 'tool/call': { const entry = pendingCalls.get(event.data.callId); if (entry) entry.callSeq = event.seq; break }
-      case 'tool/result': pendingCalls.delete(event.data.message.source.callId); break
-      default: break
-    }
-  }
-  const last = events.at(-1)
-  if (openTurn === null || last === undefined) return []   // 平衡日志，无需补齐
-  // ... 给未匹配的 call 补合成 tool/result，再补 step/end、turn/end
-}
-```
+- `turn/start`：记 `openTurn = event.data.turn`，`openStep` 置 `null`，清空 `pendingCalls`。
+- `turn/end`：`openTurn`、`openStep` 都置 `null`，清空 `pendingCalls`。
+- `step/start`：记 `openStep = event.data.step`。
+- `step/end`：清空 `pendingCalls`，`openStep` 置 `null`。
+- `assistant/message`：遍历 `event.data.message.content`，每个 `block.type === 'tool-call'` 的块以 `block.id` 为键写进 `pendingCalls`，值是 `{ step: event.data.step }`。
+- `tool/call`：按 `event.data.callId` 查 `pendingCalls`，查到就把该条目的 `callSeq` 记成 `event.seq`。
+- `tool/result`：按 `event.data.message.source.callId` 从 `pendingCalls` 删除，表示调用已有结果。
+- 其他类型：跳过。
 
-它用一个游标扫整条日志，追踪当前打开的 turn/step 和还没匹配到结果的工具调用（`pendingCalls`）。注意每次 turn 边界都清空 `pendingCalls`，防止更早 turn 的调用泄漏到尾部修复里。
+扫完取 `events.at(-1)` 作为最后一条事件。`openTurn === null` 或日志为空（`last === undefined`）就返回空数组，日志本来就平衡，无需补齐；否则给未匹配的 call 补合成 `tool/result`，再补 `step/end`、`turn/end`。
 
-如果扫完发现 turn 是闭合的（`openTurn === null`），返回空数组，日志本来就平衡。如果有一个打开的 turn，就生成合成事件：
+注意每次 turn 边界都清空 `pendingCalls`，防止更早 turn 的调用泄漏到尾部修复里。有一个打开的 turn 时，就生成合成事件：
 
 **未匹配的工具调用补合成结果。** 两种情况分开处理，而且文本是精心写的：
 
@@ -317,11 +246,9 @@ fork 能这么干净，恰恰因为会话是只追加日志加可重建投影：
 
 会话进 store 不是一步。`SessionStore` 把发布拆成 `prepare` / `enter` / `announce` 三步，文档专门解释了为什么拆：
 
-```ts
-prepare(id?, options?): Session   // 校验 id/cwd，构造 Session，但不进 store
-enter(session): () => void        // 进 store，装发布钩子，返回 detach disposer
-announce(session): void           // 发 session/created
-```
+- `prepare(id?, options?): Session`：校验 id/cwd，构造 Session，但不进 store。
+- `enter(session): () => void`：进 store，装发布钩子，返回 detach disposer。
+- `announce(session): void`：发 `session/created`。
 
 为什么不让 `create` 一步到位？因为 agent 工厂要把会话生命周期折进**一个** `ctx.effect`，这样 fiber 卸载时按顺序拆掉 session 加 agent，而不是两个竞速的兄弟 effect 各拆各的。如果用两个 effect，可能先把发布钩子拆了，驱动器最后的关闭事件还没提交，事件就丢了。
 

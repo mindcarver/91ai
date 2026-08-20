@@ -75,12 +75,7 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 
 `dsh-acp` 的权限模型很克制。它通过 `session/request_permission` 向客户端提供**一次性**选择：
 
-```typescript
-options: [
-  { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
-  { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' },
-]
-```
+`options` 数组只有两项：一项 `optionId` 为 `allow-once`、`name` 为 `Allow once`、`kind` 为 `allow_once`；另一项 `optionId` 为 `reject-once`、`name` 为 `Reject`、`kind` 为 `reject_once`。
 
 注意两个细节。第一，只有 allow-once 和 reject-once，没有"永久允许"。客户端的一次同意不会变成持久授权。第二，选择只应用于那一次重试，通过正常的 tool-result 和审计路径记录。服务端不暴露权限选择器，也不持久化客户端策略。
 
@@ -105,12 +100,7 @@ options: [
 
 ## acp-agent 示例：一个可运行的组合
 
-`examples/acp-agent` 是一个完整的可运行 ACP server 组合，用一行命令拉起：
-
-```sh
-pnpm run demo:acp          # 需要 DEEPSEEK_API_KEY
-pnpm run demo:code-mode    # 同协议但用 Code Mode 工具传输
-```
+`examples/acp-agent` 是一个完整的可运行 ACP server 组合，用 `pnpm run demo:acp` 一行命令拉起（需要 `DEEPSEEK_API_KEY`）；同协议但换成 Code Mode 工具传输的变体是 `pnpm run demo:code-mode`。
 
 这个组合装载的东西很丰富：ACP app、DeepSeek 模型适配器、沙箱化的 bash 和文件系统栈、一次性审批策略、compaction（压缩）、subagents、workflows、hooks、派生的 session-query 索引、重复防护。每个 `session/new` 创建一个全新 agent，会话持久化到 JSONL。
 

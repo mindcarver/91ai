@@ -17,9 +17,7 @@ agent 想理解代码，最朴素的办法是 grep。但 grep 是文本匹配，
 
 接缝和模型暴露的语义查询**精确地只有四个**：
 
-```ts
-type LspOperation = 'goToDefinition' | 'findReferences' | 'goToImplementation' | 'hover'
-```
+联合类型 `LspOperation` 的取值是 `goToDefinition`、`findReferences`、`goToImplementation`、`hover`。
 
 跳定义、查引用、跳实现、悬停。没了。
 
@@ -73,11 +71,7 @@ provider 拿到的是 `LspProviderQuery`：调用方的请求加派生出的 `la
 
 结果也是个封闭的判别联合：
 
-```ts
-type LspQueryResult =
-  | { kind: 'locations'; locations: readonly LspLocation[]; resolvedWorkspaceUri: string }
-  | { kind: 'hover'; hover: LspHover | null }
-```
+类型 `LspQueryResult` 按 `kind` 判别出两个分支：`kind` 为 `locations` 的带 `locations`（`readonly LspLocation[]`）和 `resolvedWorkspaceUri`（字符串）；`kind` 为 `hover` 的带 `hover`（`LspHover | null`）。
 
 导航操作（跳定义、查引用、跳实现）归一成 `locations`；hover 归一成内容或 `null`。消费者在 `kind` 上 switch 到穷尽，加一个新的 arm 会编译失败直到处理。hover 在该位置没有内容时返回 `null`，不是空字符串，也不是错误。
 

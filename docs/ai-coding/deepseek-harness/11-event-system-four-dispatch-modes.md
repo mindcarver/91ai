@@ -7,11 +7,7 @@
 
 先立一条总则：**一个事件的派发模式，是它公开契约的一部分。** 这不是实现细节，而是这个事件能被怎么用的规定。
 
-Cordis 源码里有个 `DispatchMode` 类型，定义了所有合法的派发模式：
-
-```ts
-type DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall'
-```
+Cordis 源码里有个 `DispatchMode` 类型，定义了所有合法的派发模式，是封闭五值：`'emit'`、`'parallel'`、`'serial'`、`'bail'`、`'waterfall'`。
 
 每个事件只能用它声明的那种模式派发，对应的派发方法是固定的。声明一个新事件时，要用 `@mode` 标签写明它的模式，生成的目录会拿这个声明去和实际派发点对照，保证声明和用法不漂移。所以"给一个事件选哪种派发模式"是改动事件系统时的第一个决策，不是事后随便挑的。
 
@@ -63,13 +59,7 @@ DeepSeek Harness 里，`agent/turn-stopping` 是 serial：它是个收尾检查�
 
 `ctx.waterfall(name, ...args)` 派发时，最后一个参数是一个 `next` 延续函数。每个监听器收到参数加这个 `next`，它的职责是决定要不要把控制权交给下一层：
 
-```ts
-// 真实形态：每个监听器收到 (...args, next)
-ctx.on('demo/transform', async (input, next) => {
-  const downstream = await next()      // 调 next()：委托给下一层
-  return downstream.toUpperCase()      // 拿到下游结果，改写后再返回
-})
-```
+真实形态是每个监听器收到 `(...args, next)`。以 `ctx.on('demo/transform', ...)` 为例：注册一个 `async (input, next)` 监听器，里面先 `const downstream = await next()` 委托给下一层，拿到下游结果后 `return downstream.toUpperCase()`，改写后再返回。
 
 两条核心规则，文档用两个词概括：**调 `next()` 就是委托，不调 `next()` 就是否决（veto）。**
 
@@ -82,23 +72,7 @@ waterfall 还有个 `prepend: true` 选项，让一个监听器插队到普通�
 
 官方教程给了一个很清楚的两监听器例子，能看清短路怎么发生：
 
-```ts
-ctx.on('demo/transform', async (input, next) => {
-  const downstream = await next()
-  return downstream.toUpperCase()           // 监听器 1：包一层，转大写
-})
-
-ctx.on('demo/transform', async (input, next) => {
-  if (input.includes('blocked')) return '** blocked **'   // 监听器 2：命中就短路
-  return next()
-})
-
-await ctx.waterfall('demo/transform', 'hello', async () => 'hello')
-// -> 'HELLO'（监听器 1 调 next → 监听器 2 调 next → 默认 'hello' → 回程转大写）
-
-await ctx.waterfall('demo/transform', 'blocked words', async () => 'blocked words')
-// -> '** BLOCKED **'（监听器 2 命中 blocked，不调 next，默认不跑；回程监听器 1 把替换值转大写）
-```
+两个监听器都挂在 `demo/transform` 上。监听器 1 是 `async (input, next)`，先 `const downstream = await next()`，再 `return downstream.toUpperCase()`，包一层转大写。监听器 2 同样签名，`if (input.includes('blocked')) return '** blocked **'`，命中就短路，否则 `return next()` 放行。派发两次看结果：`await ctx.waterfall('demo/transform', 'hello', async () => 'hello')` 返回 `'HELLO'`，监听器 1 调 `next` 触发监听器 2、监听器 2 也调 `next` 走到默认值 `'hello'`、回程被转大写；`await ctx.waterfall('demo/transform', 'blocked words', async () => 'blocked words')` 返回 `'** BLOCKED **'`。
 
 第二个例子的执行路径值得走一遍：监听器 1 先跑、调 `next()`；`next()` 触发监听器 2；监听器 2 看到 `blocked`，直接返回不调 `next()`，最内层的默认函数（那个传给 `ctx.waterfall` 的回调）根本没跑；控制权回到监听器 1，它把替换后的 `** blocked **` 转大写返回。
 

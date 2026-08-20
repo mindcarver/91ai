@@ -66,17 +66,13 @@ agent 干活时，经常有两类"不是一步就能做完"的活：
 
 `WorkflowStartRequest` 是调用方起一次 run 时给的：
 
-```ts
-interface WorkflowStartRequest {
-  script: string                  // 纯 JS 脚本体，顶层 await 可用，以 return <json> 结束
-  meta: WorkflowMeta              // 身份块，纯 JSON 数据
-  args?: unknown                  // 可选输入，原样暴露给脚本作为 args 全局
-  subagentProvider?: string       // 可选的引擎级子 provider 覆盖
-  maxTotalAgents?: number         // 可选的本次子 agent 总数上限
-  parent: Agent                   // 必填，每个子 agent 归属到它
-  signal?: AbortSignal
-}
-```
+- `script`：字符串，纯 JS 脚本体，顶层 `await` 可用，以 `return <json>` 结束。
+- `meta`：类型 `WorkflowMeta`，身份块，纯 JSON 数据。
+- `args`：可选，类型 `unknown`，输入原样暴露给脚本作为 `args` 全局。
+- `subagentProvider`：可选字符串，引擎级子 provider 覆盖。
+- `maxTotalAgents`：可选数字，本次子 agent 总数上限。
+- `parent`：必填，类型 `Agent`，脚本里每个子 agent 都归属到它。
+- `signal`：可选的 `AbortSignal`。
 
 几个要点：
 
@@ -90,14 +86,10 @@ interface WorkflowStartRequest {
 
 `WorkflowResult` 是一次 run 的结果：
 
-```ts
-interface WorkflowResult {
-  value: unknown                  // 脚本的返回值（宿主 JSON 数据），仅 completed 有意义
-  stopReason: WorkflowStopReason  // completed | cancelled | error，封闭联合
-  error?: string                  // 非 completed 时带失败信息
-  agentsStarted: number           // 整个生命周期接受了多少 agent() 调用
-}
-```
+- `value`：类型 `unknown`，脚本的返回值（宿主 JSON 数据），仅 `completed` 时有意义。
+- `stopReason`：类型 `WorkflowStopReason`，封闭联合，取值 `completed`、`cancelled`、`error`。
+- `error`：可选字符串，非 `completed` 时带失败信息。
+- `agentsStarted`：数字，整个生命周期接受了多少 `agent()` 调用。
 
 `stopReason` 是封闭联合。非 completed 的原因在 `error` 里带失败信息，消费者把它映射成 `isError` 工具结果，**绝不把部分输出当成功报告**。
 

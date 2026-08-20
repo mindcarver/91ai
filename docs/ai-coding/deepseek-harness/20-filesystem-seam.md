@@ -34,14 +34,7 @@
 
 ### 不透明的目标身份
 
-每个操作第一步都是把用户给的路径解析成一个不透明的后端目标 `FsTarget`：
-
-```ts
-interface FsTarget {
-  targetKey: FsTargetKey   // 不透明 key，消费者绝不能解析
-  displayPath: string      // 给模型/UI 看的路径，可能是本地绝对路径、相对路径或远程 URI
-}
-```
+每个操作第一步都是把用户给的路径解析成一个不透明的后端目标 `FsTarget`。它有两个字段：`targetKey` 是 `FsTargetKey` 类型的不透明 key，消费者绝不能解析；`displayPath` 是字符串，给模型和 UI 看的路径，可能是本地绝对路径、相对路径或远程 URI。
 
 `targetKey` 是 branded 不透明字符串。本地后端用类似 realpath 的字符串，远程后端可能用 workspace URI 或文件 id。文档明确：消费者**绝不能**解析它，也**不能**假设它是本地绝对路径。
 
@@ -73,13 +66,7 @@ interface FsTarget {
 
 ## write 与 edit：带可选护栏的原子操作
 
-这是文件系统设计最精巧的部分。`writeText` 和 `editText` 的版本护栏都是**可选**的：
-
-```ts
-type FsWriteIntent =
-  | { kind: 'createIfAbsent' }                         // 目标不存在才建，已存在则 FS_NOT_OBSERVED
-  | { kind: 'replaceIfVersion'; version: FsVersion }   // 版本匹配才替换，否则 FS_STALE_VERSION
-```
+这是文件系统设计最精巧的部分。`writeText` 和 `editText` 的版本护栏都是**可选**的，护栏类型 `FsWriteIntent` 是两个变体的联合：`{ kind: 'createIfAbsent' }` 表示目标不存在才建，已存在则报 `FS_NOT_OBSERVED`；`{ kind: 'replaceIfVersion', version: FsVersion }` 表示版本匹配才替换，否则报 `FS_STALE_VERSION`。
 
 省略 `expected` 就是无条件创建或覆盖。"不护栏"是通过省略表达的，不是联合类型里的第三个分支。这让 write 和 edit 共用同一个可选 `expected` 字段。
 
@@ -93,13 +80,7 @@ type FsWriteIntent =
 
 ### 它怎么工作：观察状态
 
-观察状态是个 `WeakMap<owner, Map<targetKey, FsObservation>>`，存在策略插件里：
-
-```ts
-type FsObservation =
-  | { kind: 'present'; version: FsVersion }   // 读/写/编辑时观察到这个版本
-  | { kind: 'absent' }                         // read 或 metadata miss 确认缺席
-```
+观察状态是个 `WeakMap<owner, Map<targetKey, FsObservation>>`，存在策略插件里。`FsObservation` 是两个变体的联合：`{ kind: 'present', version: FsVersion }` 和 `{ kind: 'absent' }`，加上缺表项一共三态：
 
 - 缺表项：没见过。
 - `absent`：一次 read 或编辑的 metadata miss 确认了它不存在。
@@ -144,15 +125,7 @@ owner 从事件 actor 派生（通常是 `exec.agent.session`），当作不透�
 
 ## 错误分类：稳定码，不靠文本
 
-文件系统失败用稳定的 `FsErrorCode` 字符串，由 `FsError`（`HarnessError`）携带。工具注册表在错误结果上保留 `{ name, code }`，所以重试、权限、UI 层可以不解析消息就分支：
-
-```ts
-type FsErrorCode =
-  | 'FS_NOT_FOUND' | 'FS_NOT_DIRECTORY' | 'FS_NOT_TEXT'
-  | 'FS_NOT_REGULAR_FILE' | 'FS_TOO_LARGE' | 'FS_PERMISSION_DENIED'
-  | 'FS_SANDBOX_DENIED' | 'FS_IO_ERROR' | 'FS_STALE_VERSION'
-  | 'FS_NOT_OBSERVED' | 'FS_AMBIGUOUS_EDIT' | 'FS_EDIT_NOT_FOUND' | 'FS_ABORTED'
-```
+文件系统失败用稳定的 `FsErrorCode` 字符串，由 `FsError`（`HarnessError`）携带。工具注册表在错误结果上保留 `{ name, code }`，所以重试、权限、UI 层可以不解析消息就分支。这个封闭联合有十三个码：`FS_NOT_FOUND`、`FS_NOT_DIRECTORY`、`FS_NOT_TEXT`、`FS_NOT_REGULAR_FILE`、`FS_TOO_LARGE`、`FS_PERMISSION_DENIED`、`FS_SANDBOX_DENIED`、`FS_IO_ERROR`、`FS_STALE_VERSION`、`FS_NOT_OBSERVED`、`FS_AMBIGUOUS_EDIT`、`FS_EDIT_NOT_FOUND`、`FS_ABORTED`。
 
 几个值得记住的区分：`FS_SANDBOX_DENIED`（沙箱策略拒绝）vs `FS_PERMISSION_DENIED`（内核拒绝）；`FS_NOT_OBSERVED`（策略没有观察记录，或 createIfAbsent 撞上已存在文件）vs `FS_NOT_FOUND`（确认缺席）；`FS_STALE_VERSION`（版本不匹配）。新鲜度授权没有 partial/full 之分，所以没有 `FS_PARTIAL_OBSERVATION` 这种码。
 

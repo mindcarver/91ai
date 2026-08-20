@@ -32,11 +32,7 @@
 
 接缝只暴露三个方法，每个都极克制：
 
-```ts
-abstract validateImage(input: SaveImageAttachment): Promise<void>
-abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>
-abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
-```
+`validateImage(input: SaveImageAttachment)` 返回 `Promise<void>`，`saveImage(input: SaveImageAttachment)` 返回 `Promise<ImageAttachmentRef>`，`readImage(ref: ImageAttachmentRef, signal?: AbortSignal)` 返回 `Promise<StoredImageAttachment>`。
 
 - **`validateImage`**：跑完整的准入校验（完全解码字节、核对声明的 media type、检查尺寸和体积上限），但不落盘。批量提交时，调用方先用它把每一张都验过，再开始存任何一张，这样一旦某张被拒，不会留下半截已存的对象。
 - **`saveImage`**：校验加原子落盘一个对象，然后才返回引用。返回的引用就是它对外暴露的全部身份。
@@ -48,16 +44,12 @@ abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<Store
 
 `ImageAttachmentRef`（`packages/attachment/attachment/src/types.ts`）记录的不是字节，是足够让客户端在不解码的情况下布局的元数据：
 
-```ts
-interface ImageAttachmentRef {
-  attachmentId: AttachmentId   // 不透明存储 id，绝不是路径或带凭证的 URL
-  mediaType: ImageMediaType     // 从存储字节验证出来的媒体类型
-  bytes: number                 // 精确编码字节数
-  width: number                 // 编码固有宽度，像素
-  height: number                // 编码固有高度，像素
-  name?: string                 // 可选展示名，已剥离本地路径信息
-}
-```
+- `attachmentId`：类型 `AttachmentId`，不透明存储 id，绝不是路径或带凭证的 URL。
+- `mediaType`：类型 `ImageMediaType`，从存储字节验证出来的媒体类型。
+- `bytes`：数字，精确编码字节数。
+- `width`：数字，编码固有宽度，像素。
+- `height`：数字，编码固有高度，像素。
+- `name`：可选字符串，展示名，已剥离本地路径信息。
 
 `AttachmentId` 是个 branded 不透明字符串。本地后端当前发的是 `sha256:<digest>`，但文档明确警告：消费者既不能去解析这个表示，也不能从中推出文件系统路径。今天它是 sha256 前缀，明天换成别的，消费者不该受影响。这是把"实现细节"和"对外契约"用类型隔开的典型做法。
 

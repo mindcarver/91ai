@@ -108,29 +108,11 @@ DeepSeek Harness 对 Cordis 的态度也很说明问题：它没有把 Cordis �
 
 ### 范式一：插件是实现了 Service 的对象
 
-Cordis 的插件有三种合法形态，从最轻到最重：
+Cordis 的插件有三种合法形态，从最轻到最重，`Service` 和 `Context` 都从 `@deepseek-ai/cordis` 导入：
 
-```typescript
-import { Service, type Context } from '@deepseek-ai/cordis'
-
-// 形态一：函数插件，最常见
-export function apply(ctx: Context) {
-  // 在 ctx 上注册你想贡献的一切
-}
-
-// 形态二：对象插件，带一个 apply 方法
-export const objectPlugin = {
-  name: 'object-plugin',
-  apply(ctx: Context) {},
-}
-
-// 形态三：类插件，继承 Service，要暴露能力给别人用时用它
-export class MyService extends Service {
-  constructor(ctx: Context) {
-    super(ctx, 'myService')
-  }
-}
-```
+- **形态一，函数插件，最常见**。导出一个 `apply(ctx: Context)` 函数，函数体里在 `ctx` 上注册你想贡献的一切。
+- **形态二，对象插件，带一个 apply 方法**。导出一个对象，比如 `objectPlugin`：它有 `name: 'object-plugin'` 和一个 `apply(ctx: Context)` 方法，apply 做的事和形态一相同。
+- **形态三，类插件，继承 `Service`，要暴露能力给别人用时用它**。导出一个继承 `Service` 的类，比如 `MyService`：构造函数拿到 `ctx`，调用 `super(ctx, 'myService')` 完成注册。
 
 ![插件的三种合法形态](imgs/03-cordis-and-plugin-composition/05-comparison-plugin-service-shapes.png)
 
@@ -142,28 +124,7 @@ export class MyService extends Service {
 
 插件怎么找到彼此提供的能力？靠 context。
 
-一个服务在被创建时，用一个稳定的 key 把自己注册到 context 上。DeepSeek Harness 里，`ctx.tools`（工具注册表）、`ctx.llm`（模型适配）、`ctx.agents`（agent 注册表）都是这么注册上去的。消费者按 key 取用，不 import 具体实现：
-
-```typescript
-import { Service, type Context } from '@deepseek-ai/cordis'
-
-// 这段 declare module 是 TypeScript 声明合并，只影响类型，不生成代码
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    greeter: GreeterService
-  }
-}
-
-export class GreeterService extends Service {
-  constructor(ctx: Context) {
-    // 第二个参数 'greeter' 是注册进 context 的 key
-    super(ctx, 'greeter')
-  }
-  greet(who: string) {
-    return `Hello, ${who}!`
-  }
-}
-```
+一个服务在被创建时，用一个稳定的 key 把自己注册到 context 上。DeepSeek Harness 里，`ctx.tools`（工具注册表）、`ctx.llm`（模型适配）、`ctx.agents`（agent 注册表）都是这么注册上去的。消费者按 key 取用，不 import 具体实现。以一个打招呼服务为例。运行时这一半：`GreeterService` 继承 `Service`，构造函数拿到 `ctx` 后调 `super(ctx, 'greeter')`，第二个参数 `'greeter'` 就是注册进 context 的 key，能力放在类的方法上，比如 `greet(who: string)` 返回 `Hello, ${who}!`。类型这一半：用 `declare module '@deepseek-ai/cordis'` 声明合并，给 `interface Context` 加一个 `greeter: GreeterService` 字段。
 
 `super(ctx, 'greeter')` 这一行做了两件事：运行时把实例挂到 context 上（之后任何插件都能 `ctx.greeter` 访问），类型层面靠上面那段 `declare module` 让 `ctx.greeter` 在编译期就能过类型检查。这段声明合并不产生代码，删掉它服务照样能在运行时工作，只是消费者失去类型提示。
 
@@ -177,19 +138,7 @@ export class GreeterService extends Service {
 
 传统框架的另一个痼疾是启动顺序。A 插件要用数据库，B 插件提供数据库，那 B 必须先于 A 加载。系统一大，启动顺序就变成一份脆弱的清单：谁先谁后、谁等谁、循环依赖怎么办。改一个插件可能要重排整条启动链。
 
-Cordis 的做法是：别写顺序，写需求。一个需要 `greeter` 服务的插件，这么写：
-
-```typescript
-import type { Context } from '@deepseek-ai/cordis'
-
-export const name = 'consumer'
-export const inject = ['greeter']
-
-export function apply(ctx: Context) {
-  // 进到这里时，ctx.greeter 保证已经就位
-  console.log(ctx.greeter.greet('world'))
-}
-```
+Cordis 的做法是：别写顺序，写需求。一个需要 `greeter` 服务的消费者插件，导出三个东西：`name = 'consumer'` 是插件名，`inject = ['greeter']` 声明依赖，`apply(ctx)` 是入口。apply 里可以直接写 `ctx.greeter.greet('world')`，因为能进到 apply，就保证 `ctx.greeter` 已经就位。
 
 `inject` 字段声明这个插件需要哪些服务。Cordis 的承诺是：这些服务没全部就位之前，插件一直停在 PENDING 状态，apply 不会执行。一旦 `greeter` 上线，Cordis 才激活消费者。
 
@@ -207,23 +156,7 @@ export function apply(ctx: Context) {
 
 服务适合"直接调一个能力"（`ctx.tools.register(...)`）。但有些交互是单向广播或需要被多个插件拦截，这时候用事件。
 
-事件也走声明合并，和服务是孪生机制：
-
-```typescript
-declare module '@deepseek-ai/cordis' {
-  interface Events {
-    'stats/report'(name: string, count: number): void
-  }
-}
-
-// 广播
-ctx.emit('stats/report', name, count)
-
-// 监听
-ctx.on('stats/report', (name, count) => {
-  console.log(`[stats] ${name} -> ${count}`)
-})
-```
+事件也走声明合并，和服务是孪生机制。给 `declare module '@deepseek-ai/cordis'` 里的 `interface Events` 加一条 `'stats/report'(name: string, count: number): void`，一个事件就声明完了。广播用 `ctx.emit('stats/report', name, count)`，监听用 `ctx.on('stats/report', (name, count) => ...)`，回调拿到 `name` 和 `count` 两个参数，比如打印一行 `[stats] ${name} -> ${count}`。
 
 `interface Events` 的合并声明了事件名和监听器签名，于是 `ctx.emit` 和 `ctx.on` 都是类型安全的。事件名用 `namespace/action` 的写法（如 `agent/request`、`tools/pre-execute`），在扁平的事件命名空间里保持可读。
 
@@ -243,20 +176,7 @@ Cordis 里，凡是"注册一个东西"的操作，都被当成副作用（effec
 - `ctx.plugin(child)` 挂载子插件，父插件卸载时连带卸载子插件。
 - 各个 harness 注册表（如 `ctx.tools.register(...)`）注册工具，卸载时自动注销。
 
-对于 Cordis 没有内置管理的资源（定时器、网络连接、文件监听），用 `ctx.effect()` 显式包一层，返回一个清理函数：
-
-```typescript
-ctx.effect(() => {
-  const timer = setInterval(() => console.log('tick'), 200)
-  // 返回的函数就是逆操作，卸载时执行
-  return () => {
-    clearInterval(timer)
-    console.log('heartbeat cleaned up')
-  }
-})
-```
-
-挂载时执行 effect 体，卸载时执行它返回的清理函数。你永远不用自己调用这个清理函数，Cordis 替你管。
+对于 Cordis 没有内置管理的资源（定时器、网络连接、文件监听），用 `ctx.effect()` 显式包一层，返回一个清理函数。传给 `ctx.effect` 的回调在挂载时执行：比如 `const timer = setInterval(() => console.log('tick'), 200)`，起一个每 200 毫秒打一行 `tick` 的心跳。回调 return 的那个函数就是逆操作，卸载时执行：里面 `clearInterval(timer)`，再打一行 `heartbeat cleaned up`。你永远不用自己调用这个清理函数，Cordis 替你管。
 
 当一个插件被卸载，Cordis 把它 context 上挂着的所有清理函数按注册的相反顺序逐个执行。监听器被移除，工具被注销，定时器被清掉，端口被关闭。整个过程像卷帘门往上收，最后那个 context 干干净净，和插件从未加载过一样。
 
@@ -368,27 +288,11 @@ headless runner 干的事很直接：等 Loader 稳定后，读默认模型，�
 
 ### 一个 patch 长什么样
 
-把上面的规则凑成一个具体的形状。一个 patch 文件（不管是 bundle 的 `cordis.patch.yml` 还是用户自己的）是一个顶层的 YAML 数组，数组里每一项是一个 patch 操作：
+把上面的规则凑成一个具体的形状。一个 patch 文件（不管是 bundle 的 `cordis.patch.yml` 还是用户自己的）是一个顶层的 YAML 数组，数组里每一项是一个 patch 操作，三种操作各举一例：
 
-```yaml
-# 一个 patch 层 = 一个 YAML 数组，每一项是一个 patch 操作
-# 操作一：按 id 改写已有行的整段 config（整段替换，不深合并）
-- id: some-existing-row
-  config:
-    # 这里要重述你想保留的所有字段，再加你要改的字段
-    someField: newValue
-
-# 操作二：插入全新的行
-- insert:
-    - name: './my-plugin.ts'        # 模块说明符，相对路径或 npm 包名
-      config:
-        greet: hello
-
-# 操作三：用 !!js 按环境动态决定是否挂载（disabled 是唯一被插值的元数据字段）
-- id: platform-specific-row
-  config:
-    disabled: !!js process.platform === 'win32'
-```
+- **按 id 改写**：一项写 `id: some-existing-row`，下面跟一段 `config`。`config` 里要重述你想保留的所有字段，再加你要改的字段，比如 `someField: newValue`。这是整段 `config` 替换，不深合并。
+- **插入全新的行**：一项只写 `insert`，值是新条目的数组。每个新条目带 `name: './my-plugin.ts'`（模块说明符，相对路径或 npm 包名）和自己的 `config`，比如 `greet: hello`。
+- **用 `!!js` 按环境动态决定是否挂载**：一项写 `id: platform-specific-row`，`config` 里写 `disabled: !!js process.platform === 'win32'`。`disabled` 是唯一被这样插值的元数据字段。
 
 三个要点再强调一次：第一，`id` 改写是整段 `config` 替换，不是合并，要保留的字段必须重写。第二，`insert` 加新行，新行也能被后续 patch 按 id 改写或禁用。第三，`!!js` 表达式在挂载时按上下文算值，`disabled` 是它最常见、也是唯一被插值的元数据字段。
 
@@ -396,11 +300,7 @@ headless runner 干的事很直接：等 Loader 稳定后，读默认模型，�
 
 ### 验证：--dump-config，看你机器实际启动了什么
 
-讲了这么多规则，怎么验证？跑一句：
-
-```sh
-dsh --profile web --dump-config
-```
+讲了这么多规则，怎么验证？跑一句 `dsh --profile web --dump-config`。
 
 它做的事叫 `renderConfigDump`：用 include 插件自己的解析器和 patch 算法，离线把基础配置和各层 overlay 组合出来，再渲染成 YAML（`!!js` 表达式原样保留）。因为用的是和真正 `boot()` 挂载时同一个 `applyEntryPatches` 算法，打印出来的就是实际会挂载的那棵树，不会漂移。
 

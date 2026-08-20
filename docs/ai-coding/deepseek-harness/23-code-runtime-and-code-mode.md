@@ -24,15 +24,7 @@ agent 调工具，默认是一次调一个：读个文件、跑条命令、改�
 
 ### 一次运行：请求进，结果出
 
-`CodeRunRequest` 携带运行时作用其上的**一切**：
-
-```ts
-interface CodeRunRequest {
-  program: string                              // 程序源码，作为 async 函数体跑
-  bindings: CodeBindingNamespace[]             // 宿主函数，每命名空间一个全局对象
-  signal?: AbortSignal                          // 中止：硬停程序，哪怕在循环里
-}
-```
+`CodeRunRequest` 携带运行时作用其上的**一切**，三个字段：`program` 是字符串形式的程序源码，作为 async 函数体跑；`bindings` 是 `CodeBindingNamespace[]`，宿主函数，每个命名空间在程序里变成一个全局对象；`signal` 可选，是 `AbortSignal`，中止时硬停程序，哪怕在循环里。
 
 `program` 作为一段 async 函数体执行，所以顶层 `await` 和 `return` 都可用，完成值变成结果的 `value`。`bindings` 是宿主暴露给程序的函数。`signal` 中止时，运行时硬停程序（哪怕在循环中途），resolve 出一个 `kind: 'abort'` 的失败。
 
@@ -40,15 +32,7 @@ interface CodeRunRequest {
 
 ### 错误是字段，不是异常
 
-这是这一层最重要的契约。`CodeRunResult` 把错误报告为**一个字段**，永远不是 `run()` 的 rejection：
-
-```ts
-interface CodeRunResult {
-  value?: CodeJsonValue     // 完成值，跨过无损 JSON 边界才有
-  logs: string[]            // 程序打印的文本，按顺序
-  error?: CodeRunFailure    // 失败时才有
-}
-```
+这是这一层最重要的契约。`CodeRunResult` 把错误报告为**一个字段**，永远不是 `run()` 的 rejection。它有三个字段：`value` 可选，是 `CodeJsonValue` 类型的完成值，跨过无损 JSON 边界才有；`logs` 是 `string[]`，程序打印的文本，按顺序；`error` 可选，是 `CodeRunFailure`，失败时才有。
 
 报告一个失败的程序是调用方的活，不是异常路径。这和 `ShellExecutor.run` 的"resolve-on-failure"契约一致。
 
@@ -72,14 +56,7 @@ interface CodeRunResult {
 
 ## 失败分类：正交，独立报告
 
-`CodeRunFailure` 的 kind 是**正交结果，独立报告**（和 shell 的前台结果一个思路）：
-
-```ts
-interface CodeRunFailure {
-  kind: 'exception' | 'timeout' | 'abort' | 'worker-exit' | 'invalid-output' | 'output-limit'
-  message: string   // 人可读，适合喂回模型让它自我修正
-}
-```
+`CodeRunFailure` 的 kind 是**正交结果，独立报告**（和 shell 的前台结果一个思路）。它有两个字段：`kind` 是六个值的联合，`exception`、`timeout`、`abort`、`worker-exit`、`invalid-output`、`output-limit`；`message` 是字符串，人可读，适合喂回模型让它自我修正。
 
 文档讲得很清楚：预算到期不是异常，中止不是超时，底质死亡（比如 OOM）两者都不是。
 

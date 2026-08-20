@@ -1,7 +1,7 @@
 # 🛠 写一个 LLM 适配器：接 OpenAI 兼容端点
 
 > 接一个新模型 provider，在 `dsh` 里就是继承 `LlmAdapter`、实现一个 `stream()` 方法、把它注册到 `ctx.llm`，剩下的事（拼装、归一化、重试、日志）harness 全替你兜了。
-> 难点不在写代码，在守契约：七条协议义务，每条都对应一个真实 provider 的坑，守不住就线上出诡异行为。这一篇带你接一个 OpenAI 兼容端点，把契约逐条落到代码里。
+> 难点不在写代码，在守契约：七条协议义务，每条都对应一个真实 provider 的坑，守不住就线上出诡异行为。这一篇带你接一个 OpenAI 兼容端点，把契约逐条落到实现里。
 
 ## 这一篇解决什么问题
 
@@ -13,30 +13,14 @@
 
 ## 最小骨架长什么样
 
-cookbook 给的最小形状是这样的：
+cookbook 给的最小形状是一个 Cordis 插件文件，六样东西：
 
-```ts
-import { Context } from 'cordis'
-import { LlmAdapter, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { z } from 'schemastery'
-
-class MyAdapter extends LlmAdapter {
-  async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    // 翻译请求、发 HTTP、解析 SSE、yield chunk
-  }
-}
-
-export const name = 'llm-myprovider'
-export const inject = ['llm']
-export const Config = z.object({
-  apiKey: z.string().role('secret'),
-  baseURL: z.string().default('https://api.example.com/v1'),
-})
-
-export function apply(ctx: Context, config: typeof Config) {
-  ctx.llm.registerAdapter(['my-provider'], new MyAdapter(config))
-}
-```
+1. 引依赖：`Context` 来自 `'cordis'`；`LlmAdapter`、`GenerateOptions`、`StreamChunk` 三个类型来自 `'@deepseek-ai/dsh-llm'`；`z` 来自 `'schemastery'`。
+2. 适配器类：`class MyAdapter extends LlmAdapter`，只实现一个异步生成器方法 `async *stream(options: GenerateOptions): AsyncIterable<StreamChunk>`，方法体就是适配器的全部工作：翻译请求、发 HTTP、解析 SSE、yield chunk。
+3. 插件名：`export const name = 'llm-myprovider'`。
+4. 注入声明：`export const inject = ['llm']`，声明依赖 `ctx.llm` 这个 service。
+5. 配置：`Config` 用 `z.object` 声明两个字段，`apiKey` 是 `z.string().role('secret')`（标成密钥），`baseURL` 是 `z.string().default('https://api.example.com/v1')`（带默认值）。
+6. 注册入口：`export function apply(ctx: Context, config: typeof Config)`，函数体一句 `ctx.llm.registerAdapter(['my-provider'], new MyAdapter(config))`，把适配器挂上 `my-provider` 路由。
 
 几个要点必须理解：
 
@@ -64,34 +48,17 @@ export function apply(ctx: Context, config: typeof Config) {
 
 ## 一步步接 OpenAI 兼容端点
 
-下面给一个接 OpenAI 兼容 `/v1/chat/completions` 端点的示意实现。代码是教学用的骨架，重点是契约怎么落，不是生产就绪代码。
+下面给一个接 OpenAI 兼容 `/v1/chat/completions` 端点的示意实现，教学用的骨架，重点是契约怎么落，不是生产就绪代码。
 
 ### 第一步：翻译请求
 
 `GenerateOptions` 是 provider 中立的，你要把它变成 OpenAI 的请求体。`system` 映射到第一条 system 消息（或 OpenAI 的 system slot），`messages` 映射到 `messages` 数组，`tools` 映射到 `tools` 字段，`temperature`、`maxTokens`、`stop` 一一对应。
 
-```ts
-function serializeRequest(options: GenerateOptions, baseURL: string) {
-  const messages = []
-  if (options.system) messages.push({ role: 'system', content: options.system })
-  for (const msg of options.messages) {
-    messages.push({ role: msg.role, content: toOpenAIContent(msg.content) })
-  }
-  return {
-    url: `${baseURL}/chat/completions`,
-    body: {
-      model: options.model,
-      messages,
-      tools: options.tools?.map(toOpenAITool),
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-      stop: options.stop,
-      stream: true,            // 关键：要流式
-      stream_options: { include_usage: true },  // 让 provider 在流末尾给 usage
-    },
-  }
-}
-```
+写成一个 `serializeRequest(options: GenerateOptions, baseURL: string)` 函数，三步：
+
+1. 组 `messages` 数组。`options.system` 存在就先 push 一条 `{ role: 'system', content: options.system }`；然后遍历 `options.messages`，每条 push `{ role: msg.role, content: toOpenAIContent(msg.content) }`，content 的转换交给 `toOpenAIContent`。
+2. 定 URL，`baseURL` 拼上 `/chat/completions`。
+3. 组请求体 `body`。`model` 取 `options.model`；`messages` 用刚组的数组；`tools` 是 `options.tools?.map(toOpenAITool)`，没有 tools 就是 undefined；`temperature`、`stop` 原样透传；`maxTokens` 映射到 `max_tokens`；最后两个开关是关键：`stream: true` 要流式，`stream_options: { include_usage: true }` 让 provider 在流末尾给 usage。
 
 注意 `stream_options: { include_usage: true }`。OpenAI 兼容端点默认不在流式响应里给 token 用量，你得显式要，它才会在流结束时发一个带 usage 的尾巴 chunk。这关系到下面第一条契约。
 
@@ -99,80 +66,28 @@ function serializeRequest(options: GenerateOptions, baseURL: string) {
 
 OpenAI 兼容端点用 SSE（Server-Sent Events）推流。每个事件是 `data: {...}\n\n`，流结束是 `data: [DONE]`。用 `eventsource-parser` 这种库解析，避免手写分隔出错（`llm-deepseek` 用的就是它）。
 
-```ts
-import { EventSourceParserStream } from 'eventsource-parser/stream'
+解析写成一个异步生成器 `parseSSE(response: Response)`，三步：
 
-async function*parseSSE(response: Response) {
-  const stream = response.body!
-    .pipeThrough(new TextDecoderStream())
-    .pipeThrough(new EventSourceParserStream())
-  for await (const event of stream as any) {
-    if (event.data === '[DONE]') return
-    yield JSON.parse(event.data)
-  }
-}
-```
+1. 从 `'eventsource-parser/stream'` 引入 `EventSourceParserStream`。
+2. 取 `response.body`，串两条管道：先 `pipeThrough(new TextDecoderStream())` 把字节解成文本，再 `pipeThrough(new EventSourceParserStream())` 切成 SSE 事件。
+3. `for await` 遍历这条流（示例里对它做了 `as any` 断言）：`event.data === '[DONE]'` 就 `return` 结束；否则 `yield JSON.parse(event.data)`，把事件负载解析成对象交给下游。
 
 ### 第三步：把 provider 事件翻译成 StreamChunk
 
 这是核心。OpenAI 流式响应里，每个 chunk 是 `choices[0].delta`，delta 里可能有 `content`（文本）、`tool_calls`（工具调用片段）。你要按"首次出现分配 index，同一块复用 index"的规则，把它们翻译成 `StreamChunk`：
 
-```ts
-async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-  const { url, body } = serializeRequest(options, this.config.baseURL)
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${this.config.apiKey}`,
-      'Content-Type': 'application/json',
-      ...attributionHeaders(),        // 必须带 app 归因头
-    },
-    signal: options.signal,           // 必须传 signal
-  })
-  if (!response.ok) {
-    throw new LlmError(httpToFailure(response), httpToCode(response))
-  }
+`stream()` 的主流程按顺序分五段：
 
-  const toolCallIndexes = new Map<number, number>()  // openai index -> block index
-  let nextBlock = 0
+1. 发请求。先 `serializeRequest(options, this.config.baseURL)` 解构出 `url` 和 `body`，`await fetch(url, ...)` 发 POST。请求头带三样：`Authorization` 是 ``Bearer ${this.config.apiKey}``、`Content-Type: application/json`，再展开 `attributionHeaders()`，app 归因头必须带；`signal` 传 `options.signal`，必须传。`response.ok` 为假就 `throw new LlmError(httpToFailure(response), httpToCode(response))`。
+2. 备两个记账变量。`toolCallIndexes` 是 `Map<number, number>`，从 OpenAI 的 tool call index 映射到本地的 block index；`nextBlock` 从 0 起，是下一个 block index 的发号器。
+3. 遍历 `parseSSE(response)` 吐出的每个事件 `evt`，取 `evt.choices?.[0]?.delta`，三个分支依次判断：
+   - `delta?.content` 有值：`idx = nextBlock++`，依次 yield `{ type: 'block-start', index: idx, blockType: 'text' }`、`{ type: 'text-delta', index: idx, text: delta.content }`、`{ type: 'block-end', index: idx, block: { type: 'text', text: delta.content } }`，一个文本块三连发。
+   - `delta?.tool_calls` 有值：对每个 `tc` 先查 `toolCallIndexes.get(tc.index)`，查不到说明首次出现，`idx = nextBlock++` 并写回 map，先 yield `{ type: 'block-start', index: idx, blockType: 'tool-call' }`；然后 yield `{ type: 'tool-call-delta', index: idx, id: tc.id, name: tc.function?.name, argumentsDelta: tc.function?.arguments ?? '' }`，`argumentsDelta` 保持原始 JSON 字符串。
+   - `evt.usage` 有值：yield `{ type: 'usage', usage: toTokenUsage(evt.usage) }`。
+4. 收尾。遍历 `toolCallIndexes.values()`，给每个工具调用块发 `block-end`，把累计的 arguments 拼好后封口（骨架里省略了累计逻辑，见下）。
+5. 最后 yield `{ type: 'finish', reason: { kind: 'stop' } }`。
 
-  for await (const evt of parseSSE(response)) {
-    const delta = evt.choices?.[0]?.delta
-    if (delta?.content) {
-      const idx = nextBlock++
-      yield { type: 'block-start', index: idx, blockType: 'text' }
-      yield { type: 'text-delta', index: idx, text: delta.content }
-      yield { type: 'block-end', index: idx, block: { type: 'text', text: delta.content } }
-    }
-    if (delta?.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        let idx = toolCallIndexes.get(tc.index)
-        if (idx === undefined) {
-          idx = nextBlock++
-          toolCallIndexes.set(tc.index, idx)
-          yield { type: 'block-start', index: idx, blockType: 'tool-call' }
-        }
-        yield {
-          type: 'tool-call-delta', index: idx,
-          id: tc.id, name: tc.function?.name,
-          argumentsDelta: tc.function?.arguments ?? '',  // 原始 JSON 字符串
-        }
-      }
-    }
-    if (evt.usage) {
-      yield { type: 'usage', usage: toTokenUsage(evt.usage) }
-    }
-  }
-
-  // 收尾：把工具调用块封口，然后 finish
-  for (const idx of toolCallIndexes.values()) {
-    // 这里应持有累计的 arguments，拼好后发 block-end
-  }
-  yield { type: 'finish', reason: { kind: 'stop' } }
-}
-```
-
-注意这段是简化骨架，真实实现要在内存里累计每个工具调用的 `argumentsDelta`，在流结束时拼成完整 JSON 字符串，再用 `block-end` 发出完整的 `ToolCallBlock`。上面为了讲清主流程省略了累计逻辑。
+注意这是简化骨架，真实实现要在内存里累计每个工具调用的 `argumentsDelta`，在流结束时拼成完整 JSON 字符串，再用 `block-end` 发出完整的 `ToolCallBlock`。上面为了讲清主流程省略了累计逻辑。
 
 ### 第四步：token 用量的口径
 
@@ -180,16 +95,7 @@ async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
 
 但 OpenAI 兼容端点（和 DeepSeek 的 `prompt_tokens`）经常把缓存命中折进一个总数。你的适配器有责任把它减出来：
 
-```ts
-function toTokenUsage(raw: OpenAIUsage): TokenUsage {
-  // 如果 provider 的 prompt_tokens 含缓存，减出来
-  return {
-    inputTokens: raw.prompt_tokens,       // 视 provider 而定，可能要减 cache
-    outputTokens: raw.completion_tokens,
-    cacheReadTokens: raw.prompt_tokens_details?.cached_tokens,
-  }
-}
-```
+换算函数 `toTokenUsage(raw: OpenAIUsage): TokenUsage` 做三个字段的映射：`inputTokens` 取 `raw.prompt_tokens`，视 provider 而定，如果这个数里含缓存命中要先减出来；`outputTokens` 取 `raw.completion_tokens`；`cacheReadTokens` 取 `raw.prompt_tokens_details?.cached_tokens`。
 
 口径错了，token 计费和上下文压力探测就全错。cookbook 专门单列一节讲这个，两个官方适配器都因为它专门做了减法。
 
@@ -197,7 +103,7 @@ function toTokenUsage(raw: OpenAIUsage): TokenUsage {
 
 cookbook 把契约浓缩成七条，写适配器时逐条自检：
 
-**1. `usage` 在 `finish` 之前，`finish` 之后什么都不发。** 稳妥做法是把 finish 和 usage 缓冲到 provider 的流结束标记再一起 flush。这处理了某些 provider 发"只有 usage 的尾巴 chunk"的情况。上面的代码里，靠 `stream_options: { include_usage: true }` 拿到 usage，再在 `[DONE]` 后发 finish，顺序就对了。
+**1. `usage` 在 `finish` 之前，`finish` 之后什么都不发。** 稳妥做法是把 finish 和 usage 缓冲到 provider 的流结束标记再一起 flush。这处理了某些 provider 发"只有 usage 的尾巴 chunk"的情况。上面的实现里，靠 `stream_options: { include_usage: true }` 拿到 usage，再在 `[DONE]` 后发 finish，顺序就对了。
 
 **2. 工具调用 `arguments` 全程是原始 JSON 字符串。** 片段用 `argumentsDelta` 流式传。如果你的 provider 直接返回解析后的对象，在 `block-end` 时重新 stringify。
 

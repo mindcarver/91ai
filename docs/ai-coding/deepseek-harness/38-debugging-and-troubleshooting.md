@@ -5,13 +5,7 @@
 
 ## 第一步永远是一句话：dump-config
 
-`dsh` 是全插件化的，出问题的第一个怀疑对象是"你的插件树组合和你以为的不一样"。这不需要猜，跑一句：
-
-```sh
-dsh --profile web --dump-config
-```
-
-它打印实际组合后的插件树，不启动进程。你看到的每一行（id、name、config）是所有 patch 层叠完的最终结果。
+`dsh` 是全插件化的，出问题的第一个怀疑对象是"你的插件树组合和你以为的不一样"。这不需要猜，跑一句 `dsh --profile web --dump-config`，它打印实际组合后的插件树，不启动进程。你看到的每一行（id、name、config）是所有 patch 层叠完的最终结果。
 
 排查的典型场景：
 
@@ -37,15 +31,7 @@ invariant violated by "@deepseek-ai/dsh-session": <具体消息>
 
 不变量检查的一个关键约定：**只能断言权威事件流或可变数据，不能断言 service 或方法是否存在。** 这是因为 service 和方法的存在属于类型系统的职责，不是运行时不变量的职责。
 
-选择哪些包的检查生效，用配置控制：
-
-```typescript
-interface Config {
-  enabled?: boolean              // 全局开关，默认 true
-  package_allowlist?: string[]   // 正则源，匹配包名；空表示全部允许
-  package_blocklist?: string[]   // 正则源，匹配后排除，覆盖 allowlist
-}
-```
+选择哪些包的检查生效，用配置控制。`Config` 有三个可选字段：`enabled?: boolean` 是全局开关，默认 `true`；`package_allowlist?: string[]` 是正则源，匹配包名，空表示全部允许；`package_blocklist?: string[]` 也是正则源，匹配后排除，优先级覆盖 allowlist。
 
 正则匹配是 unanchored 的（除非你自己加 `^` 和 `$`）。无效的、空白的、重复的条目在服务启动时抛异常，不会被跳过。
 
@@ -91,13 +77,7 @@ interface Config {
 
 如果你在改 `dsh` 的代码或写插件，有一套开发时的工具链帮你抓问题。
 
-**typecheck 是第一道防线。**
-
-```sh
-pnpm run typecheck
-```
-
-它运行完整的 Host lib 阶段（包括生成的 Typert 合约），然后跑 Client TypeScript 检查。pre-push hook 自动跑这个。类型错误在 push 之前就被拦住。
+**typecheck 是第一道防线。** 跑 `pnpm run typecheck`，它运行完整的 Host lib 阶段（包括生成的 Typert 合约），然后跑 Client TypeScript 检查。pre-push hook 自动跑这个。类型错误在 push 之前就被拦住。
 
 **type-equiv 门禁防文档漂移。**
 
@@ -109,13 +89,7 @@ pnpm run typecheck
 
 有些检查消费构建后的 `lib/` 输出。如果本地检查报奇怪的错误，先跑一遍 `pnpm run build`，确保 lib 是最新的。
 
-**hygiene 检查包质量。**
-
-```sh
-pnpm run hygiene
-```
-
-包括 `publint`（校验包入口和构建后的 `lib/*.js` 一致）和 `verify-node-next-types`（校验构建后的声明对 NodeNext 消费者有效）。
+**hygiene 检查包质量。** `pnpm run hygiene` 包括 `publint`（校验包入口和构建后的 `lib/*.js` 一致）和 `verify-node-next-types`（校验构建后的声明对 NodeNext 消费者有效）。
 
 **TODO 标记分级。**
 

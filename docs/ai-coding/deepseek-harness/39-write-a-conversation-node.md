@@ -32,17 +32,7 @@ Conversation Node 就是后者的扩展机制。它做的事是：**把一组相
 
 每个 `(kind, id)` 最多有一个 start 事件。一个只有单事件的业务可以用事件自身的稳定身份（比如 `event.seq`）作为 Definition-local id。
 
-事件类型通过 `SessionEventMap` 声明合并注册：
-
-```typescript
-declare module '@deepseek-ai/dsh-session/types' {
-  interface SessionEventMap {
-    'review/start': ReviewStartData
-    'review/progress': ReviewProgressData
-    'review/end': ReviewEndData
-  }
-}
-```
+事件类型通过 `SessionEventMap` 声明合并注册：在 `declare module '@deepseek-ai/dsh-session/types'` 里给 `interface SessionEventMap` 加三条，`'review/start'` 对应 `ReviewStartData`，`'review/progress'` 对应 `ReviewProgressData`，`'review/end'` 对应 `ReviewEndData`。
 
 branded id 类型（`ReviewId`）跨进程边界使用，防止和别的字符串混淆。
 
@@ -50,64 +40,15 @@ branded id 类型（`ReviewId`）跨进程边界使用，防止和别的字符�
 
 ## ConversationNodeDefinition 的结构
 
-一个 Definition 是一个对象，有七个关键成员：
-
-```typescript
-const reviewDefinition: ConversationNodeDefinition<ReviewState> = {
-  kind: 'review-job',
-  target: 'chat',
-  match: (event) => { /* 身份提取 */ },
-  start: (context, match) => { /* 初始化状态 */ },
-  update: (context, match) => { /* 更新状态 */ },
-  publication: (match) => { /* 发布时机 */ },
-  buildLocationData: (context, scope) => { /* 发布到 Turn/Step */ },
-  buildViewNode: (context) => { /* 产出渲染数据 */ },
-}
-```
+一个 Definition 是一个对象，有七个关键成员。审查 Job 的定义叫 `reviewDefinition`，类型是 `ConversationNodeDefinition<ReviewState>`：配置字段 `kind: 'review-job'` 和 `target: 'chat'`；函数成员 `match(event)` 做身份提取，`start(context, match)` 做初始化状态，`update(context, match)` 做更新状态，`publication(match)` 定发布时机，`buildLocationData(context, scope)` 发布到 Turn/Step，`buildViewNode(context)` 产出渲染数据。
 
 逐个看。
 
-**`match(event)`**：身份提取器，不是 fold。它只看当前事件，返回 Definition-local id 和生命周期角色（`start` 或 `update`），或 null 表示不匹配。匹配后，assembler 按 `(kind, id)` 定位 Context。
+**`match(event)`**：身份提取器，不是 fold。它只看当前事件，返回 Definition-local id 和生命周期角色（`start` 或 `update`），或 null 表示不匹配。匹配后，assembler 按 `(kind, id)` 定位 Context。审查 Job 的实现是三分支：`event.type` 是 `review/start` 时返回 `{ id: String(event.data.reviewId), role: 'start' }`；是 `review/progress` 或 `review/end` 时返回同一个 id，角色换成 `'update'`；其余返回 null。
 
-```typescript
-match: (event) => {
-  if (event.type === 'review/start') {
-    return { id: String(event.data.reviewId), role: 'start' }
-  }
-  if (event.type === 'review/progress' || event.type === 'review/end') {
-    return { id: String(event.data.reviewId), role: 'update' }
-  }
-  return null
-}
-```
+**`start(context, match)`**：在 start 事件时调用一次，返回初始 State。审查 Job 的初始 State 是：`turn` 和 `step` 取 `match.event.data.turn`、`match.event.data.step`，`title` 取 `match.event.data.title`，`completed` 从 0 起，`status` 起始为 `'running'`。
 
-**`start(context, match)`**：在 start 事件时调用一次，返回初始 State。
-
-```typescript
-start: (_context, match) => {
-  return {
-    turn: match.event.data.turn,
-    step: match.event.data.step,
-    title: match.event.data.title,
-    completed: 0,
-    status: 'running',
-  }
-}
-```
-
-**`update(context, match)`**：在每个 update 事件时调用，返回新 State。推荐返回新的不可变值，但原地修改后返回同一个对象也有相同的 adoption 语义。
-
-```typescript
-update: (context, match) => {
-  if (match.event.type === 'review/progress') {
-    return { ...context.state, completed: match.event.data.completed }
-  }
-  if (match.event.type === 'review/end') {
-    return { ...context.state, completed: 100, status: 'completed', summary: match.event.data.summary }
-  }
-  return context.state
-}
-```
+**`update(context, match)`**：在每个 update 事件时调用，返回新 State。推荐返回新的不可变值，但原地修改后返回同一个对象也有相同的 adoption 语义。审查 Job 的实现按 `match.event.type` 分三路：`review/progress` 时返回 `{ ...context.state, completed: match.event.data.completed }`；`review/end` 时在展开的基础上把 `completed` 置 100、`status` 置 `'completed'`，再带上 `summary: match.event.data.summary`；其余原样返回 `context.state`。
 
 **`publication(match)`**：控制状态变化什么时候物化。三个选项：`immediate`（结构性或终止性变化）、`animation-frame`（高频可见 delta，合并到下一帧）、`none`（状态变化只喂给后续 publication）。引擎仍然按 log 顺序应用每个 update，cadence 只合并视图发布。
 
@@ -151,40 +92,17 @@ reader 不暴露业务特定的查询方法，也不授予对另一个 Context �
 
 ## keyed renderer：React 组件怎么消费
 
-渲染侧是一个 keyed React 组件，通过 `ChatNodeViewProps` 接收 Node 数据：
-
-```typescript
-function ReviewNodeView({ node }: ChatNodeViewProps<'review-job'>) {
-  const text = node.data.summary ?? `${node.data.title}: ${node.data.completed}%`
-  return createElement('p', null, text)
-}
-```
+渲染侧是一个 keyed React 组件，通过 `ChatNodeViewProps` 接收 Node 数据。组件是 `ReviewNodeView({ node }: ChatNodeViewProps<'review-job'>)`，类型参数把组件钉在 `review-job` 这个 kind 上：渲染文本优先取 `node.data.summary`，没有摘要就用 `node.data.title` 和 `node.data.completed` 拼成 `标题: 完成度%`，最后 `createElement('p', null, text)` 渲染成一个段落。
 
 组件只消费 `node.data` 和受约束的 Location hook。它不直接接收 Session 事件、不扫描 Context 集合、不访问其他 Chat Node。
 
-注册方式是在 client 插件的 `apply` 里：
+注册方式是在 client 插件的 `apply` 里，写法分三步：
 
-```typescript
-export const inject = ['conversationEvents', 'slots']
+1. 声明依赖：`export const inject = ['conversationEvents', 'slots']`。
+2. 导出 `apply(ctx: ClientContext): void`，第一步调 `ctx.conversationEvents.register(reviewDefinition)`，把 Definition 注册进引擎。
+3. 再调 `ctx.slots.inject('conversation.chat.node', ...)`，注入回调里用 `ctx.slots.register({ name: 'conversation.chat.node', key: 'review-job' }, ReviewNodeView)` 把 keyed renderer 挂上插槽。
 
-export function apply(ctx: ClientContext): void {
-  ctx.conversationEvents.register(reviewDefinition)
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node',
-    key: 'review-job',
-  }, ReviewNodeView))
-}
-```
-
-Chat 数据类型通过声明合并注册：
-
-```typescript
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
-  interface ChatNodeDataMap {
-    'review-job': ReviewChatData
-  }
-}
-```
+Chat 数据类型通过声明合并注册：在 `declare module '@deepseek-ai/dsh-client-ui-conversation/client'` 里给 `interface ChatNodeDataMap` 加一条 `'review-job': ReviewChatData`。
 
 这给了每个 key 精确的值类型，TypeScript 会在编译时检查组件消费的数据形状和 Definition 产出的一致。
 

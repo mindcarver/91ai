@@ -25,21 +25,9 @@
 
 这个分工遵循 `dsh` 的一贯模式：工具是薄壳，能力是服务。工具负责对模型暴露，服务负责持有机制。
 
-挂载方式是在 `cordis.yml` 的 patch 层里插入两个条目：
+挂载方式是在 `cordis.yml` 的 patch 层里插一个 `insert` 块，块里两个条目：`id` 为 `cordis-host-runner`、`name` 为 `@deepseek-ai/dsh-cordis-host-runner` 的运行器，和 `id` 为 `tool-cordis`、`name` 为 `@deepseek-ai/dsh-tool-cordis` 的工具包。
 
-```yaml
-- insert:
-    - id: cordis-host-runner
-      name: '@deepseek-ai/dsh-cordis-host-runner'
-    - id: tool-cordis
-      name: '@deepseek-ai/dsh-tool-cordis'
-```
-
-跑起来用一行：
-
-```sh
-pnpm run demo:cordis
-```
+跑起来用一行 `pnpm run demo:cordis`。
 
 需要 `DEEPSEEK_API_KEY`。这个 demo 默认起在 3081 端口（避开 3080），因为它是一个 patch overlay 叠在 web profile 上。
 

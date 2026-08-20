@@ -27,15 +27,9 @@ provider 注册的是**能力**（一个 `WebSearchProvider` 或 `WebFetchProvid
 
 模型面向的工具参数就一个 `query`。`maxResults` 是 consumer 拥有的上限（`dsh-tool-web` 的 `searchMaxResults` 配置，默认 `8`），穿过接缝，在回来的路上强制：如果 provider 多返回了，接缝截断 `sources[]` 并置 `truncated`。
 
-```ts
-interface WebSearchResult {
-  content?: string                    // 可选的 provider 生成的答案/摘要
-  sources: readonly WebSearchSource[] // 可引用来源，已截断到 maxResults
-  truncated: boolean                  // 接缝为守 maxResults 砍了来源时为 true
-}
-```
+搜索结果是 `WebSearchResult`，三个字段：`content` 是可选字符串，放 provider 生成的答案或摘要；`sources` 是 `readonly WebSearchSource[]`，可引用来源，已截断到 `maxResults`；`truncated` 是布尔，接缝为守 `maxResults` 砍了来源时为 `true`。
 
-`content` 是可选的：Exa 和 DeepSeek 不返回，Perplexity 返回生成的答案。`WebSearchSource` 里只有 `url` 必填，`title`、`snippet`、`publishedAt` 都可选，因为不是每个 provider 都返回它们。文档有句话很到位：**强迫适配器编造这些字段，会让接缝撒谎**（Perplexity 的引用可能只有 URL）。`dsh-tool-web` 渲染时用 `title ?? hostname(url)` 兜底。
+Exa 和 DeepSeek 不返回 `content`，Perplexity 返回生成的答案。`WebSearchSource` 里只有 `url` 必填，`title`、`snippet`、`publishedAt` 都可选，因为不是每个 provider 都返回它们。文档有句话很到位：**强迫适配器编造这些字段，会让接缝撒谎**（Perplexity 的引用可能只有 URL）。`dsh-tool-web` 渲染时用 `title ?? hostname(url)` 兜底。
 
 ### 抓取：URL 进，资源出
 
@@ -109,12 +103,7 @@ provider 注册是同步的（在 `apply()` 里），远程初始化和发现放
 
 `SkillInvocationPolicy` 把两个独立的调用控制归一成正布尔：
 
-```ts
-interface SkillInvocationPolicy {
-  modelInvocable: boolean   // 模型面向的目录和加载器是否包含
-  userInvocable: boolean    // 人类命令目录和加载器是否包含
-}
-```
+`modelInvocable` 决定模型面向的目录和加载器是否包含这个技能，`userInvocable` 决定人类命令目录和加载器是否包含。
 
 `ctx.skills.list()` 保留全部四种组合：纯模型技能、纯用户技能、两者都行、两者都不（只能通过受信任的 `ctx.skills.get()` 调用方访问）。本地 provider 读 frontmatter 的 `disable-model-invocation` 和 `user-invocable` 键，省略的默认 `true`，把每个解析出的技能投影成这个归一策略。
 

@@ -71,9 +71,7 @@ agent 跑着的时候，唯一的追加点是一个 prepend 的 `agent/pre-step`
 
 持久阶段回答"目标怎么了"：
 
-```ts
-type GoalPhase = 'active' | 'paused' | 'blocked' | 'complete'
-```
+类型 `GoalPhase` 是四值联合：`active`、`paused`、`blocked`、`complete`。
 
 `blocked` 是唯一一个"因为一个问题停了"的持久状态。它的策略拥有的 reason 带一个稳定的小写 kebab-case code（用于路由）和一个自由文本 explanation（给人也给模型看）。
 

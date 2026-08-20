@@ -75,13 +75,7 @@ DeepSeek 选后者，是一个生态判断：**与其做一个锁死自家模型
 
 第一层永远是一个叫 `dsh-base` 的 bundle，它装的是所有 profile 都要的东西：模型适配器、工具注册表、会话持久化、沙箱和审批策略、settings、credentials、telemetry。往上叠 `dsh-web-app` 就有了浏览器应用，叠 `dsh-headless` 就有了无界面的 runner。
 
-关键是：**这些层之间是用 patch 叠加的，每一层都能改写或替换下面那层注册的任何一行配置。** 想看你的机器实际启动了什么，跑一句：
-
-```sh
-dsh --profile web --dump-config
-```
-
-它打印出来的每一行配置，都能被你自己的 patch 替换掉。这就是"没有特权核心"的实际含义——你不用 fork 源码，挂一个插件就能改行为。这部分在 03（概念）和 06（源码导读）篇展开。
+关键是：**这些层之间是用 patch 叠加的，每一层都能改写或替换下面那层注册的任何一行配置。** 想看你的机器实际启动了什么，跑一句 `dsh --profile web --dump-config`，它打印出来的每一行配置，都能被你自己的 patch 替换掉。这就是"没有特权核心"的实际含义——你不用 fork 源码，挂一个插件就能改行为。这部分在 03（概念）和 06（源码导读）篇展开。
 
 ![dsh 如何由 profile 和 bundle 装配](imgs/04-flowchart-profile-bundle.png)
 

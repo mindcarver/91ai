@@ -107,21 +107,7 @@ e2e 测试拥有自己的资源：在测试里创建 harness，在 `afterEach` �
 
 功能测试（e2e、snapshot）回答"行为对不对"，性能测试回答"扛不扛得住"。两个问题的失败模式不同，测试方式也不同——所以性能压测是一条独立的 opt-in lane，落在 `apps/web/tests/complex-history.perf.ts` 这个浏览器 benchmark 里。
 
-它通过一个独立的 vitest config 运行：
-
-```typescript
-// vitest.web.perf.config.ts
-export default defineConfig({
-  ...webConfig,
-  test: {
-    ...webConfig.test,
-    include: ['apps/web/tests/**/*.perf.ts'],
-    disableConsoleIntercept: true,
-    hookTimeout: 180_000,
-    testTimeout: 600_000,
-  },
-})
-```
+它通过一个独立的 vitest config 运行，文件叫 `vitest.web.perf.config.ts`：`defineConfig` 以 `webConfig` 为基础，`test` 段展开 `webConfig.test` 后只覆盖四项，`include` 收窄成 `['apps/web/tests/**/*.perf.ts']`，`disableConsoleIntercept: true`，`hookTimeout: 180_000`，`testTimeout: 600_000`。
 
 几个关键配置选择揭示了它的定位：
 
@@ -150,23 +136,7 @@ export default defineConfig({
 
 测试通过 Playwright 的 CDP（Chrome DevTools Protocol）session 采集 Chromium 性能指标。每次操作前后采集一组指标，算 delta。
 
-采集的指标：
-
-```typescript
-interface Measurement {
-  wallMs: number        // 挂钟时间
-  taskMs: number        // 浏览器 task 时间
-  scriptMs: number      // JS 执行时间
-  layoutMs: number      // 布局时间
-  recalcStyleMs: number // 样式重算时间
-  devtoolsMs: number    // DevTools 协议时间
-  nodesDelta: number    // DOM 节点变化
-  listenersDelta: number // 事件监听器变化
-  heapDeltaMb: number   // 堆内存变化
-  totalNodes: number    // 总 DOM 节点数
-  heapMb: number        // 总堆内存
-}
-```
+采集的指标装在一个 `Measurement` 结构里，十一个字段：`wallMs`（挂钟时间）、`taskMs`（浏览器 task 时间）、`scriptMs`（JS 执行时间）、`layoutMs`（布局时间）、`recalcStyleMs`（样式重算时间）、`devtoolsMs`（DevTools 协议时间）、`nodesDelta`（DOM 节点变化）、`listenersDelta`（事件监听器变化）、`heapDeltaMb`（堆内存变化）、`totalNodes`（总 DOM 节点数）、`heapMb`（总堆内存）。
 
 这些指标让你看到一次操作（比如展开 1000 个会话的侧边栏）在浏览器里花了多少时间在 JS、多少在布局、多少在样式重算，以及它增加了多少 DOM 节点和堆内存。
 
@@ -200,11 +170,7 @@ interface Measurement {
 
 这些断言防止的是"基数缩水"：如果一次重构让虚拟化列表少渲染了行，或者让分页少加载了历史，结构断言会失败。但它们不断言"渲染有多快"。
 
-时间数据通过 `console.info` 打印为 JSON：
-
-```javascript
-console.info(`WEB_PERF_RESULT ${JSON.stringify({ ... }, null, 2)}`)
-```
+时间数据通过 `console.info` 打印为 JSON：每条结果以 `WEB_PERF_RESULT` 前缀开头，后接 `JSON.stringify` 以两个空格缩进格式化的对象。
 
 开发者手动跑这个测试，看输出的 JSON，人肉判断"这次比上次慢了"或"堆内存涨了"。
 
@@ -216,35 +182,13 @@ console.info(`WEB_PERF_RESULT ${JSON.stringify({ ... }, null, 2)}`)
 
 1. **精确的行数断言**。不是 `expect(count).toBeGreaterThan(0)`，而是 `expect(count).toBe(EXPECTED_TRAJECTORY_ROWS)` 或 `expect(count).toBe(SIDEBAR_SESSION_COUNT + 2)`。
 
-2. **stableCount 辅助函数**。它不是读一次 count 就断言，而是连续读多次直到稳定（4 次相同读数）。这防止异步渲染导致的暂时性计数误判。
-
-```typescript
-async function stableCount(locator, accepts, timeoutMs = 60_000) {
-  let stableReads = 0
-  while (performance.now() < deadline) {
-    const count = await locator.count()
-    stableReads = accepts(count) && count === previous ? stableReads + 1 : 0
-    if (stableReads >= 4) return count
-    previous = count
-    await new Promise(resolve => setTimeout(resolve, 50))
-  }
-}
-```
+2. **`stableCount` 辅助函数**。签名是 `stableCount(locator, accepts, timeoutMs = 60_000)`：给一个 locator 和一个判断函数，默认 60 秒超时。它不是读一次 count 就断言，而是循环读：每轮 `await locator.count()` 拿当前计数，若 `accepts(count)` 为真且和上一轮读数 `previous` 相同，连续稳定计数 `stableReads` 加一，否则清零；攒够 4 次相同读数就返回这个 count。每轮之间 `setTimeout` 等 50 毫秒，循环以 `performance.now()` 对比 deadline 截止。这防止异步渲染导致的暂时性计数误判。
 
 ### soak 测试：持续对话的保留状态
 
 性能测试不只是"打开大历史"。它还有一个 soak 场景：在已有 500 轮历史的基础上，继续发 100 轮对话（`SOAK_TURNS = 100`），每 10 轮检查一次保留的浏览器状态。
 
-每次检查采集 `retainedBrowserState`：
-
-```typescript
-interface RetainedBrowserState {
-  domElements: number   // DOM 元素数
-  nodes: number         // DOM 节点数
-  listeners: number     // 事件监听器数
-  heapMb: number        // 堆内存 MB
-}
-```
+每次检查采集 `retainedBrowserState`，四个字段：`domElements`（DOM 元素数）、`nodes`（DOM 节点数）、`listeners`（事件监听器数）、`heapMb`（堆内存 MB）。
 
 这些数据告诉你：**随着对话轮数增加，浏览器保留了什么。** 如果每轮对话都增加 10 个 DOM 元素和 5MB 堆内存，100 轮后就是 1000 个元素和 500MB。这是内存泄漏的信号。
 
@@ -270,15 +214,7 @@ soak 测试也测量每轮的性能指标（click 到 user echo 的时间、clic
 
 ### 运行方式
 
-性能测试是 opt-in 的，不在 CI web gate 里。运行方式：
-
-```sh
-# 需要先 build（因为性能测试消费构建后的 CSS）
-pnpm run build:web
-
-# 运行性能测试
-pnpm exec vitest run --config vitest.web.perf.config.ts apps/web/tests/complex-history.perf.ts
-```
+性能测试是 opt-in 的，不在 CI web gate 里。运行分两步：先 `pnpm run build:web` 构建（性能测试消费构建后的 CSS），再 `pnpm exec vitest run --config vitest.web.perf.config.ts apps/web/tests/complex-history.perf.ts` 跑测试。
 
 测试只在 replay 模式下运行（`webSnapshotMode() === 'record'` 时抛异常）。这保证了确定性：同一个 replay override 每次产出同样的模型响应，测量才有可比性。
 

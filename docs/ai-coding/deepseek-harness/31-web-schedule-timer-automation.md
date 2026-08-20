@@ -7,11 +7,7 @@
 
 看到"schedule"和"reminder"，多数人会预期一个通知系统：定个时间，到点了给我弹个浏览器通知、推个系统消息、发封邮件。`web-schedule` 不是这个。
 
-它是一层 overlay，让一个 `dsh web` 进程拥有 Schedule 提醒能力，不改默认的 Web 组合：
-
-```sh
-dsh web --patch examples/web-schedule/cordis.yml
-```
+它是一层 overlay，让一个 `dsh web` 进程拥有 Schedule 提醒能力，不改默认的 Web 组合，启动命令是 `dsh web --patch examples/web-schedule/cordis.yml`。
 
 加载之后，模型通过三个工具管理提醒：`schedule_create`、`schedule_list`、`schedule_delete`。每个结果都把投递标识为 `session-local`。
 

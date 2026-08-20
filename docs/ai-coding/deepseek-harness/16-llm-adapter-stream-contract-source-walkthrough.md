@@ -28,20 +28,9 @@
 
 ## `StreamChunk`：封闭的原始协议
 
-这是整篇的核心。一次流式响应可能交织好几种块：文本、推理（reasoning）、多个工具调用。`StreamChunk` 用 `index` 把每个 delta 绑到它所属的块上，`block-end` 携带那个块拼好的完整 `ContentBlock`。源码在 `packages/llm/llm/src/types.ts`：
+这是整篇的核心。一次流式响应可能交织好几种块：文本、推理（reasoning）、多个工具调用。`StreamChunk` 用 `index` 把每个 delta 绑到它所属的块上，`block-end` 携带那个块拼好的完整 `ContentBlock`。源码在 `packages/llm/llm/src/types.ts`。七个变体，不多不少：`block-start` 带 `index: number` 和 `blockType: ContentBlockType`，宣告一个块的开始；`text-delta` 带 `index: number` 和 `text: string`，是文本增量；`reasoning-delta` 带 `index: number` 和 `text: string`，是推理增量；`tool-call-delta` 带 `index: number`、`id: CallId`、可选的 `name: string` 和 `argumentsDelta: string`，是工具调用增量；`block-end` 带 `index: number` 和 `block: ContentBlock`，携带拼好的完整块；`usage` 带 `usage: TokenUsage`；`finish` 带 `reason: FinishReason` 和可选的 `replayState: unknown`。
 
-```ts
-type StreamChunk =
-  | { type: 'block-start'; index: number; blockType: ContentBlockType }
-  | { type: 'text-delta'; index: number; text: string }
-  | { type: 'reasoning-delta'; index: number; text: string }
-  | { type: 'tool-call-delta'; index: number; id: CallId; name?: string; argumentsDelta: string }
-  | { type: 'block-end'; index: number; block: ContentBlock }
-  | { type: 'usage'; usage: TokenUsage }
-  | { type: 'finish'; reason: FinishReason; replayState?: unknown }
-```
-
-七个变体，不多不少。几个设计决策值得点出来：
+几个设计决策值得点出来：
 
 **它是封闭联合（closed discriminated union）。** 不是随便往里加成员。`dsh` 在每个 `switch` 这种类型的地方结尾用 `assertNever`，意思是只要新增一个 chunk 类型，所有消费它的地方都编译失败，逼你逐个处理。这是故意把"扩展成本"做高，换来所有消费者都能依赖的类型安全。
 
@@ -61,17 +50,7 @@ type StreamChunk =
 
 **3. 两条错误出口，一种 `LlmFailure` 类型。** 失败要么从 `stream()` 里 throw（传输/协议错误），要么用 `finish {kind:'error'|'aborted', failure}` 结束流（provider 在带内报错，适配器没法中途抛）。两条路最终都归一成同一个可序列化的 `LlmFailure`。`LlmRuntime.stream()` 会把 throw 出来的错误归一成终态 `error` 或 `aborted` finish，再暴露给消费者。
 
-`LlmFailure` 长这样（`packages/llm/llm/src/types.ts`）：
-
-```ts
-interface LlmFailure {
-  readonly message: string      // 人可读的失败描述
-  readonly code: string         // 稳定的 provider 中立路由码
-  readonly status?: number      // provider 返回的 HTTP 状态码
-  readonly providerRetryAfterMs?: number  // provider 请求的退避，不是重试决策
-  readonly requestId?: ProviderRequestId  // 不透明的诊断 id
-}
-```
+`LlmFailure` 定义在 `packages/llm/llm/src/types.ts`，五个只读字段：`message` 是字符串，人可读的失败描述；`code` 是字符串，稳定的 provider 中立路由码；`status` 可选，是数字，provider 返回的 HTTP 状态码；`providerRetryAfterMs` 可选，是数字，provider 请求的退避，不是重试决策；`requestId` 可选，是 `ProviderRequestId`，不透明的诊断 id。
 
 注意 `providerRetryAfterMs` 只是"provider 请求等多久"，不是"决定要不要重试"。重试决策属于策略层（`dsh-llm-retry`），不属于适配器。这个区分是 `dsh` 反复强调的：**机制和策略分开**。
 
@@ -91,18 +70,7 @@ interface LlmFailure {
 
 既然 chunk 是封闭协议，谁来把它折回 `ContentBlock`？答案是 `packages/llm/llm/src/assembler.ts` 里的 `BlockAssembler`，全局唯一一份实现。
 
-agent loop 的做法是：一边把原始 chunk 记进会话日志（保真，日后能 replay），一边把同一批 chunk 喂给一个 assembler，最后读 `blocks()`/`message()`/`usage`/`finish`。需要拼装结果又不想自己重写折回逻辑的消费者，都用这一个类。
-
-```ts
-declare class BlockAssembler {
-  push(chunk: StreamChunk): void;
-  blocks(): ContentBlock[];
-  get usage(): TokenUsage | undefined;
-  get finish: FinishReason;
-  get replayState(): unknown;
-  message(source?: MessageSource): Message;
-}
-```
+agent loop 的做法是：一边把原始 chunk 记进会话日志（保真，日后能 replay），一边把同一批 chunk 喂给一个 assembler，最后读 `blocks()`/`message()`/`usage`/`finish`。需要拼装结果又不想自己重写折回逻辑的消费者，都用这一个类。它的公开面一共六个成员：`push(chunk: StreamChunk)` 喂一个 chunk，返回 void；`blocks()` 返回 `ContentBlock[]`；`usage`、`finish`、`replayState` 是三个 getter，类型分别是 `TokenUsage | undefined`、`FinishReason`、`unknown`；`message(source?: MessageSource)` 返回 `Message`，可选的 source 标注消息来源。
 
 它有两个值得说的容错行为。第一，容忍只有 delta 没有 `block-start`/`block-end` 的协议。第二，如果某个 `index` 已经被 `block-end` 关闭了又来了 delta，直接忽略，这样行为异常的适配器既不能撑爆内存，也不能污染一个已经完成的块。
 
@@ -130,12 +98,7 @@ declare class BlockAssembler {
 
 ## `llm/stream` waterfall：接缝的扩展点
 
-`ctx.llm` 不只是一个注册表。它还挂了一个 `llm/stream` 的 waterfall 事件，包住每一次流式调用。定义在 `packages/llm/llm/src/index.ts`：
-
-```ts
-'llm/stream'(this: LlmRuntime, options: GenerateOptions,
-             next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
-```
+`ctx.llm` 不只是一个注册表。它还挂了一个 `llm/stream` 的 waterfall 事件，包住每一次流式调用，定义在 `packages/llm/llm/src/index.ts`。事件签名是：this 绑定 `LlmRuntime`，收 `options: GenerateOptions` 和 `next: () => AsyncIterable<StreamChunk>` 两个参数，返回 `AsyncIterable<StreamChunk>`。
 
 waterfall 的语义是"洋葱皮中间件"：监听器可以选择调 `next()` 把请求传给下一层（最终到达解析出的适配器的 `stream()`），也可以自己 yield chunk 来短路整个调用。retry、replay、路由这些横切逻辑都挂在这里，不需要改动 agent loop 或适配器。
 

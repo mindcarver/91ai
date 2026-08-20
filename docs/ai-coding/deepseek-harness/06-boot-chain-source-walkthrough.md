@@ -1,66 +1,30 @@
 # 启动链源码导读：从 npx dsh web 到插件树挂载
 
 > `dsh web` 这条命令，从一个 Node bin 走到一棵挂载完毕的插件树，中间只有三层代码，一层负责分发，一层负责把 profile 拼成 patch 栈，一层负责建 context、挂 include、等树稳定。
-> 这一篇是源码导读，沿着 `npx dsh web` 的真实调用链一行行往下读，定位到具体文件和函数。组合的规则（profile、bundle、patch 层顺序）是上一篇讲过的，这里只看这些规则在代码里是怎么被执行的。
+> 这一篇是源码导读，沿着 `npx dsh web` 的真实调用链往下读，定位到具体文件和函数。组合的规则（profile、bundle、patch 层顺序）是上一篇讲过的，这里只看这些规则在代码里是怎么被执行的。
 
 ## 这一篇读什么
 
-跟着一条命令走。你在终端敲下：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-到屏幕上出现 `dsh web:` 那行本地地址为止，中间发生的事可以压成三层：
+跟着一条命令走。你在终端敲下 `npx @deepseek-ai/dsh web`，到屏幕上出现 `dsh web:` 那行本地地址为止，中间发生的事可以压成三层：
 
 1. **`apps/cli/src/bin.ts`**：进程入口，一个分发器。解析命令行，按 mode 把工作交给不同的模块。
 2. **`apps/cli/src/profile-boot.ts`**：把一个 profile 名字解析成一条有序的 patch 栈。
 3. **`packages/boot/app-boot/src/index.ts`**：建 root context，挂载 Loader 和 include，等插件树稳定，审计每一个条目。
 
-这三层是 `deepseek-ai/deepseek-harness` 仓库里真实存在的文件，下面的代码片段都从它们摘录（为可读性做了裁剪，保留了关键控制流）。读完后你应当能拿着一份 checkout，从 `bin.ts` 一路追到插件树挂载完成。
+这三层是 `deepseek-ai/deepseek-harness` 仓库里真实存在的文件，下面按执行顺序展开每一层的关键函数和控制流。读完后你应当能拿着一份 checkout，从 `bin.ts` 一路追到插件树挂载完成。
 
 ## 第一站：bin.ts，一个分发器
 
-`bin.ts` 是 `dsh` 命令的入口，顶部带 `#!/usr/bin/env node`。它干的第一件事是加载分层环境、解析参数：
-
-```ts
-import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
-import { parseDshArgs } from './args.ts'
-
-const invocation = parseDshArgs(process.argv.slice(2), readVersion())
-```
+`bin.ts` 是 `dsh` 命令的入口，顶部带 `#!/usr/bin/env node`。它干的第一件事是加载分层环境、解析参数：从 `@deepseek-ai/dsh-app-boot` 导入 `loadLayeredEnv`，从 `./args.ts` 导入 `parseDshArgs`，然后用 `parseDshArgs(process.argv.slice(2), readVersion())` 得到一个 `invocation` 对象。
 
 `loadLayeredEnv('dsh')` 在这一步拍下本次运行的"环境快照"，把继承来的环境、调用目录的 `.env`、Harness home 的 `.env` 按优先级冻结成一份不可变快照。这份快照稍后会通过一个 context slot 提供给整棵树，保证所有插件读到的是同一份启动时刻的环境。
 
-`parseDshArgs` 返回一个 `invocation` 对象，它的 `mode` 字段决定走哪条路。分发是一个 switch：
+`parseDshArgs` 返回一个 `invocation` 对象，它的 `mode` 字段决定走哪条路。分发是对 `invocation.mode` 的一个 switch，三个 case 各自动态导入自己的模块：
 
-```ts
-switch (invocation.mode) {
-  case 'profile': {
-    const { runProfile } = await import('./profile-boot.ts')
-    await runProfile({
-      environment: loadLayeredEnv('dsh'),
-      profile: invocation.profile,
-      patchFiles: invocation.patches,
-      args: invocation.args,
-    })
-    break
-  }
-  case 'plugin': {
-    const { runPlugin } = await import('./plugin.ts')
-    process.exit(runPlugin(invocation.profile, invocation.args))
-    break
-  }
-  case 'dump-config': {
-    const { runDumpConfig } = await import('./dump-config.ts')
-    runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)
-    break
-  }
-  default:
-    invocation satisfies never
-    throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation.mode)}`)
-}
-```
+- `case 'profile'`：`await import('./profile-boot.ts')` 取出 `runProfile`，传四个字段调用它，`environment` 是 `loadLayeredEnv('dsh')`，`profile` 是 `invocation.profile`，`patchFiles` 是 `invocation.patches`，`args` 是 `invocation.args`。
+- `case 'plugin'`：`await import('./plugin.ts')` 取出 `runPlugin`，跑 `runPlugin(invocation.profile, invocation.args)`，返回值交给 `process.exit`。
+- `case 'dump-config'`：`await import('./dump-config.ts')` 取出 `runDumpConfig`，调 `runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches)`。
+- `default` 分支先写 `invocation satisfies never`，再 `throw new Error`，消息是 `dsh: unhandled invocation mode` 拼 `JSON.stringify(invocation.mode)`。
 
 `dsh web` 命中 `case 'profile'`，`invocation.profile` 的值是 `"web"`。注意这里用的是 `await import(...)` 动态导入，三种模式互不拖累彼此的依赖：跑 `web` 不会把 `plugin` 管理子命令的代码也加载进来。`--help`、`--version` 和解析错误在 `parseDshArgs` 阶段就打印并退出了，所以能走到 switch 的都是合法模式。`invocation satisfies never` 是 TypeScript 的穷尽性检查，保证将来加新 mode 时编译器会逼你在这里补一个分支。
 
@@ -68,122 +32,41 @@ switch (invocation.mode) {
 
 ## 第二站：profile-boot.ts，把 profile 组合成 patch 栈
 
-`runProfile` 的第一步是 `composeProfile`，它把一个 profile 名字变成一条完整的 patch 栈。先看它怎么准备 profile：
-
-```ts
-/** The empty root entry list every profile tree patches over. */
-const PROFILE_ROOT_CONFIG = `[]\n`
-
-export function prepareProfile(name: string, userLayer = true): Profile {
-  healProfilesModuleFallback(INSTALL_ANCHOR)
-  const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
-  writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
-  return profile
-}
-```
+`runProfile` 的第一步是 `composeProfile`，它把一个 profile 名字变成一条完整的 patch 栈。先看它怎么准备 profile。`prepareProfile(name: string, userLayer = true)` 返回一个 `Profile`，按顺序做三件事：先调 `healProfilesModuleFallback(INSTALL_ANCHOR)`，再调 `loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })` 得到 `profile`，最后 `writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)` 往 profile 目录写根配置文件。`PROFILE_ROOT_CONFIG` 是模块级常量，注释写明它是 "The empty root entry list every profile tree patches over"（每个 profile 树在其上打 patch 的空根条目列表），内容就是 `[]` 加一个换行。
 
 这里有个反直觉的细节：**每次启动都把 profile 目录下的 `cordis.yml` 重写成 `[]`（空列表）。** 为什么？因为整个组合都是 patch 层叠上去的，根配置就该是空的。vendored Loader 有个"写回"行为：一个插件自我销毁时会把当前树持久化回这个文件，如果不清空，下次启动就会把上次组合出来的行又当成根配置，每个 bundle 的 insert 就被重复一遍。所以根配置每次启动重写为 `[]`，树完全由 patch 层组合。这个文件存在于磁盘上，只是因为 Loader 需要一个真实的 include 根来锚定 `baseUrl`。
 
 `healProfilesModuleFallback` 维护 profile 目录下的 `node_modules` 符号链接，让树外插件的名字能通过 Node 的普通父级查找解析。
 
-接下来是组装 patch 栈。`composeProfile` 读三层 patch，加上 overlay：
-
-```ts
-const profile = prepareProfile(name)
-const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? []
-const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
-const bundlePatches = profile.layers.flatMap(layer => layer.patches)
-const rows = new Map<string, EntryOptions>()
-for (const row of composeEntries([bundlePatches, profile.patches, homePatches, overlays])) {
-  if (typeof row.id === 'string') rows.set(row.id, row)
-}
-```
+接下来是组装 patch 栈。`composeProfile` 读三层 patch，加上 overlay，四路来源分别是：`prepareProfile(name)` 得到 `profile`；`loadOptionalPatches(NAME, homePatchPath()) ?? []` 读 home 级 patch，文件不存在就取空数组，记成 `homePatches`；`patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))` 把每个 `--patch` 传入的文件 resolve 成绝对路径再加载，得到 `overlays`；`profile.layers.flatMap(layer => layer.patches)` 汇总所有 bundle 层的 patch，记成 `bundlePatches`。随后调 `composeEntries([bundlePatches, profile.patches, homePatches, overlays])`，遍历它产出的每个 `row`，凡是 `row.id` 是字符串的，塞进 `new Map<string, EntryOptions>()` 建的 `rows` 索引。
 
 `composeEntries` 是关键：它把这四层数组展平成一条 patch 列表，用 include 插件自己的 `applyEntryPatches` 算法往空列表上叠，得到最终的条目集合。顺序正是上一篇讲的：bundle 层在下，profile 自己的 patch，home 级 patch，overlay 最上。`rows` 是一张 id 到条目的索引，后面要做两件依赖这个索引的事。
 
 第一件：如果树里有 `agent-presets` 这行，往它的 config 里注入官方自带的 preset root（指向 `apps/cli/config/agent-presets/`）。
 
-第二件：遥测开关。有个叫 `resolveTelemetryPatch` 的函数：
-
-```ts
-export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: boolean): PatchOptions | undefined {
-  if ((disabledEnv ?? '') === '' || !hasRow) return undefined
-  return { id: TELEMETRY_ROW_ID, disabled: true }
-}
-```
+第二件：遥测开关。有个叫 `resolveTelemetryPatch` 的函数，签名是 `(disabledEnv: string | undefined, hasRow: boolean)`，返回 `PatchOptions | undefined`。逻辑两条：`(disabledEnv ?? '') === ''`，或者 `hasRow` 为 false，就返回 `undefined`；否则返回 `{ id: TELEMETRY_ROW_ID, disabled: true }`。
 
 读它的注释能学到一条产品判断：**任何非空值（包括 `'0'` 和 `'false'`）都禁用遥测。** 理由是一个隐私开关宁可错关（off-by-mistake），也不要错开（on-by-mistake）。如果组合里根本没有遥测行，这个开关平凡满足，不产生 patch，所以自定义 profile 不挂遥测也能跑。
 
-把四层 patch 拼起来的辅助函数就一行，但顺序是整条链的骨架：
-
-```ts
-function allPatches(composed: ComposedProfile): PatchOptions[] {
-  return [
-    ...composed.bundlePatches,
-    ...composed.profile.patches,
-    ...composed.homePatches,
-    ...composed.overlays,
-  ]
-}
-```
+把四层 patch 拼起来的辅助函数 `allPatches` 就一个 return，但顺序是整条链的骨架：它接收一个 `ComposedProfile`，返回 `PatchOptions[]`，展开顺序是 `composed.bundlePatches`、`composed.profile.patches`、`composed.homePatches`、`composed.overlays`。
 
 回到 `runProfile`。组装完 patch 栈，它先装好进程级的失败和关停设施：`createProcessShutdown`（SIGTERM 退出码 0，SIGINT 退出码 130）、`installFailLoud`。然后调真正挂载树的 `boot`。
 
 ## 第三站：boot()，挂载树并等它稳定
 
-`boot` 在 `packages/boot/app-boot/src/index.ts`，是整个启动链最核心的函数。裁剪后的骨架：
-
-```ts
-export async function boot(
-  binName: string,
-  absoluteConfigPath: string,
-  patches?: PatchOptions[],
-  prepare?: (ctx: Context) => Promise<void> | void,
-  bareModuleBaseUrl?: string,
-): Promise<Context> {
-  const ctx = new Context()
-  let stage = 'host preparation failed'
-  try {
-    ctx.baseUrl = pathToFileURL(dirname(absoluteConfigPath)).href + '/'
-    ctx.provide('dshHomePath', dshHomePath)
-    await ctx.plugin(Loader)
-    await prepare?.(ctx)
-    stage = 'plugin tree failed to load'
-    await mountRootInclude(ctx, absoluteConfigPath, patches, bareModuleBaseUrl)
-    await ctx.get('loader')?.await()
-    if (ctx.get('loader') === undefined) return ctx
-    await assertEntriesActivated(ctx, binName)
-    return ctx
-  } catch (cause) {
-    await ctx.fiber.dispose()
-    // ... 包装成带 stage 标签的错误重新抛出
-    throw new Error(`${binName}: ${stage}: ${detail}...`, { cause })
-  }
-}
-```
-
-逐行读：
+`boot` 在 `packages/boot/app-boot/src/index.ts`，是整个启动链最核心的函数。签名是 `boot(binName: string, absoluteConfigPath: string, patches?: PatchOptions[], prepare?: (ctx: Context) => Promise<void> | void, bareModuleBaseUrl?: string)`，返回 `Promise<Context>`。函数体是一个大 try/catch：try 段从建 context 一路走到审计；catch 段先 `await ctx.fiber.dispose()` 销毁那个还没建完的部分 context，再抛一个新 `Error`，消息按 `${binName}: ${stage}: ${detail}` 的格式拼接，`{ cause }` 挂住原始异常。try 段逐项读：
 
 1. `new Context()`：建一个全新的 root context。这是整棵插件树的根。
-2. `stage = 'host preparation failed'`：一个失败标签。`boot` 把失败分成两个阶段，`prepare` 跑在配置树任何条目挂载之前，它的失败叫"宿主准备失败"；之后的失败叫"插件树加载失败"。这个标签后面会用来给错误信息定性。
-3. `ctx.baseUrl = ...`：把根配置所在目录设为 baseUrl，相对插件名从这里解析。
+2. `stage = 'host preparation failed'`：一个失败标签。`boot` 把失败分成两个阶段，`prepare` 跑在配置树任何条目挂载之前，它的失败叫"宿主准备失败"；prepare 跑完后标签改赋成 `'plugin tree failed to load'`，之后的失败叫"插件树加载失败"。这个标签后面会用来给错误信息定性。
+3. `ctx.baseUrl = pathToFileURL(dirname(absoluteConfigPath)).href + '/'`：把根配置所在目录设为 baseUrl，相对插件名从这里解析。
 4. `ctx.provide('dshHomePath', dshHomePath)`：把 Harness home 的路径解析器作为 context 上的一个值提供出去。这样配置里的 `!!js` 表达式就能引用 `ctx.dshHomePath` 来定位 home 下的资源。
 5. `await ctx.plugin(Loader)`：挂载 Loader 服务。Loader 是负责读配置、解析条目、按依赖激活插件的引擎。
 6. `await prepare?.(ctx)`：跑宿主准备钩子。注意它的时机：**在任何配置条目挂载之前。** 对 `dsh` 来说，这个钩子（在 `runProfile` 里传入）做两件事：提供启动环境快照、提供命令行参数和退出钩子（`provideCmdline`）。把它们在条目挂载前就位，是为了让任何插件解析启动相关的值时，读到的都是同一份不可变快照。
-7. `mountRootInclude`：挂载根 include，这是真正把配置树加载进来的地方。
+7. `mountRootInclude(ctx, absoluteConfigPath, patches, bareModuleBaseUrl)`：挂载根 include，这是真正把配置树加载进来的地方。
 8. `await ctx.get('loader')?.await()`：等 Loader 树稳定。可选链 `?.` 不是装饰：一个一次性 surface 可能在树还在加载时就请求退出，把整棵树连同 Loader 服务一起 dispose 掉，这时 `ctx.get('loader')` 会是 undefined，直接返回即可（注释里反复强调"这是 app 按要求退出，不是启动失败"）。
-9. `assertEntriesActivated`：审计整棵树，每个启用的条目必须 ACTIVE。
+9. `assertEntriesActivated(ctx, binName)`：审计整棵树，每个启用的条目必须 ACTIVE。
 
-`mountRootInclude` 值得单独看一眼。它把 `cordis:include` 和 `cordis:group` 注册成 Loader 的内建插件，然后挂一个根条目：
-
-```ts
-const rootInclude: EntryOptions = {
-  id: 'include',
-  name: 'cordis:include',
-  config: includeConfig,  // { path: 配置文件 URL, patches: [...] }
-}
-const includeId = await ctx.loader.create(rootInclude)
-```
+`mountRootInclude` 值得单独看一眼。它把 `cordis:include` 和 `cordis:group` 注册成 Loader 的内建插件，然后构造一个 `EntryOptions` 类型的根条目：`id` 固定为 `'include'`，`name` 是 `'cordis:include'`，`config` 传 `includeConfig`（内容是配置文件 URL 的 `path` 和一个 patch 数组），最后 `await ctx.loader.create(rootInclude)` 挂载它，返回值记为 `includeId`。
 
 这个 id 固定为 `'include'` 的根条目，就是整棵树的入口。`cordis:include` 读根配置（那个 `[]`），把所有 patch 层应用上去，得到最终的条目列表，然后 Loader 把每个条目当插件挂载。`cordis:group` 一起注册，是因为一个组合要用 group 行给一个 provider 和它的消费者划同一个 `isolate` 领域，而住在 workspace 外的 agent preset 没法按名字解析到 group 包，必须作为内建提供。
 
@@ -212,31 +95,9 @@ const includeId = await ctx.loader.create(rootInclude)
 
 ## 启动后：让用户 patch 层保持热
 
-`boot` 返回后，`runProfile` 还要做一件事：让用户的 patch 层在运行时保持热。
+`boot` 返回后，`runProfile` 还要做一件事：让用户的 patch 层在运行时保持热。它连着调两次 `watchUserPatches(ctx, ...)`，两次都传 `binName: NAME` 和同一个 `compose: composeLive` 闭包，`filename` 一次是 `composed.profile.patchPath`，一次是 `homePatchPath()`。
 
-```ts
-await watchUserPatches(ctx, {
-  binName: NAME,
-  filename: composed.profile.patchPath,
-  compose: composeLive,
-})
-await watchUserPatches(ctx, {
-  binName: NAME,
-  filename: homePatchPath(),
-  compose: composeLive,
-})
-```
-
-它给 profile 的 `cordis.patch.yml` 和 home 级的 `cordis.patch.yml` 各装一个 HMR watcher。你改这两个文件之一，会事务化地重新组合整条 patch 列表，重新应用。`composeLive` 是重新组合的闭包：
-
-```ts
-const composeLive = (): PatchOptions[] => structuredClone([
-  ...composed.bundlePatches,
-  ...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
-  ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
-  ...composed.overlays,
-])
-```
+它给 profile 的 `cordis.patch.yml` 和 home 级的 `cordis.patch.yml` 各装一个 HMR watcher。你改这两个文件之一，会事务化地重新组合整条 patch 列表，重新应用。`composeLive` 是重新组合的闭包：一个无参函数，返回 `structuredClone` 包住的四段数组，`composed.bundlePatches` 打头，然后是现场重读的 `loadOptionalPatches(NAME, composed.profile.patchPath) ?? []` 和 `loadOptionalPatches(NAME, homePatchPath()) ?? []`，最后是 `composed.overlays`，整体类型是 `PatchOptions[]`。
 
 这里有两个非显然的细节，都藏在 `structuredClone` 里。第一，**每一代重新组合都深拷贝整条 patch 列表。** 为什么？因为 include 把 `insert` 行按引用推进挂载的树，后面的 id 改写会原地修改这些对象。如果跨代复用同一份解析过的 patch 对象，一次用户覆盖就会被烤进 bundle 的内存 insert 行里，之后移除覆盖也回不到 bundle 默认值。第二，**每次都重新读两个用户文件**，而不是用 watcher 传进来的那一份，这样两个 watcher 不会把对方的旧拷贝缝进去。
 

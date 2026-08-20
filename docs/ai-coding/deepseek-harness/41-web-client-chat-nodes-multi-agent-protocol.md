@@ -40,20 +40,7 @@
 
 Host 把 `WebBootGraph` 作为 `<head>` 里的第一个 script 注入，赋给 `window.__DSH_BOOT__`。这是一个 JSON 对象：
 
-```typescript
-interface WebBootEntry {
-  id: string          // 包名
-  url: string         // bundle endpoint，带 rev 查询参数
-  rev: string         // bundle 内容哈希（缓存一致性锚）
-  inject?: string[]   // 包名依赖边（信息性）
-  immediately?: boolean // stage-one 预取标记
-}
-
-interface WebBootGraph {
-  rev: string         // 整个图的一致性锚
-  entries: WebBootEntry[]
-}
-```
+图里每个条目是一个 `WebBootEntry`：`id` 是字符串，包名；`url` 是字符串，bundle endpoint，带 `rev` 查询参数；`rev` 是字符串，bundle 内容哈希（缓存一致性锚）；可选的 `inject` 是字符串数组，包名依赖边（信息性）；可选的 `immediately` 是布尔，stage-one 预取标记。外层的 `WebBootGraph` 有两个字段：`rev` 是字符串，整个图的一致性锚；`entries` 是 `WebBootEntry[]`。
 
 `<` 被转义，所以插件控制的字符串不能逃出 script 元素。一个没有有效 manifest 的页面无法 boot，浏览器侧 parser 在缺失或畸形的 graph 上大声抛异常。
 
@@ -69,12 +56,7 @@ interface WebBootGraph {
 
 路由匹配顺序固定：exact 表先，然后最长匹配的 prefix，然后注册的 fallback。注册顺序不影响请求，因为命名路由被组合成不相交的。
 
-```typescript
-interface Config {
-  host: '127.0.0.1' | '0.0.0.0'
-  port: number  // 0 请求 OS 分配
-}
-```
+`Config` 只有两个字段：`host` 的类型是 `'127.0.0.1' | '0.0.0.0'`，`port` 是数字，传 `0` 请求 OS 分配。
 
 `host` 只接受两个值：`127.0.0.1`（默认，loopback）和 `0.0.0.0`（刻意的网络暴露）。没有 TLS、认证或 origin policy，所以非 loopback 绑定会把服务器暴露给那个网络。
 

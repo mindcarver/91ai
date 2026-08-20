@@ -21,11 +21,7 @@
 
 ### 三个模式，只管文件
 
-`SandboxMode` 只有三个值，而且**只管文件系统效果**，不管网络、不管进程可见性：
-
-```ts
-type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
-```
+`SandboxMode` 只有三个值：`read-only`、`workspace-write`、`danger-full-access`，而且**只管文件系统效果**，不管网络、不管进程可见性。
 
 - `read-only`：要求后端拒绝写。POSIX 后端额外开 shell 需要的 `/dev/null` 接收端；Windows ACL 后端不开任何可写根，并报告 partial 强制。
 - `workspace-write`：允许写工作区根目录下面，加后端承诺的临时区。
@@ -35,11 +31,7 @@ type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
 ### 强制力是被报告的事实
 
-这是整个沙箱设计最反常识、也最重要的一点。`SandboxEnforcement` 只有两个值：
-
-```ts
-type SandboxEnforcement = 'full' | 'partial'
-```
+这是整个沙箱设计最反常识、也最重要的一点。`SandboxEnforcement` 只有两个值：`full` 和 `partial`。
 
 `full` 表示后端能管住这个模式承诺的全部文件效果。`partial` 表示当前后端或老内核 ABI 只能管住一部分。当前的 partial 场景包括老的 Landlock ABI，以及 Windows ACL 后端的 Everyone/硬链接边界。
 
@@ -80,11 +72,7 @@ type SandboxEnforcement = 'full' | 'partial'
 
 ### 闭合的结果，只有一种放行
 
-`ApprovalOutcome` 是闭合的，而且 fail-closed：
-
-```ts
-type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
-```
+`ApprovalOutcome` 是闭合的，而且 fail-closed，四个值：`allowed-once`、`rejected`、`cancelled`、`unavailable`。
 
 `allowed-once` 是唯一的放行，而且只对"被问到的这一个动作"有效，不延续到下一次。调用方在 `rejected`、`cancelled`、`unavailable` 三种情况下都拒绝执行。
 
@@ -92,11 +80,7 @@ type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
 
 ### 两种策略
 
-`ApprovalPolicy` 决定在交互式 answerer 跑之前发生什么：
-
-```ts
-type ApprovalPolicy = 'ask' | 'never'
-```
+`ApprovalPolicy` 决定在交互式 answerer 跑之前发生什么，只有 `ask` 和 `never` 两个值。
 
 - `ask`（默认）：委托给组合的 answerer 链。没 compose 任何 answerer 时，链落空到 fail-closed 的 `unavailable`。
 - `never`：不问任何人，每次 ask 确定性地返回 `rejected`。这是严格的 headless 姿态（CI、无人值守运行），也是唯一一个"不问就知道结果"的策略。

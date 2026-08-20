@@ -21,15 +21,7 @@ agent 干活时，"记忆"不止是当前会话的上下文。它经常需要：
 
 ### live-preferred 逻辑记录
 
-`SessionRecord` 是跨语料库 list 返回的逻辑记录。它把**来源可用性**和克隆的 live-preferred 头部分开报告：
-
-```ts
-interface SessionRecord {
-  header: SessionHeader   // 从 live-preferred 语料库选的克隆头部
-  live: boolean           // 这个 id 当前在 ctx.sessions 里吗
-  persisted: boolean      // 当前持久化后端物化了这个 id 吗
-}
-```
+`SessionRecord` 是跨语料库 list 返回的逻辑记录。它把**来源可用性**和克隆的 live-preferred 头部分开报告，三个字段：`header` 是从 live-preferred 语料库选的克隆头部，类型 `SessionHeader`；`live` 是布尔值，表示这个 id 当前是否在 `ctx.sessions` 里；`persisted` 是布尔值，表示当前持久化后端是否物化了这个 id。
 
 `live` 和 `persisted` 独立报告，因为一个会话可能活着但没持久化、或持久化了但不活。这种区分让消费者能判断"这个记录现在到底在哪儿可用"。
 
@@ -72,18 +64,7 @@ interface SessionRecord {
 
 这是这个接缝的核心切分。**框架驱动，领域计算。** 注册表订阅一次 `session/event`，把每个已提交事件 fold 过每个单元；领域不持有任何订阅，客户端从不 fold 领域事件，它们只接收算好的值。
 
-一个领域贡献一个 `ProjectionDefinition`，是三个纯同步函数加声明：
-
-```ts
-interface ProjectionDefinition<K, S> {
-  key: K
-  schema: ZodType<...>          // 校验 view 输出
-  init(): S                      // 空日志的初始状态
-  apply(state: S, event): S      // 纯转移：前状态加一事件 → 下一状态
-  view(state: S): ...            // 状态 → wire 载荷
-  stateVersion: number           // 持久化缓存失效版本
-}
-```
+一个领域贡献一个 `ProjectionDefinition`，是三个纯同步函数加声明，泛型参数 `K` 是单元 key、`S` 是状态：`key: K` 标识这个投影单元；`schema: ZodType` 校验 `view` 的输出；`init(): S` 返回空日志的初始状态；`apply(state: S, event): S` 是纯转移，前状态加一个事件得到下一状态；`view(state: S)` 把状态变成 wire 载荷；`stateVersion: number` 是持久化缓存失效版本。
 
 为什么领域不订阅？因为如果每个领域插件都自己订阅 `session/event`，N 个领域就是 N 份订阅、N 次 fold，浪费且容易不一致。注册表订阅一次、fold 过所有单元，保证所有领域看到的是同一个事件流、同一次 fold。
 
@@ -134,14 +115,7 @@ host 适配器用这些类型，而不是把它们 UI 里的 mention 语法塞�
 
 ### prepare：聚合一个上下文
 
-`prepare` 在入队前快照所有引用，返回至多一个聚合上下文：
-
-```ts
-interface PreparedReferencedMessage {
-  content: ContentBlock[]            // 去掉 host mention token 后的可读消息
-  additionalContext?: UserMessage     // 聚合的不受信快照，没有引用时缺省
-}
-```
+`prepare` 在入队前快照所有引用，返回至多一个聚合上下文 `PreparedReferencedMessage`，两个字段：`content` 是 `ContentBlock[]`，即去掉 host mention token 后的可读消息；`additionalContext` 可选，是 `UserMessage` 类型的聚合不受信快照，没有引用时缺省。
 
 引用的会话快照被聚合成一个 `additionalContext`（一条 user 消息），作为不受信的上下文注入。错误码区分自引用、太多、读失败、预算超限、取消。`BUDGET_EXCEEDED` 这条说明注入有预算控制：引用的会话快照不能无限大，超预算就拒。
 

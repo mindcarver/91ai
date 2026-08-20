@@ -43,18 +43,7 @@ OTel backend 有三种模式，控制什么数据什么时候离开进程。
 
 **`DISABLED`**（默认）：不构造 coordinator、provider、processor、exporter。没有记录离开进程。一个 `feedback/record` 会记录"telemetry 已禁用，反馈保留在本地"。这是安全默认值。
 
-配置方式：
-
-```yaml
-- id: sessionTelemetry-otel
-  name: '@deepseek-ai/dsh-session-sessionTelemetry-otel'
-  config:
-    mode: FULL
-    exporter:
-      url: https://collector.example.com/v1/logs
-      headers:
-        authorization: !!js `Bearer ${process.env.OTLP_TOKEN}`
-```
+配置方式是标准的插件条目：`id` 填 `sessionTelemetry-otel`，`name` 填 `@deepseek-ai/dsh-session-sessionTelemetry-otel`，`config.mode` 设为 `FULL`，`config.exporter.url` 指向 collector 端点（如 `https://collector.example.com/v1/logs`），`config.exporter.headers.authorization` 用 `Bearer ${process.env.OTLP_TOKEN}` 的 JS 插值从环境变量取 token。
 
 授权是正向的、fail-closed 的。未知 mode 在读取传输配置之前就失败。只有 `FULL` 接受直接的 `ctx.sessionTelemetry.emit()` 调用。`FEEDBACK_ONLY` 把 consent 限定为已经存储在会话事件里的那个确切的 `feedback/record` 对象，独立发出的 bus 值会被忽略。`DISABLED` 即使配置了 exporter 选项也不构造 SDK pipeline。
 
@@ -118,13 +107,7 @@ severity 在捕获时预映射，让接收方零配置就能告警：`error` 给
 
 ## 共享披露
 
-mounted backend 通过必选的 `sharing` 成员向人类可见的确认界面（`/feedback` 命令）披露当前策略：
-
-```
-full          每个事件实时移交
-feedback-only 只在反馈触发时回放前缀
-disabled      不移交任何东西
-```
+mounted backend 通过必选的 `sharing` 成员向人类可见的确认界面（`/feedback` 命令）披露当前策略：`full` 是每个事件实时移交，`feedback-only` 是只在反馈触发时回放前缀，`disabled` 是不移交任何东西。
 
 消费者只有在没有任何 telemetry 服务 mounted 时才显示"未配置"。披露声明的是当前策略，不保证交付。移交是非阻塞入队，批处理、重试、丢包策略归 backend SDK。
 

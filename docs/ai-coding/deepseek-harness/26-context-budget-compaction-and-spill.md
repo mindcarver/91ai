@@ -40,18 +40,7 @@
 
 测量请求压力和表面定价的，是单例 `ctx.tokenMeter`。它是个重放（replay）owner：通过会话的持久日志尾部重放出当前的请求压力和表面快照。
 
-`measure(session, requestHeader?)` 返回一个**脱离的、深度不可变的**测量快照 `TokenMeasurement`：
-
-```ts
-interface TokenMeasurement {
-  logRevision: number              // 消费的持久事件数，等于下一个未读事件 seq
-  baseline: TokenMeasurementBaseline  // provider 或启发式锚点
-  surfaceDeltaTokens: number       // 相对锚点的有符号重定价
-  totalTokens: number              // 当前请求加响应压力（非负）
-  surfaceTokens: number            // 当前表面的启发式 token 总数
-  nodes: readonly TokenSurfaceNode[]  // 当前表面节点，位置头到尾顺序
-}
-```
+`measure(session, requestHeader?)` 返回一个**脱离的、深度不可变的**测量快照 `TokenMeasurement`。它有六个字段：`logRevision` 是消费的持久事件数，等于下一个未读事件 seq；`baseline` 是 provider 或启发式锚点，类型 `TokenMeasurementBaseline`；`surfaceDeltaTokens` 是相对锚点的有符号重定价；`totalTokens` 是当前请求加响应压力，非负；`surfaceTokens` 是当前表面的启发式 token 总数；`nodes` 是当前表面节点，按位置头到尾排列，类型是只读的 `TokenSurfaceNode` 数组。
 
 baseline 有两种。`usage` 表示最近一次成功的 provider 调用有相同的规范请求信封、且它的总数不低于那次调用的完整启发式锚点，可以复用 provider 给的真实 usage。`estimated` 表示没有可复用的保守 usage 锚点，服务用固定启发式给完整信封和表面定价。有符号的 `surfaceDeltaTokens` 保留相对匹配锚点的增长和收缩。
 
@@ -115,16 +104,7 @@ baseline 有两种。`usage` 表示最近一次成功的 provider 调用有相�
 
 ### 一个方法，只管存
 
-`saveText(input)` 是接缝的全部操作：把 `content` 原样持久化，返回一个不透明的定位符、后端给的检索提示、和精确的字节数。请求 `SaveTextSpill` 携带：
-
-```ts
-interface SaveTextSpill {
-  owner: SpillOwner          // 保存时的存储命名空间（sessionId）
-  source: SpillSource         // 产生它的工具和调用（用于命名和检查，不做访问控制）
-  suggestedName: string       // 调用方建议的名字（提示，不是路径）
-  content: string             // 要持久化的完整文本（UTF-8）
-}
-```
+`saveText(input)` 是接缝的全部操作：把 `content` 原样持久化，返回一个不透明的定位符、后端给的检索提示、和精确的字节数。请求 `SaveTextSpill` 有四个字段：`owner` 是保存时的存储命名空间，即 sessionId，类型 `SpillOwner`；`source` 记录产生它的工具和调用，类型 `SpillSource`，用于命名和检查，不做访问控制；`suggestedName` 是调用方建议的名字，只是提示，不是路径；`content` 是要持久化的完整文本，UTF-8 编码的字符串。
 
 `saveText` 持久化**完整**的 `content`，在真正的存储失败（权限、磁盘满、后端不可用）时 **reject**。由调用方决定怎么降级。
 
@@ -132,15 +112,7 @@ interface SaveTextSpill {
 
 ### 定位符加检索提示
 
-`SpillRef` 是保存的结果：
-
-```ts
-interface SpillRef {
-  locator: SpillLocator   // 不透明的模型面向句柄
-  bytes: number           // 精确字节数
-  retrievalHint: string   // 后端给的检索提示
-}
-```
+`SpillRef` 是保存的结果，三个字段：`locator` 是不透明的模型面向句柄，类型 `SpillLocator`；`bytes` 是精确字节数；`retrievalHint` 是后端给的检索提示。
 
 `SpillLocator` 是个 branded 不透明句柄。本地后端把它渲染成一个文件系统路径；远程或数据库后端可以渲染成 URI、key 或命令令牌。消费者把它当不透明的，用 `retrievalHint` 渲染，**不假设 `read` 永远是正确的检索方式**。
 
@@ -154,11 +126,7 @@ interface SpillRef {
 
 ## 本地后端：session 级私有文件
 
-`dsh-spill-local` 是本地 provider，把溢出内容写到宿主文件系统的私有 session 级文件里。路径布局是：
-
-```
-<root>/session-<hash>/<random>-<safeName>
-```
+`dsh-spill-local` 是本地 provider，把溢出内容写到宿主文件系统的私有 session 级文件里。路径布局是 `<root>/session-<hash>/<random>-<safeName>`。
 
 - `<root>` 是配置的或懒创建的私有（0700 权限）根目录。
 - `sha256(sessionId)` 做 session 子目录，把不同会话的溢出隔开。

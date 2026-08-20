@@ -29,18 +29,7 @@
 
 ### 完全显式的 spawn 规格
 
-`SubprocessSpawnSpec` 把每一个配置项都写死在规格上，接缝不补默认：
-
-```ts
-interface SubprocessSpawnSpec {
-  argv: readonly string[]   // argv[0] 是程序，绝不在这里被 shell 解释
-  cwd: string
-  stdio: SubprocessStdio    // 每个流的处置都显式
-  graceMs: number           // 终止升级的宽限期
-  signal?: AbortSignal      // 触发终止升级
-  env?: NodeJS.ProcessEnv   // 合并到擦洗过的父环境上
-}
-```
+`SubprocessSpawnSpec` 把每一个配置项都写死在规格上，接缝不补默认。它有六个字段：`argv` 是只读字符串数组（`readonly string[]`），`argv[0]` 是程序，绝不在这里被 shell 解释；`cwd` 是字符串工作目录；`stdio` 是 `SubprocessStdio`，每个流的处置都显式；`graceMs` 是数字，表示终止升级的宽限期；`signal` 可选，是 `AbortSignal`，触发终止升级；`env` 可选，是 `NodeJS.ProcessEnv`，合并到擦洗过的父环境上。
 
 "这个接缝不设默认值"是反复强调的纪律。每个处置、每个上限、每个目录都显式写在规格上，让调用方自己的配置决定它们，而不是一个隐藏的 subprocess 服务默认值。`argv` 在这一层**绝不**被 shell 解释。
 
@@ -84,20 +73,7 @@ spawn 立即返回一个活的句柄 `SubprocessHandle`。collect 模式的读�
 
 ### 前台结果：正交结果独立报告
 
-`ShellRunResult` 是这一层最精巧的设计。它的各个结果是**独立报告**的：
-
-```ts
-interface ShellRunResult {
-  exitCode: number | null
-  signal: NodeJS.Signals | null
-  timedOut: boolean     // 执行器自己的超时是首个截断原因
-  aborted: boolean      // 调用方的 AbortSignal 是首个杀掉原因
-  timeoutMs: number
-  stdout: CollectedOutput
-  stderr: CollectedOutput
-  sandbox?: ShellSandboxInfo
-}
-```
+`ShellRunResult` 是这一层最精巧的设计。它的各个结果是**独立报告**的，八个字段：`exitCode` 是 `number | null` 的退出码；`signal` 是 `NodeJS.Signals | null` 的终止信号；`timedOut` 是布尔值，表示执行器自己的超时是首个截断原因；`aborted` 是布尔值，表示调用方的 `AbortSignal` 是首个杀掉原因；`timeoutMs` 是数字超时上限；`stdout` 和 `stderr` 都是 `CollectedOutput`；`sandbox` 可选，是 `ShellSandboxInfo`。
 
 为什么要独立？因为**一个进程可能既超时又 exit 0**。它 trap 了信号，被杀时退出码还是 0。如果只看退出码，就会把一次被截断的运行读成干净成功。`timedOut` 和 `aborted` 互斥（一个融合的截止驱动两者，谁先触发就报谁），但它们和 `exitCode`/`signal` 是正交的。调用方永远不会把一次截断的运行误读成成功。
 
@@ -123,11 +99,7 @@ interface ShellRunResult {
 
 `TerminalSessionId` 是服务铸造的 branded id。可选的名字是 owner 本地的展示元数据；授权比的是**确切的归属 Agent**，不是名字或猜的 id。这是个安全细节：你不能靠猜一个 session 名字去操作别人的 PTY。
 
-`TerminalWaitReason` 说的是一次 send 为什么把控制权还给了调用方。它和 `TerminalSessionStatus` 独立：
-
-```ts
-type TerminalWaitReason = 'stdin_read' | 'inferred_idle' | 'timeout' | 'session_exit'
-```
+`TerminalWaitReason` 说的是一次 send 为什么把控制权还给了调用方。它和 `TerminalSessionStatus` 独立，是四个值的联合：`stdin_read`、`inferred_idle`、`timeout`、`session_exit`。
 
 沉默或超时可能返回，而顶层 shell 还活着；`session_exit` 才表示那个 shell 退出了，不是某个前台子进程退了。这个区分很关键：一次 send 返回不等于会话结束。
 
@@ -137,15 +109,7 @@ type TerminalWaitReason = 'stdin_read' | 'inferred_idle' | 'timeout' | 'session_
 
 ### 独占发送与滚动缓冲
 
-一个活动会话**同一时刻只接受一个 send**。这个独占语义避免了两个输入交织把终端状态搞乱。这个 send 操作暴露一个消费式输出游标（给通用后台 job 用）和一个终端结果（给前台调用方用）：
-
-```ts
-interface TerminalSendOperation {
-  done: Promise<TerminalSendResult>   // 就绪/超时/取消/顶层退出后 resolve
-  readOutput(): TerminalSendRead       // 消费上次调用以来产生的输出
-  cancel(): boolean                    // 请求 SIGINT，结算后返回 false
-}
-```
+一个活动会话**同一时刻只接受一个 send**。这个独占语义避免了两个输入交织把终端状态搞乱。这个 send 操作暴露一个消费式输出游标（给通用后台 job 用）和一个终端结果（给前台调用方用）。`TerminalSendOperation` 有三个成员：`done` 是 `Promise<TerminalSendResult>`，在就绪、超时、取消或顶层退出后 resolve；`readOutput()` 返回 `TerminalSendRead`，消费上次调用以来产生的输出；`cancel()` 请求 SIGINT，返回布尔值，结算后返回 false。
 
 `TerminalReadResult` 另外分页读取有界的会话滚动缓冲。这把"一次 send 的增量输出"和"会话历史滚动缓冲"分成了两个读取路径。
 

@@ -17,13 +17,7 @@ Web UI 是给人用的。当你需要把 `dsh` 嵌进自动化流程时，有三
 
 ## Headless：一行命令跑完一个任务
 
-这是最直接的自动化方式：
-
-```sh
-pnpm dsh --profile headless "fix the failing test in this workspace"
-```
-
-它做四件事：接收一个非空任务字符串，创建并持久化一个全新会话，打印最终 assistant 文本，退出。不开 server，不起 UI。
+这是最直接的自动化方式，跑一句 `pnpm dsh --profile headless "fix the failing test in this workspace"`。它做四件事：接收一个非空任务字符串，创建并持久化一个全新会话，打印最终 assistant 文本，退出。不开 server，不起 UI。
 
 headless profile 的组合包含：DeepSeek V4 模型、本地 bash 和文件系统工具、subagent 委托、workflows、todo_write、JSONL 持久化。它显式挂载共享 agent spine、一个 root agent、持久化和 checkpoint 策略。
 
@@ -33,54 +27,20 @@ headless profile 的组合包含：DeepSeek V4 模型、本地 bash 和文件系
 
 ## Python SDK：把 agent 当库用
 
-Python SDK 是自动化集成的推荐方式。安装：
+Python SDK 是自动化集成的推荐方式，安装用 `python -m pip install deepseek-harness-sdk`。这个包会安装同版本的 `deepseek-harness-runtime-bin` 平台 wheel。**runtime 是捆绑的单文件可执行文件，目标机器不需要 Node.js。**
 
-```sh
-python -m pip install deepseek-harness-sdk
-```
-
-这个包会安装同版本的 `deepseek-harness-runtime-bin` 平台 wheel。**runtime 是捆绑的单文件可执行文件，目标机器不需要 Node.js。**
-
-最简用法：
-
-```python
-from deepseek_harness import DeepSeekHarness
-
-with DeepSeekHarness() as harness:
-    result = harness.run("Say hi.")
-
-print(result.final_response)
-```
+最简用法三步：从 `deepseek_harness` 包导入 `DeepSeekHarness` 类；用 `with DeepSeekHarness() as harness:` 建实例管理生命周期，块内调 `result = harness.run("Say hi.")` 发任务；退出块后 `print(result.final_response)` 取最终文本。
 
 `DeepSeekHarness` 懒启动 runtime 子进程，跨调用复用。用 context manager 管理生命周期，或显式调 `close()`。
 
 ### 带配置的用法
 
-如果你需要指定 provider、model、workspace、session：
+如果你需要指定 provider、model、workspace、session，完整流程四步：
 
-```python
-from pathlib import Path
-from deepseek_harness import DeepSeekHarness
-
-config = Path("examples/jsonrpc-agent/minimal.cordis.yml").resolve()
-workspace = Path("/absolute/path/to/workspace").resolve()
-sessions = Path("/absolute/path/to/sessions").resolve()
-
-with DeepSeekHarness(
-    provider="deepseek-official",
-    model="deepseek-v4-flash",
-    max_tokens=49_152,
-    cwd=str(workspace),
-    session_root=str(sessions),
-    cordis=str(config),
-) as harness:
-    result = harness.run(
-        "Inspect the repository and fix the failing tests.",
-        session_id="example-001",
-    )
-
-print(result.final_response)
-```
+1. 用 `pathlib.Path` 准备三个绝对路径：`config` 是 `Path("examples/jsonrpc-agent/minimal.cordis.yml").resolve()`，`workspace` 和 `sessions` 分别对各自的目标目录 `Path(...).resolve()`。
+2. 构造 `DeepSeekHarness`，六个关键字参数：`provider="deepseek-official"`、`model="deepseek-v4-flash"`、`max_tokens=49_152`、`cwd=str(workspace)`、`session_root=str(sessions)`、`cordis=str(config)`，三个路径都转成字符串。
+3. 仍用 `with ... as harness:` 管理生命周期，`harness.run(...)` 这次带两个参数：任务字符串 `"Inspect the repository and fix the failing tests."` 和 `session_id="example-001"`。
+4. 结果同样从 `result.final_response` 取最终文本。
 
 `provider` 选择组合里注册的 provider route，`model` 是 adapter 解析的模型 id。`max_tokens` 是可选的正整数，root agent 及其进程内后代的单次请求输出 token 上限。`cordis` 指向你的 Cordis 配置文件。
 
