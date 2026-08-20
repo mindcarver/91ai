@@ -103,12 +103,6 @@ Cordis 论文形式化了两个正交属性：时间可组合性（运行时安�
 
 `dsh` 选择了后者。这个系列就是拆解这个选择的工程含义。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支。文中对 `dsh` 工程哲学的分析综合了 dsh 各子系统的拆解。Cordis 的时空可组合性范式参考 [Cordis 论文](https://github.com/cordiverse/paper)。inner/outer harness 概念参考本仓库的 [harness-engineering 系列](../harness-engineering/01-what-is-harness-engineering.md)。
-
-文中的七条工程经验是从 `dsh` 代码和文档中提炼的分析判断，不是官方表述。"可组合性的税""长期价值"等判断基于架构分析。`dsh` 在 developer preview 阶段，所有 API 和行为可能随版本变化。
-
 ## 延伸阅读
 
 - [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)

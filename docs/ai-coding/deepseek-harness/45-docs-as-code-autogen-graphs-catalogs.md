@@ -159,12 +159,6 @@ pnpm run gen-cordis-catalog   # 或其他 gen-* 脚本
 
 对于一个 221 个包、50 多个 service、几十个工具的 monorepo，这个投入是值得的。没有 docs-as-code，文档要么是过时的废话，要么是没人有时间维护的空壳。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `scripts/` 目录的文件列表和各生成标记。脚本的具体名称、行为、manifest 格式以仓库实际版本为准。
-
-文中对 docs-as-code 系统设计逻辑的分析是解读结论。脚本数量（80+）基于目录结构统计，具体脚本名以仓库为准。
-
 ## 延伸阅读
 
 - [scripts/ 目录](https://github.com/deepseek-ai/deepseek-harness/tree/master/scripts)

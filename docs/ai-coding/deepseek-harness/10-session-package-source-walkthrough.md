@@ -227,12 +227,6 @@ announce(session): void           // 发 session/created
 
 `dsh-session` 把会话做成一个普通类，日志是只追加的事件序列。append 走两道关：JSON 校验兼快照（一次遍历、迭代、realm 安全、拒绝奇异值），surface 校验（先验后提交、seq 连续、provenance 覆盖被遮蔽节点、tool/result 重写只改 content）。消息历史由逐节点纯函数 `deriveEventMessage` 投影，故意不穷尽、原样透传，增量视图由 `SurfaceManager` 维护。崩溃时 `interruptedTurnClosers` 扫描日志、给未匹配调用补合成结果（区分副作用）、补 step/end 和 interrupted 的 turn/end。fork 基于同一套投影深拷贝前缀、拒绝结束在打开 turn 的前缀。发布拆成 prepare/enter/announce，把生命周期折进一个有序 effect。这套实现把上一篇的可重建模型，落成了有边界、有校验、能自愈的真实代码。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 仓库源码：`packages/core/session/src/surface.ts`、`packages/core/session/src/json.ts`、`packages/core/session/src/repair.ts`、该包 README 与 `docs/subsystems/session.md`。文中代码片段从上述源码裁剪保留关键控制流，函数名（`deriveEventMessage`、`SurfaceManager`、`foldSurface`、`planSurfaceEvent`/`applySurfacePlan`、`snapshotJsonValue`/`isJsonValue`、`interruptedTurnClosers`）、校验规则（seq 连续、provenance 覆盖、tool/result 只改 content、JSON 拒绝稀疏/循环/奇异/负零/非有限）、崩溃修复两态（`TOOL_OUTCOME_UNKNOWN` / `TOOL_NOT_STARTED`）与 `interrupted` turn/end、SessionStore 的 `prepare`/`enter`/`announce`/`flush`/`fork` 语义，均为源码与文档陈述的可核实事实。
-
-`dsh` 处于 developer preview，类结构、方法签名、事件字段会随重构变。文中代码为可读性做了行级裁剪与变量省略（如 `walkJsonValue` 的任务栈细节、`SurfaceManager._processDelta` 的完整逻辑），`Session.append` 的发布钩子编排、`SessionStore.fork` 的 store 入库实现以仓库 `src/index.ts` 实际源码为准。文中"一次遍历同时校验拷贝防止有状态 getter 做手脚""fork 能干净是因为消息是日志纯投影"属对源码设计意图的分析判断，部分依据源码注释。
-
 ## 延伸阅读
 
 - [session 包 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/session/README.md)：Session 模型与 API 总述

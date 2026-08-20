@@ -123,7 +123,7 @@ English | [中文](foo.zh.md)
 
 ## 绿色门禁的含义和局限
 
-这个系统最重要的诚实声明，原文用了粗体：
+这个系统最重要的限制，原文用了粗体：
 
 > A green gate means the pair was confirmed consistent at these exact contents, not that the confirmation was sound.
 
@@ -134,12 +134,6 @@ English | [中文](foo.zh.md)
 一个重新记录的配对，如果对应版本翻译得很差，门禁会过。但它不应该过 review。这是机械检查和人类判断的分工：门禁抓结构不一致，reviewer 抓语义不一致。
 
 `dsh` 用 `terminology.md` 作为术语的真相来源，`translation-rules.md` 定义翻译规则。常规的对应版本更新由工作中的 agent 一次性直接完成，加载 terminology 后一 pass 翻译。它不调用翻译 skill、不生成 briefing、不跑单独的翻译 review pass、不委托给 subagent。扩展的 `dsh-translate-docs` workflow 保留给显式用户调用。
-
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/i18n/README.md` 和 `lefthook.yml`。配对契约的具体规则、merge driver 机制、lefthook job 配置以仓库实际版本为准。
-
-文中对配对系统设计逻辑的分析是解读结论。"绿色门禁不等于确认合理"直接引自官方文档。
 
 ## 延伸阅读
 

@@ -169,12 +169,6 @@ waterfall 的语义是"洋葱皮中间件"：监听器可以选择调 `next()` �
 
 这条契约之所以硬，是因为它用 `assertNever` 和运行期断言把"写错适配器"这件事变成了编译失败或即时爆炸，而不是线上诡异行为。理解了这条契约，你才理解为什么 `dsh` 敢说"换一个 provider 等于换了整个产品"：因为 provider 是一个挂在接缝上、吐标准 chunk、可干净撤销的注册，而不是焊死在 agent loop 里的 import。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/llm-streaming.md`。`dsh` 处于 developer preview，下列内容会随版本变：`StreamChunk` 变体集合、`LlmFailure` 的 code 词汇表、`GenerateOptions` 字段、适配器不变量的具体措辞、包内文件划分。涉及具体签名和源码行号时，以仓库实际版本为准。
-
-文中"八条不变量"是对契约文档 JSDoc 的归纳概括，编号和措辞是为讲解方便组织的，不是官方编号。"`llm-replay` 从 fixture 提供录制响应"来自配置参考文档与 capability seams 表的描述，其包的源码位置本次未逐行核对，标记待核实。
-
 ## 延伸阅读
 
 - [LLM Streaming 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/llm-streaming.md)：本文主要依据，含全部类型定义与适配器契约原文

@@ -122,12 +122,6 @@ Windows 的 `rmSync(link)` 在 junction 上抛 `ERR_FS_EISDIR`。递归删除可
 
 这个哲学和 `dsh` "一切皆插件"的架构选择是一致的。如果你把每个子系统都做成可替换的插件，你就必须假设每个插件都可能是坏的。防御式模式是这种假设在错误处理层面的落地。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/defensive-patterns.md` 全文和架构文档的 Agent Loop 部分。每条模式的 bug 背景以仓库的 Agent Notes 和 postmortem 记录为准。
-
-文中对模式背后哲学的分析是解读结论。具体的行为描述（正交结果报告、双侧契约归一化、环境变量清洗规则、链接路径处理）直接引自官方文档。
-
 ## 延伸阅读
 
 - [Defensive Patterns 全文](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/defensive-patterns.md)

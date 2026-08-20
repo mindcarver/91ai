@@ -161,12 +161,6 @@ Claude Code 做远程执行要靠 Docker container 或 SSH，这不是 harness �
 
 一个值得注意的趋势：`dsh` 的全插件化设计在学术上最接近 Cordis 论文描述的"时空可组合性"范式，但在产品成熟度上还在 developer preview。Claude Code、Cursor、Codex 在产品成熟度上领先，但在架构可组合性上受限。这不是谁好谁坏，是不同阶段的取舍。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的公开信息。`dsh` 的架构描述基于 `deepseek-ai/deepseek-harness` `master` 分支。Claude Code、Cursor、Codex 的架构描述基于各工具的官方文档和公开技术资料。本仓库的 [harness-engineering 系列](../harness-engineering/01-what-is-harness-engineering.md)提供了 inner/outer harness 概念的学科背景。
-
-文中的架构对比和选型建议是分析判断，不是官方表述。"模型锁定是商业决策""全插件化在产品成熟度上还在 developer preview"等判断基于公开信息和架构分析。各工具的具体功能、价格、支持模型以各自官方文档为准，这些信息随版本变化。
-
 ## 延伸阅读
 
 - [Harness Engineering 是什么](../harness-engineering/01-what-is-harness-engineering.md)

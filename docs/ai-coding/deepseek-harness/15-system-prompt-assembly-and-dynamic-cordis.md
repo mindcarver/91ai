@@ -96,12 +96,6 @@
 
 模型每个 step 看到的系统提示，是 section、context、tools、variable 四种贡献按 order 排序、经 `system-prompt/assemble` waterfall 组装出来的；order 有约定（-100 身份、0 人格、100-199 工具引导），complete 段能接管整个提示。组装的稳定性直接关系 KV cache 复用，所以段落顺序、确定性 SDK 都为"不变就不付代价"设计。typert 给类型化反射，typertGateway 把 Remote 描述符映射到活服务，apiProxy 是浏览器侧的派发面，三者让浏览器能摸到 host 活服务。动态 Cordis 的自指工具集（cordis_inspect/define/run/stop/undefine）让 agent 能在运行时挂载包、注册工具和提示、修改正在跑它自己的那棵插件树，但动态包只活在进程内存、会话作用域、不活过重启，且信任姿态等同 bash 权限。这套 self-modification 之所以不失控，靠的是 Cordis 可逆副作用：注册是带逆操作的 effect，cordis_stop/undefine 能按序撤销，活运行时回到原状。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 官方文档：`docs/subsystems/system-prompt.md`（组装上下文、PromptSection、PromptContext、ToolProviderResult、ctx.systemPrompt API、system-prompt/assemble waterfall）、`docs/capability-seams.md`（ctx.typert、ctx.typertGateway、ctx.apiProxy、ctx.dynamicCordisRunner、ctx.cordisInspect 行）、`packages/extensions/tool-cordis/README.md`（五个自指工具、动态包生命周期、信任姿态）、`packages/core/tools/README.md` 与 app-boot 的 addHarnessSourceSection（order 约定与 harness:source 段）。文中四种贡献类型、order 约定（-100/0/100-199、harness:source -99、code-only 99、SDK 150）、complete 段语义、assemble waterfall 权威性、KV cache prefix-stable 性质、typert/typertGateway/apiProxy 三者职责、五个 cordis_* 工具的语义、动态包"只活进程内存/会话作用域/不活过重启/不改 cordis.yml"、沙箱非安全边界且信任姿态等同 bash、ctx façade 不暴露 effect()，均来自上述官方文档，为可核实事实。
-
-事件签名、工具 schema、具体 order 数值以生成的 Cordis 目录与工具目录为准，`dsh` 处于 developer preview，组装 API、动态 Cordis 工具、slot 面会随版本变。文中"自指安全网是可逆副作用""组装为 KV cache 不变就不付代价设计""typert/apiProxy/cordis_inspect 共享同一份声明投影所以不漂移"属分析判断，把官方机制连成因果解释，不是文档原话表述。动态 Cordis 的 vm 沙箱内部、ackTimeoutMs/vmTimeoutMs 等配置以 `cordis-host-runner` 实际源码为准。
-
 ## 延伸阅读
 
 - [系统提示组装文档（docs/subsystems/system-prompt.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/system-prompt.md)：组装 API 与贡献类型的权威来源

@@ -187,12 +187,6 @@ interface PreparedReferencedMessage {
 
 几个判断值得带走：三个机制各管一层（检索、派生、注入），共享 live-preferred 根基；全文 query 是数据不是可执行语法，防注入；投影框架只订阅一次、领域只算数学；引用快照不受信且有预算上限，保护当前上下文。这套分层让跨会话记忆这个最容易做得很重的话题，在每个具体需求上都有轻量合适的工具。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/session-query.md`、`session-projection.md`、`session-reference.md`。`dsh` 处于 developer preview，下列内容会随版本变：`SessionQueryErrorCode` 词汇表、`SessionProjectionMap` 条目、`SessionReferenceErrorCode`、冷读阶梯的触发点与默认配置、projection 的 `stateVersion` 语义。
-
-文中关于"三者共享 live-preferred 逻辑语料库""reference 注入的快照聚合为一条 additionalContext user 消息""冷读阶梯四步"的描述，是依据三个子系统文档的契约与类型给出的架构归纳；session-projection 的 RFC 标注为 proposed（2026-07-27），表明该子系统可能仍在演进，具体实现与本文归纳若有出入，以仓库源码为准，标记待核实。
-
 ## 延伸阅读
 
 - [Session Query 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session-query.md)：本文主要依据之一，检索、过滤、血缘

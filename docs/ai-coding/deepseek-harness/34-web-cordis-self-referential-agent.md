@@ -135,12 +135,6 @@ host 半边代码在 `node:vm` 沙箱里跑。Node 的全局变量被移除或�
 
 **包代码不能注册自定义销毁器。** ctx facade 不暴露 `effect()`，支持的清理路径只有 `on`/`provide`/`tools.register`。这是一个有意的限制：自定义销毁器会让卸载语义不可控。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `packages/extensions/tool-cordis/README.md`、`packages/extensions/cordis-host-runner/README.md`、`examples/web-cordis/README.md` 及其 `cordis.yml`。工具签名以仓库的 `docs/tool-catalog.md` 为准。
-
-文中对"自指"概念和两阶段设计（define 不运行、run 才有效果）的解读是分析结论。信任立场的描述（"vm 沙箱不是安全边界""等同于 bash 访问"）直接引自官方 README 和 Agent Note。动态包的具体行为以源码为准。
-
 ## 延伸阅读
 
 - [tool-cordis README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/extensions/tool-cordis/README.md)

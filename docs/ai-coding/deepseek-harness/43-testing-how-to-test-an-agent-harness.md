@@ -101,12 +101,6 @@ e2e 测试拥有自己的资源：在测试里创建 harness，在 `afterEach` �
 
 如果 HMR 后旧实例的注册没清理，新实例和旧实例的注册会冲突。这个测试确保不会发生。它覆盖了 Cordis 注册模型的核心承诺。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/testing.md` 全文和 `docs/development.md`。具体的命令名、vitest 配置、门禁组织以仓库 `package.json`、`scripts/run-gates.ts` 和 CI workflow 文件为准。
-
-文中对测试原则的分析是解读结论。具体的分层行为（coverage gate per-file 100%、self-skip 机制、snapshot 归属）直接引自官方文档。
-
 ## 延伸阅读
 
 - [Testing Policy 全文](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/testing.md)

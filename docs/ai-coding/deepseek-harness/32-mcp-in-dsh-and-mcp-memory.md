@@ -165,12 +165,6 @@ dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"
 
 但最大的价值在于通用性。因为桥接插件是通用的，接入一个新的 MCP 服务器只需要写一段配置，不需要改一行 `dsh` 的代码。这就是协议标准化的回报：N 个客户端和 M 个服务器，只需要 N+M 的工作量，而不是 N 乘以 M。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `packages/mcp/mcp-client/README.md`、`src/index.ts`、`src/tools.ts`，以及 `examples/mcp-memory/README.md` 和三个 `.cordis.yml` 配置文件。MCP 协议本身的细节参考 [Model Context Protocol 官方规范](https://modelcontextprotocol.io/specification/2026-07-28)。
-
-文中对桥接机制的描述基于源码和官方文档。文中"记忆系统的检索质量取决于上游""协议标准化的回报是 N+M 而非 N*M"是分析判断，不是官方表述。三个记忆系统的版本号和前置条件以仓库 README 为准，它们是第三方项目，DeepSeek 不做背书或持续支持承诺。
-
 ## 延伸阅读
 
 - [MCP 官方规范](https://modelcontextprotocol.io/specification/2026-07-28)

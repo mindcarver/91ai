@@ -195,12 +195,6 @@ routes:
 
 **credentials 的每次解析有性能代价。** 每次模型请求多一次 resolve 调用。对于大多数场景这是可忽略的，但在极高吞吐场景下值得注意。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `docs/subsystems/settings.md`、`docs/subsystems/credentials.md`、`docs/subsystems/storage.md` 及其引用的源码文件。API 签名以仓库的生成目录（`gen-cordis-catalog`）为准。
-
-文中对三个子系统共同模式的分析是解读结论，不是官方表述。具体的行为描述（分层解析顺序、写入链时序、secret 脱敏机制）直接引自子系统文档和源码。
-
 ## 延伸阅读
 
 - [Settings 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/settings.md)

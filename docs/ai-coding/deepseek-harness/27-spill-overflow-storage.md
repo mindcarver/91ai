@@ -138,12 +138,6 @@ interface SpillRef {
 
 这套设计把"超大工具结果"这个会让上下文瞬间爆炸的问题，用"搬到外面加给把钥匙"解决了。它不损失信息，不依赖模型自己管理，在工具结果即将进上下文的那个窗口干净地拦截。和压缩一起，它们覆盖了上下文体积管理的两种主要场景。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/spill.md`。`dsh` 处于 developer preview，下列内容会随版本变：`SpillStore` 方法、`SpillRef`/`SpillLocator` 形状、本地后端路径布局与权限、`maxInlineBytes` 配置、保留库预览机制。
-
-文中关于"spill 策略挂在 tools/post-execute，在结果进上下文前拦截""本地后端用 `open(path,'wx',0o600)` 独占写防符号链接"的描述，前者来自 spill 文档对消费者（dsh-spill-policy 是 tools/post-execute 策略）的定位，后者来自文档对本地后端写入语义的明确陈述。`maxInlineBytes` 的具体默认值、保留库头/尾预览的精确切分逻辑本次未逐行核对源码，标记待核实。
-
 ## 延伸阅读
 
 - [Spill Storage 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/spill.md)：本文主要依据，含接缝、本地后端、策略消费者

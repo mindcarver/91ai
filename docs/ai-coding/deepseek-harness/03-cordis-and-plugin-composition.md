@@ -70,7 +70,7 @@ Cordis 是把 Koishi 插件系统里那套和聊天机器人无关的、纯框�
 
 名字也值得说一句。Cordis 是拉丁语的"心"。一个叫"心"的框架，做的是给整个产品当承重的心肌：所有插件挂在它上面跳动，它保证每一次收缩（加载）都有一次舒张（卸载）。
 
-Cordis 的代码托管在 [cordiverse](https://github.com/cordiverse/cordis) 组织下。截至 2026-08-14，它仍在活跃开发，官方仓库顶部就声明 "The API is not yet stable and may change without notice"，配套论文也标注 "coming soon"。这是个还在快速演化的基础设施，用它要接受这条前提。
+Cordis 的代码托管在 [cordiverse](https://github.com/cordiverse/cordis) 组织下。官方仓库将 API 标注为尚未稳定，配套论文标注为 "coming soon"。这是个还在快速演化的基础设施，用它要接受这条前提。
 
 DeepSeek Harness 对 Cordis 的态度也很说明问题：它没有把 Cordis 当成一个 npm 依赖，而是把 Cordis 及其基础库（cosmokit、schemastery）整套源码内嵌进自己的 monorepo。它的 vendor 文档原话是：内嵌是为了"让 harness 完全拥有自己的框架层（可审计、可打补丁、固定版本）"。内嵌进来的包全部改名为 `@deepseek-ai` 作用域（`cordis` 变成 `@deepseek-ai/cordis`，版本钉在 4.0.0-rc.7）。
 

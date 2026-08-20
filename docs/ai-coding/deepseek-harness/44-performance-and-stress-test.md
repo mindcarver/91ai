@@ -196,12 +196,6 @@ pnpm exec vitest run --config vitest.web.perf.config.ts apps/web/tests/complex-h
 
 **soak 不是真压测。** 100 轮对话是持续使用，不是并发压力。真正的压测（多用户、高并发请求）不在这个测试范围。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支，主要参考 `vitest.web.perf.config.ts` 和 `apps/web/tests/complex-history.perf.ts`。任务计划里提到的 `vitest.web.stress.config.ts` 在仓库中不存在，stress 场景以 soak test 的形式集成在 perf 测试里。
-
-文中对性能测试哲学的分析（"宿主速度不是正确性契约""基数缩水"）是解读结论，基于测试文件开头的注释和结构断言的设计。具体的常量值（1000 会话、500 轮、2100 行）以源码为准。
-
 ## 延伸阅读
 
 - [Web Performance Test 源码](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/web/tests/complex-history.perf.ts)

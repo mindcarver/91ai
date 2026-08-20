@@ -182,12 +182,6 @@ type FsErrorCode =
 
 这套设计让"换后端"（本地、沙箱、远程）和"换策略"（是否 read-before-edit、怎么记观察）成为两个正交的轴，互不影响。这就是接缝的价值：把一个看似简单的"读写文件"，拆成了能独立演进的能力和策略。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `docs/subsystems/filesystem.md`。`dsh` 处于 developer preview，下列内容会随版本变：`FileSystem` 的方法集合、`FsErrorCode` 词汇表、`FsWriteIntent` 的变体、事件名与签名、provider 包名与覆盖的后端。
-
-文中"`dsh-fs-sandbox` 按 sandboxPolicy 围栏写"的描述来自 filesystem 文档对 `sandboxPolicy` 参数的说明与 `FS_SANDBOX_DENIED` 码的注释；本次未逐行核对 `fs-sandbox` 包的围栏实现代码，标记待核实。"部署会一起加载 tool-fs 与 observation-policy"的表述来自文档"a deployment that loads dsh-tool-fs is expected to also load dsh-fs-observation-policy"，是文档的预期表述，具体 profile 组合以仓库实际版本为准。
-
 ## 延伸阅读
 
 - [Filesystem 官方文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/filesystem.md)：本文主要依据，含全部类型与接缝定义

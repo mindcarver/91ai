@@ -156,12 +156,6 @@ fork 能这么干净，恰恰因为会话是只追加日志加可重建投影：
 
 一个会话是一条只追加的事件日志，是唯一真相源。模型看到的消息历史是从日志投影出来的，从不单独存储，重放就是再投影。"模型可见即可重建"是一条硬规矩：任何到达模型请求的东西都必须能从日志重建，由运行时不变量断言盯住，所以新的模型可见输入必须是一个新的 session 事件。日志里只有三种 surface 事件产生消息，请求头本身也是日志状态。append 在写入点强制 JSON 可序列化，坏事件进不了日志。seed 和 live 的边界用 `session/end-seed` 标记，fork 要求前缀结束在 turn 之外。这套规矩的代价是每个模型可见的东西都要做成事件，回报是 fork/resume/转录/遥测/持久化全部从同一条日志派生，且可被审计、被断言盯住。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` 官方文档：架构文档 Session log 节、`docs/subsystems/session.md`。文中 Session 的 append-only 事件日志模型、SessionEventMap 事件清单、SessionEvent 的判别联合与 `seq = log.length` 连续性、`ignorable` 标记语义、三种 surface 事件（user/message、assistant/message、tool/result）与 surfaceOp/sourceEventSeqs、deriveMessages 投影规则（chunk 跳过、空内容跳过）、request/header 的 initial/resume/change 记账与 request/context 分离、append 的 JSON 序列化源头强制与热路径不阻塞、持久化不丢 chunk、invariant companion、firstLiveSeq/session/end-seed 边界、fork 的 boundary 与"前缀结束在 turn 之外"约束，均来自上述官方文档，为可核实事实。
-
-事件签名、字段细节（如 EpochHeader、SurfaceFoldResult 的字段）以仓库生成的类型与持久化目录为准，`dsh` 处于 developer preview，事件类型、格式版本会随版本变。文中"可重建规矩是区别于把消息存数组的 agent 的核心""fork 之所以干净是因为只追加日志加可重建投影"属分析判断，把官方机制连成因果解释，不是文档原话表述。源码层面的 append、surface 投影、fork 落地实现，以仓库 `packages/core/session/` 实际源码为准。
-
 ## 延伸阅读
 
 - [会话日志子系统文档（docs/subsystems/session.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session.md)：Session 模型与 SessionEventMap 的权威来源

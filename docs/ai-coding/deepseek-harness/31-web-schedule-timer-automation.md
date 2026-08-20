@@ -143,12 +143,6 @@ README 列的限制很清楚，值得逐条记住：
 
 几个判断值得带走：它不是通知系统，是会话内自动化；时间绝对权威、无 session 默认时区；定时器与记录分离让崩溃恢复可靠；提醒复用 inbox follow-up 机制，不造独立消息系统；作为 overlay 体现"一切皆插件、按需引入"。这个例子虽小，却把整个系列的核心主题（插件化、session 日志为真相、复用既有机制、fail loud、显式优于隐式）在一个具体功能上集中展示了一遍。
 
-## 时点与诚实声明
-
-本文基于 2026-08-14 的 `deepseek-ai/deepseek-harness` `master` 分支与 `examples/web-schedule/README.md`。`dsh` 处于 developer preview，下列内容会随版本变：三个工具的参数与返回、`every_seconds` 的最小值、支持的触发方式、`at` 的格式要求、补投与合并规则。
-
-`web-schedule` 是 `examples/` 下的一个 overlay 示例，不是核心子系统，也没有独立的 `docs/subsystems/` 文档页。本文完全基于其 README，该 README 较短且聚焦行为契约。文中对"提醒复用 inbox follow-up 机制"的描述，是把 README 的"queues a normal follow-up turn in that conversation"与子 agent 接缝的 inbox FIFO 机制联系起来的架构推断，schedule overlay 内部是否直接调用 `Agent.followup()`、还是经别的路径排队，本次未核对示例源码，标记待核实。
-
 ## 延伸阅读
 
 - [Session-local Schedule 示例 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/web-schedule/README.md)：本文唯一依据，含全部行为契约
