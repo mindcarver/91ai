@@ -1,4 +1,4 @@
-# Plan Mode 与 Goal：agent 怎么管理目标和计划
+# Plan Mode 与 Goal：dsh 怎么管理目标和计划
 
 > `dsh` 用两个不同重量的机制管理"agent 在干什么"，`ctx.planMode` 是**软引导**（激活时往每个请求塞一段提示，模型可以不听，不强制任何限制），`ctx.goals` 是**持久的事件溯源目标生命周期**（阶段、修订号、轮次预算，靠会话日志 fold 出来）。
 > 两者共享一个根基：状态都记在会话日志里、用纯 fold 恢复，都和硬性强制（沙箱、审批）分开。
@@ -150,5 +150,5 @@ agent 跑着的时候，唯一的追加点是一个 prepend 的 `agent/pre-step`
 - [Persisted same-session goal domain 笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-19-persisted-same-session-goal-domain.md)：goal 持久化与激活决策
 - [Sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/sandbox.md) / [Approval](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/approval.md)：plan mode 明确分开的硬性强制
 
-上一篇：[跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md)
-下一篇：[子 Agent 与多智能体：一个 agent 怎么调度另一个 agent](./30-subagents-multi-agent.md)
+上一篇：[dsh 的跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md)
+下一篇：[子 Agent 与多智能体：dsh 怎么调度另一个 agent](./30-subagents-multi-agent.md)

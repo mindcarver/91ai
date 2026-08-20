@@ -1,4 +1,4 @@
-# Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转
+# Turn 与 Step：dsh 的 agent-loop 怎么流转一次对话
 
 > dsh 用 turn 和 step 两个时间单位组织对话，而驱动这套流转的，是整个 harness 里唯一装着具体循环逻辑的包 dsh-agent-loop，一个三状态机，靠 kick → turn → step 的循环把 inbox 里的输入变成模型请求，每一步的模型历史都从会话日志现算。
 > 这一篇把概念和源码合成一条线：先建立 turn/step 的事件骨架（输入怎么进 inbox、守门人怎么拦、turn 怎么收尾），再落到 `packages/core/agent-loop` 的真实实现，从一条用户消息追到一次工具结果落进日志。文中代码与行为基于 2026-08-14 的仓库 `master` 分支。工具执行管线和会话日志另有专篇，这里只看它们在驱动器里的位置。
@@ -254,5 +254,5 @@ dsh 用 turn 和 step 两个时间单位组织对话：turn 在第一条输入�
 - [工具执行管线文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/tool-execution-pipeline.md)：tool/call 到 tool/result 之间发生的事
 - [会话日志子系统](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session.md)：deriveMessages 与"模型可见即可重建"
 
-上一篇：[启动链源码导读：从 npx dsh web 到插件树挂载](./06-boot-chain-source-walkthrough.md)
-下一篇：[会话日志：为什么"模型可见即可重建"是最硬的规矩](./09-session-log-visible-means-reconstructable.md)
+上一篇：[dsh 启动链源码导读：从 npx 命令到挂载完毕的插件树](./06-boot-chain-source-walkthrough.md)
+下一篇：[会话日志：dsh 为什么坚守"模型可见即可重建"](./09-session-log-visible-means-reconstructable.md)

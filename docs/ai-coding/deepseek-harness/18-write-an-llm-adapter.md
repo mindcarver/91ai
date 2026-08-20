@@ -1,4 +1,4 @@
-# 🛠 写一个 LLM 适配器：接 OpenAI 兼容端点
+# 🛠 给 dsh 写一个 LLM 适配器：接 OpenAI 兼容端点
 
 > 接一个新模型 provider，在 `dsh` 里就是继承 `LlmAdapter`、实现一个 `stream()` 方法、把它注册到 `ctx.llm`，剩下的事（拼装、归一化、重试、日志）harness 全替你兜了。
 > 难点不在写代码，在守契约：七条协议义务，每条都对应一个真实 provider 的坑，守不住就线上出诡异行为。这一篇带你接一个 OpenAI 兼容端点，把契约逐条落到实现里。
@@ -162,5 +162,5 @@ provider 专属的思考模式开关留在适配器的 Config 里，不进 provi
 - [`packages/llm/llm-deepseek`](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/llm/llm-deepseek)：direct HTTP 参考实现，本文布局对齐它
 - [Testing Policy](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/testing.md)：适配器覆盖、真实 provider 检查、发布要求
 
-上一篇：[多模态与 Attachment：agent 怎么"看图"](./17-multimodal-attachments.md)
-下一篇：[沙箱、审批与权限三件套：agent 如何安全地动你的机器](./19-sandbox-approval-permission.md)
+上一篇：[多模态与 Attachment：dsh 怎么让 agent"看图"](./17-multimodal-attachments.md)
+下一篇：[沙箱、审批与权限：dsh 怎么安全地放 agent 上机](./19-sandbox-approval-permission.md)

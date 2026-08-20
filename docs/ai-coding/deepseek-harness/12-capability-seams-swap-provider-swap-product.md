@@ -1,4 +1,4 @@
-# 能力接缝 Capability Seams：换一个 provider 等于换整个产品
+# 能力接缝：dsh 换一个 provider 等于换整个产品
 
 > DeepSeek Harness 把每个能力都做成一个有三个角色（定义、提供者、消费者）的可替换接缝，而文件系统和子进程共享同一个"执行世界"，所以把这两个接缝指向一个远程沙箱，Bash、终端、LSP、子 agent 就全都跟着搬过去了，不用为远程执行单独写一套分支。
 > 这是整个系列最值钱的一个概念。这一篇把"接缝"说准，拆解它怎么靠"共享执行世界"实现"换一个 provider 等于换整个产品"，再逐个过一遍最重要的几个接缝。
@@ -146,5 +146,5 @@
 - [子系统：sandbox 与 sandbox-policy](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/sandbox.md)：进程围栏与一致性
 - [子系统：approval 与 permission-presets](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/approval.md)：fail closed 的权限决策
 
-上一篇：[事件系统：四种派发模式与 waterfall 的短路艺术](./11-event-system-four-dispatch-modes.md)
-下一篇：[工具执行管线：从 tool_call 到结果中间发生什么](./13-tool-execution-pipeline.md)
+上一篇：[事件系统：dsh 的四种派发模式与 waterfall 短路](./11-event-system-four-dispatch-modes.md)
+下一篇：[工具执行管线：dsh 从 tool_call 到结果的七道关卡](./13-tool-execution-pipeline.md)

@@ -1,4 +1,4 @@
-# 工具执行管线：从 tool_call 到结果中间发生什么
+# 工具执行管线：dsh 从 tool_call 到结果的七道关卡
 
 > DeepSeek Harness 的工具调用不是"模型说要调就调"，而是要走完一条分层管线，钩子、权限、沙箱、单调守卫、审批、around 派发、结果归一化、内容终检各占一层，策略挂在机制上、机制不认识任何具体策略。
 > 这一篇拆这条管线：从模型吐出一个 tool-call 块，到一条 tool/result 落进会话日志，中间经过哪些关卡、每道关卡管什么、为什么要把策略和机制分开。tools 包的源码内部是下一篇的事，这里只讲管线的概念和每层的职责。
@@ -149,5 +149,5 @@ DeepSeek Harness 的工具调用是一条分层管线：tool-call 块先进 tool
 - [架构文档：Turn flow 工具部分](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)：管线在 turn 流程里的位置
 - [Cordis Primer：Waterfall 语义](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md)：pre/execute/post-execute 三道 waterfall 的 next() 纪律
 
-上一篇：[能力接缝 Capability Seams：换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md)
-下一篇：[tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md)
+上一篇：[能力接缝：dsh 换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md)
+下一篇：[dsh tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md)

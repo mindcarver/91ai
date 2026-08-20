@@ -1,4 +1,4 @@
-# web-cordis：一个会改自己插件树的 agent
+# web-cordis：dsh 里会改自己插件树的 agent
 
 > `web-cordis` 让 agent 在运行时往自己的 Cordis 进程里挂载模型写的插件，inspect 当前活着的插件树，跑起来，停掉，卸掉，全程不碰磁盘、不重启进程、不改任何配置文件。
 > 这一篇拆 `@deepseek-ai/dsh-tool-cordis` 的五个自指工具和它背后的 `@deepseek-ai/dsh-cordis-host-runner` 运行器，看一个 agent 怎么变成自己架构的编辑者。
@@ -131,5 +131,5 @@ host 半边代码在 `node:vm` 沙箱里跑。Node 的全局变量被移除或�
 - [自指工具集 Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)
 - [工具目录（generated）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/tool-catalog.md)
 
-上一篇：[ACP 协议与 acp-agent：让 agent 之间能通话的标准](./33-acp-protocol-acp-agent.md)
-下一篇：[配置、凭证与存储三件套：agent harness 的有状态底座](./35-settings-credentials-storage.md)
+上一篇：[ACP 协议与 acp-agent：dsh 的 agent 通话标准](./33-acp-protocol-acp-agent.md)
+下一篇：[配置、凭证与存储：dsh 的有状态底座三件套](./35-settings-credentials-storage.md)

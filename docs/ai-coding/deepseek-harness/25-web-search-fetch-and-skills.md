@@ -1,4 +1,4 @@
-# Web 搜索抓取与 Skills 技能系统
+# dsh 的 Web 搜索抓取与 Skills 技能系统
 
 > `ctx.web` 和 `ctx.skills` 是两个共享同一设计哲学的能力接缝，都把多个 provider 合并成一张模型面向的稳定表面，换 provider 不改模型怎么问，模型面向的名字、schema、展示全集中在单个 consumer 里。
 > `ctx.web` 把搜索和抓取合成一个能力、按调用时选 provider；`ctx.skills` 把多来源技能按层合并、按需加载正文，连模型可见的技能目录都是动态注入的会话历史。
@@ -177,5 +177,5 @@ provider 注册是同步的（在 `apply()` 里），远程初始化和发现放
 - [Capability Seams](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/capability-seams.md)：`ctx.web`、`ctx.skills` 行
 - [Scoped Agent Registration](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/12-scoped-agent-registration.md)：skills 分层注册表的 scope 基础
 
-上一篇：[Jobs 与 Workflow：后台任务与工作流编排](./24-jobs-and-workflow-ralph.md)
-下一篇：[上下文预算：Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md)
+上一篇：[dsh 的 Jobs 与 Workflow：后台任务和编排脚本](./24-jobs-and-workflow-ralph.md)
+下一篇：[上下文预算：dsh 的 Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md)

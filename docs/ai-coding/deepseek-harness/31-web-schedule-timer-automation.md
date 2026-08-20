@@ -1,4 +1,4 @@
-# web-schedule：定时、提醒与 session 内自动化
+# web-schedule：dsh 会话内的定时、提醒与自动化
 
 > `web-schedule` 不是一个通知系统，它是一层 session 内的自动化 overlay，"提醒"本质是一个被推迟的 follow-up turn，记在会话日志里，等根 agent 完全空闲时在那个对话里排队一条普通消息，**不发浏览器通知、不发系统通知、不发邮件短信**。
 > 时间上走绝对权威：没有 session 默认时区，`at` 必须带明确时区或 `Z`，进程关了定时器就停、但记录还在，重开会话补投过期的。
@@ -146,5 +146,5 @@ README 列的限制很清楚，值得逐条记住：
 - [Profiles and Bundles](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/13-profiles-and-bundles.md)：`--patch` overlay 机制
 - [Session Log and Events](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session.md)：提醒记录的归属
 
-上一篇：[子 Agent 与多智能体：一个 agent 怎么调度另一个 agent](./30-subagents-multi-agent.md)
+上一篇：[子 Agent 与多智能体：dsh 怎么调度另一个 agent](./30-subagents-multi-agent.md)
 下一篇：[MCP 协议在 dsh 中的位置：一个通用客户端，一份记忆服务器接入手册](./32-mcp-in-dsh-and-mcp-memory.md)

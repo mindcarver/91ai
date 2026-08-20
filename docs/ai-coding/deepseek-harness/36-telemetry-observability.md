@@ -1,4 +1,4 @@
-# Telemetry 与可观测性：给 agent 接上 OTel 监控
+# Telemetry 可观测性：dsh 怎么接 OTel 监控
 
 > `dsh` 的 telemetry 子系统有一条硬边界叫"止于 emit()"，harness 负责捕获和投影会话事件，批处理、重试、排队、丢包策略全归上报 SDK 管，两者泾渭分明。
 > 这一篇拆 `ctx.sessionTelemetry` 接缝（`dsh-session-telemetry`）和它的 OpenTelemetry provider（`dsh-session-telemetry-otel`），看一个 agent harness 怎么把内部事件流变成外部可观测的监控数据。
@@ -145,5 +145,5 @@ backend 不实现 `flush()`。批处理器拥有常规刷新。shutdown 时 OTel
 - [Telemetry Revival Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.md)
 - [OpenTelemetry 官方文档](https://opentelemetry.io/docs/)
 
-上一篇：[配置、凭证与存储三件套：agent harness 的有状态底座](./35-settings-credentials-storage.md)
-下一篇：[配置实战：用 patch 改行为，用 preset 做可分发的组合](./37-config-practice-patch-and-preset.md)
+上一篇：[配置、凭证与存储：dsh 的有状态底座三件套](./35-settings-credentials-storage.md)
+下一篇：[配置实战：dsh 用 patch 改行为，用 preset 做分发组合](./37-config-practice-patch-and-preset.md)

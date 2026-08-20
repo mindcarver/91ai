@@ -1,4 +1,4 @@
-# Jobs 与 Workflow：后台任务与工作流编排
+# dsh 的 Jobs 与 Workflow：后台任务和编排脚本
 
 > `dsh` 把"长跑的活"分成两个不同层次，`ctx.jobs` 是通用的后台任务注册表（管身份、归属、生命周期，bash 和子 agent 都注册在这里），`ctx.workflowEngine` 是建在上面的编排脚本引擎（模型写一段脚本，用编程逻辑扇出多个子 agent）。
 > 两者共享一个纪律：失败永远走结果字段而非异常，活的生命周期边界比自身更底层，归属授权靠 owner 不靠 id 保密。
@@ -170,5 +170,5 @@ workflow 脚本以 `return <json-value>` 结束，返回值是宿主领域的纯
 - [Dynamic workflows 笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-05-dynamic-workflows.md)：workflow 的提案与理由
 - [Capability Seams](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/capability-seams.md)：`ctx.jobs`、`ctx.workflowEngine` 行
 
-上一篇：[Code Runtime 与 Code Mode：模型写代码并执行](./23-code-runtime-and-code-mode.md)
-下一篇：[Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md)
+上一篇：[Code Runtime 与 Code Mode：dsh 让模型写代码并执行](./23-code-runtime-and-code-mode.md)
+下一篇：[dsh 的 Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md)

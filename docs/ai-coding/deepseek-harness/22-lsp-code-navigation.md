@@ -1,4 +1,4 @@
-# LSP 接缝：让 agent 真正"懂"代码导航
+# LSP 接缝：dsh 怎么让 agent 真正"懂"代码
 
 > `dsh` 把 LSP 做成一个只暴露四个归一化操作、且**没有任何协议逃生舱**的能力接缝，模型永远只问"跳定义、查引用、跳实现、hover"这四件事，原始 JSON-RPC、文档同步、进程控制全部藏在 provider 后面，换语言服务器不影响模型怎么问。
 > 这是个很硬的设计取舍：宁可让 agent 只能做这四件事，也不让它直接对着 LSP 协议乱发，换来的是模型工具的跨 provider 稳定。
@@ -122,5 +122,5 @@ subprocess 接缝提到 LSP 用它的原始协议管道（`stdout: 'pipe'`）。
 - [Subprocess](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/subprocess.md)：LSP 用它的原始协议管道
 - [`packages/lsp/lsp/src/types.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/lsp/lsp/src/types.ts)：接缝类型源码
 
-上一篇：[Shell / Subprocess / Terminal：命令执行的三层抽象](./21-shell-subprocess-terminal.md)
-下一篇：[Code Runtime 与 Code Mode：模型写代码并执行](./23-code-runtime-and-code-mode.md)
+上一篇：[dsh 命令执行三层：Subprocess / Shell / Terminal](./21-shell-subprocess-terminal.md)
+下一篇：[Code Runtime 与 Code Mode：dsh 让模型写代码并执行](./23-code-runtime-and-code-mode.md)

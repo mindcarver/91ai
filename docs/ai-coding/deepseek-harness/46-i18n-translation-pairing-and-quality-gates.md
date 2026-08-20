@@ -1,4 +1,4 @@
-# i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂
+# i18n 翻译配对与质量门禁：dsh 双语文档怎么不腐烂
 
 > `dsh` 用一个三文件配对机制（`foo.md` + `foo.zh.md` + `foo.i18n.yaml`）和 blob hash 一致性记录，让中英双语文档无法悄悄分叉：改了一边没改另一边，CI 门禁就挂。
 > 这一篇拆配对契约、一致性记录、结构镜像规则、verify-translation-pairing 门禁、Git merge driver，以及 lefthook hooks 怎么在提交前拦住分叉。
@@ -126,5 +126,5 @@
 - [lefthook.yml](https://github.com/deepseek-ai/deepseek-harness/blob/master/lefthook.yml)
 - [Automatic Pairing Merges Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.md)
 
-上一篇：[文档即代码：用脚本自动生成图、目录和校验](./45-docs-as-code-autogen-graphs-catalogs.md)
+上一篇：[文档即代码：dsh 用脚本生成图、目录和校验门禁](./45-docs-as-code-autogen-graphs-catalogs.md)
 下一篇：[Cordis 生态溯源：从 Koishi 到 DeepSeek Harness 的插件框架谱系](./47-cordis-lineage-koishi-plugin-framework-genealogy.md)

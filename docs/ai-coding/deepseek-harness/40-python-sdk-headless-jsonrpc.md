@@ -129,5 +129,5 @@ runtime 继承正常的 `dsh` 环境变量：
 - [headless-agent 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/headless-agent/README.md)
 - [SDK Runtime 参考](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/README.md)
 
-上一篇：[写一个 Conversation Node：在 Web 客户端做自定义渲染](./39-write-a-conversation-node.md)
-下一篇：[Web 客户端、Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md)
+上一篇：[给 dsh 写一个 Conversation Node：Web 自定义渲染](./39-write-a-conversation-node.md)
+下一篇：[dsh Web 客户端：Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md)

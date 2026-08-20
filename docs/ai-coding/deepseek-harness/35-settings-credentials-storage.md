@@ -1,4 +1,4 @@
-# 配置、凭证与存储三件套：agent harness 的有状态底座
+# 配置、凭证与存储：dsh 的有状态底座三件套
 
 > `dsh` 把用户配置、凭证、存储做成三个独立但同构的接缝，共同的原则是"引用和值分离、机制和策略分离、改了不用重启"。
 > 这一篇拆 `ctx.settings`（分层配置解析）、`ctx.credentials`（每次解析的凭证引用）、`ctx.storage` 加 `ctx.storageDomain`（hub 不做 IO 的键值存储），看一个 agent harness 怎么管理会话日志之外的有状态数据。
@@ -168,5 +168,5 @@ schema 能做单字段验证（类型、范围、枚举），但做不了跨字�
 - [能力接缝设计记录](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)
 - [Domain KV 存储 Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md)
 
-上一篇：[web-cordis：一个会改自己插件树的 agent](./34-web-cordis-self-referential-agent.md)
-下一篇：[Telemetry 与可观测性：给 agent 接上 OTel 监控](./36-telemetry-observability.md)
+上一篇：[web-cordis：dsh 里会改自己插件树的 agent](./34-web-cordis-self-referential-agent.md)
+下一篇：[Telemetry 可观测性：dsh 怎么接 OTel 监控](./36-telemetry-observability.md)

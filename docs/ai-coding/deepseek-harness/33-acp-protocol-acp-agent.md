@@ -1,4 +1,4 @@
-# ACP 协议与 acp-agent：让 agent 之间能通话的标准
+# ACP 协议与 acp-agent：dsh 的 agent 通话标准
 
 > MCP 解决的是 agent 怎么接外部工具，ACP 解决的是 agent 怎么被另一个程序（或另一个 agent）驱动；`dsh` 同时是 ACP 的服务端和客户端，用同一条 JSON-RPC 线让 agent 变成可编程的自动化单元。
 > 这一篇拆 `@deepseek-ai/dsh-acp` 这个自动化传输适配器，以及 `examples/acp-agent` 示例如何把一个可运行的 ACP server 组合起来。
@@ -134,4 +134,4 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 - [ACP 协议 GitHub 仓库](https://github.com/agentclientprotocol/agent-client-protocol)
 
 上一篇：[MCP 协议在 dsh 中的位置：一个通用客户端，一份记忆服务器接入手册](./32-mcp-in-dsh-and-mcp-memory.md)
-下一篇：[web-cordis：一个会改自己插件树的 agent](./34-web-cordis-self-referential-agent.md)
+下一篇：[web-cordis：dsh 里会改自己插件树的 agent](./34-web-cordis-self-referential-agent.md)

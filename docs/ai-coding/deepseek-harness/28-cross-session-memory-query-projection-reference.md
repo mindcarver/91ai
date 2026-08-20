@@ -1,4 +1,4 @@
-# 跨会话记忆：session-query / projection / reference
+# dsh 的跨会话记忆：session-query / projection / reference
 
 > `dsh` 用三个不同层次的机制让 agent 记住别的会话，`ctx.sessionQuery` 是跨会话的全文检索与血缘追踪，`ctx.sessionProjections` 是框架驱动、领域计算的状态投影 fold，`ctx.sessionReferenceResolver` 是把另一个会话的快照注入当前消息。
 > 三者共享一个根基：都在"live-preferred 逻辑语料库"上读，活的会话优先于持久化的，但都不把整个日志一次性塞进内存。
@@ -169,5 +169,5 @@ host 适配器用这些类型，而不是把它们 UI 里的 mention 语法塞�
 - [Session projection RFC](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.md)：投影设计提案
 - [Session Log and Events](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session.md)：三者共同的基础
 
-上一篇：[上下文预算：Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md)
-下一篇：[Plan Mode 与 Goal：agent 怎么管理目标和计划](./29-plan-mode-and-goal.md)
+上一篇：[上下文预算：dsh 的 Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md)
+下一篇：[Plan Mode 与 Goal：dsh 怎么管理目标和计划](./29-plan-mode-and-goal.md)

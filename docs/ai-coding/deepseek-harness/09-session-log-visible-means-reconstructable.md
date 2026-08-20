@@ -1,4 +1,4 @@
-# 会话日志：为什么"模型可见即可重建"是最硬的规矩
+# 会话日志：dsh 为什么坚守"模型可见即可重建"
 
 > DeepSeek Harness 的一个会话是一条只追加的事件日志，模型看到的消息历史永远是从这条日志投影出来的、从不单独存储，而"任何到达模型请求的东西都必须能从日志重建"是一条有运行时断言盯着的硬规矩。
 > 这一篇先拆会话日志的心智模型：日志里有什么、消息历史怎么从它投影出来、为什么请求本身也是日志状态、那条"可重建"的规矩怎么被强制、fork 怎么在它上面成立；然后落到 `packages/core/session` 的源码，看清一次 append 怎么进日志、消息怎么被投影、崩溃后日志怎么被补齐。
@@ -301,5 +301,5 @@ fork 能这么干净，恰恰因为会话是只追加日志加可重建投影：
 - [压缩子系统（docs/subsystems/compaction.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/compaction.md)：surfaceOp replace 的主要使用者
 - [不变量子系统（docs/subsystems/invariants.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/invariants.md)：盯住可重建规矩的断言体系
 
-上一篇：[Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md)
-下一篇：[事件系统：四种派发模式与 waterfall 的短路艺术](./11-event-system-four-dispatch-modes.md)
+上一篇：[Turn 与 Step：dsh 的 agent-loop 怎么流转一次对话](./07-turn-and-step-agent-loop.md)
+下一篇：[事件系统：dsh 的四种派发模式与 waterfall 短路](./11-event-system-four-dispatch-modes.md)

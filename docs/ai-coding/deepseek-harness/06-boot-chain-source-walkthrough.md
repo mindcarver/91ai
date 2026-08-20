@@ -1,4 +1,4 @@
-# 启动链源码导读：从 npx dsh web 到插件树挂载
+# dsh 启动链源码导读：从 npx 命令到挂载完毕的插件树
 
 > `dsh web` 这条命令，从一个 Node bin 走到一棵挂载完毕的插件树，中间只有三层代码，一层负责分发，一层负责把 profile 拼成 patch 栈，一层负责建 context、挂 include、等树稳定。
 > 这一篇是源码导读，沿着 `npx dsh web` 的真实调用链往下读，定位到具体文件和函数。组合的规则（profile、bundle、patch 层顺序）是上一篇讲过的，这里只看这些规则在代码里是怎么被执行的。
@@ -160,4 +160,4 @@ bin.ts: parseDshArgs → switch 'profile'
 - [架构文档：Profiles and bundles](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)：组合规则的总述
 
 上一篇：[从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md)
-下一篇：[Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md)
+下一篇：[Turn 与 Step：dsh 的 agent-loop 怎么流转一次对话](./07-turn-and-step-agent-loop.md)

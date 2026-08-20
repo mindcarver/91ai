@@ -1,4 +1,4 @@
-# Web 客户端、Chat Nodes 与多 agent 协议
+# dsh Web 客户端：Chat Nodes 与多 agent 协议
 
 > `dsh` 的 Web 客户端是 Host（Node.js）和 Client（浏览器）两半插件图，中间用一条 wire 协议（`window.__DSH_BOOT__`）和一个 HTTP carrier 连起来，两半各自有完整的插件生命周期，不是"后端渲染前端"的单体。
 > 这一篇拆 Client Modules 怎么扫描和组装浏览器插件、Web Server 怎么做 HTTP carrier、HMR 怎么热更新、以及 Host-Client 之间的 RPC 协议。
@@ -130,4 +130,4 @@ ACP server（33 篇拆过）是另一种多 agent 协议入口。它让外部程
 - [API Remotes README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/api/remotes/README.md)
 
 上一篇：[Python SDK、Headless 与 JSON-RPC：把 dsh 编进流水线](./40-python-sdk-headless-jsonrpc.md)
-下一篇：[错误处理与容错哲学：一个 agent harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md)
+下一篇：[错误处理与容错哲学：dsh 这个 harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md)

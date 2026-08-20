@@ -1,4 +1,4 @@
-# 系统提示组装与动态 Cordis
+# 系统提示组装与动态 Cordis：dsh 让 agent 改自己的插件树
 
 > 模型每个 step 看到的系统提示，是若干段按 order 排序的贡献（section、context、tools、variable）经一道 waterfall 组装出来的；而动态 Cordis 让 agent 能在运行时挂载一个会注册工具、提示、监听器的包，修改正在跑它自己的那棵插件树，且这一切因为注册是可逆副作用而能干净撤销。
 > 这一篇把两件事缝在一起：系统提示是怎么拼出来的，以及 agent 怎么通过 typert/apiProxy 和动态 Cordis 去观察甚至修改自己运行的那个 harness。
@@ -105,5 +105,5 @@
 - [能力接缝图（ctx.typert / typertGateway / apiProxy / dynamicCordisRunner 行）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/capability-seams.md)：这几个 core 服务的职责
 - [自指 Cordis 工具集设计 Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)：沙箱语义与设计决策
 
-上一篇：[tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md)
-下一篇：[🔍 LLM 适配器抽象与 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md)
+上一篇：[dsh tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md)
+下一篇：[🔍 LLM 适配器：dsh 的 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md)

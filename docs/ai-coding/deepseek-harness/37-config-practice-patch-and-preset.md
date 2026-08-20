@@ -1,4 +1,4 @@
-# 配置实战：用 patch 改行为，用 preset 做可分发的组合
+# 配置实战：dsh 用 patch 改行为，用 preset 做分发组合
 
 > `dsh` 的配置改法是"按 id 替换整行，不做深度合并"，这意味着改一个子系统的行为只需要在 patch 层写一行同 id 的配置覆盖它，不用 fork 源码。
 > 这一篇拆三件事：插件 Config 怎么定义、patch 怎么按 id 替换、preset 怎么把一组插件打包成分发单元。
@@ -115,5 +115,5 @@ Quick Start 里提到了几个内置 preset：有减少工具面的 preset，有
 - [Configuration Reference](https://zread.ai/deepseek-ai/deepseek-harness/21-configuration-reference)
 - [Architecture Overview](https://zread.ai/deepseek-ai/deepseek-harness/7-architecture-overview)
 
-上一篇：[Telemetry 与可观测性：给 agent 接上 OTel 监控](./36-telemetry-observability.md)
-下一篇：[排查与调试实战：一个全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md)
+上一篇：[Telemetry 可观测性：dsh 怎么接 OTel 监控](./36-telemetry-observability.md)
+下一篇：[排查与调试：dsh 这个全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md)

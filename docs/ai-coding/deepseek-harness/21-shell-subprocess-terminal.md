@@ -1,4 +1,4 @@
-# Shell / Subprocess / Terminal：命令执行的三层抽象
+# dsh 命令执行三层：Subprocess / Shell / Terminal
 
 > `dsh` 把"执行命令"做成三层叠加的抽象，`ctx.subprocess` 是不带语义的底层坐标（只给原始进程事实），`ctx.shell` 在上面加出 bash 执行语义（超时、中止分类、沙箱、批输出），`ctx.terminals` 再往上加出持久交互式 PTY（就绪推断、滚动缓冲、独占发送、跨重载存活）。
 > 三层各有自己的接缝和 provider，选错层就会要么累要么漏：跑一次性命令用 shell，跑协议后端用 subprocess，跑需要你来我回交互的会话用 terminal。
@@ -166,5 +166,5 @@ spawn 立即返回一个活的句柄 `SubprocessHandle`。collect 模式的读�
 - [Persistent PTY Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-16-persistent-pty-sessions.md)：持久 PTY 的设计理由
 - [Timeout deadline library Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md)：超时与中止的首因分类
 
-上一篇：[Filesystem 接缝：fs-local / fs-sandbox / 观察策略](./20-filesystem-seam.md)
-下一篇：[LSP 接缝：让 agent 真正"懂"代码导航](./22-lsp-code-navigation.md)
+上一篇：[dsh 的 Filesystem 接缝：读写编辑与观察策略](./20-filesystem-seam.md)
+下一篇：[LSP 接缝：dsh 怎么让 agent 真正"懂"代码](./22-lsp-code-navigation.md)

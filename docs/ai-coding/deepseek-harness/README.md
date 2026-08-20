@@ -55,84 +55,84 @@
 | # | 文章 | 重点 |
 |---|------|------|
 | 03 | [从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md) | 论文两轴、五大范式（第五条是灵魂）、profile/bundle 拼装、`--dump-config` |
-| 06 | [🔍 启动链源码导读：从 `npx dsh web` 到插件树挂载](./06-boot-chain-source-walkthrough.md) | app-boot / loader / cordis.yml 加载全链路（#03 的实现） |
+| 06 | [🔍 dsh 启动链源码导读：从 npx 命令到挂载完毕的插件树](./06-boot-chain-source-walkthrough.md) | app-boot / loader / cordis.yml 加载全链路（#03 的实现） |
 | 47 | [Cordis 生态溯源：Koishi 与插件框架谱系](./47-cordis-lineage-koishi-plugin-framework-genealogy.md) | Cordis 从哪来、为什么 vendor、与同类插件框架的对比 |
 
 ### 第 3 章：一次对话如何流转：Turn、Step、Session Log 与事件系统（3 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 07 | [Turn 与 Step：一次对话在 agent-loop 驱动器里的完整流转](./07-turn-and-step-agent-loop.md) | step/turn 定义、事件骨架、inbox/pre-step 守门人、三态驱动器源码：kick→turn→step、deriveMessages、工具调度 |
-| 09 | [会话日志：为什么"模型可见即可重建"是最硬的规矩（含 session 包源码导读）](./09-session-log-visible-means-reconstructable.md) | deriveMessages、durable/live 事件、不变量断言、fork/resume；append 两道关、SurfaceManager、崩溃修复源码 |
-| 11 | [事件系统：四种派发模式与 waterfall 的短路艺术](./11-event-system-four-dispatch-modes.md) | emit/waterfall/parallel/serial、around 中间件、策略短路 |
+| 07 | [Turn 与 Step：dsh 的 agent-loop 怎么流转一次对话](./07-turn-and-step-agent-loop.md) | step/turn 定义、事件骨架、inbox/pre-step 守门人、三态驱动器源码：kick→turn→step、deriveMessages、工具调度 |
+| 09 | [会话日志：dsh 为什么坚守"模型可见即可重建"（含 session 包源码导读）](./09-session-log-visible-means-reconstructable.md) | deriveMessages、durable/live 事件、不变量断言、fork/resume；append 两道关、SurfaceManager、崩溃修复源码 |
+| 11 | [事件系统：dsh 的四种派发模式与 waterfall 短路](./11-event-system-four-dispatch-modes.md) | emit/waterfall/parallel/serial、around 中间件、策略短路 |
 
 ### 第 4 章：能力接缝：模型如何使用可替换的工具和上下文（4 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 12 | [能力接缝 Capability Seams：换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md) | 三角色模型、执行世界共享、逐 seam 拆解 ★ |
-| 13 | [工具执行管线：从 tool_call 到结果中间发生什么](./13-tool-execution-pipeline.md) | 七层关卡、单调守卫、approval、Code Mode |
-| 14 | [🔍 tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md) | tools 包内部：注册、守卫、around dispatch、finalizeContent（#13 的实现） |
-| 15 | [系统提示组装与动态 Cordis](./15-system-prompt-assembly-and-dynamic-cordis.md) | prompt section 组装、typert/apiProxy、自指插件树修改 |
+| 12 | [能力接缝：dsh 换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md) | 三角色模型、执行世界共享、逐 seam 拆解 ★ |
+| 13 | [工具执行管线：dsh 从 tool_call 到结果的七道关卡](./13-tool-execution-pipeline.md) | 七层关卡、单调守卫、approval、Code Mode |
+| 14 | [🔍 dsh tools 注册表与守卫管线源码导读](./14-tools-registry-guards-source-walkthrough.md) | tools 包内部：注册、守卫、around dispatch、finalizeContent（#13 的实现） |
+| 15 | [系统提示组装与动态 Cordis：dsh 让 agent 改自己的插件树](./15-system-prompt-assembly-and-dynamic-cordis.md) | prompt section 组装、typert/apiProxy、自指插件树修改 |
 
 ### 第 5 章：模型适配：Stream 契约、多模态与 OpenAI 兼容接入（3 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 16 | [🔍 LLM 适配器抽象与 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md) | stream/chunk/finish 契约、normalize、replay adapter |
-| 17 | [多模态与 Attachment：agent 怎么"看图"](./17-multimodal-attachments.md) | ctx.attachments、provider-native content 解析 |
-| 18 | [🛠 写一个 LLM 适配器：接 OpenAI 兼容模型](./18-write-an-llm-adapter.md) | adding-an-llm-adapter 实操 |
+| 16 | [🔍 LLM 适配器：dsh 的 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md) | stream/chunk/finish 契约、normalize、replay adapter |
+| 17 | [多模态与 Attachment：dsh 怎么让 agent"看图"](./17-multimodal-attachments.md) | ctx.attachments、provider-native content 解析 |
+| 18 | [🛠 给 dsh 写一个 LLM 适配器：接 OpenAI 兼容端点](./18-write-an-llm-adapter.md) | adding-an-llm-adapter 实操 |
 
 ### 第 6 章：执行世界：agent 如何安全地读写、运行、导航和联网（7 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 19 | [沙箱、审批与权限三件套：agent 如何安全地动你的机器](./19-sandbox-approval-permission.md) | sandboxPolicy 单一来源、approval 失败关闭、permission presets |
-| 20 | [Filesystem 接缝：fs-local / fs-sandbox / 观察策略](./20-filesystem-seam.md) | 读写编辑走 ctx.fs、按共享 sandbox mode 围栏、read-before-edit |
-| 21 | [Shell / Subprocess / Terminal：命令执行的三层抽象](./21-shell-subprocess-terminal.md) | 底层坐标 / bash 执行器 / 持久 PTY 的关系与取舍 |
-| 22 | [LSP 接缝：让 agent 真正"懂"代码导航](./22-lsp-code-navigation.md) | 四个归一化操作、无协议逃生舱、lsp-local 翻译 |
-| 23 | [Code Runtime 与 Code Mode：模型写代码并执行](./23-code-runtime-and-code-mode.md) | ctx.codeRuntime + worker、run_code 传输、子调用走工具管线 |
-| 24 | [Jobs 与 Workflow：后台任务、Ralph 与工作流编排](./24-jobs-and-workflow-ralph.md) | ctx.jobs 注册表、workflow engine、Ralph 结构化输出 |
-| 25 | [Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md) | ctx.web 统一多 provider、ctx.skills 按需加载技能体 |
+| 19 | [沙箱、审批与权限：dsh 怎么安全地放 agent 上机](./19-sandbox-approval-permission.md) | sandboxPolicy 单一来源、approval 失败关闭、permission presets |
+| 20 | [dsh 的 Filesystem 接缝：读写编辑与观察策略](./20-filesystem-seam.md) | 读写编辑走 ctx.fs、按共享 sandbox mode 围栏、read-before-edit |
+| 21 | [dsh 命令执行三层：Subprocess / Shell / Terminal](./21-shell-subprocess-terminal.md) | 底层坐标 / bash 执行器 / 持久 PTY 的关系与取舍 |
+| 22 | [LSP 接缝：dsh 怎么让 agent 真正"懂"代码](./22-lsp-code-navigation.md) | 四个归一化操作、无协议逃生舱、lsp-local 翻译 |
+| 23 | [Code Runtime 与 Code Mode：dsh 让模型写代码并执行](./23-code-runtime-and-code-mode.md) | ctx.codeRuntime + worker、run_code 传输、子调用走工具管线 |
+| 24 | [dsh 的 Jobs 与 Workflow：后台任务和编排脚本](./24-jobs-and-workflow-ralph.md) | ctx.jobs 注册表、workflow engine、Ralph 结构化输出 |
+| 25 | [dsh 的 Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md) | ctx.web 统一多 provider、ctx.skills 按需加载技能体 |
 
 ### 第 7 章：从短对话到长期 Agent：上下文、记忆、计划与多智能体（5 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 26 | [上下文预算：Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md) | 无 compact 工具、事件触发、先修剪后摘要、ctx.spillStore 定位符与检索提示 |
-| 28 | [跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md) | 全文检索、状态驱动投影 fold、冷读阶梯缓存 |
-| 29 | [Plan Mode 与 Goal：agent 怎么管理目标和计划](./29-plan-mode-and-goal.md) | turn 边界 flush、/plan 命令、目标态 fold |
-| 30 | [子 Agent 与多智能体：一个 agent 怎么调度另一个 agent](./30-subagents-multi-agent.md) | 六种 subagent provider、一次式与可继续委派 |
-| 31 | [web-schedule：定时、提醒与 session 内自动化](./31-web-schedule-timer-automation.md) | 持久 session-local 提醒、绝对时间权威、冷热恢复 |
+| 26 | [上下文预算：dsh 的 Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md) | 无 compact 工具、事件触发、先修剪后摘要、ctx.spillStore 定位符与检索提示 |
+| 28 | [dsh 的跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md) | 全文检索、状态驱动投影 fold、冷读阶梯缓存 |
+| 29 | [Plan Mode 与 Goal：dsh 怎么管理目标和计划](./29-plan-mode-and-goal.md) | turn 边界 flush、/plan 命令、目标态 fold |
+| 30 | [子 Agent 与多智能体：dsh 怎么调度另一个 agent](./30-subagents-multi-agent.md) | 六种 subagent provider、一次式与可继续委派 |
+| 31 | [web-schedule：dsh 会话内的定时、提醒与自动化](./31-web-schedule-timer-automation.md) | 持久 session-local 提醒、绝对时间权威、冷热恢复 |
 
 ### 第 8 章：协议与客户端：MCP、ACP、Headless、Web Client 与自指 Agent（6 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
 | 32 | [MCP 协议在 dsh 中的位置 + mcp-memory 拆解](./32-mcp-in-dsh-and-mcp-memory.md) | dsh 怎么消费 MCP server、记忆服务器接入 |
-| 33 | [ACP 协议与 acp-agent：agent 间的"通话标准"](./33-acp-protocol-acp-agent.md) | Agent Client Protocol、会话/权限/取消支持 |
-| 34 | [web-cordis：会自己改插件树的自指 agent](./34-web-cordis-self-referential-agent.md) | 自指 demo、运行时修改 Cordis 树 |
-| 39 | [🛠 写一个 Conversation Node（Web 自定义渲染）](./39-write-a-conversation-node.md) | ConversationNodeDefinition + keyed renderer |
+| 33 | [ACP 协议与 acp-agent：dsh 的 agent 通话标准](./33-acp-protocol-acp-agent.md) | Agent Client Protocol、会话/权限/取消支持 |
+| 34 | [web-cordis：dsh 里会改自己插件树的 agent](./34-web-cordis-self-referential-agent.md) | 自指 demo、运行时修改 Cordis 树 |
+| 39 | [🛠 给 dsh 写一个 Conversation Node：Web 自定义渲染](./39-write-a-conversation-node.md) | ConversationNodeDefinition + keyed renderer |
 | 40 | [Python SDK、Headless 与 JSON-RPC：把 dsh 编进流水线](./40-python-sdk-headless-jsonrpc.md) | sdk/sdk-runtime、headless 一次性、benchmark 隔离 |
-| 41 | [Web 客户端、Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md) | clientModules 增量扫描、HMR、协议接入 |
+| 41 | [dsh Web 客户端：Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md) | clientModules 增量扫描、HMR、协议接入 |
 
 ### 第 9 章：生产化工程：状态、配置、可观测、调试、容错、测试与性能（6 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 35 | [配置、凭证与存储三件套](./35-settings-credentials-storage.md) | settings 分层、credentials 每次解析、storage(json/sqlite) |
-| 36 | [Telemetry 与可观测性：给 agent 接上 OTel 监控](./36-telemetry-observability.md) | ctx.sessionTelemetry、捕获/脱敏/上报 |
-| 37 | [🛠 配置实战：用 patch 改行为 + 自定义 preset](./37-config-practice-patch-and-preset.md) | 改一行配置换掉整个子系统 |
-| 38 | [🛠 排查与调试实战](./38-debugging-and-troubleshooting.md) | dump-config、invariants、telemetry 排查问题 |
-| 42 | [错误处理与容错哲学：一个 agent harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md) | defensive patterns、request-error 恢复、dispose 到 quiescence |
-| 43 | [测试体系与性能压测：怎么测一个 agent harness](./43-testing-how-to-test-an-agent-harness.md) | 五层测试、with-key 真实 API、验证世界不验证自述、Web 压测结构断言防基数缩水 |
+| 35 | [配置、凭证与存储：dsh 的有状态底座三件套](./35-settings-credentials-storage.md) | settings 分层、credentials 每次解析、storage(json/sqlite) |
+| 36 | [Telemetry 可观测性：dsh 怎么接 OTel 监控](./36-telemetry-observability.md) | ctx.sessionTelemetry、捕获/脱敏/上报 |
+| 37 | [🛠 配置实战：dsh 用 patch 改行为，用 preset 做分发组合](./37-config-practice-patch-and-preset.md) | 改一行配置换掉整个子系统 |
+| 38 | [🛠 排查与调试：dsh 这个全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md) | dump-config、invariants、telemetry 排查问题 |
+| 42 | [错误处理与容错哲学：dsh 这个 harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md) | defensive patterns、request-error 恢复、dispose 到 quiescence |
+| 43 | [测试体系与性能压测：怎么测 dsh 这个 agent harness](./43-testing-how-to-test-an-agent-harness.md) | 五层测试、with-key 真实 API、验证世界不验证自述、Web 压测结构断言防基数缩水 |
 
 ### 第 10 章：文档即代码：自动生成、校验与双语质量门禁（2 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
-| 45 | [文档即代码：用脚本自动生成图、目录和校验](./45-docs-as-code-autogen-graphs-catalogs.md) | 80+ 脚本、gen-doc-graphs、catalog 自动生成、verify-* 门禁 |
-| 46 | [i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md) | translation-pairing、doc-budgets、lefthook + oxlint |
+| 45 | [文档即代码：dsh 用脚本生成图、目录和校验门禁](./45-docs-as-code-autogen-graphs-catalogs.md) | 80+ 脚本、gen-doc-graphs、catalog 自动生成、verify-* 门禁 |
+| 46 | [i18n 翻译配对与质量门禁：dsh 双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md) | translation-pairing、doc-budgets、lefthook + oxlint |
 
 ### 终章：dsh 的位置：架构横评与可组合性的工程哲学（1 篇）
 

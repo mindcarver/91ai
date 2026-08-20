@@ -1,4 +1,4 @@
-# Code Runtime 与 Code Mode：模型写代码并执行
+# Code Runtime 与 Code Mode：dsh 让模型写代码并执行
 
 > `dsh` 把"模型写一段程序并执行"做成两件事，`ctx.codeRuntime` 是底层执行接缝（跑一段带宿主绑定的程序，报告它打印和返回了什么），Code Mode 是建在它上面的消费模式（程序里能回调 agent 的工具，子调用照样走完整的工具管线）。
 > 最关键的设计：程序失败是结果里的一个**字段**，不是异常；执行隔离是个诊断标签，**不是安全承诺**。
@@ -136,5 +136,5 @@ worker-thread Service Provider 和 tool-registry Consumer 由两份设计笔记�
 - [typed-return contract 笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-20-code-mode-typed-tool-returns.md)：工具子调用的类型化返回
 - [defensive patterns](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/defensive-patterns.md)：正交失败分类的来源
 
-上一篇：[LSP 接缝：让 agent 真正"懂"代码导航](./22-lsp-code-navigation.md)
-下一篇：[Jobs 与 Workflow：后台任务与工作流编排](./24-jobs-and-workflow-ralph.md)
+上一篇：[LSP 接缝：dsh 怎么让 agent 真正"懂"代码](./22-lsp-code-navigation.md)
+下一篇：[dsh 的 Jobs 与 Workflow：后台任务和编排脚本](./24-jobs-and-workflow-ralph.md)

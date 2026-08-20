@@ -1,4 +1,4 @@
-# 多模态与 Attachment：agent 怎么"看图"
+# 多模态与 Attachment：dsh 怎么让 agent"看图"
 
 > 在 `dsh` 里，一张图永远不会原样出现在会话日志里，日志只存一个内容寻址的不可变引用，真正的字节存在 attachment 存储里，谁要用谁去按引用取。
 > 这条"二进制所有权和会话日志分离"的规矩，是让图片能在 fork、resume、跨 provider 迁移时不丢不乱、也不撑爆日志的根基。
@@ -126,5 +126,5 @@ provider-native 的翻译发生在适配器层：同一个引用，不同适配�
 - [Quick Start 排错表](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/index.md)：图片被拒与模态声明的关系
 - [`packages/attachment/attachment/src/types.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/attachment/attachment/src/types.ts)：`ImageAttachmentRef` 等类型源码
 
-上一篇：[🔍 LLM 适配器抽象与 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md)
-下一篇：[🛠 写一个 LLM 适配器：接 OpenAI 兼容端点](./18-write-an-llm-adapter.md)
+上一篇：[🔍 LLM 适配器：dsh 的 stream 契约源码导读](./16-llm-adapter-stream-contract-source-walkthrough.md)
+下一篇：[🛠 给 dsh 写一个 LLM 适配器：接 OpenAI 兼容端点](./18-write-an-llm-adapter.md)

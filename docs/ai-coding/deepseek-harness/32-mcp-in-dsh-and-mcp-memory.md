@@ -138,5 +138,5 @@ MCP 的 `isError: true` 会被映射成抛异常，走工具注册表的错误�
 - [mcp-memory 示例配置](https://github.com/deepseek-ai/deepseek-harness/tree/master/examples/mcp-memory)
 - [MCP 官方服务器集合（含 server-memory）](https://github.com/modelcontextprotocol/servers)
 
-上一篇：[web-schedule：定时、提醒与 session 内自动化](./31-web-schedule-timer-automation.md)
-下一篇：[ACP 协议与 acp-agent：让 agent 之间能通话的标准](./33-acp-protocol-acp-agent.md)
+上一篇：[web-schedule：dsh 会话内的定时、提醒与自动化](./31-web-schedule-timer-automation.md)
+下一篇：[ACP 协议与 acp-agent：dsh 的 agent 通话标准](./33-acp-protocol-acp-agent.md)

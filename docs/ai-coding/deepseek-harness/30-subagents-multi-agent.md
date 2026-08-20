@@ -1,4 +1,4 @@
-# 子 Agent 与多智能体：一个 agent 怎么调度另一个 agent
+# 子 Agent 与多智能体：dsh 怎么调度另一个 agent
 
 > `ctx.subagents` 是个命名 provider 注册表，六种后端共存，把委派分成两类，**一次式**（一个可丢弃的 run，拿一个结果就 dispose）和**可继续**（一个持久子会话，带进程内 Activation，能多轮 FIFO 对话、能冷恢复、能上报给父）。
 > 关键判断：可继续子 agent 的唯一队列是 Agent inbox，授权靠确切的直接父 Agent，provider 只参与首次创建、之后整个生命周期归 continuation manager。
@@ -162,5 +162,5 @@ provider 只参与首次创建（一次式的 `start`，或可继续的 `prepare
 - [Codex and Claude Code subagent backends 笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-08-04-claude-code-and-codex-subagent-backends.md)：产品级 provider 理由
 - [Scoped Agent Registration](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/12-scoped-agent-registration.md)：scoped 注册与 lineage
 
-上一篇：[Plan Mode 与 Goal：agent 怎么管理目标和计划](./29-plan-mode-and-goal.md)
-下一篇：[web-schedule：定时、提醒与 session 内自动化](./31-web-schedule-timer-automation.md)
+上一篇：[Plan Mode 与 Goal：dsh 怎么管理目标和计划](./29-plan-mode-and-goal.md)
+下一篇：[web-schedule：dsh 会话内的定时、提醒与自动化](./31-web-schedule-timer-automation.md)

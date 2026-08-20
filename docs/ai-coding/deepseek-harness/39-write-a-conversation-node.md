@@ -1,4 +1,4 @@
-# 写一个 Conversation Node：在 Web 客户端做自定义渲染
+# 给 dsh 写一个 Conversation Node：Web 自定义渲染
 
 > Conversation Node 是把一组相关的会话事件折叠成一个有状态视图单元的机制，你写一个 Definition 声明怎么匹配事件、怎么构建状态、怎么渲染，引擎保证回放正确、分页不乱、性能是常数级。
 > 这一篇拆 `ConversationNodeDefinition` 的结构、三条事件摄入路径、性能不变量，以及 keyed renderer 的消费方式。
@@ -138,5 +138,5 @@ Chat 数据类型通过声明合并注册：在 `declare module '@deepseek-ai/ds
 - [assistant.ts 参考实现](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-conversation/src/client/conversation-nodes/assistant.ts)
 - [ui-deliverables（无 Node 的 Definition 参考）](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/client/ui-deliverables)
 
-上一篇：[排查与调试实战：一个全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md)
+上一篇：[排查与调试：dsh 这个全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md)
 下一篇：[Python SDK、Headless 与 JSON-RPC：把 dsh 编进流水线](./40-python-sdk-headless-jsonrpc.md)

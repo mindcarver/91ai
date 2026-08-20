@@ -1,4 +1,4 @@
-# Filesystem 接缝：fs-local / fs-sandbox / 观察策略
+# dsh 的 Filesystem 接缝：读写编辑与观察策略
 
 > `dsh` 的文件系统不是一个"读写函数集"，而是四个解耦的包，provider 只管原子读写、观察策略通过事件加新鲜度护栏、工具只负责执行和渲染，三者靠 `fs/*` 事件共享词汇表，谁都不直接依赖谁。
 > 最反常识的一条：read-before-edit 是一层**可选的策略插件**，不是 provider 自带的；裸 provider 会无条件覆盖，装上策略才变成"先读再写"，而卸掉策略工具照常工作。
@@ -162,5 +162,5 @@ owner 从事件 actor 派生（通常是 `exec.agent.session`），当作不透�
 - [Process Sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/sandbox.md)：`sandboxPolicy` 参数与执行世界共享
 - [`packages/fs/fs/src/index.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/fs/fs/src/index.ts)：`FileSystem` 抽象接缝与 `fs/*` 事件源码
 
-上一篇：[沙箱、审批与权限三件套：agent 如何安全地动你的机器](./19-sandbox-approval-permission.md)
-下一篇：[Shell / Subprocess / Terminal：命令执行的三层抽象](./21-shell-subprocess-terminal.md)
+上一篇：[沙箱、审批与权限：dsh 怎么安全地放 agent 上机](./19-sandbox-approval-permission.md)
+下一篇：[dsh 命令执行三层：Subprocess / Shell / Terminal](./21-shell-subprocess-terminal.md)

@@ -1,4 +1,4 @@
-# 🔍 LLM 适配器抽象与 stream 契约源码导读
+# 🔍 LLM 适配器：dsh 的 stream 契约源码导读
 
 > `dsh` 把"模型怎么调"压成了一条**封闭的流式协议**（`StreamChunk`），所有 provider 只负责往这条协议上吐 chunk，拼装、出错归一、重放、重试全由 harness 统一兜底。
 > 适配器写得对不对，不靠 review 靠契约：八条硬性不变量加上一个 `assertNever`，错一个就编译不过或运行期直接断言炸出来。这一篇对着源码逐行拆这条契约。
@@ -140,5 +140,5 @@ waterfall 的语义是"洋葱皮中间件"：监听器可以选择调 `next()` �
 - [`packages/llm/llm/src/types.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/llm/src/types.ts)：`StreamChunk`、`LlmFailure`、`GenerateOptions` 源码
 - [`packages/llm/llm/src/assembler.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/llm/src/assembler.ts)：`BlockAssembler` 唯一拼装实现
 
-上一篇：[系统提示组装与动态 Cordis](./15-system-prompt-assembly-and-dynamic-cordis.md)
-下一篇：[多模态与 Attachment：agent 怎么"看图"](./17-multimodal-attachments.md)
+上一篇：[系统提示组装与动态 Cordis：dsh 让 agent 改自己的插件树](./15-system-prompt-assembly-and-dynamic-cordis.md)
+下一篇：[多模态与 Attachment：dsh 怎么让 agent"看图"](./17-multimodal-attachments.md)

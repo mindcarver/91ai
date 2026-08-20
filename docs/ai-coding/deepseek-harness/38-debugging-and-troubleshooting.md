@@ -1,4 +1,4 @@
-# 排查与调试实战：一个全插件化 harness 怎么追问题
+# 排查与调试：dsh 这个全插件化 harness 怎么追问题
 
 > `dsh` 给排查问题提供了三个抓手：`--dump-config` 看实际加载了什么、运行时不变量在 agent 跑的时候守住不变契约、会话日志让一切可重建；这三个组合起来，大部分问题不需要加 print 就能定位。
 > 这一篇拆排查工具链：dump-config、invariants 子系统、request-error 恢复、会话日志的调试用法，以及开发时用的 typecheck 和 type-equiv 门禁。
@@ -125,5 +125,5 @@ invariant violated by "@deepseek-ai/dsh-session": <具体消息>
 - [Session Log and Events](https://zread.ai/deepseek-ai/deepseek-harness/9-session-log-and-events)
 - [Defensive Patterns](https://zread.ai/deepseek-ai/deepseek-harness/20-defensive-patterns)
 
-上一篇：[配置实战：用 patch 改行为，用 preset 做可分发的组合](./37-config-practice-patch-and-preset.md)
-下一篇：[写一个 Conversation Node：在 Web 客户端做自定义渲染](./39-write-a-conversation-node.md)
+上一篇：[配置实战：dsh 用 patch 改行为，用 preset 做分发组合](./37-config-practice-patch-and-preset.md)
+下一篇：[给 dsh 写一个 Conversation Node：Web 自定义渲染](./39-write-a-conversation-node.md)

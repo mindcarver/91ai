@@ -1,4 +1,4 @@
-# 上下文预算：Compaction 压缩与 Spill 溢出
+# 上下文预算：dsh 的 Compaction 压缩与 Spill 溢出
 
 > `dsh` 管上下文体积靠两个互补机制——**压缩**（compaction）治"很多中等内容撑爆上下文"，**溢出**（spill）治"单个超大内容塞不进去"；压缩没有面向模型的 compact 工具、由 harness 被动驱动、先确定性修剪后总结，spill 把超大工具结果整个搬到上下文外、给模型一个不透明定位符加检索提示。
 > 测量这件事归单例 `ctx.tokenMeter`，它把请求压力和表面定价统一成一个可重放的快照。
@@ -218,5 +218,5 @@ baseline 有两种。`usage` 表示最近一次成功的 provider 调用有相�
 - [Tool Execution Pipeline](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/tool-execution-pipeline.md)：`tools/post-execute` 挂载点
 - [Durable Image Attachments](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/attachment.md)：二进制大对象归 attachment 不归 spill
 
-上一篇：[Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md)
-下一篇：[跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md)
+上一篇：[dsh 的 Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md)
+下一篇：[dsh 的跨会话记忆：session-query / projection / reference](./28-cross-session-memory-query-projection-reference.md)

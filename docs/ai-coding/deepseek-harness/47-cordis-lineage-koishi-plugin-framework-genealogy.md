@@ -105,5 +105,5 @@ Cordis 的独特之处在于**同时做到了时空可组合性**。空间上，
 - [dsh vendor README](https://github.com/deepseek-ai/deepseek-harness/blob/master/vendor/README.md)
 - [Cordis Primer（dsh 文档）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md)
 
-上一篇：[i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)
+上一篇：[i18n 翻译配对与质量门禁：dsh 双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)
 下一篇：[架构横评与可组合性的工程哲学：dsh vs Claude Code vs Cursor vs Codex](./48-architecture-comparison-dsh-vs-claude-code-cursor-codex.md)

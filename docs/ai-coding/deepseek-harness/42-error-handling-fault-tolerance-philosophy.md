@@ -1,4 +1,4 @@
-# 错误处理与容错哲学：一个 agent harness 怎么不崩
+# 错误处理与容错哲学：dsh 这个 harness 怎么不崩
 
 > `dsh` 的防御式模式不是理论框架，是七条从真实 bug 里长出来的规则，每条规则对应一类曾经确实发布过或差点发布过的缺陷，规则本身就是为了防止它再次发生。
 > 这一篇拆 `docs/defensive-patterns.md` 的七条模式加 `agent/request-error` 恢复机制，看一个全插件化的 agent harness 怎么在不信任外部世界的前提下保持不崩。
@@ -129,5 +129,5 @@ Windows 的 `rmSync(link)` 在 junction 上抛 `ERR_FS_EISDIR`。递归删除可
 - [Agent Loop and Turn Flow](https://zread.ai/deepseek-ai/deepseek-harness/8-agent-loop-and-turn-flow)
 - [Postmortem: ACP Default Export](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/postmortem/0001-acp-default-export-drops-inject.md)
 
-上一篇：[Web 客户端、Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md)
-下一篇：[测试体系：怎么测一个 agent harness](./43-testing-how-to-test-an-agent-harness.md)
+上一篇：[dsh Web 客户端：Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md)
+下一篇：[测试体系与性能压测：怎么测 dsh 这个 agent harness](./43-testing-how-to-test-an-agent-harness.md)

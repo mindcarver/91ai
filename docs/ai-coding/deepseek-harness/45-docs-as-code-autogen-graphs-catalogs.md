@@ -1,4 +1,4 @@
-# 文档即代码：用脚本自动生成图、目录和校验
+# 文档即代码：dsh 用脚本生成图、目录和校验门禁
 
 > `dsh` 仓库的 `scripts/` 目录有 80 多个脚本，一半是从源码生成文档（gen-*），一半是验证文档和源码一致（verify-*），两边配合让文档无法漂移：源码改了但文档没改，门禁就挂。
 > 这一篇拆这套 docs-as-code 系统的设计逻辑，看生成脚本怎么工作、校验脚本怎么门禁、以及为什么这种投入对一个开源项目值得。
@@ -142,5 +142,5 @@
 - [Development Guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/development.md)
 - [Testing Policy](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/testing.md)
 
-上一篇：[测试体系与性能压测：怎么测一个 agent harness](./43-testing-how-to-test-an-agent-harness.md)
-下一篇：[i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)
+上一篇：[测试体系与性能压测：怎么测 dsh 这个 agent harness](./43-testing-how-to-test-an-agent-harness.md)
+下一篇：[i18n 翻译配对与质量门禁：dsh 双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)

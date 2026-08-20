@@ -1,4 +1,4 @@
-# 沙箱、审批与权限三件套：agent 如何安全地动你的机器
+# 沙箱、审批与权限：dsh 怎么安全地放 agent 上机
 
 > `dsh` 把"agent 能动你的机器"这件事拆成三个互相独立、各自 fail-closed 的开关，沙箱管文件效果、审批管单次动作放行、预设把它们打包成名字，三者没有谁能替代谁，也没有谁在"差不多安全"时偷偷放行。
 > 最反常识的一条：沙箱的强制力是一个**被报告的事实**（full 或 partial），不是一个承诺，partial 的时候消费者必须拒绝或明示，绝不假装它是 full。
@@ -156,5 +156,5 @@
 - [Defensive Patterns](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/defensive-patterns.md)：跨子系统的防御性设计条目
 - [Sandbox switching 设计笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-06-sandbox.md)：沙箱切换的设计理由
 
-上一篇：[🛠 写一个 LLM 适配器：接 OpenAI 兼容端点](./18-write-an-llm-adapter.md)
-下一篇：[Filesystem 接缝：fs-local / fs-sandbox / 观察策略](./20-filesystem-seam.md)
+上一篇：[🛠 给 dsh 写一个 LLM 适配器：接 OpenAI 兼容端点](./18-write-an-llm-adapter.md)
+下一篇：[dsh 的 Filesystem 接缝：读写编辑与观察策略](./20-filesystem-seam.md)

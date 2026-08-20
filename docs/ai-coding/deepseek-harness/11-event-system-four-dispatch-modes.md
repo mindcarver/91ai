@@ -1,4 +1,4 @@
-# 事件系统：四种派发模式与 waterfall 的短路艺术
+# 事件系统：dsh 的四种派发模式与 waterfall 短路
 
 > Cordis 的事件有五种派发模式，每种回答一个不同的问题（广播？并发？顺序拍板？同步拍板？层层包裹改写？），其中 waterfall 是 around 中间件，调 `next()` 才往下传、不调就是短路否决，这套语义是 DeepSeek Harness 实现"拦截与策略"的全部地基。
 > 这一篇拆事件派发：每种模式干什么、waterfall 的 `next()` 纪律、什么时候该短路、Harness 把哪些关键关卡挂在了哪种模式上。
@@ -135,5 +135,5 @@ Cordis 源码定义了五种派发模式：emit 同步广播不收集返回，pa
 - [事件生产者/消费者图](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/event-producer-consumer.md)：每个事件的生产者与消费者
 - [vendored Cordis 事件源码（vendor/cordis/src/events.ts）](https://github.com/deepseek-ai/deepseek-harness/blob/master/vendor/cordis/src/events.ts)：派发实现的源头
 
-上一篇：[会话日志：为什么"模型可见即可重建"是最硬的规矩](./09-session-log-visible-means-reconstructable.md)
-下一篇：[能力接缝 Capability Seams：换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md)
+上一篇：[会话日志：dsh 为什么坚守"模型可见即可重建"](./09-session-log-visible-means-reconstructable.md)
+下一篇：[能力接缝：dsh 换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md)

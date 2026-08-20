@@ -1,4 +1,4 @@
-# tools 注册表与守卫管线源码导读
+# dsh tools 注册表与守卫管线源码导读
 
 > `dsh-tools` 的 `ToolRuntime` 用六个事件（三道 waterfall 加一个 code-dispatch-log waterfall 加两个 emit）定义了上一段的工具执行管线，并暴露一个调度器符号，让 agent-loop 的并行调度器能重叠派发同时保持前后策略有序。
 > 这一篇是源码导读，把上一篇讲的七层管线落到 `packages/core/tools/src/index.ts` 的真实代码。它还会对上更早讲的 agent-loop 那篇：agent-loop 的 `tool-calls.ts` 正是通过一个调度器符号调进这里的。
@@ -123,5 +123,5 @@ Code Mode 是这个包的一大块，源码里它的实现跨 `index.ts` 和 `co
 - [工具目录（docs/tool-catalog.md）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/tool-catalog.md)：内置工具的 schema 清单
 - [agent-loop 的 tool-calls.ts](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent-loop/src/tool-calls.ts)：通过调度器符号调进本包的并行调度器
 
-上一篇：[工具执行管线：从 tool_call 到结果中间发生什么](./13-tool-execution-pipeline.md)
-下一篇：[系统提示组装与动态 Cordis](./15-system-prompt-assembly-and-dynamic-cordis.md)
+上一篇：[工具执行管线：dsh 从 tool_call 到结果的七道关卡](./13-tool-execution-pipeline.md)
+下一篇：[系统提示组装与动态 Cordis：dsh 让 agent 改自己的插件树](./15-system-prompt-assembly-and-dynamic-cordis.md)

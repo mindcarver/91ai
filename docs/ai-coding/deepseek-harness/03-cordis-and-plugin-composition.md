@@ -371,4 +371,4 @@ Cordis 是一个把"副作用可逆"和"依赖反应式"做成运行时一等机
 - [vendor/README.md](https://github.com/deepseek-ai/deepseek-harness/blob/master/vendor/README.md)：Cordis 如何被内嵌、改名、打补丁
 
 上一篇：[从 0 跑起来：first run 全流程](./02-first-run-web-ui.md)
-下一篇：[启动链源码导读：从 npx dsh web 到插件树挂载](./06-boot-chain-source-walkthrough.md)
+下一篇：[dsh 启动链源码导读：从 npx 命令到挂载完毕的插件树](./06-boot-chain-source-walkthrough.md)

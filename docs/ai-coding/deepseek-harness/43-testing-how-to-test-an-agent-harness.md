@@ -1,4 +1,4 @@
-# 测试体系与性能压测：怎么测一个 agent harness
+# 测试体系与性能压测：怎么测 dsh 这个 agent harness
 
 > `dsh` 的测试政策有一条反直觉的原则叫"我们是 DeepSeek，不要吝啬真 API 测试"，没有 key 的测试只证明管道通，有 key 的运行才证明 agent 真能干活；每层测试都有自己回答的问题，不能互相替代。
 > 这一篇拆五层测试体系（外加一条 opt-in 的 Web 性能压测 lane）、with-key 策略、"验证世界不验证自述"原则、HMR 安全测试，以及为什么 mock 能让单测全绿但产品是坏的；后半段落到 `apps/web/tests/complex-history.perf.ts`，看性能压测为什么不做时间断言、只做结构断言。
@@ -243,5 +243,5 @@ soak 测试也测量每轮的性能指标（click 到 user echo 的时间、clic
 - [vitest.web.perf.config.ts](https://github.com/deepseek-ai/deepseek-harness/blob/master/vitest.web.perf.config.ts)
 - [Web GUI Browser E2E Lane Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/testing/2026-07-24-web-gui-browser-e2e-lane.md)
 
-上一篇：[错误处理与容错哲学：一个 agent harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md)
-下一篇：[文档即代码：用脚本自动生成图、目录和校验](./45-docs-as-code-autogen-graphs-catalogs.md)
+上一篇：[错误处理与容错哲学：dsh 这个 harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md)
+下一篇：[文档即代码：dsh 用脚本生成图、目录和校验门禁](./45-docs-as-code-autogen-graphs-catalogs.md)
