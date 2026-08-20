@@ -1,0 +1,66 @@
+{
+  "topic": "上下文压缩",
+  "main_title": "Codex\n上下文压缩",
+  "subtitle": "触发、四条路径与压缩前交接",
+  "left_cards": [
+    {
+      "title": "怎么触发",
+      "desc": "按 token 水位，不按时间",
+      "icon": "flowchart"
+    },
+    {
+      "title": "怎么压缩",
+      "desc": "四条路径，保留内容不同",
+      "icon": "layers"
+    },
+    {
+      "title": "怎么交接",
+      "desc": "关键状态写进文件系统",
+      "icon": "document"
+    }
+  ],
+  "core_panel": {
+    "title": "核心模块",
+    "items": [
+      {
+        "title": "触发",
+        "keywords": [
+          "PreTurn",
+          "MidTurn",
+          "模型切换"
+        ]
+      },
+      {
+        "title": "路径",
+        "keywords": [
+          "TokenBudget",
+          "远程V2",
+          "本地总结"
+        ]
+      },
+      {
+        "title": "观测",
+        "keywords": [
+          "/status",
+          "事件流",
+          "Analytics"
+        ]
+      },
+      {
+        "title": "交接",
+        "keywords": [
+          "TODO",
+          "AGENTS.md",
+          "文件状态"
+        ]
+      }
+    ]
+  },
+  "bottom_slogan": "别等模型失忆，先把状态写进文件",
+  "bottom_keywords": [
+    "Codex",
+    "压缩",
+    "交接",
+    "长任务"
+  ]
+}

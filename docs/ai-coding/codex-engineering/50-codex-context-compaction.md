@@ -1,8 +1,18 @@
 # Codex 上下文压缩：什么时候压、怎么压、怎么在压缩前交接
 
+<!-- codex:cover ../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/00-cover-context-compaction.png -->
+![Codex 上下文压缩封面：触发、四条路径与压缩前交接](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/00-cover-context-compaction.png)
+<!-- /codex:cover -->
+
+
 ## TL;DR
 
 Codex 的上下文窗口有硬上限，压缩按 token 用量触发，不是按时间。压缩有四条代码路径，走 OpenAI 官方 API 的 Codex 模型默认走服务端 `/responses/compact`，返回一个客户端不解密的黑盒存档。运行时靠每个回合前后数 token 判断该不该压。外部用 `/status`、`/statusline` 或 SDK 的 ContextCompaction 事件观测。想在压缩前交接任务，最稳的办法不是拦截压缩，是把状态写进文件。
+
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/01-framework-context-window.png -->
+![Notion 图解：上下文窗口不是按时间，而是按 token 水位触发压缩](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/01-framework-context-window.png)
+<!-- /wos:illustration -->
+
 
 ## 读者定位
 
@@ -30,6 +40,11 @@ Codex 没有真正的记忆。每生成一步，它都要把之前发生的所�
 
 这是第一个被多数博客讲模糊的问题。答案是按 token 用量判断，每个回合前后各检查一次，没有任何计时器。
 
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/02-flowchart-trigger-timing.png -->
+![Notion 图解：PreTurn、MidTurn 和模型切换三处压缩触发点](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/02-flowchart-trigger-timing.png)
+<!-- /wos:illustration -->
+
+
 源码里核心是一个布尔值 `token_limit_reached`，在 `session/context_window.rs` 里算出来。它为真，只要满足下面任一条件：
 
 1. 已用的作用域 token 超过缓冲后的阈值：`auto_compact_scope_tokens >= buffered_auto_compact_limit`
@@ -49,6 +64,11 @@ Codex 没有真正的记忆。每生成一步，它都要把之前发生的所�
 ## 压缩的四条路径
 
 这是整篇最关键、也最容易被讲错的地方。Codex 的压缩不是一个机制，是四条代码路径，由 `run_auto_compact` 按 feature flag 优先级分发：
+
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/03-comparison-four-paths.png -->
+![Notion 图解：Codex 压缩的四条路径](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/03-comparison-four-paths.png)
+<!-- /wos:illustration -->
+
 
 | 优先级 | 路径 | 文件 | 做了什么 |
 |--------|------|------|----------|
@@ -73,6 +93,11 @@ Codex 没有真正的记忆。每生成一步，它都要把之前发生的所�
 
 两层观测。
 
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/04-infographic-observability.png -->
+![Notion 图解：人类界面和程序事件两层观测](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/04-infographic-observability.png)
+<!-- /wos:illustration -->
+
+
 人用 TUI 时，`/status` 显示当前 token 用量，`/statusline` 在底部放一个实时计数器，能直观看到窗口还剩多少。这是被动观测，你得自己看。
 
 程序接 SDK 或 app-server 时，走事件流。压缩会发出 `TurnItem::ContextCompaction` 生命周期事件，以及 `CompactionAnalyticsAttempt` 分析事件，后者记录压缩前后的 token 数、耗时、采用的策略（`strategy = Memento`）、实现方式（`implementation = Responses`）、成功还是失败。这意味着你可以在外层包一个监控，统计每次压缩丢了多少 token、多久压一次，用来判断某个任务是不是压得太频繁。
@@ -82,6 +107,11 @@ Codex 没有真正的记忆。每生成一步，它都要把之前发生的所�
 ## 能不能在压缩前交接任务
 
 这是很多人最关心的问题。分三层回答。
+
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/05-flowchart-handoff-boundary.png -->
+![Notion 图解：PreCompact hook 与文件系统交接边界](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/05-flowchart-handoff-boundary.png)
+<!-- /wos:illustration -->
+
 
 **第一层：能不能拦住压缩？能，但代价是回合中止。** `hook_runtime.rs` 里，压缩前会跑 `run_pre_compact_hooks`，构造一个 `PreCompactRequest`（带 session ID、turn ID、触发标签 `manual` 或 `auto`）。任一 PreCompact hook 返回 `should_stop = true`，函数就返回 `Stopped`，调用方拿到后抛 `CodexErr::TurnAborted`。压缩是被拦下了，但当前回合也停了，你拿到的是一个中止的会话，不是一份优雅的交接。
 
@@ -99,6 +129,11 @@ Codex 没有真正的记忆。每生成一步，它都要把之前发生的所�
 ## 真实踩坑
 
 社区和 issue 里反复出现的几个问题，源码层面都能解释。
+
+<!-- wos:illustration codex-engineering/50-codex-context-compaction/06-infographic-pitfalls-guardrails.png -->
+![Notion 图解：上下文压缩的三类真实踩坑和护栏](../../../assets/ai-coding-engineering-illustrations/codex-engineering/50-codex-context-compaction/06-infographic-pitfalls-guardrails.png)
+<!-- /wos:illustration -->
+
 
 **自动压缩有时不触发，直接撞墙 fatal。** OpenAI 社区有帖子报「Codex Still Runs Out of Context Window」，说即使设了较大上下文也很快耗尽。原因是 `token_limit_reached` 的判断依赖每次采样后重新计算 token 用量，如果某一步的工具输出异常巨大（比如一次读了超大文件），可能一步就从安全区跳过阈值直接撞硬上限，压缩来不及插进 MidTurn 检查。
 
