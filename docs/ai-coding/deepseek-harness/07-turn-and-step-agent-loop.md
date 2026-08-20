@@ -304,7 +304,7 @@ if (!this.requestHeaderLogged) {
 
 `agent/request` waterfall 让插件有机会改写请求配置（默认是 seedConfig）。然后 `ctx.llm.prepareCall()` 校验 adapter 字段、物化 reasoning-effort 和 output-token 默认值。返回的 `preparedCall` 绑定了解析默认值的那个 adapter 注册，跨异步解析、header 记账、最终派发都保持同一个 adapter，所以 HMR 换掉一个 provider 的时刻，不会把旧 adapter 的能力结果混进新 adapter 的请求。
 
-请求头按需记账：第一次写 `initial`（或恢复时写 `resume`），之后只在 header 变了时写 `change`。这个 header 是请求前缀的规范记录，用来判断 KV cache 能不能复用：只要 system、tools、历史字节相同且路由没变，就是 append-only、可复用；一改就从头失效。
+请求头按需记账：第一次写 `initial`（或恢复时写 `resume`），之后只在 header 变了时写 `change`。这个 header 是请求前缀的规范记录，也是 KV cache 复用判断的依据（那条"字节相同且路由没变即可复用"的完整记账规则，见 09 篇）。
 
 `seedConfig` 里有个细节叫 adapter-default marker：上一步从 header 里标记了哪些字段是 adapter 算出来的默认值，`requestProposal()` 在下一次提议前把这些标记字段删掉，让当前路由重新算自己的默认值；没标记的显式设置跨 step 和路由变更保留。这保证换路由不会带错上一路由的默认值。
 

@@ -42,7 +42,7 @@ export function apply(ctx: Context, config: typeof Config) {
 
 **注册是基于副作用的。** `apply` 里调 `registerAdapter`，这个调用是 Cordis 的可逆副作用，插件卸载时自动撤销。这意味着它 HMR 安全：改了配置热重载，旧路由干净撤掉，新路由挂上，不留垃圾。
 
-**一个 provider 路由只能有一个适配器。** 重复注册会抛 `DUPLICATE_ADAPTER`，而且是 all-or-nothing，要么全注册成功要么一个都不动。这条规矩杜绝了"同一个 provider 有两个适配器，运行期不知道走哪个"的歧义。
+**一个 provider 路由只能有一个适配器。** 重复注册会抛 `DUPLICATE_ADAPTER`，而且是 all-or-nothing，要么全注册成功要么一个都不动。这条规矩杜绝了"同一个 provider 有两个适配器，运行期不知道走哪个"的歧义（注册表的完整机制见 16 篇）。
 
 **`options.provider` 选适配器，`options.model` 是 provider 的模型 id。** 模型 id 不需要在生命周期开始时注册，所以一个能动态发现模型的适配器，可以不重启就服务新模型。
 

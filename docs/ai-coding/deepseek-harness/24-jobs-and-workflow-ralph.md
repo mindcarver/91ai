@@ -140,7 +140,7 @@ workflow 脚本以 `return <json-value>` 结束，返回值是宿主领域的纯
 
 文档里还提到一个"结构化输出子集"（structured-output subset）：`agent()` 调用可以带 schema，但 schema 必须落在这个子集里，超出会触发 `fatal` 错误。这把"子 agent 返回结构化数据"约束在一个安全可校验的范围内。
 
-`Ralph` 在仓库里对应 `packages/workflow/tool-ralph`，是 workflow engine 的一个固定 consumer，和通用的 `tool-workflow` 并列。按 capability-seams 的描述，它要求一条全新的结构化输出路由（requires one fresh structured-output route），也就是专门用来跑一次返回结构化输出的工作流，而非通用编排脚本。它的具体实现（为什么叫 Ralph、内部如何强制结构化输出）本次未深入源码，标记待核实。
+`Ralph` 在仓库里对应 `packages/workflow/tool-ralph`，是 workflow engine 的一个固定 consumer，提供面向模型的 `ralph` 工具：把一个不可变的目标（objective）依次交给一连串**全新的子 agent** 执行——每轮启动一个不继承父上下文的新子 agent，以共享工作区当长期记忆，靠结构化的"交接报告"（handoff，含 continue/complete/blocked 状态、摘要、证据、后续步骤）在轮次间传递状态，报告在工作流内和消费边界做双重校验。这就是社区所说的 "Ralph 循环"（Geoffrey Huntley 推广的 Ralph Wiggum 模式：反复派全新 agent 处理同一目标，直到它自报完成）。README 特别强调 Ralph 只是普通插件，构建在 `ctx.workflowEngine` 和 `ctx.subagents` 之上，agent-loop 里没有加任何"Ralph 模式"。它要求的"一条全新结构化输出路由"落在这里：每轮经 `subagentProvider`（默认 `spawn`）启动子 agent，该 provider 必须支持结构化输出且报告 `inheritsParentContext: false`；provider 由部署配置作为 `WorkflowStartRequest.subagentProvider` 传入固定脚本，模型拿不到路由选择权。限制也诚实：完成与否靠子 agent 自报（无独立评估者）、仅前台运行、普通子 agent 失败即终止整个运行、只有轮数上限（`maxTotalAgents`）没有 token/价格/时间预算。
 
 ## 真实代码落点
 

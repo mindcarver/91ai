@@ -158,19 +158,19 @@ dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"
 
 `!!js process.cwd()` 是 Cordis Loader 支持的 JS 表达式，在配置加载时求值。你可以用它做环境驱动的配置（比如 `!!js process.env.MY_VAR`），不需要外部模板引擎。
 
-## dump-config：看你的机器实际启动什么
+## dump-config：改完怎么确认生效
 
-改完配置后，怎么确认生效了？跑一句：
+改完配置后跑一句：
 
 ```sh
 dsh --profile web --dump-config
 ```
 
-它打印出实际组合后的插件树，不启动进程。你看到的每一行，都是上面所有 patch 层叠完的最终结果。
+它打印实际组合后的插件树（不启动进程），你看到的每一行都是所有 patch 层叠完的最终结果，任何一行都能被你自己的 patch 替换掉——这就是"没有特权核心"的实际证明。
 
-这个命令是"没有特权核心"的实际证明：你不用猜内核藏了什么，dump 出来的就是全部。任何一行都能被你自己的 patch 替换掉。
+一个细节：如果一行 config 的某个字段没出现在 dump 里，可能是它用了 schema 默认值。dump 只显示 cordis.yml 里显式设置的值和 patch 覆盖的值，schema 默认值在运行时填入但不一定显示。
 
-如果一行 config 的某个字段没出现在 dump 里，可能是它用了 schema 默认值。dump 只显示 cordis.yml 里显式设置的值和 patch 覆盖的值，schema 默认值在运行时填入但不一定显示。
+排查语境的完整用法（插件没生效、config 值不对、加载顺序问题的排查路径）见 [38 篇](./38-debugging-and-troubleshooting.md)。
 
 ## Preset 系统：可分发的 agent 组合
 

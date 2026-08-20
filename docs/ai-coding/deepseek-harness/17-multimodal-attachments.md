@@ -107,7 +107,7 @@ interface ImageAttachmentRef {
 - `packages/attachment/attachment/src/index.ts`：`AttachmentStore` 抽象接缝，三个方法。
 - `packages/attachment/attachment-local/src/store.ts`：本地实现，内容寻址落盘。
 - `packages/attachment/attachment-local/src/image.ts`：解码、校验媒体签名和尺寸的准入逻辑。
-- 模型可见的 `ImageBlock` 定义在 `packages/llm/llm/src/message.ts`，是 `ContentBlockMap` 的一个成员。`dsh` 明确规定：一个新模态只有当它的适配器、UI、压缩、持久化重放路径都支持了，才允许进这个 map。图片是当前唯一落地的非文本模态。
+- 模型可见的 `ImageBlock` 定义在 `packages/llm/llm/src/message.ts`，是 `ContentBlockMap` 的一个成员。一个新模态要进这个 map，得先让适配器、UI、压缩、持久化重放路径都支持它（16 篇讲的封闭联合门禁）。图片是当前唯一落地的非文本模态。
 
 ## 权衡与局限
 

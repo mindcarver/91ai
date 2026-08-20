@@ -189,4 +189,4 @@ interface SkillInvocationPolicy {
 - [Scoped Agent Registration](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/12-scoped-agent-registration.md)：skills 分层注册表的 scope 基础
 
 上一篇：[Jobs 与 Workflow：后台任务与工作流编排](./24-jobs-and-workflow-ralph.md)
-下一篇：[上下文压缩 Compaction：对话太长怎么给模型腾地方](./26-compaction-context-compression.md)
+下一篇：[上下文预算：Compaction 压缩与 Spill 溢出](./26-context-budget-compaction-and-spill.md)

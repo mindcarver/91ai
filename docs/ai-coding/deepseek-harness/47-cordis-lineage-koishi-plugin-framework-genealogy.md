@@ -5,28 +5,11 @@
 
 ## Cordis 从哪来：Koishi 的四年实战
 
-Cordis 的源头是 [Koishi](https://koishi.chat)，一个跨平台聊天机器人框架。Koishi 从 2020 年左右开始开发，到 2024 年积累了超过 4000 个社区插件。这是一个真实的、大规模的插件化系统，它的插件系统经过四年和几千个插件的考验。
+Cordis 的源头是 [Koishi](https://koishi.chat)，一个跨平台聊天机器人框架。Koishi 从 2020 年左右开始开发，到 2024 年积累了超过 4000 个社区插件——一个真实的、大规模的插件化系统，插件系统经过四年和几千个插件的考验。Cordis 就是从 Koishi 的插件系统里抽取出来的独立框架，这个过程类似 React 从 Facebook 的产品里解耦成通用库：核心抽象被验证有效后，从特定产品里独立出来。它的官方描述是"A Meta-Framework of Spatiotemporal Composability"（时空可组合性的元框架），目前版本 4.0.0-rc.7，在 [cordiverse](https://github.com/cordiverse) 组织下维护，有一篇配套论文《A Programming Paradigm for Spatiotemporal Composability》。
 
-Cordis 是从 Koishi 的插件系统里抽取出来的独立框架。这个过程类似于 React 从 Facebook 的产品里抽取出来变成独立库：核心抽象被验证有效后，从特定产品里解耦出来，变成一个通用的底层框架。
+`dsh` 选择 Cordis 不是偶然：一个 agent harness 需要的插件能力（运行时挂载/卸载、依赖解析、副作用清理、热更新）正是 Koishi 四年实战打磨出来的，Cordis 把它们从聊天机器人场景泛化到了通用场景。
 
-Cordis 的官方描述是"A Meta-Framework of Spatiotemporal Composability"（时空可组合性的元框架）。目前版本是 4.0.0-rc.7，API 尚未完全稳定。它在 [cordiverse](https://github.com/cordiverse) 组织下维护，有一篇配套论文《A Programming Paradigm for Spatiotemporal Composability》。
-
-`dsh` 选择 Cordis 不是偶然。一个 agent harness 需要的插件能力（运行时挂载/卸载、依赖解析、副作用清理、热更新）正是 Koishi 四年实战打磨出来的。Cordis 把这些能力从聊天机器人场景泛化到了通用场景。
-
-## 时空可组合性：论文说了什么
-
-论文的核心贡献是形式化两个正交的可组合性属性。
-
-**时间可组合性**（temporal composability）：插件可以在运行时安全加载和卸载，不留下垃圾。这是 Cordis 区别于大多数插件框架的关键。大部分框架（Spring、NestJS）能做到空间可组合性，但做不到时间可组合性：你不能在运行时干净地卸载一个模块而不留下悬挂的引用、监听器、定时器。
-
-**空间可组合性**（spatial composability）：管理插件的 context 和依赖。插件声明依赖，框架等依赖就位才激活。插件之间的 context 是隔离的，一个插件的注册不会泄漏到另一个插件的 context 里。
-
-Cordis 用两个机制实现这两个属性：
-
-- **Effect tracking**（副作用追踪）：注册一个工具、监听器、定时器都是副作用，框架追踪它们，插件卸载时按序撤销。
-- **Coeffect resolution**（协效应解析）：插件用 `inject` 声明它需要什么 service，框架在依赖就位时才激活插件。
-
-这两个机制合在一起，让"一切皆插件"从一个口号变成了一个有运行时保证的工程事实。`dsh` 敢说"换一个 provider 等于换了整个产品"，因为 provider 的注册是一个可干净撤销的 effect，不是焊死在代码里的 import。
+论文的两轴（时间/空间可组合性）、effect tracking 和 coeffect resolution 的机制展开，[03 篇](./03-cordis-and-plugin-composition.md)已经讲透，这里不重复。这一篇讲谱系：vendor 了什么、改了什么、和别的插件框架差在哪。
 
 ## 基础库谱系
 
@@ -123,4 +106,4 @@ Cordis 的独特之处在于**同时做到了时空可组合性**。空间上，
 - [Cordis Primer（dsh 文档）](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md)
 
 上一篇：[i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)
-下一篇：[架构横评：dsh vs Claude Code vs Cursor vs Codex](./48-architecture-comparison-dsh-vs-claude-code-cursor-codex.md)
+下一篇：[架构横评与可组合性的工程哲学：dsh vs Claude Code vs Cursor vs Codex](./48-architecture-comparison-dsh-vs-claude-code-cursor-codex.md)

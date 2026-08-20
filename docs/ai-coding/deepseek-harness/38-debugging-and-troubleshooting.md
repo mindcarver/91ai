@@ -83,17 +83,9 @@ interface Config {
 
 ## Telemetry：把事件流导出来看
 
-会话日志是进程内的。如果你需要把 agent 的运行状态导出到外部系统做分析，用 telemetry 子系统。
+会话日志是进程内的。如果你需要把 agent 的运行状态导出到外部系统做分析，用 telemetry 子系统：`FULL` 模式下每个会话事件（经过 chunk 投影和脱敏瀑布后）实时交给后端，可以导出到 OpenTelemetry collector 再用 Grafana、Jaeger 查询。
 
-`FULL` 模式下，每个会话事件（经过 chunk 投影和脱敏瀑布后）实时交给后端。你可以把它们导出到一个 OpenTelemetry collector，然后用 Grafana、Jaeger 或任何 OTel 兼容的工具查询。
-
-排查时 telemetry 的用处：
-
-- **severity 过滤。** telemetry 记录的 severity 是预映射的：error 给 `tool/result.isError`、`turn/end` 错误原因、`agent-error`。你可以只看 error 级别的事件，快速定位失败点。
-- **ops 通道。** `agent-error` 和 `shutdown` 是操作信号，用于告警。如果一个会话没有 shutdown 标记，可能是崩溃了。
-- **去重。** 记录可能重复（cursor-less re-adoption、SDK 重试），在 `(session.id, event.seq)` 上去重。
-
-注意：telemetry 默认是 DISABLED 的。排查时需要显式开启 FULL 模式并配置 exporter。
+排查时最有用的两点：severity 是预映射的（error 对应 `tool/result.isError`、`turn/end` 错误原因、`agent-error`），可以只看 error 级别快速定位失败点；`agent-error` 和 `shutdown` 是操作告警信号，一个会话没有 shutdown 标记可能是崩了。注意 telemetry 默认 DISABLED，排查时需要显式开启 FULL 模式并配置 exporter。完整的三模式语义、脱敏瀑布和去重键见 [36 篇](./36-telemetry-observability.md)。
 
 ## 开发时的排查工具链
 

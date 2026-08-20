@@ -1,7 +1,7 @@
-# 架构横评：dsh vs Claude Code vs Cursor vs Codex
+# 架构横评与可组合性的工程哲学：dsh vs Claude Code vs Cursor vs Codex
 
-> 如果你只能从这篇带走一句话，带走这句：这四个工具不是同一类东西。`dsh` 是一个开源的、全插件化的 agent 运行时（没有特权核心），Claude Code 和 Codex 是模型厂商的封闭 inner harness（内核你改不了），Cursor 是一个 IDE 集成的 agent 产品（agent 嵌在编辑器里）。选哪个取决于你要的是可组合性、开箱即用、还是编辑器原生体验。
-> 这一篇用六个维度横评这四个工具的架构定位，明确区分事实和判断。
+> 如果你只能从这篇带走一句话，带走这句：这四个工具不是同一类东西。`dsh` 是一个开源的、全插件化的 agent 运行时（没有特权核心），Claude Code 和 Codex 是模型厂商的封闭 inner harness（内核你改不了），Cursor 是一个 IDE 集成的 agent 产品（agent 嵌在编辑器里）。`dsh` 用 Cordis 的时空可组合性把"一切皆插件"从口号变成了有运行时保证的工程事实，代价是复杂度暴露给用户，回报是一个 agent harness 能像操作系统组件一样被替换、组合、二次开发。
+> 这一篇先按六个维度横评四个工具的架构定位（明确区分事实和判断），再回到最根本的问题收束整个系列：可组合性值不值得付出复杂度的代价，`dsh` 的工程实践给了什么启示，给跟进者什么建议。
 
 ## 比较的维度
 
@@ -55,6 +55,8 @@
 
 另外三个工具的 inner harness 对用户是黑盒。你升级一个版本，agent loop 可能整个变了，你只能适应。`dsh` 的等价变更是换一个插件，你可以选择不换、或者写自己的。
 
+这意味着在大多数 agent 生态里，agent 的核心基础设施（agent loop、工具注册表、context 压缩、工具执行管线、沙箱策略）由少数几个厂商黑盒提供——你能用，但不能改、不能审计、不能组合。`dsh` 提供了另一种可能：把这些核心基础设施全部做成可替换的插件，不是外层扩展，是内核本身可组合，连 agent loop 都是一个插件。这不是一个产品决策，是一个工程哲学判断。
+
 ## 模型锁定：锁不锁模型
 
 | 工具 | 模型 | 能换吗 |
@@ -98,8 +100,6 @@ Claude Code 和 Codex 的模型锁定是刻意的商业决策：模型厂商的�
 
 Claude Code 做远程执行要靠 Docker container 或 SSH，这不是 harness 级的替换，是运行环境的替换。Codex 的 Cloud 入口提供远程执行，但那是 OpenAI 的基础设施，不是你的 provider 选择。
 
-可组合性的代价是复杂度。`dsh` 的接缝层多、调试链长、学习曲线陡。一个行为的根因可能穿过多个插件和 waterfall。其他三个工具的调试更简单：inner harness 是黑盒，你只调试 outer harness。
-
 ## 抽象代价：复杂度 vs 开箱即用
 
 这是所有取舍的汇总。
@@ -107,7 +107,7 @@ Claude Code 做远程执行要靠 Docker container 或 SSH，这不是 harness �
 **`dsh` 的代价**：
 
 - 上手门槛高。要理解 Cordis、profile、bundle、patch、接缝、waterfall 才能做深度定制。
-- 调试链长。一个行为的根因可能穿过多个插件。
+- 调试链长。一个行为的根因可能穿过多个插件。MCP 工具为什么不生效？可能是 patch 没写对、可能是 serverName 冲突、可能是重连预算耗尽。dump-config 帮你看加载状态，invariants 帮你抓运行时违规，但调试仍然比封闭 harness 更费力。
 - developer preview 阶段。API 不稳定，会有破坏兼容性的改动。
 - 自带 UI 相对简单。Web UI 是一个 profile，不是像 Cursor 那样打磨过的编辑器体验。
 
@@ -129,6 +129,8 @@ Claude Code 做远程执行要靠 Docker container 或 SSH，这不是 harness �
 - 开箱即用。装了就能用，不用理解插件框架。
 - 体验打磨。编辑器集成、UI 交互、错误恢复都经过大量用户验证。
 - 模型深度优化。inner harness 针对特定模型调优（Claude Code 针对 Claude，Codex 针对 OpenAI 模型）。
+
+要强调的是，`dsh` 这些代价是结构性的，不是"等版本迭代就好了"。一个全插件化的系统天然比一个封闭系统更复杂，因为它的复杂度暴露给了用户。这是可组合性的税：复杂度的税在前期交（学习、调试、迁移），可组合性的回报在后期收（二次开发、生态、定制）。这是 infrastructure 类项目的典型取舍。
 
 ## 什么时候选什么
 
@@ -161,14 +163,79 @@ Claude Code 做远程执行要靠 Docker container 或 SSH，这不是 harness �
 
 一个值得注意的趋势：`dsh` 的全插件化设计在学术上最接近 Cordis 论文描述的"时空可组合性"范式，但在产品成熟度上还在 developer preview。Claude Code、Cursor、Codex 在产品成熟度上领先，但在架构可组合性上受限。这不是谁好谁坏，是不同阶段的取舍。
 
+## 时空可组合性：从口号到工程事实
+
+横评之后收束整个系列。Cordis 论文形式化了两个正交属性：时间可组合性（运行时安全加载/卸载插件）和空间可组合性（依赖注入、context 隔离）。大部分插件框架做到空间，做不到时间。Cordis 用 effect tracking 和 coeffect resolution 同时做到两个。`dsh` 把这个范式落地到了一个两百多个包的 agent harness 里。落地意味着什么？
+
+**注册是可逆副作用。** 注册一个工具、一段 prompt、一个监听器，都是 `ctx.effect()` 或 `ctx.on()` 产生的副作用。插件卸载时按序撤销。这不是"卸载时手动清理"的约定，是框架的运行时保证。每个 registry 都有 HMR 安全测试验证它。
+
+**依赖是声明的，不是手写的。** 插件用 `inject` 声明它需要什么 service，Cordis 等依赖就位才激活。加载顺序由需求决定，不用手写 boot 序列。这让 50 多个插件能正确组合，不需要人肉排依赖。
+
+**一个 provider 的替换移动整个产品。** 上面 E2B 的例子就是这条能力的直接展示：换两个 provider，整个执行世界跟着搬。
+
+这三个能力合在一起，让"换一个子系统"从"fork 源码改代码"变成了"卸载旧插件挂载新插件"。运行时上下文干净，不留垃圾。
+
+## 回报的另一半：协议与自指
+
+上面代价/回报清单里的四条回报（可组合、可二次开发、不锁模型、可审计）之外，还有两条容易被低估。
+
+**协议标准化。** `dsh` 支持 MCP（接外部工具）和 ACP（被外部驱动）。两个协议都是开放标准。这意味着 `dsh` 的生态不只是它自己的插件，还包括所有 MCP 兼容的工具服务器和所有 ACP 兼容的客户端。
+
+**自指能力。** web-cordis 示例展示了 agent 在运行时修改自己的插件树。这是"一切皆插件"的终极推论：如果连 agent loop 都是插件，agent 自己就能编辑这个插件组合。
+
+## 七条工程经验
+
+从 `dsh` 的代码和文档里提炼七条可迁移的工程经验。
+
+**1. 注册是可逆副作用，不是手写清理。** 让框架追踪副作用，卸载时自动撤销。不要依赖开发者记得在 dispose 里手动清理每个 listener 和 timer。这是 Cordis effect tracking 的核心思想。
+
+**2. 能力用接缝，不用 import。** 声明 Service Definition，让 provider 实现，让 consumer 注入。不要 `import { shell } from './shell'`，用 `ctx.shell.run()`。这让 provider 可替换，也让依赖关系显式。
+
+**3. 错误恢复用事件，不用硬编码。** 模型请求失败时派发 waterfall，让监听器决定是否重试。不要在 agent loop 里写死重试逻辑。这让重试策略可插拔。
+
+**4. 外部世界不可靠是常态。** 为每种不可靠设计具体规则：正交结果独立报告、双侧公共契约归一化、异步状态不和同步状态混淆、销毁到达平静而非请求、回调异常在 dispatcher 里 contain、不给不可信输出环境变量、链接形路径走 unlink。
+
+**5. 文档是构建产物。** 从源码生成文档，用门禁验证一致性。文档和代码的任何不一致都让 CI 失败。这比靠人肉 review 维护文档可行得多。
+
+**6. 测试要测真实入口路径。** 不要只测手建的 `ctx.plugin(...)`，要通过 Loader 启动真实组合。mock 只 mock 昂贵边界，下游用真实实现。"单测全绿但产品是坏的"这一类 bug 只有真实入口测试能抓。
+
+**7. 热更新不是重启。** settings 的 `watch()`、credentials 的每次解析、storage 的写入链、Cordis 的 HMR，都做到了"改了不用重启"。这是全插件化架构对用户感知的直接回报。
+
+## 给跟进者的建议
+
+如果你打算在 `dsh` 上做二次开发，或者借鉴它的架构做自己的 agent harness，几条建议。
+
+**先过 Cordis 门槛。** 理解 fiber、effect、waterfall、service、inject 是读任何 `dsh` 源码的前提。跳过这一步直接读子系统源码，大概率卡在"为什么注册一个函数就能扩展能力"上。
+
+**用 dump-config 而不是猜。** 改配置前先 `dsh --profile web --dump-config`，看实际加载了什么。出了问题先确认插件树组合是否和你以为的一致。
+
+**从 examples 开始。** 仓库的 `examples/` 目录有 headless、jsonrpc-agent、acp-agent、mcp-memory、web-cordis 等可运行示例。先跑通一个，理解整个链路，再往深走。
+
+**注意 developer preview 的不稳定性。** API 会变。做二次开发时要预留迁移成本，不要在 API 不稳定的阶段做太深的定制。
+
+**区分 dsh 和 Cordis。** `dsh` 是 agent harness，Cordis 是它的底层框架。如果你觉得 `dsh` 太重，可以只用 Cordis 搭自己的东西。Cordis 的时空可组合性对任何需要插件化的系统都适用，不限于 agent。
+
+**关注 MCP 和 ACP 生态。** `dsh` 支持这两个开放协议。如果这两个协议的生态成熟了，`dsh` 的价值会因为生态网络效应放大。如果协议生态没起来，`dsh` 的开放性优势会打折扣。
+
+## 这个系列拆了什么
+
+这个系列把 `dsh` 从 Cordis 范式、运行时核心、能力接缝、执行子系统，到源码导读、扩展开发、工程化门禁和横向评测，逐层拆了一遍。
+
+这些拆解的共同主题是：**一个全插件化的 agent harness 在工程上长什么样。** 不是理念，是具体的机制、代码、测试、文档、配置。每一个子系统都有独立的设计判断，这些判断加在一起构成了一个完整的工程实践。
+
+`dsh` 不是唯一答案。封闭 harness（Claude Code、Codex）在产品成熟度上领先，在开箱即用上更好。但 `dsh` 提供了一种不同的可能：agent 的核心基础设施可以是开放的、可组合的、可审计的。这个可能是否值得追求，取决于 agent 时代的基础设施最终由少数厂商黑盒提供，还是由开放的、可组合的生态提供。
+
+`dsh` 选择了后者。这个系列就是拆解这个选择的工程含义。
+
 ## 延伸阅读
 
+- [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
+- [官方架构文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)
+- [Cordis 时空可组合性论文](https://github.com/cordiverse/paper)
 - [Harness Engineering 是什么](../harness-engineering/01-what-is-harness-engineering.md)
 - [Codex 工程化实战系列](../codex-engineering/README.md)
 - [Claude Code 工程化系列](../claude-code-engineering/README.md)
-- [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
-- [Cordis 时空可组合性论文](https://github.com/cordiverse/paper)
 - [SWE-agent: Agent-Computer Interfaces](https://arxiv.org/abs/2405.15793)
 
 上一篇：[Cordis 生态溯源：从 Koishi 到 DeepSeek Harness 的插件框架谱系](./47-cordis-lineage-koishi-plugin-framework-genealogy.md)
-下一篇：[可组合性的工程哲学：DeepSeek Harness 给 Agent 时代留下什么](./49-engineering-philosophy-of-composability.md)
+下一篇：系列完结

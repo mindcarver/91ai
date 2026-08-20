@@ -161,5 +161,5 @@ Cordis 源码定义了五种派发模式：emit 同步广播不收集返回，pa
 - [事件生产者/消费者图](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/event-producer-consumer.md)：每个事件的生产者与消费者
 - [vendored Cordis 事件源码（vendor/cordis/src/events.ts）](https://github.com/deepseek-ai/deepseek-harness/blob/master/vendor/cordis/src/events.ts)：派发实现的源头
 
-上一篇：[session 包源码导读：append-only log / fork / resume](./10-session-package-source-walkthrough.md)
+上一篇：[会话日志：为什么"模型可见即可重建"是最硬的规矩](./09-session-log-visible-means-reconstructable.md)
 下一篇：[能力接缝 Capability Seams：换一个 provider 等于换整个产品](./12-capability-seams-swap-provider-swap-product.md)

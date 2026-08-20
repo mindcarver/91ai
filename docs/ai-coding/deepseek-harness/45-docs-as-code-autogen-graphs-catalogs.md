@@ -167,5 +167,5 @@ pnpm run gen-cordis-catalog   # 或其他 gen-* 脚本
 - [Development Guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/development.md)
 - [Testing Policy](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/testing.md)
 
-上一篇：[性能与压测：Web 客户端在高基数下怎么扛](./44-performance-and-stress-test.md)
+上一篇：[测试体系与性能压测：怎么测一个 agent harness](./43-testing-how-to-test-an-agent-harness.md)
 下一篇：[i18n 翻译配对与质量门禁：中英双语文档怎么不腐烂](./46-i18n-translation-pairing-and-quality-gates.md)
