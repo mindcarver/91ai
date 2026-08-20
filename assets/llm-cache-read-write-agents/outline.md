@@ -1,12 +1,19 @@
 ---
 article: docs/ai-coding/llm-cache-read-write-agents.md
-style: retro
-palette: retro-neon
-image_count: 6
+style: mixed
+palette: mixed
+image_count: 7
 generator: gpt-image-2
 ---
 
-# 大模型缓存：复古配图大纲
+# 大模型缓存：配图大纲
+
+## Cover
+
+**Purpose**: 用封面先讲清缓存读是低价复用、缓存写是为后续复用投入，点出稳定前缀的核心规则。
+**Visual Content**: 白底 Notion 知识卡片：左侧是缓存读的复用箭头，右侧是缓存写的首次投入，中间以稳定前缀串联。
+**Text Plan**: 标题「LLM 缓存读写」；标签「稳定前缀」「缓存读 0.1 倍」「缓存写 1.25–2 倍」「逐 token 相同」；提示「稳定在前，变化在后」。
+**Filename**: 00-cover-cache-economics.png
 
 ## Illustration 1
 
