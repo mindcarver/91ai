@@ -20,7 +20,7 @@ Conversation Node 就是后者的扩展机制。它做的事是：**把一组相
 
 ## 设计一个可回放的事件族
 
-写 Definition 之前，先设计事件族。核心原则：**选一个稳定的业务 id，每个事件要么携带它，要么能从自己的 payload 推导出来。**
+写 Definition 之前，先设计事件族。核心原则：选一个稳定的业务 id，每个事件要么携带它，要么能从自己的 payload 推导出来。客户端绝不能把一个 update 分配给"最近一个还没结束的"Context。
 
 以一个代码审查 Job 为例：
 
@@ -32,43 +32,35 @@ Conversation Node 就是后者的扩展机制。它做的事是：**把一组相
 
 每个 `(kind, id)` 最多有一个 start 事件。一个只有单事件的业务可以用事件自身的稳定身份（比如 `event.seq`）作为 Definition-local id。
 
-事件类型通过 `SessionEventMap` 声明合并注册：在 `declare module '@deepseek-ai/dsh-session/types'` 里给 `interface SessionEventMap` 加三条，`'review/start'` 对应 `ReviewStartData`，`'review/progress'` 对应 `ReviewProgressData`，`'review/end'` 对应 `ReviewEndData`。
+事件类型通过 `SessionEventMap` 声明合并注册：在 `declare module '@deepseek-ai/dsh-session/types'` 里给 `interface SessionEventMap` 加三条，`'review/start'` 对应 `ReviewStartData`，`'review/progress'` 对应 `ReviewProgressData`，`'review/end'` 对应 `ReviewEndData`。branded id 类型（`ReviewId`）跟着 producer 走，跨进程边界使用，防止和别的字符串混淆。
 
-branded id 类型（`ReviewId`）跨进程边界使用，防止和别的字符串混淆。
-
-**增量事件是支持的，但有一个要求：每个 delta 必须在按 `seq` 升序回放时产生确定性的 State。** 不能依赖 live-only 的内存状态。如果当前加载的历史窗口只有 update 没有 start，assembler 保留一个 pending Context，不构建 State，直到更早的页面提供 start。如果产品必须在 start 加载前就渲染，一个 terminal 或 checkpoint 事件必须携带足够的 whole fallback state。
+增量事件是支持的，但有一条硬要求：**每个 delta 必须在按 `seq` 升序回放时产生确定性的 State**，不能依赖 live-only 的内存状态。如果当前加载的历史窗口只有 update 没有 start，assembler 保留一个 pending Context，不构建 State，直到更早的页面提供 start。如果产品必须在 start 加载前就渲染，一个 terminal 或 checkpoint 事件必须携带足够的 whole fallback state。
 
 ## ConversationNodeDefinition 的结构
 
-一个 Definition 是一个对象，有七个关键成员。审查 Job 的定义叫 `reviewDefinition`，类型是 `ConversationNodeDefinition<ReviewState>`：配置字段 `kind: 'review-job'` 和 `target: 'chat'`；函数成员 `match(event)` 做身份提取，`start(context, match)` 做初始化状态，`update(context, match)` 做更新状态，`publication(match)` 定发布时机，`buildLocationData(context, scope)` 发布到 Turn/Step，`buildViewNode(context)` 产出渲染数据。
+落到代码，一个 Definition 是一个对象，成员正好对应上面那四个问题，外加两个配置字段。审查 Job 的定义叫 `reviewDefinition`，类型是 `ConversationNodeDefinition<ReviewState>`，逐个成员看契约。
 
-逐个看。
+`match(event)` 是身份提取器，不是 fold。它只看当前事件，返回 Definition-local id 和生命周期角色（`start` 或 `update`），不匹配返回 null。匹配后，assembler 按 `(kind, id)` 定位 Context。审查 Job 的匹配逻辑就三分支：`review/start` 返回 start 角色，`review/progress` 和 `review/end` 返回同一个 id 的 update 角色，其余返回 null。
 
-**`match(event)`**：身份提取器，不是 fold。它只看当前事件，返回 Definition-local id 和生命周期角色（`start` 或 `update`），或 null 表示不匹配。匹配后，assembler 按 `(kind, id)` 定位 Context。审查 Job 的实现是三分支：`event.type` 是 `review/start` 时返回 `{ id: String(event.data.reviewId), role: 'start' }`；是 `review/progress` 或 `review/end` 时返回同一个 id，角色换成 `'update'`；其余返回 null。
+`start(context, match)` 在 start 事件时调用一次，返回初始 State；`update(context, match)` 在每个 update 事件时调用，返回新 State。引擎采纳返回值：推荐返回新的不可变值，原地修改后返回同一个对象也有相同的 adoption 语义。审查 Job 的状态就是这么长的：start 建立坐标、标题、`completed: 0`、`status: 'running'`；progress 覆盖完成度；end 置 100、标记完成、带上摘要。
 
-**`start(context, match)`**：在 start 事件时调用一次，返回初始 State。审查 Job 的初始 State 是：`turn` 和 `step` 取 `match.event.data.turn`、`match.event.data.step`，`title` 取 `match.event.data.title`，`completed` 从 0 起，`status` 起始为 `'running'`。
+`publication(match)` 控制状态变化什么时候物化成视图发布，三档：`immediate` 给结构性或终止性变化，`animation-frame` 给高频可见 delta（合并到下一帧），`none` 给只喂给后续 publication 的变化。引擎仍然按 log 顺序应用每个 update，cadence 只合并视图发布。
 
-**`update(context, match)`**：在每个 update 事件时调用，返回新 State。推荐返回新的不可变值，但原地修改后返回同一个对象也有相同的 adoption 语义。审查 Job 的实现按 `match.event.type` 分三路：`review/progress` 时返回 `{ ...context.state, completed: match.event.data.completed }`；`review/end` 时在展开的基础上把 `completed` 置 100、`status` 置 `'completed'`，再带上 `summary: match.event.data.summary`；其余原样返回 `context.state`。
+`buildLocationData(context, scope)` 可选，把 Definition 拥有的数据发布到引擎拥有的 Turn 或 Step 上。同一个 Location 的另一个 Node 可以通过受约束的 slot hook（如 `useTurnData(key)`）消费这个值，不需要接收 Session 或扫描 `snapshot.chat.nodes`。
 
-**`publication(match)`**：控制状态变化什么时候物化。三个选项：`immediate`（结构性或终止性变化）、`animation-frame`（高频可见 delta，合并到下一帧）、`none`（状态变化只喂给后续 publication）。引擎仍然按 log 顺序应用每个 update，cadence 只合并视图发布。
-
-**`buildLocationData(context, scope)`**：可选，把 Definition 拥有的数据发布到引擎拥有的 Turn 或 Step 上。同一个 Location 的另一个 Node 可以通过受约束的 slot hook（如 `useTurnData(key)`）消费这个值，不需要接收 Session 或扫描 `snapshot.chat.nodes`。
-
-**`buildViewNode(context)`**：产出渲染就绪的 Node。保留 `context.key` 作为 React 身份，从持久排序证据里选 `anchorSeq`，只返回 renderer-ready 数据。一旦 target Node 发布了，持续返回同一个 key；需要暂时离开可见流时用 `visibility: 'hidden'`，不要返回 null 撤回它。
-
-**`target`** 和 `buildViewNode` 必须一起出现，声明一个 target 拥有的渲染贡献。
+`buildViewNode(context)` 产出渲染就绪的 Node，和 `target` 必须一起出现，声明一个 target 拥有的渲染贡献。两条纪律：保留 `context.key` 作为 React 身份，从持久排序证据里选 `anchorSeq`，只返回 renderer-ready 数据；一旦 target Node 发布了，持续返回同一个 key，需要暂时离开可见流时用 `visibility: 'hidden'`，不要返回 null 撤回它。
 
 ## 三条事件摄入路径
 
-引擎从三个路径接收事件，每条路径的工作量不同。
+引擎从三个路径接收事件。历史可以从尾部往回一页一页要，但每个被接受的页面都先归一成按 `seq` 升序，再做 State 回放。三条路径对 Definition 呈现的行为不同：
 
-**Replace（打开、resync、gap 修复）。** 重建加载的窗口，对每个 Definition 匹配每个事件一次，然后回放每个已启动的 Context。对 Definition 来说，这是 start 后跟按 seq 升序的 update；只有 update 的 pending Context 保持无 State。
+| 路径 | 什么时候发生 | 引擎做什么 | Definition 看到什么 |
+|---|---|---|---|
+| Replace | 打开、resync、gap 修复 | 重建加载的窗口，每个事件对每个 Definition 匹配一次，回放每个已启动的 Context | start 后跟按 seq 升序的 update；只有 update 的 pending Context 保持无 State |
+| Prepend | 加载一个更早的页面 | 只匹配新的更早事件，按 `(kind, id)` 合并进现有 Context，保留已有 keyed node，只回放受影响的 Context 和依赖 | 新发现的 start 激活它收集的 update；变化的 Location 或 predecessor 可能重跑 Context |
+| Append | 一个 live 事件到达 | 对每个 Definition 的 `match` 调用一次，按 key 查找匹配的 Context，只更新那个 Context | 一次 update、一次请求的 publication，不扫描任何现有 Context |
 
-**Prepend（加一个更早的页面）。** 只匹配新的更早事件，按 `(kind, id)` 合并到现有 Context，保留已有的 keyed node，只回放受影响的 Context 和依赖。一个新发现的 start 激活它收集的 update；一个变化的 Location 或 predecessor 可能重跑 Context。
-
-**Append（一个 live 事件）。** 对每个 Definition 的 `match` 调用一次，按 key 查找匹配的 Context，只更新那个 Context。一次 update，一次请求的 publication，不扫描任何现有 Context。
-
-三条路径的设计目标是：**历史可以是分页的、可以是乱序到达的、可以是 live 追加的，但最终的 State 在任何情况下都是正确的。** 这靠可回放的 start + update 保证。
+三条路径的设计目标是一句话：历史可以是分页的、可以是乱序到达的、可以是 live 追加的，最终的 State 在任何情况下都是正确的。支撑它的还是上一节那条可回放的 start + update。
 
 ## 性能不变量：不做全窗口扫描
 
@@ -79,6 +71,7 @@ branded id 类型（`ReviewId`）跨进程边界使用，防止和别的字符�
 D 个注册的 Definition，一个事件到来时做 D 次当前事件匹配，匹配后做常数时间的 Context-key 查找。
 
 这意味着 Definition 代码不能在正常的 append 路径上：
+
 - 遍历完整的事件窗口
 - 遍历所有 Context
 - 遍历 `context.matches`
@@ -86,20 +79,18 @@ D 个注册的 Definition，一个事件到来时做 D 次当前事件匹配，�
 
 用什么替代？用 State 存累积事实，用 Location data 做 same-Turn/Step 共享，用 `reader.previous()` 做索引化的 predecessor 依赖查询。
 
-`reader.previous(kind)` 在 `start` 时可用，返回当前 start seq 之前最近的已启动 Context 的只读数据。assembler 记录这个依赖。如果后来一个更早的 prepend 提供了更近的 predecessor、关闭了一个之前未知的窗口间隙、或修改了 predecessor State，它会从 start 重跑依赖的 Context 并按 seq 升序回放 update。
-
-reader 不暴露业务特定的查询方法，也不授予对另一个 Context 的修改权。
+`reader.previous(kind)` 在 `start` 时可用，返回当前 start seq 之前最近的已启动 Context 的只读数据，assembler 记录这个依赖。如果后来一个更早的 prepend 提供了更近的 predecessor、关闭了一个之前未知的窗口间隙、或修改了 predecessor State，引擎会从 start 重跑依赖的 Context，按 seq 升序回放 update。reader 不暴露业务特定的查询方法，也不授予对另一个 Context 的修改权。
 
 ## keyed renderer：React 组件怎么消费
 
-渲染侧是一个 keyed React 组件，通过 `ChatNodeViewProps` 接收 Node 数据。组件是 `ReviewNodeView({ node }: ChatNodeViewProps<'review-job'>)`，类型参数把组件钉在 `review-job` 这个 kind 上：渲染文本优先取 `node.data.summary`，没有摘要就用 `node.data.title` 和 `node.data.completed` 拼成 `标题: 完成度%`，最后 `createElement('p', null, text)` 渲染成一个段落。
+渲染侧是一个 keyed React 组件，通过 `ChatNodeViewProps` 接收 Node 数据。类型参数把组件钉在一个 kind 上：`ChatNodeViewProps<'review-job'>` 的组件只服务 `review-job` 这一种 Node，审查卡片的实现无非是拿 `node.data.summary` 或 `title` 加 `completed` 拼一行文字渲染出来。
 
 组件只消费 `node.data` 和受约束的 Location hook。它不直接接收 Session 事件、不扫描 Context 集合、不访问其他 Chat Node。
 
 注册方式是在 client 插件的 `apply` 里，写法分三步：
 
 1. 声明依赖：`export const inject = ['conversationEvents', 'slots']`。
-2. 导出 `apply(ctx: ClientContext): void`，第一步调 `ctx.conversationEvents.register(reviewDefinition)`，把 Definition 注册进引擎。
+2. 在 `apply(ctx: ClientContext)` 里先调 `ctx.conversationEvents.register(reviewDefinition)`，把 Definition 注册进引擎。
 3. 再调 `ctx.slots.inject('conversation.chat.node', ...)`，注入回调里用 `ctx.slots.register({ name: 'conversation.chat.node', key: 'review-job' }, ReviewNodeView)` 把 keyed renderer 挂上插槽。
 
 Chat 数据类型通过声明合并注册：在 `declare module '@deepseek-ai/dsh-client-ui-conversation/client'` 里给 `interface ChatNodeDataMap` 加一条 `'review-job': ReviewChatData`。
@@ -110,26 +101,24 @@ Chat 数据类型通过声明合并注册：在 `declare module '@deepseek-ai/ds
 
 写完一个 Conversation Node，需要验证这些结果：
 
-1. **完整窗口 replace** 产生预期的最终 State、Location data、Node payload 和 anchorSeq。
-2. **只有 update 的尾部** 保持 pending；prepend 唯一的 start 后产生和完整 replace 相同的结果。
-3. **初始历史后 live append** 产生和回放合并窗口相同的结果。
-4. **prepend 更早页面** 添加更早的行，不替换数据未变的已有 keyed Node。
-5. **重复的可见 delta** 保留 `context.key`，在请求时每帧最多发布一次。
-6. **keyed renderer** 只消费 `node.data` 和受约束的 Location hook，不扫描 Session 事件窗口、Context 或 Chat Node。
+1. 完整窗口 replace 产生预期的最终 State、Location data、Node payload 和 anchorSeq。
+2. 只有 update 的尾部保持 pending；prepend 唯一的 start 后产生和完整 replace 相同的结果。
+3. 初始历史后 live append 产生和回放合并窗口相同的结果。
+4. prepend 更早页面添加更早的行，不替换数据未变的已有 keyed Node。
+5. 重复的可见 delta 保留 `context.key`，在请求时每帧最多发布一次。
+6. keyed renderer 只消费 `node.data` 和受约束的 Location hook，不扫描 Session 事件窗口、Context 或 Chat Node。
 
 仓库里有现成的参考实现：`assistant.ts` 做流式和中断，`inbox.ts` 加 `message.ts` 做 predecessor 查询，`ui-deliverables` 做一个发布 Turn 数据但不创建自己 Node 的 Definition。
 
 ## 权衡与局限
 
-**事件必须是可回放的。** 如果你的业务逻辑依赖 live-only 的内存状态，Definition 会出错。所有 State 必须在按 seq 升序回放时确定性地重建。这是一个硬约束，不是建议。
+这套机制的前提是事件必须可回放。业务逻辑依赖 live-only 的内存状态，Definition 就会出错：所有 State 必须在按 seq 升序回放时确定性地重建。这是硬约束，不是建议。连带的一条是 start 之前不能渲染：窗口里只有 update 没有 start，Context 保持 pending；产品必须在 start 加载前渲染的话，需要一个 checkpoint 事件携带 whole fallback state。
 
-**start 之前不能渲染。** 如果窗口里只有 update 没有 start，Context 保持 pending，不构建 State。产品必须在 start 加载前渲染的话，需要一个 checkpoint 事件携带 whole fallback state。
+Node 之间也不共享状态。一个 Node 不能直接读另一个 Node 的 State，需要共享时用 Location data 发布到 Turn/Step 层，另一个 Node 通过 hook 消费。Definition 代码不能扫描全窗口，这是性能不变量，违反它会让 append 路径退化到 O(N) 而不是 O(D + 1)。当前教程的 target 固定为 'chat'，Trajectory 等其他视图目标是 out of scope。
 
-**不跨 Node 共享状态。** 一个 Node 不能直接读另一个 Node 的 State。需要共享时，用 Location data 发布到 Turn/Step 层，另一个 Node 通过 hook 消费。
+## 结论
 
-**Definition 代码不能扫描全窗口。** 这是性能不变量。违反它会导致 append 路径退化到 O(N) 而不是 O(D + 1)。
-
-**target 固定为 'chat'。** 当前教程只覆盖 Chat 视图。Trajectory 等其他视图目标是 out of scope。
+Conversation Node 的分工是：你声明事件身份、状态构建和渲染数据，引擎兜住回放、分页一致性和常数级性能。写 Definition 时守住两条就够了：事件族可回放，delta 按 seq 升序能确定性重建 State；append 路径不扫描全窗口。做到这两条，分页、乱序到达、live 追加都只是引擎要处理的情况，不是你要处理的。
 
 ## 延伸阅读
 

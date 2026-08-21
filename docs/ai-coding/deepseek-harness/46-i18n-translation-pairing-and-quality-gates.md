@@ -9,7 +9,7 @@
 
 原文说得很直接：两种语言权威相等。一个文档可以先以任一语言写和 review，然后翻译出对应版本。一份中文先写的 Agent Note 和一份英文先写的一样合法。绑定它们的是"必须说同一件事"。
 
-双语文档最常见的失败模式是**分叉**：英文改了，中文没跟着改，或者反过来。一旦分叉，读者不知道哪个版本是对的，文档从资产变成负债。`dsh` 的解法是一套机械化的配对和校验系统。
+双语文档最常见的失败模式是分叉：英文改了，中文没跟着改，或者反过来。一旦分叉，读者不知道哪个版本是对的，文档从资产变成负债。`dsh` 的解法是一套机械化的配对和校验系统。
 
 ## 配对契约：三个兄弟文件
 
@@ -21,11 +21,11 @@
 
 没有 locale 目录，没有独立翻译仓库，没有交替的双语文件。配对整体合并：一个 PR 永远不落地一种语言而不带另外两个文件。
 
-这个三文件结构的好处是**配对是原子单元**。你不能只改英文、只改中文、或只改记录。一次确认同时更新三者。
+这个三文件结构的好处是配对成为原子单元。你不能只改英文、只改中文、或只改记录，一次确认同时更新三者。
 
 ## 一致性记录：blob hash
 
-`foo.i18n.yaml` 持有每一侧在上次确认一致时的完整 git blob hash。整个文件就是文件名到 hash 的映射，两条记录：`foo.md` 一条，记 `3f786850e387550fdab836ed7e6dc881de23001b`；`foo.zh.md` 一条，记 `89e6c98d92887913cadf06b2adb97f26cde4849b`。
+`foo.i18n.yaml` 持有每一侧在上次确认一致时的完整 git blob hash。整个文件就是文件名到 hash 的映射，两条记录，一边一条。
 
 用 blob hash 而不是 commit hash，所以记录对同一个 PR 里编辑的文件可计算（`git hash-object foo.md`），一致性是纯内容比较。
 
@@ -57,11 +57,9 @@
 
 `pnpm run verify-translation-pairing` 是 doc-sync 的一部分，机械化地执行配对契约。它检查三件事：
 
-1. **范围内的每个文档有完整的配对。** 缺 `.zh.md` 或 `.i18n.yaml` 就失败。README 发现是 basename 大小写不敏感的，所以 `missions/readme.md` 和其他文档根一样在范围内。
-
-2. **每个存在的配对 artifact 完整且一致。** 三个文件都在；每一侧的当前 blob hash 等于记录的；中文侧和每个 authored 英文源带语言切换器；结构签名按序匹配。
-
-3. **列为 excluded 的文件没有 `.zh.md` 和 `.i18n.yaml`。** 这些文件明确排除在双语配对之外。
+1. 范围内的每个文档有完整的配对。缺 `.zh.md` 或 `.i18n.yaml` 就失败。README 发现是 basename 大小写不敏感的，所以 `missions/readme.md` 和其他文档根一样在范围内。
+2. 每个存在的配对 artifact 完整且一致。三个文件都在；每一侧的当前 blob hash 等于记录的；中文侧和每个 authored 英文源带语言切换器；结构签名按序匹配。
+3. 列为 excluded 的文件没有 `.zh.md` 和 `.i18n.yaml`。这些文件明确排除在双语配对之外。
 
 几个实用的变体：
 
@@ -89,18 +87,16 @@
 
 `lefthook.yml` 定义了本地 Git hooks，设计为快速的本地检查点，CI 拥有完整的仓库级门禁矩阵。
 
-**pre-commit** 有六个 job：
+`pre-commit` 有六个 job：
 
-1. **translation pairing (staged records)**：对暂存的 `.i18n.yaml` 文件跑配对校验。改了配对记录没更新内容？提交前就拦住。
-2. **archived agent notes**：校验归档的 Agent Notes。
-3. **lint (staged)**：用 Oxlint 校验暂存的 TS/TSX 文件，带 `--fix` 和有限重试。
-4. **third-party notices (staged)**：当 package.json 或相关文件变化时，重新生成 `THIRD_PARTY_NOTICES.md` 并暂存。这是"重新生成而非拒绝"的设计：一个忘改 notices 的依赖编辑会在提交时被自动修正。
-5. **whitespace (staged)**：`git diff --cached --check`。
-6. **vendor manifest guard**：检查 vendored 代码的 manifest。
+1. translation pairing（staged records）：对暂存的 `.i18n.yaml` 文件跑配对校验。改了配对记录没更新内容，提交前就拦住。
+2. archived agent notes：校验归档的 Agent Notes。
+3. lint（staged）：用 Oxlint 校验暂存的 TS/TSX 文件，带 `--fix` 和有限重试。
+4. third-party notices（staged）：当 package.json 或相关文件变化时，重新生成 `THIRD_PARTY_NOTICES.md` 并暂存。这是"重新生成而非拒绝"的设计：一个忘改 notices 的依赖编辑会在提交时被自动修正。
+5. whitespace（staged）：`git diff --cached --check`。
+6. vendor manifest guard：检查 vendored 代码的 manifest。
 
-**pre-merge-commit** 重复 pairing 和 archived notes 检查。
-
-**pre-push** 跑 `pnpm run typecheck`，完成 Host lib 阶段（包括生成的 Typert 合约）再跑 Client TypeScript 检查。
+`pre-merge-commit` 重复 pairing 和 archived notes 检查。`pre-push` 跑 `pnpm run typecheck`，完成 Host lib 阶段（包括生成的 Typert 合约）再跑 Client TypeScript 检查。
 
 这些 hook 的设计原则是"快"。它们故意不跑测试、快照、文档检查、build 或 hygiene。贡献者跑一次和变更相关的检查，CI 拥有穷尽的覆盖。`pnpm run check:all` 是可选的完整本地门禁集，独立于 Git hooks。
 
@@ -117,6 +113,10 @@
 一个重新记录的配对，如果对应版本翻译得很差，门禁会过。但它不应该过 review。这是机械检查和人类判断的分工：门禁抓结构不一致，reviewer 抓语义不一致。
 
 `dsh` 用 `terminology.md` 作为术语的真相来源，`translation-rules.md` 定义翻译规则。常规的对应版本更新由工作中的 agent 一次性直接完成，加载 terminology 后一 pass 翻译。它不调用翻译 skill、不生成 briefing、不跑单独的翻译 review pass、不委托给 subagent。扩展的 `dsh-translate-docs` workflow 保留给显式用户调用。
+
+## 结论
+
+双语文档不腐烂，靠的是把"两边说同一件事"拆成可机械校验的部分：三文件配对让更新成为原子单元，blob hash 记录让失步可检测，结构签名让漏译可自动抓，merge driver 让并行更新可自动合并。语义等价仍然是 reviewer 的职责，门禁只保证结构和内容指纹一致，这个分工是整套系统能长期运转的前提。
 
 ## 延伸阅读
 

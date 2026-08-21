@@ -5,13 +5,13 @@
 
 ## 三种自动化姿势
 
-Web UI 是给人用的。当你需要把 `dsh` 嵌进自动化流程时，有三个选择，复杂度递增。
+Web UI 是给人用的。当你需要把 `dsh` 嵌进自动化流程时，有三个选择，复杂度递增：
 
-**Headless**（`dsh --profile headless`）：命令行一次性 runner。接一个任务字符串，创建全新会话，跑完，打印最终 assistant 文本，退出。最简单，适合"给我跑一个任务拿结果"的场景。
-
-**Python SDK**（`deepseek-harness-sdk`）：把 `dsh` 当 Python 库用。`DeepSeekHarness` 类管理 runtime 生命周期，`Session.run()` 发任务收结果。适合需要在 Python 程序里编排 agent 的场景。
-
-**JSON-RPC runtime**：底层协议。headless 和 Python SDK 底层都走 JSON-RPC stdio 和 runtime 通信。如果你用的不是 Python，可以直接实现这个协议的客户端。
+| 姿势 | 是什么 | 适合 |
+|---|---|---|
+| Headless（`dsh --profile headless`） | 命令行一次性 runner：接一个任务字符串，创建全新会话，跑完，打印最终 assistant 文本，退出 | "给我跑一个任务拿结果" |
+| Python SDK（`deepseek-harness-sdk`） | 把 `dsh` 当 Python 库用：`DeepSeekHarness` 管理 runtime 生命周期，`Session.run()` 发任务收结果 | 在 Python 程序里编排 agent |
+| JSON-RPC runtime | 底层 stdio 协议，headless 和 Python SDK 的地基 | 用的不是 Python，自己实现协议客户端 |
 
 三者共享同一套 agent 组合（Cordis 配置），区别只在谁来驱动 turns 和怎么收结果。
 
@@ -29,20 +29,11 @@ headless profile 的组合包含：DeepSeek V4 模型、本地 bash 和文件系
 
 Python SDK 是自动化集成的推荐方式，安装用 `python -m pip install deepseek-harness-sdk`。这个包会安装同版本的 `deepseek-harness-runtime-bin` 平台 wheel。**runtime 是捆绑的单文件可执行文件，目标机器不需要 Node.js。**
 
-最简用法三步：从 `deepseek_harness` 包导入 `DeepSeekHarness` 类；用 `with DeepSeekHarness() as harness:` 建实例管理生命周期，块内调 `result = harness.run("Say hi.")` 发任务；退出块后 `print(result.final_response)` 取最终文本。
-
-`DeepSeekHarness` 懒启动 runtime 子进程，跨调用复用。用 context manager 管理生命周期，或显式调 `close()`。
+最简用法三行就是全部：导入 `DeepSeekHarness`，用 `with DeepSeekHarness() as harness:` 管住生命周期，块内 `harness.run(...)` 发任务，从 `result.final_response` 取最终文本。`DeepSeekHarness` 懒启动 runtime 子进程并跨调用复用，退出 with 块或显式调 `close()` 时清理。
 
 ### 带配置的用法
 
-如果你需要指定 provider、model、workspace、session，完整流程四步：
-
-1. 用 `pathlib.Path` 准备三个绝对路径：`config` 是 `Path("examples/jsonrpc-agent/minimal.cordis.yml").resolve()`，`workspace` 和 `sessions` 分别对各自的目标目录 `Path(...).resolve()`。
-2. 构造 `DeepSeekHarness`，六个关键字参数：`provider="deepseek-official"`、`model="deepseek-v4-flash"`、`max_tokens=49_152`、`cwd=str(workspace)`、`session_root=str(sessions)`、`cordis=str(config)`，三个路径都转成字符串。
-3. 仍用 `with ... as harness:` 管理生命周期，`harness.run(...)` 这次带两个参数：任务字符串 `"Inspect the repository and fix the failing tests."` 和 `session_id="example-001"`。
-4. 结果同样从 `result.final_response` 取最终文本。
-
-`provider` 选择组合里注册的 provider route，`model` 是 adapter 解析的模型 id。`max_tokens` 是可选的正整数，root agent 及其进程内后代的单次请求输出 token 上限。`cordis` 指向你的 Cordis 配置文件。
+要指定 provider、model、workspace、session，就在构造 `DeepSeekHarness` 时传关键字参数，`run()` 再带上 `session_id`。各参数管什么：`provider` 选择组合里注册的 provider route；`model` 是 adapter 解析的模型 id；`max_tokens` 是可选的正整数，作为 root agent 及其进程内后代单次请求的输出 token 上限，不传就留给 provider 默认值；`cwd` 和 `session_root` 分别定 workspace 和会话日志目录；`cordis` 指向你的 Cordis 配置文件。结果同样从 `result.final_response` 取最终文本。
 
 ### RunResult 的结构
 
@@ -61,7 +52,7 @@ Python SDK 是自动化集成的推荐方式，安装用 `python -m pip install 
 
 Python SDK 底层通过 JSON-RPC stdio 和 runtime 通信。这个协议是自动化的基础设施。
 
-runtime（`dsh-jsonrpc-agent`）是一个 unattended coding-agent 组合。它**刻意不加载** terminal UI、console logger、approval UI、user-questions tool，因为 stdout 归 SDK 协议，turns 由 SDK 驱动。
+runtime（`dsh-jsonrpc-agent`）是一个 unattended coding-agent 组合。它刻意不加载 terminal UI、console logger、approval UI、user-questions tool，因为 stdout 归 SDK 协议，turns 由 SDK 驱动。
 
 模型可见的工具是精简的：bash（foreground only）、read/write/edit、subagent（一个 foreground in-process spawn provider）、todo_write。runtime 还加载 JSONL 会话持久化和自动上下文 compaction。
 
@@ -85,15 +76,15 @@ runtime 继承正常的 `dsh` 环境变量：
 
 当你不传 `cordis` 参数时，SDK 用捆绑的默认配置（`DSH_CORDIS_CONFIG` 注入）。这个默认配置包含：stdio JSON-RPC server、agent core、预加载的 DeepSeek adapter、JSONL 会话持久化、local bash。
 
-如果你想跑自己的插件组合，在配置里保留 `@deepseek-ai/dsh-sdk-jsonrpc-server` 条目，然后传 Cordis 配置路径。一个自定义组合可以挂 `llm-pi-ai`，配置 provider 特定的凭证和端点，选择 pi-ai 安装目录里的任何 provider/model。
+如果你想跑自己的插件组合，在配置里保留 `@deepseek-ai/dsh-sdk-jsonrpc-server` 条目，然后传 Cordis 配置路径。一个自定义组合可以挂 `llm-pi-ai`，配置 provider 特定的凭证和端点，选择 pi-ai 安装的 catalog 里的任何 provider/model。
 
 ## workspace 和 session 隔离
 
-自动化场景的隔离比交互场景更重要。两个维度：
+自动化场景的隔离比交互场景更重要，分两个维度。
 
-**workspace 隔离。** `cwd` 选择 agent 可用的 workspace，`session_root` 存储会话日志和状态。两者在子进程启动前解析为绝对路径。
+workspace 维度：`cwd` 选择 agent 可用的 workspace，`session_root` 存储会话日志和状态，它是设置 `DSH_SESSION_ROOT` 的高层便捷参数。`cwd` 在子进程启动前就解析成绝对路径。
 
-**session 隔离。** 用全新的 session_id 跑独立任务。复用同一个 session_id 只在下一次调用应该继续同一段持久对话时使用。复用同一个 harness 和 session id 会保留 session 拥有的 Bash 进程，包括工作目录、导出的变量和 shell 函数。
+session 维度：独立任务用全新的 session_id；只有下一次调用应该继续同一段持久对话时才复用 id。复用同一个 harness 和 session id 会保留 session 拥有的 Bash 进程，包括工作目录、导出的变量和 shell 函数。
 
 这和 ACP server 的设计哲学一致：每个 `session/new` 创建全新 agent，会话之间互不干扰。但 Python SDK 的方式更直接，不需要走 JSON-RPC 协议。
 
@@ -109,17 +100,13 @@ runtime 继承正常的 `dsh` 环境变量：
 
 ## 权衡与局限
 
-**Headless 是一次性的。** 每次跑都是一个新进程、一个新会话。不适合需要跨调用复用状态的场景。复用状态用 Python SDK。
+Headless 是一次性的：每次跑都是一个新进程、一个新会话，需要跨调用复用状态就用 Python SDK。Python SDK 又是子进程模型：runtime 通过 stdio 通信，Python 进程退出时 runtime 一并被清理，需要跨进程的持久性就靠 session 日志的 resume 能力。JSON-RPC 协议本身是 stdio 的，客户端和 runtime 必须在同一台机器上、走子进程管道；要远程调用，走 ACP 的 streamable-http 那条路。
 
-**Python SDK 是子进程模型。** runtime 是一个子进程，通过 stdio 通信。这意味着 Python 进程崩溃时 runtime 也会被清理（context manager 退出时）。如果你需要跨进程的持久性，用 session 日志的 resume 能力。
+还有两条运行纪律要记。自动化组合权限宽，danger-full-access 意味着 agent 能做任何 runtime 进程能做的事，安全边界靠隔离环境（容器、一次性 checkout）保证，不靠权限策略。JSON-RPC runtime 的 stdout 是协议通道，任何混进 stdout 的日志都会破坏协议，诊断信息走 stderr。
 
-**JSON-RPC 协议是 stdio 的。** 不适合远程调用（用 ACP 的 streamable-http 那条路）。stdio 限制了客户端和 runtime 必须在同一台机器上，通过子进程管道通信。
+## 结论
 
-**自动化组合权限宽。** danger-full-access 意味着 agent 能做任何 runtime 进程能做的事。安全边界靠隔离环境（容器、一次性 checkout）保证，不靠权限策略。
-
-**POSIX 限制。** 持久 PTY 需要 POSIX terminal。Windows 上不能直接跑这些组合。
-
-**stdout 归协议。** JSON-RPC runtime 的 stdout 是协议通道。任何混入 stdout 的日志都会破坏协议。诊断信息走 stderr。
+三种姿势共享同一套 agent 组合，差别只在驱动方：shell 里拿一次性结果用 headless，Python 程序里编排用 SDK，其他语言直接实现 JSON-RPC stdio 协议。用的时候记住两条边界就够：stdout 归协议，权限默认 danger-full-access，安全靠一次性 checkout 或容器兜底。
 
 ## 延伸阅读
 

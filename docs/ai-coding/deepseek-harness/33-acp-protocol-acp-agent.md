@@ -25,7 +25,7 @@ ACP 由 Zed 编辑器团队在 2025 年 8 月推出，社区把它叫做"AI 编�
 
 两侧用同一条协议线，意味着 `dsh` 的 agent 可以嵌套：一个 `dsh` agent 通过 ACP 调用另一个 `dsh` agent（或任何 ACP 兼容 agent，比如 Codex）作为子 agent。这是 `dsh` 多 agent 协作的基础设施。
 
-本文聚焦服务端。客户端的细节在子 agent 的接缝设计里。
+本文聚焦服务端。客户端那半的细节在子 agent 的接缝设计里，这里只看服务端。
 
 ## dsh-acp：一个刻意做窄的自动化传输层
 
@@ -33,29 +33,29 @@ ACP 由 Zed 编辑器团队在 2025 年 8 月推出，社区把它叫做"AI 编�
 
 > Automation-only Agent Client Protocol server over JSON-RPC stdio.
 
-关键词是 **automation-only**（仅自动化）。这个包不是 UI 集成，不是能力接缝，而是一个**传输适配器**。它的职责是把 `dsh` 的 agent 能力翻译成 ACP 协议消息，仅此而已。
+关键词是 automation-only（仅自动化）。这个包不是 UI 集成，不是能力接缝，而是一个传输适配器。它的职责是把 `dsh` 的 agent 能力翻译成 ACP 协议消息，仅此而已。
 
-它**不暴露**的东西，和它暴露的东西一样重要：不暴露编辑器导航、对话回放、命令面板、模式切换、配置选择、elicitation（交互式表单）、reasoning（推理过程）、plans（计划）、titles（标题）、工具呈现。这些都是 Web host 和 client modules 的活，不是自动化传输的活。
+它不暴露的东西，和它暴露的东西一样重要：不暴露编辑器导航、对话回放、命令面板、模式切换、配置选择、elicitation（交互式表单）、reasoning（推理过程）、plans（计划）、titles（标题）、工具呈现。这些都是 Web host 和 client modules 的活，不是自动化传输的活。
 
 源码里 `apply()` 函数做三件事：在 stdin/stdout 上打开一个 `AgentSideConnection`，注册 ACP 方法处理器，用 `ctx.agents` 驱动 agent 的创建和销毁。stdout 被协议帧独占，所以这个包不安装任何 stdout 日志器，诊断信息只能走 stderr。
 
 ## 协议方法：会话的一生
 
-ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `dsh` agent 的完整生命周期如下。
+ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `dsh` agent 的完整生命周期，方法就六七个。
 
-**`initialize`**：握手。协商协议版本，声明能力。`dsh-acp` 声明的 prompt 能力是 baseline-only：不支持 image、audio、embeddedContext。不声明 session、editor、terminal、filesystem、MCP 能力。不声明认证方法。这个握手很诚实：我只做自动化文本对话，别的别找我。
+**`initialize`**：握手。协商协议版本，声明能力。prompt 能力默认是 baseline 文本；只有当部署挂了持久 attachment store、且当前 provider/model 显式支持图片输入时，才声明 image 能力，audio 和 embeddedContext 恒为 false。不声明 session、editor、terminal、filesystem、MCP 能力，也不声明认证方法。这个握手很诚实：我做的是自动化对话，交互式的能力别找我。
 
-**`session/new`**：创建一个全新的 agent。需要一个绝对路径的 `cwd`（工作目录）。`additionalDirectories` 和 `mcpServers` 如果非空会被拒绝。换句话说，每个 ACP 会话拿到的是一个干净的 agent，挂在一个明确的工作目录上，不带额外目录，不带 MCP 服务器。
+**`session/new`**：创建一个全新的 agent，需要一个绝对路径的 `cwd`（工作目录）。`additionalDirectories` 和 `mcpServers` 空值可以，非空被拒。每个 ACP 会话拿到的是一个干净的 agent，挂在一个明确的工作目录上，不带额外目录，不带 MCP 服务器。
 
-**`session/prompt`**：发一条提示。文本块被拼接成一条用户消息，resource link 被渲染成方括号文本引用。空提示或超出 baseline 的内容（图片、音频）被拒绝。每个会话同一时间只允许一个 in-flight 请求。调用会阻塞，直到整个 agent 变空闲（idle）才返回。
+**`session/prompt`**：发一条提示。有序的文本块被拼接成一条用户消息，resource link 渲染成方括号文本引用；空提示、音频、嵌入资源、未声明的图片被拒绝。每个会话同一时间只允许一个 in-flight 请求，调用会阻塞，直到整个 agent 变空闲（idle）才返回。
 
-这里有个微妙的设计：prompt 的 `stopReason` 不直接对应单个 turn 的结果。`dsh` 的一个 prompt 可能触发多个 turn（模型多步思考、调用工具），ACP 的 `session/prompt` 等整个 agent 空闲后才返回。正常的平静退出报 `end_turn`；显式取消或被丢弃的 prompt 报 `cancelled`；token 上限的 turn 结束也报 `end_turn`（不报成特殊停止原因），只有相关 turn 上的模型错误才会立即拒绝 prompt。
+这里有个微妙的设计：prompt 的 `stopReason` 不直接对应单个 turn 的结果。`dsh` 的一个 prompt 可能触发多个 turn（模型多步思考、调用工具），`session/prompt` 等整个 agent 空闲后才返回。正常的平静退出报 `end_turn`；显式取消或被丢弃的准入报 `cancelled`；token 上限的 turn 结束也报 `end_turn`，不报成特殊停止原因；关联的模型错误同样等到静默边界，才让 prompt 以错误收场。
 
-**`session/cancel`**：取消指定会话的工作。只取消目标 agent，把它的 pending prompt 结算为 `cancelled`。未知的 session id 是空操作。
+**`session/cancel`**：取消指定会话的工作。有 in-flight prompt 时，取消目标 agent，把 pending prompt 结算为 `cancelled`，不发迟到的用户消息；没有 in-flight prompt 时，取消的是自主工作。未知的 session id 是空操作。
 
-**`session/update`**：服务端通知。每当一个 committed 的 assistant/message 产生非空文本块，发一个 `agent_message_chunk`。注意是 committed message，不是 raw delta。这意味着客户端看到的不是逐 token 的流式输出，而是一段段已确认的文本。
+**`session/update`**：服务端通知。一个 committed 的 assistant/message 里每个非空的文本或图片块，发一个 `agent_message_chunk`，保持顺序。注意是 committed message，不是 raw delta，客户端看到的不是逐 token 的流式输出，而是一段段已确认的文本。
 
-**`session/request_permission`**：权限请求。当模型重试需要更宽的沙箱访问时，服务端向客户端发起一次性选择：`allow_once` 或 `reject_once`。客户端可以自动回答。关闭对话框或不可用的答案一律 fail closed（拒绝）。
+**`session/request_permission`**：权限请求。当模型重试需要更宽的沙箱访问时，服务端向客户端发起一次性选择：allow_once 或 reject_once，客户端可以自动回答。关闭对话框或不可用的答案一律 fail closed（拒绝）。
 
 ## committed-only 输出：为什么不做逐 token 流
 
@@ -65,7 +65,7 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 
 > Committed-message output intentionally trades token-by-token latency for a clean automation result.
 
-翻译过来：**故意用逐 token 延迟换取一个干净的自动化结果。** 未提交的 provider chunk 和重试尝试不会泄漏部分文本。
+翻译过来：**故意用逐 token 延迟，换取一个干净的自动化结果。** 未提交的 provider chunk 和重试尝试不会泄漏部分文本。
 
 为什么？因为 ACP 的消费者是程序，不是人。程序要的是"这段文字是最终答案的一部分"，不是"模型现在正在想这几个字"。如果泄漏了未确认的部分文本（比如模型中途重试、走了一条错误路径又回退），客户端拿到的是碎片化的、可能自相矛盾的内容。committed-only 保证了客户端收到的每一段文字都是模型确认过的，可以直接用于后续处理。
 
@@ -73,11 +73,7 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 
 ## 权限：一次性决策，不做持久授权
 
-`dsh-acp` 的权限模型很克制。它通过 `session/request_permission` 向客户端提供**一次性**选择：
-
-`options` 数组只有两项：一项 `optionId` 为 `allow-once`、`name` 为 `Allow once`、`kind` 为 `allow_once`；另一项 `optionId` 为 `reject-once`、`name` 为 `Reject`、`kind` 为 `reject_once`。
-
-注意两个细节。第一，只有 allow-once 和 reject-once，没有"永久允许"。客户端的一次同意不会变成持久授权。第二，选择只应用于那一次重试，通过正常的 tool-result 和审计路径记录。服务端不暴露权限选择器，也不持久化客户端策略。
+`dsh-acp` 的权限模型很克制。它通过 `session/request_permission` 向客户端提供一次性选择，选项只有两项：allow-once 和 reject-once，没有"永久允许"。客户端的一次同意不会变成持久授权，选择只应用于那一次重试，通过正常的 tool-result 和审计路径记录。服务端不暴露权限选择器，也不持久化客户端策略。
 
 这个设计的安全含义是：即使客户端被攻破或配置错误，一次错误的"允许"不会永久打开安全边界。每次需要提权都是一次独立决策。
 
@@ -89,14 +85,14 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 
 `dsh-acp` 的 teardown 分四步：
 
-1. **关闭入口**：标记 `closed`，拒绝新的 session 和 prompt。
-2. **结算 pending**：把所有 in-flight 的 prompt 结算为 `cancelled`，取消所有顶层 agent。
-3. **排空子 agent**：只排空属于这个连接的顶层 agent 旗下的 continuable 子 agent，从子到父（child-first）逐个销毁。这样不会有子 agent 残留在一个已经被释放的运行时上。其他前端共享同一 Context 的子 agent 不受影响。
-4. **销毁顶层 agent**：并行销毁所有顶层 agent 句柄，等所有结果返回。任何一个失败都会被收集到 AggregateError 里，不让一个失败掩盖其他失败。
+1. 关闭入口：标记 `closed`，拒绝新的 session 和 prompt。
+2. 结算 pending：把所有 in-flight 的 prompt 结算为 `cancelled`，取消所有顶层 agent。
+3. 排空子 agent：只排空属于这个连接的顶层 agent 旗下的 continuable 子 agent，从子到父（child-first）逐个销毁。这样不会有子 agent 残留在一个已经被释放的运行时上。其他前端共享同一 Context 的子 agent 不受影响。
+4. 销毁顶层 agent：并行销毁所有顶层 agent 句柄，等所有结果返回。任何一个失败都会被收集到 AggregateError 里，不让一个失败掩盖其他失败。
 
 源码里这段逻辑由一个 memoized 的 `quiesce()` 函数实现，通过 `ctx.effect()` 注册为插件销毁副作用，同时挂在连接关闭的 promise 链上。两条路径（Cordis 销毁和传输断开）复用同一个 teardown，保证不会重复执行。
 
-这个设计的核心原则是**精确归属**。bridge 用 branded session id 做身份检查：每条 session event 和权限请求都必须精确匹配 bridge 拥有的那个 agent 实例，不接受同 id 的冒充者。这防止了一个 agent 被 bridge 之外的途径销毁后，bridge 还在往它发消息。
+这个设计的核心原则是精确归属。bridge 用 branded session id 做身份检查：每条 session event 和权限请求都必须精确匹配 bridge 拥有的那个 agent 实例，不接受同 id 的冒充者。这防止了一个 agent 被 bridge 之外的途径销毁后，bridge 还在往它发消息。
 
 ## acp-agent 示例：一个可运行的组合
 
@@ -104,25 +100,23 @@ ACP 的核心是会话（session）。一个外部客户端通过 ACP 操作 `ds
 
 这个组合装载的东西很丰富：ACP app、DeepSeek 模型适配器、沙箱化的 bash 和文件系统栈、一次性审批策略、compaction（压缩）、subagents、workflows、hooks、派生的 session-query 索引、重复防护。每个 `session/new` 创建一个全新 agent，会话持久化到 JSONL。
 
-两个工程细节值得注意：
+两个工程细节容易被漏掉。
 
-**stdout 协议纯净化。** `@deepseek-ai/dsh-acp-demo` 不安装任何 stdout 日志器，所有诊断信息走 stderr。因为 stdout 被 ACP 的 JSON-RPC 帧独占，任何混入 stdout 的日志都会破坏协议。你在自己的组合里加 leaf 组件时，也必须用 stderr。
+stdout 协议纯净化。demo 包不安装任何 stdout 日志器，所有诊断信息走 stderr。因为 stdout 被 ACP 的 JSON-RPC 帧独占，任何混入 stdout 的日志都会破坏协议。你在自己的组合里加 leaf 组件时，也必须用 stderr。
 
-**会话工作区隔离。** 每个 `session/new` 提供独立的绝对 `cwd`，沙箱化的 bash 和文件系统变更针对那个 session cwd 解析 `workspace-write` 策略。所以并发会话可以使用不同的项目根目录，互不干扰。`DSH_PERMISSION_MODE` 环境变量在部署层面选择 `workspace-write` 或 `danger-full-access`。
+会话工作区隔离。每个 `session/new` 提供独立的绝对 `cwd`，沙箱化的 bash 和文件系统变更针对那个 session cwd 解析 `workspace-write` 策略。所以并发会话可以使用不同的项目根目录，互不干扰。`DSH_PERMISSION_MODE` 环境变量在部署层面选择 `workspace-write` 或 `danger-full-access`。
 
-## 权衡与局限
+## 权衡：automation-only 的边界
 
 `dsh-acp` 的窄是刻意的，但窄意味着有边界。
 
-**只支持全新会话。** 不支持 load、list、resume、delete、fork。每次都是 `session/new` 创建全新 agent。想恢复之前的会话？当前不行。
-
-**只支持 baseline 提示和一个工作区。** 图片、音频、嵌入资源、非空 additional directories、MCP 服务器都会被拒绝。resource link 被拍平成文本引用，不是获取内容。
-
-**只输出 committed 答案。** 实时进度、reasoning、工具活动、plans、titles、usage 都不在线上。如果你需要这些，得通过别的接口（比如会话日志或 telemetry）。
-
-**连接级生命周期。** 一个连接断开会释放它的所有会话，不支持单个会话关闭。
+它只支持全新会话，不支持 load、list、resume、delete、fork，每次都是 `session/new` 创建全新 agent，想恢复之前的会话当前不行。提示内容同样收窄：音频、嵌入资源、非空 additional directories、MCP 服务器都会被拒绝，图片只支持光栅格式且需要部署挂上 attachment store，resource link 被拍平成文本引用，不是获取内容。线上只有 committed 答案，实时进度、reasoning、工具活动、plans、titles、usage 都不在传输里，需要这些得走会话日志或 telemetry。生命周期是连接级的：一个连接断开会释放它的所有会话，不支持单个会话关闭。
 
 这些局限不是 bug，是 scope。`dsh-acp` 是自动化传输层，不是全能 UI。交互式渲染和人类提问属于 Web host 和 client modules。把它当 ACP 的"自动化 API"用，而不是当聊天界面用，这些局限就都合理。
+
+## 结论
+
+`dsh` 在 ACP 里两侧都站，这一篇看的是服务端 `dsh-acp`：一个刻意做窄的自动化传输适配器，把会话生命周期翻译成 JSON-RPC，只输出 committed 的答案，权限只做一次性决策，teardown 精确归属、不留孤儿。窄就是它的定位，程序要的是干净可靠的结果，不是逐 token 的表演。配上 `examples/acp-agent`，一行命令就能把这套 agent 变成可编程的自动化单元。
 
 ## 延伸阅读
 

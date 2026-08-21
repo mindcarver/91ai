@@ -13,24 +13,17 @@
 
 ## 最小骨架长什么样
 
-cookbook 给的最小形状是一个 Cordis 插件文件，六样东西：
+cookbook 给的最小形状是一个 Cordis 插件文件。核心是适配器类：继承 `LlmAdapter`，只实现一个异步生成器方法 `stream(options)`，产出 `StreamChunk`，方法体就是适配器的全部工作：翻译请求、发 HTTP、解析 SSE、yield chunk。外面套插件的标准件：`name` 声明插件名，`inject` 声明依赖 `ctx.llm`，`Config` 用 schemastery 声明配置（`apiKey` 标成 secret，`baseURL` 给默认值）。入口 `apply(ctx, config)` 里一句 `ctx.llm.registerAdapter(['my-provider'], new MyAdapter(config))`，把适配器挂上 `my-provider` 路由。
 
-1. 引依赖：`Context` 来自 `'cordis'`；`LlmAdapter`、`GenerateOptions`、`StreamChunk` 三个类型来自 `'@deepseek-ai/dsh-llm'`；`z` 来自 `'schemastery'`。
-2. 适配器类：`class MyAdapter extends LlmAdapter`，只实现一个异步生成器方法 `async *stream(options: GenerateOptions): AsyncIterable<StreamChunk>`，方法体就是适配器的全部工作：翻译请求、发 HTTP、解析 SSE、yield chunk。
-3. 插件名：`export const name = 'llm-myprovider'`。
-4. 注入声明：`export const inject = ['llm']`，声明依赖 `ctx.llm` 这个 service。
-5. 配置：`Config` 用 `z.object` 声明两个字段，`apiKey` 是 `z.string().role('secret')`（标成密钥），`baseURL` 是 `z.string().default('https://api.example.com/v1')`（带默认值）。
-6. 注册入口：`export function apply(ctx: Context, config: typeof Config)`，函数体一句 `ctx.llm.registerAdapter(['my-provider'], new MyAdapter(config))`，把适配器挂上 `my-provider` 路由。
+四条注册规矩值得先记住。
 
-几个要点必须理解：
+注册是基于副作用的。`apply` 里调 `registerAdapter`，这个调用是 Cordis 的可逆副作用，插件卸载时自动撤销。它因此 HMR 安全：改了配置热重载，旧路由干净撤掉，新路由挂上，不留垃圾。
 
-**注册是基于副作用的。** `apply` 里调 `registerAdapter`，这个调用是 Cordis 的可逆副作用，插件卸载时自动撤销。这意味着它 HMR 安全：改了配置热重载，旧路由干净撤掉，新路由挂上，不留垃圾。
+一个 provider 路由只能有一个适配器。重复注册会抛 `DUPLICATE_ADAPTER`，而且是 all-or-nothing，要么全注册成功要么一个都不动。这条规矩杜绝了"同一个 provider 有两个适配器，运行期不知道走哪个"的歧义（注册表的完整机制见 16 篇）。
 
-**一个 provider 路由只能有一个适配器。** 重复注册会抛 `DUPLICATE_ADAPTER`，而且是 all-or-nothing，要么全注册成功要么一个都不动。这条规矩杜绝了"同一个 provider 有两个适配器，运行期不知道走哪个"的歧义（注册表的完整机制见 16 篇）。
+`options.provider` 选适配器，`options.model` 是 provider 的模型 id。模型 id 不需要在生命周期开始时注册，所以一个能动态发现模型的适配器，可以不重启就服务新模型。
 
-**`options.provider` 选适配器，`options.model` 是 provider 的模型 id。** 模型 id 不需要在生命周期开始时注册，所以一个能动态发现模型的适配器，可以不重启就服务新模型。
-
-**密钥走 schemastery Config 加环境变量回退。** Config 里声明 `apiKey`，从 `cordis.yml` 里用 `!!js process.env.MY_KEY` 注入。绝不要在代码里自己读 key 文件。这是 `dsh` 凭证管理的统一姿势，集中、可轮换、不散落。
+密钥走 schemastery Config 加环境变量回退。Config 里声明 `apiKey`，从 `cordis.yml` 里用 `!!js process.env.MY_KEY` 注入，绝不在代码里自己读 key 文件。这是 `dsh` 凭证管理的统一姿势：集中、可轮换、不散落。
 
 ## 把职责拆开
 
@@ -52,70 +45,41 @@ cookbook 给的最小形状是一个 Cordis 插件文件，六样东西：
 
 ### 第一步：翻译请求
 
-`GenerateOptions` 是 provider 中立的，你要把它变成 OpenAI 的请求体。`system` 映射到第一条 system 消息（或 OpenAI 的 system slot），`messages` 映射到 `messages` 数组，`tools` 映射到 `tools` 字段，`temperature`、`maxTokens`、`stop` 一一对应。
+`GenerateOptions` 是 provider 中立的，你要把它变成 OpenAI 的请求体。`system` 映射到第一条 system 消息，`messages` 映射到 `messages` 数组，`tools` 映射到 `tools` 字段，`temperature`、`maxTokens`、`stop` 一一对应。写成一个 `serializeRequest()` 函数：组 messages 数组（有 system 就先放一条，再逐条转换 content），URL 是 baseURL 拼 `/chat/completions`，请求体里 `maxTokens` 映射到 `max_tokens`。
 
-写成一个 `serializeRequest(options: GenerateOptions, baseURL: string)` 函数，三步：
-
-1. 组 `messages` 数组。`options.system` 存在就先 push 一条 `{ role: 'system', content: options.system }`；然后遍历 `options.messages`，每条 push `{ role: msg.role, content: toOpenAIContent(msg.content) }`，content 的转换交给 `toOpenAIContent`。
-2. 定 URL，`baseURL` 拼上 `/chat/completions`。
-3. 组请求体 `body`。`model` 取 `options.model`；`messages` 用刚组的数组；`tools` 是 `options.tools?.map(toOpenAITool)`，没有 tools 就是 undefined；`temperature`、`stop` 原样透传；`maxTokens` 映射到 `max_tokens`；最后两个开关是关键：`stream: true` 要流式，`stream_options: { include_usage: true }` 让 provider 在流末尾给 usage。
-
-注意 `stream_options: { include_usage: true }`。OpenAI 兼容端点默认不在流式响应里给 token 用量，你得显式要，它才会在流结束时发一个带 usage 的尾巴 chunk。这关系到下面第一条契约。
+两个开关是关键：`stream: true` 要流式；`stream_options: { include_usage: true }` 让 provider 在流末尾给 usage。OpenAI 兼容端点默认不在流式响应里给 token 用量，你得显式要，它才会在流结束时发一个带 usage 的尾巴 chunk。这关系到下面第一条契约。
 
 ### 第二步：解析 SSE 流
 
-OpenAI 兼容端点用 SSE（Server-Sent Events）推流。每个事件是 `data: {...}\n\n`，流结束是 `data: [DONE]`。用 `eventsource-parser` 这种库解析，避免手写分隔出错（`llm-deepseek` 用的就是它）。
-
-解析写成一个异步生成器 `parseSSE(response: Response)`，三步：
-
-1. 从 `'eventsource-parser/stream'` 引入 `EventSourceParserStream`。
-2. 取 `response.body`，串两条管道：先 `pipeThrough(new TextDecoderStream())` 把字节解成文本，再 `pipeThrough(new EventSourceParserStream())` 切成 SSE 事件。
-3. `for await` 遍历这条流（示例里对它做了 `as any` 断言）：`event.data === '[DONE]'` 就 `return` 结束；否则 `yield JSON.parse(event.data)`，把事件负载解析成对象交给下游。
+OpenAI 兼容端点用 SSE 推流：每个事件是 `data: {...}`，流结束是 `data: [DONE]`。解析写成一个异步生成器 `parseSSE(response)`：取 `response.body`，串两条管道，先过 `TextDecoderStream` 把字节解成文本，再过 `eventsource-parser` 的 `EventSourceParserStream` 切成 SSE 事件；然后 `for await` 遍历，见到 `[DONE]` 就结束，否则把 `event.data` 解析成对象交给下游。用库解析是为了避免手写分隔出错，`llm-deepseek` 用的就是它。
 
 ### 第三步：把 provider 事件翻译成 StreamChunk
 
-这是核心。OpenAI 流式响应里，每个 chunk 是 `choices[0].delta`，delta 里可能有 `content`（文本）、`tool_calls`（工具调用片段）。你要按"首次出现分配 index，同一块复用 index"的规则，把它们翻译成 `StreamChunk`：
+这是核心。OpenAI 流式响应里，每个 chunk 是 `choices[0].delta`，delta 里可能有 `content`（文本）、`tool_calls`（工具调用片段），尾巴 chunk 里可能有 `usage`。翻译规则一句话：**block 的 index 按首次出现顺序分配，同一块的每个 delta 复用同一个 index**。
 
-`stream()` 的主流程按顺序分五段：
+`stream()` 的主流程五段。发请求：用 `serializeRequest()` 的结果发 POST，请求头带 `Authorization` 和 `Content-Type`，再展开 `attributionHeaders()`（app 归因头必须带），`signal` 必须传 `options.signal`；响应不 ok 就抛 `LlmError`。备记账：一张 `toolCallIndexes` 映射，从 OpenAI 的 tool call index 映到本地 block index；一个 `nextBlock` 发号器。翻译：遍历 `parseSSE()` 吐出的每个事件，文本内容就三连发 `block-start`、`text-delta`、`block-end`；工具调用片段首次出现时领一个新 index 并发 `block-start`，然后发 `tool-call-delta`，`argumentsDelta` 保持原始 JSON 字符串；usage 出现就发 `usage` chunk。收尾：给每个工具调用块发 `block-end`，把累计的 arguments 拼好后封口。最后发 `finish`，reason 是 `{ kind: 'stop' }`。
 
-1. 发请求。先 `serializeRequest(options, this.config.baseURL)` 解构出 `url` 和 `body`，`await fetch(url, ...)` 发 POST。请求头带三样：`Authorization` 是 ``Bearer ${this.config.apiKey}``、`Content-Type: application/json`，再展开 `attributionHeaders()`，app 归因头必须带；`signal` 传 `options.signal`，必须传。`response.ok` 为假就 `throw new LlmError(httpToFailure(response), httpToCode(response))`。
-2. 备两个记账变量。`toolCallIndexes` 是 `Map<number, number>`，从 OpenAI 的 tool call index 映射到本地的 block index；`nextBlock` 从 0 起，是下一个 block index 的发号器。
-3. 遍历 `parseSSE(response)` 吐出的每个事件 `evt`，取 `evt.choices?.[0]?.delta`，三个分支依次判断：
-   - `delta?.content` 有值：`idx = nextBlock++`，依次 yield `{ type: 'block-start', index: idx, blockType: 'text' }`、`{ type: 'text-delta', index: idx, text: delta.content }`、`{ type: 'block-end', index: idx, block: { type: 'text', text: delta.content } }`，一个文本块三连发。
-   - `delta?.tool_calls` 有值：对每个 `tc` 先查 `toolCallIndexes.get(tc.index)`，查不到说明首次出现，`idx = nextBlock++` 并写回 map，先 yield `{ type: 'block-start', index: idx, blockType: 'tool-call' }`；然后 yield `{ type: 'tool-call-delta', index: idx, id: tc.id, name: tc.function?.name, argumentsDelta: tc.function?.arguments ?? '' }`，`argumentsDelta` 保持原始 JSON 字符串。
-   - `evt.usage` 有值：yield `{ type: 'usage', usage: toTokenUsage(evt.usage) }`。
-4. 收尾。遍历 `toolCallIndexes.values()`，给每个工具调用块发 `block-end`，把累计的 arguments 拼好后封口（骨架里省略了累计逻辑，见下）。
-5. 最后 yield `{ type: 'finish', reason: { kind: 'stop' } }`。
-
-注意这是简化骨架，真实实现要在内存里累计每个工具调用的 `argumentsDelta`，在流结束时拼成完整 JSON 字符串，再用 `block-end` 发出完整的 `ToolCallBlock`。上面为了讲清主流程省略了累计逻辑。
+注意这是简化骨架。真实实现要在内存里累计每个工具调用的 `argumentsDelta`，在流结束时拼成完整 JSON 字符串，再用 `block-end` 发出完整的 `ToolCallBlock`。上面为了讲清主流程省略了累计逻辑。
 
 ### 第四步：token 用量的口径
 
 这是最容易踩的坑。`dsh` 用的是**不相交（disjoint）计数**：`inputTokens` 只算未缓存输入，缓存命中单独报为 `cacheReadTokens`/`cacheWriteTokens`，计费输入是三者之和。
 
-但 OpenAI 兼容端点（和 DeepSeek 的 `prompt_tokens`）经常把缓存命中折进一个总数。你的适配器有责任把它减出来：
-
-换算函数 `toTokenUsage(raw: OpenAIUsage): TokenUsage` 做三个字段的映射：`inputTokens` 取 `raw.prompt_tokens`，视 provider 而定，如果这个数里含缓存命中要先减出来；`outputTokens` 取 `raw.completion_tokens`；`cacheReadTokens` 取 `raw.prompt_tokens_details?.cached_tokens`。
+但 OpenAI 兼容端点（和 DeepSeek 的 `prompt_tokens`）经常把缓存命中折进一个总数。你的适配器有责任把它减出来：换算函数 `toTokenUsage()` 做三个字段的映射，`outputTokens` 取 `completion_tokens`，`cacheReadTokens` 取 `prompt_tokens_details` 里的 `cached_tokens`，而 `inputTokens` 如果这个数里含缓存命中，要先减出来。
 
 口径错了，token 计费和上下文压力探测就全错。cookbook 专门单列一节讲这个，两个官方适配器都因为它专门做了减法。
 
 ## 七条协议义务，逐条对账
 
-cookbook 把契约浓缩成七条，写适配器时逐条自检：
+cookbook 把契约浓缩成七条，写适配器时逐条自检。
 
-**1. `usage` 在 `finish` 之前，`finish` 之后什么都不发。** 稳妥做法是把 finish 和 usage 缓冲到 provider 的流结束标记再一起 flush。这处理了某些 provider 发"只有 usage 的尾巴 chunk"的情况。上面的实现里，靠 `stream_options: { include_usage: true }` 拿到 usage，再在 `[DONE]` 后发 finish，顺序就对了。
-
-**2. 工具调用 `arguments` 全程是原始 JSON 字符串。** 片段用 `argumentsDelta` 流式传。如果你的 provider 直接返回解析后的对象，在 `block-end` 时重新 stringify。
-
-**3. block 的 `index` 按首次出现顺序分配。** 同一个块的每个 delta 复用同一个 index。
-
-**4. 错误只有两条合法出口。** 要么从 `stream()` 里 throw（传输和协议失败，用 `LlmError` 带稳定 code），要么用 `finish {kind:'error'|'aborted'}` 结束流（provider 带内失败）。按失败类别选一个，并写进文档。
-
-**5. 必须响应 `options.signal`。** 把它传给 fetch 或你的 SDK，调用方取消时你要能及时停下来。
-
-**6. 不支持的字段要明确报错。** provider 不支持 `stop` 序列？抛 `LlmError(..., 'UNSUPPORTED')`，而不是静默丢弃。静默丢弃会让调用方以为生效了，bug 极难查。
-
-**7. 需要 native 元数据的，用 `finish.replayState`。** 如果 provider 在后续调用里要求带上次的响应 id、签名之类的原生元数据，把最小化的无损 JSON 投影作为 `replayState` 发出。重建历史时校验它。`LlmRuntime` 只在历史 provider 路由和目标 provider 路由当前属于同一个适配器实例时才传这段状态；你的适配器自己决定同模型、跨模型、跨 provider 的恢复是否合法。状态缺失时，绝不凭 provider/model 名字猜 native replay。
+1. `usage` 在 `finish` 之前，`finish` 之后什么都不发。稳妥做法是把 finish 和 usage 缓冲到 provider 的流结束标记再一起 flush，这处理了某些 provider 发"只有 usage 的尾巴 chunk"的情况。上面的实现里，靠 `stream_options: { include_usage: true }` 拿到 usage，再在 `[DONE]` 后发 finish，顺序就对了。
+2. 工具调用 `arguments` 全程是原始 JSON 字符串，片段用 `argumentsDelta` 流式传。如果你的 provider 直接返回解析后的对象，在 `block-end` 时重新 stringify。
+3. block 的 `index` 按首次出现顺序分配，同一个块的每个 delta 复用同一个 index。
+4. 错误只有两条合法出口。要么从 `stream()` 里 throw（传输和协议失败，用 `LlmError` 带稳定 code），要么用 `finish {kind:'error'|'aborted'}` 结束流（provider 带内失败）。按失败类别选一个，并写进文档。
+5. 必须响应 `options.signal`。把它传给 fetch 或你的 SDK，调用方取消时你要能及时停下来。
+6. 不支持的字段要明确报错。provider 不支持 `stop` 序列，就抛 `LlmError(..., 'UNSUPPORTED')`，而不是静默丢弃。静默丢弃会让调用方以为生效了，bug 极难查。
+7. 需要 native 元数据的，用 `finish.replayState`。如果 provider 在后续调用里要求带上次的响应 id、签名之类的原生元数据，把最小化的无损 JSON 投影作为 `replayState` 发出，重建历史时校验它。`LlmRuntime` 只在历史 provider 路由和目标 provider 路由当前属于同一个适配器实例时才传这段状态；你的适配器自己决定同模型、跨模型、跨 provider 的恢复是否合法。状态缺失时，绝不凭 provider/model 名字猜 native replay。
 
 这七条不是建议，是硬性义务。两个官方适配器都是按这套契约验证过的，你的适配器也得这样。
 
@@ -137,17 +101,17 @@ provider 专属的思考模式开关留在适配器的 Config 里，不进 provi
 - `adapter.spec.ts`：用 mock server 测适配器整体行为。
 - `adapter.e2e.ts`：真实 provider 的端到端测试，通常在 CI 里按条件运行。
 
-关键：要验证 app 归因头真的发出去了（wire 级测试），要验证 token 用量口径对，要验证错误归一化的 code 对。这些在契约里都是硬要求。
+关键是三件事：验证 app 归因头真的发出去了（wire 级测试），验证 token 用量口径对，验证错误归一化的 code 对。这些在契约里都是硬要求。
 
 ## 权衡与坑
 
-**别把 provider 中立类型和 wire 类型混在一起。** `GenerateOptions` 是 provider 中立的，OpenAI 的请求体是 wire 类型。混在一起，适配器就和 provider 中立层耦合了，以后换 harness 内部表示会牵连你。分开两个文件，中间一个翻译函数。
+别把 provider 中立类型和 wire 类型混在一起。`GenerateOptions` 是 provider 中立的，OpenAI 的请求体是 wire 类型。混在一起，适配器就和 provider 中立层耦合了，以后换 harness 内部表示会牵连你。分开两个文件，中间一个翻译函数。
 
-**fetch 库的 retry 要关掉。** 契约要求"一次适配器调用等于一次 provider 尝试"。很多 HTTP 库默认开 retry，你要显式关掉，否则重试会和 agent 级别的恢复（`dsh-llm-retry`）叠加，行为不可控。
+fetch 库的 retry 要关掉。契约要求一次适配器调用等于一次 provider 尝试。很多 HTTP 库默认开 retry，你要显式关掉，否则重试会和 agent 级别的恢复（`dsh-llm-retry`）叠加，行为不可控。
 
-**上下文溢出要归一化。** 你的 provider 报"上下文超长"时，要通过类似 `isContextWindowExceededError()` 的判断，归一成 `CONTEXT_WINDOW_EXCEEDED` code，不管它是 HTTP 413 还是带内消息。消费者只按 code 路由。
+上下文溢出要归一化。你的 provider 报"上下文超长"时，通过类似 `isContextWindowExceededError()` 的判断，归一成 `CONTEXT_WINDOW_EXCEEDED` code，不管它是 HTTP 413 还是带内消息。消费者只按 code 路由。
 
-**空响应要当错误。** 终态 `stop` 但一个 content block 都没有的，映射成 `finish {kind:'error'}` 加 `EMPTY_RESPONSE` code。别让它静默成功。
+空响应要当错误。终态 `stop` 但一个 content block 都没有的，映射成 `finish {kind:'error'}` 加 `EMPTY_RESPONSE` code，别让它静默成功。
 
 ## 结论
 

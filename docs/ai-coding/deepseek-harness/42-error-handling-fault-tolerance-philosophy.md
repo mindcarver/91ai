@@ -17,7 +17,7 @@
 
 第一条模式解决的是"一个结果可以同时是好几个状态"的问题。
 
-一个进程可以超时**同时**退出码是 0，因为它 trap 了信号。如果你把 `timedOut` 标志嵌在 `exitCode` 的分支里，调用方会读到一次被截断的运行当成干净的成功。
+一个进程可以超时的同时退出码是 0，因为它 trap 了信号。如果你把 `timedOut` 标志嵌在 `exitCode` 的分支里，调用方会读到一次被截断的运行当成干净的成功。
 
 规则：把每个独立的事实（`timedOut`、`signal`、`exitCode`）放在自己的字段上报告。不要把一个标志的报告嵌在另一个的分支里。
 
@@ -41,11 +41,11 @@
 
 规则：永远不要把 `agent/status` 或 `whenIdle()` 当成一次 follow-up 的结果。几个排队的 follow-up、steering 和注入的工作可能共享一个 `running` interval，而取消或销毁可以丢弃未启动的 item。
 
-一个真正拥有一次运行的自动化调用方必须**显式定义自己的 interval**，比如从它的 message 的 durable inbox receipt 到下一个 whole-agent `idle`，把任何选定的输出描述为 interval 级别的，而不是因果归因到那条 message。
+一个真正拥有一次运行的自动化调用方必须显式定义自己的 interval，比如从它的 message 的 durable inbox receipt 到下一个 whole-agent `idle`，把任何选定的输出描述为 interval 级别的，而不是因果归因到那条 message。
 
 这个规则双向切割：如果等待的 transition 永远不会发生，wait 就挂住了。所以要显式处理"没有东西可等"的分支。
 
-这条模式解释了为什么 ACP server（33 篇）的 `session/prompt` 要等 whole-agent idle 才返回，而不是等"那条 prompt 对应的 turn"：因为 agent 状态是异步的、共享的，不存在"那条 prompt 的结果"这种东西。
+这条模式解释了为什么 dsh-acp 的 `session/prompt` 要等 whole-agent idle 才返回，而不是等"那条 prompt 对应的 turn"：因为 agent 状态是异步的、共享的，不存在"那条 prompt 的结果"这种东西。
 
 ## 销毁要到达平静，不只是请求
 
@@ -53,10 +53,10 @@
 
 一个只发 kill/abort 但在 work 停下之前就返回的 teardown 会留下孤儿。正确做法：
 
-1. 让 cleanup 是 async 的，await 子进程的退出（kill 后 await `done`）
-2. 在 kill 之前关闭 listener/notification 注册表，让迟到的 completion 保持沉默
+1. 让 cleanup 是 async 的，await 子进程的退出（kill 后 await `done`）。
+2. 在 kill 之前关闭 listener/notification 注册表，让迟到的 completion 保持沉默。
 
-这条在 `dsh-acp` 的 teardown（33 篇拆过）里直接体现了：先关闭入口、结算 pending、从子到父排空 continuable subagent、最后并行销毁顶层 agent 并等所有结果。
+这条在 `dsh-acp` 的 teardown 里直接体现了：先关闭入口、结算 pending、从子到父排空 continuable subagent、最后并行销毁顶层 agent 并等所有结果。
 
 `dsh-host-webserver` 的 disposal 也体现了这条：它 pair `close()` 和 `closeAllConnections()`，因为一个 handler 可能 hold 它的 response 打开（SSE），这样的连接不会自己结束。没有 force-close，teardown 会挂住。
 
@@ -80,7 +80,7 @@ spawned 命令拿到一个清洗过的 env：drop `*KEY*`/`*SECRET*`/`*TOKEN*`/`
 
 temp/spill 文件用私有（0700）目录、随机名字和独占的 owner-only 打开（`'wx'`、`0o600`）。可预测的 world-readable 路径邀请 symlink race 和信息泄露。
 
-这条在 MCP client（32 篇）里也体现了：stdio 方式启动子进程时，桥接插件清洗环境变量，移除所有名字看起来像凭证的环境变量和所有 `DSH_*` 开头的变量。
+这条在 MCP client 里也体现了：stdio 方式启动子进程时，桥接插件清洗环境变量，移除所有名字看起来像凭证的环境变量和所有 `DSH_*` 开头的变量。
 
 这条规则的本质是：**不可信输出（命令输出、子进程、外部 MCP server）不应该拿到它能利用的东西。** 环境变量里的凭证、可预测的临时文件路径，这些都是攻击面。
 
@@ -106,21 +106,15 @@ Windows 的 `rmSync(link)` 在 junction 上抛 `ERR_FS_EISDIR`。递归删除可
 
 这个设计和上面的防御式模式配合：request-error 是"模型请求层面"的错误恢复，防御式模式是"系统层面"的错误预防。两层叠加让 agent harness 在不可靠的外部世界里保持韧性。
 
-## 这些模式背后的哲学
+## 权衡：不修复外部世界，只保证不被拖下水
 
-七条模式加 request-error 恢复，背后是一个共同的哲学判断：**外部世界不可靠是常态，harness 要在不崩的前提下优雅降级。**
+七条模式加 request-error 恢复，背后是同一个判断：**外部世界不可靠是常态，harness 要在不崩的前提下优雅降级。** 进程会 trap 信号然后退出 0，实现会用多种方式表达同一个失败，异步状态没有同步的因果，用户代码会抛异常，外部进程会利用你的环境，文件系统里藏着链接。dsh 的做法不是假设外部世界是好的，而是为每一种不可靠准备一条具体的应对规则，这些规则不试图修复外部世界，只确保 harness 自己不被拖下水。
 
-- 进程会 trap 信号然后退出 0（正交结果）
-- 实现会以多种方式表达同一个失败（双侧契约）
-- 异步状态和同步状态不一样（async 不是 sync）
-- 销毁不等于请求销毁（到达平静）
-- 用户代码会抛异常（contain）
-- 外部进程会利用你的环境（清洗）
-- 文件系统有链接（unlink）
+成本是显式和纪律。正交结果要求多字段而不是一个码，双侧契约要求归一化加文档，async 状态要求调用方定义自己的 interval，到达平静的销毁要求 await 而不是发完信号就走。每条规则都比它的反面多写代码、多想一步。回报和"一切皆插件"的架构选择咬合：如果把每个子系统都做成可替换的插件，就必须假设每个插件都可能是坏的，这套规则正是这个假设在错误处理层面的落地。
 
-每一条都是"外部世界不可靠"的一个具体表现。`dsh` 的做法不是假设外部世界是好的，而是为每种不可靠设计一个具体的应对规则。这些规则是防御性的，不是进攻性的：它们不试图修复外部世界，只确保 harness 自己不被拖下水。
+## 结论
 
-这个哲学和 `dsh` "一切皆插件"的架构选择是一致的。如果你把每个子系统都做成可替换的插件，你就必须假设每个插件都可能是坏的。防御式模式是这种假设在错误处理层面的落地。
+dsh 的容错不是一个抽象框架，是七条从真实 bug 里提炼的规则，加一个可插拔的 `agent/request-error` 恢复点。它们的共同姿态是承认外部世界不可靠，把每类已知的不可靠变成一条显式纪律，而不是祈祷它不发生。对一个全插件化的 harness 来说，这套防御是"一切皆插件"能在生产里成立的前提。
 
 ## 延伸阅读
 
