@@ -1,58 +1,58 @@
 # Turn 与 Step：dsh 的 agent-loop 怎么流转一次对话
 
-> dsh 用 turn 和 step 两个时间单位组织对话，而驱动这套流转的，是整个 harness 里唯一装着具体循环逻辑的包 dsh-agent-loop，一个三状态机，靠 kick → turn → step 的循环把 inbox 里的输入变成模型请求，每一步的模型历史都从会话日志现算。
-> 这一篇把概念和源码合成一条线：先建立 turn/step 的事件骨架（输入怎么进 inbox、守门人怎么拦、turn 怎么收尾），再落到 `packages/core/agent-loop` 的真实实现，从一条用户消息追到一次工具结果落进日志。文中代码与行为基于 2026-08-14 的仓库 `master` 分支。工具执行管线和会话日志另有专篇，这里只看它们在驱动器里的位置。
+> dsh 用两个单位丈量对话：turn 从领到输入开始，到"什么都不欠"时结束；step 是其中一次模型请求加上它触发的工具调用。驱动这套流转的是 dsh-agent-loop，整个 harness 里唯一装着具体循环逻辑的包。
+> 这一篇先建立 turn/step 的事件骨架（输入怎么进 inbox、守门人怎么拦、turn 怎么收尾），再进 `packages/core/agent-loop` 的源码，从一条用户消息追到一次工具结果落进日志。文中代码与行为基于 2026-08-14 的仓库 `master` 分支。工具执行管线和会话日志另有专篇，这里只看它们在驱动器里的位置。
 
-## 两个时间单位：step 和 turn
+## 先分清两个单位：step 和 turn
 
-理解 DeepSeek Harness 的运行时，先要分清两个时间单位。架构文档给的定义很精确：
+架构文档给了两个精确的定义：
 
 - **step（步）**：一次模型请求，加上模型在这一步里调用的工具。
 - **turn（轮）**：零个或若干个 step。它在第一条输入被领取之前打开，在"什么都不欠"时关闭。
 
-举个直观例子。你发一句"总结这个仓库并指出主要包"，agent 可能先调一个列目录的工具，再调几个读文件的工具，最后给出总结。这整个过程是一个 turn，但里面有不止一个 step：第一个 step 是模型决定调列目录工具（一次模型请求加那次工具调用），工具结果回来后模型可能再想一步，于是有第二个 step。一个 turn 就是这些 step 串成的链。
+用一个例子把两个单位分开。你发一句"总结这个仓库并指出主要包"，agent 先调列目录的工具，再调几个读文件的工具，最后给出总结。整个过程是一个 turn。但模型不是一次想完的：第一个 step 里它决定调列目录工具，一次请求加一次工具调用；工具结果回来，它再想一步，于是有第二个 step。turn 就是这些 step 串成的链。
 
-注意"零个 step"也是合法的 turn。一个被守门人拦下的 turn 可能一个 step 都不消耗，但这个 turn 仍然会被记进日志。这个细节是"模型可见即可重建"那条规矩的延伸，后面会看到它的两条触发路径。
+还有个容易漏掉的细节：零个 step 也是合法的 turn。一个被守门人拦下的 turn 可能一次模型都不请求，但它照样记进日志。为什么这样设计，讲到 pre-step 那一节就清楚了。
 
-## 唯一的"具体 loop"：dsh-agent-loop
+## 驱动器：harness 里唯一的具体循环
 
-概念有了着落处。README 一句话定调：这个包是 THE concrete agent plugin and loop driver，整个 harness 里唯一装着具体循环逻辑的包，其他一切都是抽象服务或挂在扩展点上的插件。
+README 一句话给这个包定了性：THE concrete agent plugin and loop driver。整个 harness 里只有它装着具体的循环逻辑，其他一切都是抽象服务或挂在扩展点上的插件。想加新行为，写插件，不改这里。
 
-它的入口是 `src/index.ts` 里的 `AgentLoop` 类，声明是 `export class AgentLoop extends Service implements AgentFactory`，另有一个静态字段 `static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt']`。
+它对外的身份是 `src/index.ts` 里的 `AgentLoop` 类，做两件事。一是注入五个服务：`agents`、`sessions`、`llm`、`tools`、`systemPrompt`，一个能跑的 agent 需要的全部依赖都在这张清单上。二是实现 `AgentFactory` 接口，构造时把自己注册成工厂。别的插件创建或恢复 agent，调 `ctx.agents.create(...)`，接住请求的就是它。
 
-两件事一眼看出它的角色。第一，它注入了五个核心服务：`agents`、`sessions`、`llm`、`tools`、`systemPrompt`，一个能跑的 agent 需要的全部依赖都在这里。第二，它实现 `AgentFactory` 接口，并在构造时把自己注册成工厂，注册语句是 `ctx.effect(() => ctx.agents.setFactory(this), 'agentLoop.setFactory()')`。
+真正干活的驱动器类 `ReactLoopAgent` 是包私有的，外部碰不到，只能通过 `ctx.agents` 和事件观察它。包的导出表里也没有 `./src/*` 的逃生口。这是一条刻意的边界：所有可观察的行为都走 session 事件和 `agent/*` 事件，驱动器内部不留后门。
 
-所以别的插件创建或恢复 agent，走的是 `ctx.agents.create(...)`，背后就是这个工厂。真正的驱动器类 `ReactLoopAgent` 是包私有的，外部碰不到它的内部，只能通过 `ctx.agents` 和事件来观察。这个包导出的只是插件、服务、配置三件契约，导出表里没有 `./src/*` 的逃生口。这是一条刻意的边界：所有可观察的行为都通过 session 事件和 `agent/*` 事件暴露，驱动器内部不留后门。
+## 三个状态：idle、maintenance、running
 
-## 三态驱动器：idle / maintenance / running
+驱动器用 `Phase` 类型管住自己，三个分支：
 
-驱动器的状态用一个 `Phase` 类型表达，这是理解整个循环的钥匙。`Phase` 是按 `kind` 区分的联合类型，共三个分支：`idle` 分支带 `lastTurn: number`；`maintenance` 分支带 `abort: AbortController`、`lastTurn: number`、`wakeRequested: boolean`；`running` 分支带 `abort: AbortController`、`turn: number`、`step: number`、`wakeRequested: boolean`。
+- **idle**：没活在跑，记着上一个 turn 的编号。
+- **running**：正在跑一个 turn，记着当前 turn 号和 step 号，握着一个属于这个 turn 的 AbortController。
+- **maintenance**：在做不需要模型的工作（比如上下文压缩），独占驱动器，不能和 turn 同时跑。
 
-三种状态：idle 是没有工作在跑，记录上一次的 turn 号；maintenance 是在做不需要模型的工作（比如压缩），独占驱动器，不能同时跑 turn；running 是正在跑一个 turn，记录当前 turn 号、step 号，以及一个属于这个 turn 的 AbortController。
+对外暴露的 `status` 只有两值，maintenance 算 idle。所以一次内部的压缩动作在 UI 上不可见，用户只看到 agent 空闲片刻后继续。状态切换走私有的 `setPhase()`，新旧 status 不同就广播一条 `agent/status`。
 
-对外暴露的 `status` 只有两值，maintenance 算 idle。`status` 是个 getter，返回类型 `AgentStatus`：phase 的 kind 是 `idle` 或 `maintenance` 时返回 `'idle'`，否则返回 `'running'`。状态切换走私有的 `setPhase(next: Phase)`：先把旧的 `status` 记成 `previousStatus`，把 `this.phase` 换成新值，再算一次 `status`，两值不同就用 `this.dispatch.emit('agent/status', { status })` 广播一次状态变化。
+`running` 和 `maintenance` 两个分支里都有一个 `wakeRequested` 字段，值得单独记住。它是个唤醒锁存：驱动器正忙时来了唤醒输入，没法立刻处理，就先记下"醒来后再跑一次"，等收敛回 idle 时补跑。像你正埋头写代码时有人来找，先在便签上记一笔，忙完再处理。后面讲取消的时候它会再出场。
 
-记住 `wakeRequested` 这个字段，它在 maintenance 和 running 两个状态里都有。它是一个"唤醒锁存"：当驱动器正忙（maintenance 或被取消的 running）时来了唤醒输入，没法立刻处理，就记下"醒来后要再跑一次"，等驱动器收敛回 idle 时再 replay。后面讲取消时它会再出场。
+## 输入都进 inbox：三种递话方式
 
-## 输入怎么进来：inbox 与三种 send 语义
+输入不直接触发模型请求，而是先放进一个 inbox。驱动器暴露三个方法，背后是同一个 `send()` 原语，差别只在两个参数：进哪个队列，要不要唤醒。
 
-输入不是直接调一个"跑模型"的函数，而是进一个 inbox。驱动器暴露的 `followup`、`steer`、`inject` 三个方法，背后是同一个 `send()` 原语，按"目标队列 × 是否唤醒"两个维度区分：
+| 方法 | 进哪个队列 | 唤醒驱动器 | 语义 |
+|------|-----------|-----------|------|
+| `followup(input)` | next-turn | 唤醒 | 普通用户消息，锚定下一个 turn |
+| `steer(input)` | next-step | 唤醒 | 方向盘，插进正在跑的 turn 的下一步 |
+| `inject(input)` | next-step | 不唤醒 | 注入的上下文，等人捎带 |
 
-`send(message: UserMessage, target: InboxTarget, wakeup: boolean)` 是唯一原语，两个维度都落在参数上。它先算 `wakingAfterAbort`：`wakeup` 为真、`this.phase.kind !== 'idle'`、且 `this.phase.abort.signal.aborted` 三者同时成立才命中；命中时 `resolvedTarget` 改成 `'next-turn'`，否则用调用方传入的 `target`。接着 `this.inbox.splice(resolvedTarget, Infinity, 0, [message])` 把消息放进对应队列，`wakeup` 为真再调 `this.wakeDriver(wakingAfterAbort)`。三个公开方法都是它的薄封装：`followup(input)` 调 `this.send(input, 'next-turn', true)`，`steer(input)` 调 `this.send(input, 'next-step', true)`，`inject(input)` 调 `this.send(input, 'next-step', false)`。
+inject 不唤醒这一点反常识：**注入的上下文不会自己触发一次模型请求**。它在 inbox 里排队，直到一条唤醒输入（followup 或 steer）把它捎上。设计是有意的：一段新检索到的文档不该让 agent 空跑一圈，它要等一个真正的用户输入或事件。README 的原话是，idle injection waits until follow-up or steering wakes the driver。
 
-三种语义清清楚楚：`followup` 进 next-turn 队列并唤醒，这是普通用户消息；`steer` 进 next-step 队列并唤醒，这是方向盘，想插进下一步；`inject` 进 next-step 队列但不唤醒，这是注入的上下文，等人捎带。
+领取的时刻也讲顺序。turn 开始时，驱动器一次性领取"待处理的 next-step 输入，外加一条 next-turn 队列里排队的消息"；step 之间只领 next-step 输入。所以你趁 agent 干活时插的方向盘消息会进当前 turn 的下一个 step，而一条排队的用户消息要等下一个 turn 开始才被领走。这也兑现了 inject 的"等人捎带"：注入的上下文躺在 next-step 队列里，下一条 followup 到来时，turn 开始的这次领取会把它和用户消息一起带进第一个 step。注意领取是 claim 不是读取，领走即从 inbox 删除，这条消息从此属于这个 turn。
 
-inject 不唤醒这一点有个反常识的意味：**注入的上下文不会主动触发一次模型请求，它排在 inbox 里等，直到另一条消息到来把它一起带上。** 这个设计是有意的：一段新检索到的文档本身不该让 agent 空跑一圈，它要等一个真正的用户输入或事件把它捎上。架构文档对 inbox 行为的原话是，输入通过同一个 inbox 到达驱动器。
+`send()` 里还有一个边角判断：一条唤醒输入如果赶上一个正在被取消的活动，它不能并进去，就改投 next-turn 队列，等下一个 turn 再处理。这个判断在消息进 inbox 之前完成，免得一个取消回调回过头改它的归类。
 
-inbox 的状态变化通过一组 live 事件广播给 UI 或 SDK：`agent/inbox/spliced`（删除）、`agent/inbox/inserted`（插入了一条消息）、`agent/inbox/claimed`（领走了一条消息，带它属于哪个 turn）。这些是 live 协调事件，不是持久事实。
+## 一个 turn 的骨架
 
-这条 inbox 模型解释了一个日常现象：你连发两条消息，agent 不是分别处理两条各跑一个 turn，而是把排队的消息一起领进同一个 turn 的某个 step。这是"claim 下一步输入外加一条排队消息"的实际效果，下一节讲 `preStep` 时能看到 claim 的位置。
-
-`send()` 里还有一个边角处理：`wakingAfterAbort` 判断一条唤醒输入赶上一个正在被取消的活动，它不能并入那个活动，所以改投到 next-turn 队列，等下一个 turn 再处理。这个判断在插入 inbox 之前完成，避免一个重入的取消回调改写它的归类。
-
-## 一条 turn 的完整骨架
-
-把一个 turn 从开到关的事件列出来，是理解整个运行时最直接的方式。架构文档给了一段流程，这里逐段拆：
+把一个 turn 从开到关的事件列出来，是理解整个运行时最直接的方式。架构文档给的流程长这样：
 
 ```text
 turn/start
@@ -71,175 +71,146 @@ turn/start
 turn/end
 ```
 
-逐段读，每个环节都藏着设计。
+逐段看，每一段都藏着一个设计决定。
 
-领取输入。turn 一开始，驱动器从 inbox 里领两样东西：待处理的"下一步输入"，外加一条排队中的消息。注意是"领取"（claim）不是"读取"，领走意味着从 inbox 移除，这条消息接下来就属于这个 turn。
+领取输入。就是上一节说的 claim：turn 开始领"下一步输入加一条排队消息"，step 之间只领下一步输入。
 
-组装提示和工具。系统提示的各段（身份、人格、工具说明、注入的上下文）和工具 schema 在这里拼好，每一步读的都是插件当下注册的版本。
+组装提示和工具。系统提示的各段（身份、人格、工具说明、注入的上下文）和工具 schema 在这里拼好，每一步读的都是插件当下注册的版本，热重载后的变化下一步就能生效。
 
-agent/pre-step 关卡。整个流程最关键的一环，单独一节讲。
+过 agent/pre-step 关卡。整个流程里控制力最强的一环，后面单独一节讲。
 
-进入 step。如果关卡放行，开一个 step，把消息作为 `user/message` 追加进会话，然后从会话日志投影出模型历史。投影是"模型可见即可重建"的落地点：模型这一步看到的全部历史，都是从日志算出来的，不是某个内存变量。
+进 step。关卡放行后，把消息作为 `user/message` 追加进会话，然后从会话日志投影出模型历史。"投影"两个字是关键：模型这一步看到的全部历史都是从日志算出来的，不存在另一份内存副本。
 
-请求模型。`agent/request`（waterfall）构造发给模型的请求，`llm/stream`（waterfall）实际发起流式请求，模型逐块返回，每块产生一个 `assistant/chunk`，最后归总成一个 `assistant/message`。
+请求模型。`agent/request` 构造请求，`llm/stream` 发起流式调用，模型逐块返回，每块产生一个 `assistant/chunk`，最后归总成一条 `assistant/message`。
 
-工具调用。如果模型在这一步调了工具，产生 `tool/call`，进入工具执行管线，产出 `tool/result`。工具部分有自己的复杂度（执行模式、有界滚动池、单调守卫），这里只要知道它夹在 `assistant/message` 和下一个判断之间。
+执行工具。模型调了工具就产生 `tool/call`，进工具执行管线，产出 `tool/result`。管线内部另有专篇，在本篇的流程里，它夹在 `assistant/message` 和下一个判断之间。
 
-是否再来一个 step。一个 step 结束后，驱动器判断：工具结果是否还需要模型再想一步，或者 inbox 里又来了新的下一步输入。是的话，领取新输入，回到 agent/pre-step，开下一个 step。
+判断要不要再来一个 step。工具结果还需要模型再想一步，或者 inbox 里又来了新的下一步输入，就领取新输入，回到关卡，开下一个 step。
 
-收尾。当自然停下且下一步 inbox 为空，过一道 `agent/turn-stopping` 检查点，然后 `turn/end` 关闭 turn。
+收尾。自然停下且 next-step 队列空，过一道 `agent/turn-stopping` 检查点，然后 `turn/end` 关闭 turn。
 
-## 落到实现：kick → turn → step
+## 实现走读：kick → turn → step
 
-唤醒后驱动器进入 running，跑一个 `kick`。`kick` 的签名是 `private async kick(): Promise<void>`，三段结构。try 里一句 `while (await this.turn()) {}`，跑 turn 直到没有下一个；catch 块是空的，失败和取消在 driver 边界兜住；finally 里若 `this.phase.kind === 'running'`，解构出 `turn` 和 `wakeRequested`，先 `this.setPhase({ kind: 'idle', lastTurn: turn })` 收敛回 idle，`wakeRequested` 为真且 `this.inbox.hasPending` 还有货，就再调一次 `this.wakeDriver()`。
+落到代码，三个函数正好嵌套：`kick()` 跑 turn 直到没有下一个，`turn()` 跑完一个 turn 的所有 step，`step()` 完成一次模型请求。
 
-`kick` 是个 `while (await this.turn())` 循环。`turn()` 返回布尔，true 表示还有下一个 turn 要跑（inbox 又有货了），false 表示这次驱动收敛。`finally` 里如果锁存了唤醒请求且 inbox 还有货，就再唤一次自己。所有失败和取消都在这个边界被吞掉，不让它们逃出驱动器。
+`kick()` 很短，就三件事。try 里一个 `while (await this.turn())`：turn 返回 true 表示 inbox 又有货，接着跑下一个 turn；返回 false 表示驱动收敛。catch 块是空的，失败和取消都在这个边界被吞掉，单个 turn 的失败杀不死整个 loop。finally 里把状态收回 idle，如果锁存过唤醒请求且 inbox 还有货，就再唤一次自己。
 
-`turn()` 是一条 turn 的完整骨架，正好和上面那段事件流程对得上：
+`turn()` 是骨架的代码版，按顺序做六件事：
 
-`turn()` 的签名是 `private async turn(): Promise<boolean>`，按执行顺序是这样的。进入时取 `const phase = this.phase` 和它的 `signal`，算出 `turn = phase.turn + 1`，先 `this.session.append('turn/start', { turn })` 写开 turn 记号，再 `phase.turn = turn` 更新计数；另备两个局部变量：`turnEnds: TurnEndReason | null = null` 记结束原因，`target: InboxTarget = 'next-turn'` 记领取目标。然后进 `while (true)` 循环，每个 step 一轮：
+1. 写 `turn/start`，turn 编号加一，取当前 turn 的取消信号。
+2. 进 step 循环。每轮先查取消，然后调 `preStep()` 领输入、过守门人。
+3. 守门人拒绝，turn 以 `blocked` 结束；第一个 step 的消息被改写成空，以 `completed` 结束。两条路径都不消耗 step，这就是"零 step 的 turn"在代码里的落点。后续某个 step 的消息被改写成空，直接退出循环。
+4. 放行就写 `step/start`，把消息逐条追加为 `user/message`，调 `step()` 跑模型，无论成败补一条 `step/end`。
+5. 每跑完一个 step 判断：自然停下且 next-step 队列空，先过 `agent/turn-stopping` 检查点，再判一次同样的条件，仍然成立才退出循环。判两次是因为检查点本身是一次 await，期间 inbox 可能进来新的输入。
+6. 写 `turn/end`，永远写，带上结束原因。inbox 还有货就换一个新的 AbortController、重置 step 计数，返回 true 让 kick 再跑一个 turn。
 
-- 先 `signal.throwIfAborted()`，取消立刻可见。
-- 算 `step = phase.step + 1`，`await this.preStep(target, { turn, step })` 领输入过守门人，得到 `decision`。
-- `decision.kind === 'reject'` 就把 `turnEnds` 记成 `{ kind: 'blocked' }` 并 `return false`。
-- `turnEnds` 已有值且 `decision.messages.length === 0` 就 break；`phase.step === 0` 且 `decision.messages.length === 0` 就把 `turnEnds` 记成 `{ kind: 'completed' }` 并 `return false`。
-- 否则 `this.session.append('step/start', { turn, step })`、`phase.step = step`，进内层 try：把 `decision.messages` 逐条 `this.session.append('user/message', message, { surfaceOp: 'append' })` 追加，`await this.step(decision.assembly)` 跑模型得到 `stepEnd`，`turnEnds === null || turnEnds.kind !== 'max-tokens'` 时接受 `turnEnds = stepEnd`；finally 里无论成败 `this.session.append('step/end', { turn, step })`。
-- step 收尾判两次同一条件 `turnEnds && this.inbox.nextStep.length === 0`：第一次成立 `await this.dispatch.serial('agent/turn-stopping', { turn, signal })`，第二次成立 break。
-- 没 break 就 `target = 'next-step'`，进下一轮。
+有个细节叫 max-tokens 粘性：一旦某个 step 撞了输出上限，turn 的结束原因就定成 `max-tokens`，后面正常完成的 step 不能把它降级回 `completed`。代码里体现为，只有当前还没定论、或者已定的不是 `max-tokens` 时，才接受新的 step 结果。
 
-外层 finally 无条件 `this.session.append('turn/end', { turn, reason: turnEnds! })`。循环退出后再看 `this.inbox.hasPending`：没有就 `return false`；有就 `phase.abort = new AbortController()` 换新信号、`phase.wakeRequested = false` 清锁存、`phase.step = 0` 重置步数，`return true` 让 `kick` 再跑一个 turn。
+`agent/turn-stopping` 这个检查点和前面的关卡不一样：它是 serial 模式，没有 `next()`。waterfall 要求监听器调 `next()` 把值往下传，serial 无委托意味着它只是收尾时让监听器按顺序看一眼的检查点，不是层层包裹的中间件。一个监听器可以在这里影响 turn 停不停，但不能像 waterfall 那样改写一个往下传的值。
 
-逐段对应：`turn/start` 开 turn 记号；循环里每个 step 先过 `preStep`（领取输入加守门人，下一节展开）；拒绝则 turn 以 `blocked` 结束，第一个 step 的消息被改写成空则以 `completed` 结束，这两条就是"零 step 的 turn"在代码里的落点，而且 `turn/end` 永远写一条，带上结束原因；否则 `step/start`、追加 `user/message`、跑 `step()`、`step/end`；每跑完一个 step 判断自然停下且 next-step 队列空，就过 `agent/turn-stopping` 这个 serial 检查点再 break；最后 inbox 还有货就换一个新的 AbortController、重置 step 计数，返回 true 让 `kick` 再跑一个 turn。
+## 守门人：agent/pre-step
 
-注意 `max-tokens` 是"粘"的：注释里写明，一旦某个 step 撞了输出上限，后面正常完成的 step 不能把 turn 结果降级回 completed。所以判断是 `turnEnds === null || turnEnds.kind !== 'max-tokens'` 才接受新的 step 结果。
+每一步请求模型之前都要过 `agent/pre-step` 这道 waterfall 关卡，领输入也发生在这一步的 `preStep()` 里。它按顺序做六件事：
 
-## 守门人：agent/pre-step 与 preStep()
+1. 取当前 turn 的取消信号。
+2. 从 inbox 领走一批消息（claim，规则上一节讲过）。
+3. 组装系统提示。
+4. 渲染各段上下文，投影出运行时上下文。
+5. 派发 `agent/pre-step` waterfall，把领到的消息交过去。默认回调是放行；运行时上下文非空时，放行的消息是领到的消息加上这段上下文。
+6. 再查一次取消信号，把结果带回给 `turn()`。
 
-整个 turn 流程里，`agent/pre-step` 是控制力最强的一道关卡。它是一个 waterfall 事件，每一步请求模型之前都会过。领取输入和过守门人，都在 `preStep` 里。它的签名是 `private async preStep(target: InboxTarget, position: { turn: number; step: number }): Promise<PreparedStep>`，按执行顺序做六件事。取 `const signal = this.phase.abort.signal`；`this.inbox.claim(target, position.turn)` 领走一批消息得到 `claimed`；`await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))` 组装系统提示，跟一句 `signal.throwIfAborted()`；`renderContextSections(assembly)` 渲染出 `sections`，再 `this.runtimeContext.project(joinContextSections(sections), sections)` 投影出运行时上下文 `context`；`await this.dispatch.waterfall('agent/pre-step', { messages: claimed, ...position, signal }, ...)` 过守门人，内置的默认回调返回 `{ kind: 'enter', messages: context === undefined ? claimed : [...claimed, context] }`，也就是放行，上下文非空时把它接在 `claimed` 后面带上；最后再 `signal.throwIfAborted()`，然后返回：`decision.kind === 'reject'` 就原样返回拒绝，否则返回 `{ ...decision, assembly }` 把组装结果带给下一步。
+每个关键 await 之后都查一次取消，所以取消能及时生效，不会拖到下一个 step。
 
-`claim` 按目标从对应队列领走一批消息：turn 开始时 target 是 `next-turn`，会领 next-step 输入外加一条 next-turn 提示（就是骨架里"claim 下一步输入外加一条排队消息"那行）；step 之间 target 是 `next-step`，只领 next-step 输入。然后组装系统提示、投影运行时上下文，最后过 `agent/pre-step` waterfall。默认放行（enter），如果运行时上下文非空，放行的消息是 `[...claimed, context]`，把上下文作为额外消息带上。每个 `signal.throwIfAborted()` 都在关键 await 之后检查取消，保证取消能及时生效。
+守门人的权力有两个。
 
-守门人的权力有两个。拒绝：一个监听器可以决定不让这一步发生，被拒绝的 turn 已从 inbox 领走的批次保持移除状态，一个 step 都不消耗就关闭，对应 `turn()` 里的 `blocked` 路径。改写放行的消息：监听器可以改写模型这一步看到的消息，架构文档强调这个返回的决定是权威的（authoritative）。
+拒绝：一个监听器可以决定这一步不发生。被拒的 turn 里已经领走的批次保持移除状态，一个 step 不消耗就关闭，对应 `turn()` 里的 `blocked` 路径。领取之后才进来的输入不受影响，继续排队。
 
-这里有条和 waterfall 纪律一致的铁律：一个只是观察或注解的监听器，包了 `next()` 就必须保留下游消息，除非它故意要替换。不调 `next()` 就是短路，调了就要么原样传递要么明确替换。方向盘（steering）和注入的上下文走的也是这道 waterfall，只不过是在后续某次 claim 领到它们那批消息之后才过。
+改写：监听器可以改写模型这一步看到的消息。架构文档强调这个返回值是权威的（authoritative），模型看到什么由这里说了算。
 
-为什么把"模型看见什么"的决策权交给一个 waterfall 事件，而不是写死在驱动器里？这层因果是我的归纳，文档没有直接这么说，但机制摆在那里：压缩插件在这里探上下文压力，权限插件在这里改写可见的工具，自定义审批逻辑在这里拦截。守门人是插件可挂载的扩展点，不是硬编码的 if。
+waterfall 有条纪律：一个只是观察或注解的监听器，包了 `next()` 就必须保留下游消息，除非它故意要替换。不调 `next()` 就是短路。方向盘和注入的上下文走的也是这道关卡，在后续某次 claim 领到它们那批消息之后。
 
-## 一次模型请求：step() 与 deriveMessages()
+为什么把"模型看见什么"的决策权交给一个事件，而不是写死在驱动器里？这层因果是我的归纳，文档没有直说，但机制摆在那里：压缩插件在这里探上下文压力，权限插件在这里改写可见的工具，自定义审批逻辑在这里拦截。守门人是插件的挂载点，不是硬编码的 if。
 
-`step()` 是一次模型请求的全部，签名 `private async step(assembly: PromptAssembly): Promise<StepEndReason | null>`。裁剪后的主干按执行顺序是这样：开头从 `this.phase` 解构出 `turn`、`step` 和 `signal`，`renderPrompt(assembly)` 算出 `system`，然后进 `while (true)`：
+## 一次模型请求：step()
 
-- `await this.buildRequest(turn, step, assembly.tools, system, this.session.deriveMessages(), signal)` 组请求，拿到 `request` 和 `preparedCall`。
-- 新建 `const assembler = new BlockAssembler()` 和 `const chunkSeqs: number[] = []`，流取自 `preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)`，`preparedCall` 存在就用它绑定的流。
-- `for await` 逐块消费：每块先 `signal.throwIfAborted()`，再 `this.session.append('assistant/chunk', { turn, step, chunk })` 记日志并把返回的 `.seq` 推进 `chunkSeqs`，同时 `assembler.push(chunk)` 归块。
-- 流结束看 `assembler.finish`。`finish.kind` 是 `'error'` 或 `'aborted'` 时，先过 `agent/request-error` waterfall，载荷是 `{ turn, step, provider: request.provider, failure: finish.failure, retryPolicy: preparedCall?.retryPolicy, signal }`，默认回调 `() => Promise.resolve<RequestErrorAction>(undefined)`；返回的 `action?.kind !== 'retry'` 就 `throw new LlmError(finish.failure.message, finish.failure.code, finish.failure)`，是 retry 才 `continue` 回循环开头。
-- 正常结束时 `createAssistantMessage({ content: assembler.blocks(), source: { provider: request.provider, model: request.model } })` 造出 `message`，`this.session.append('assistant/message', { turn, step, message, ...assembler.usage }, { surfaceOp: 'append', sourceEventSeqs: chunkSeqs })` 落日志。
-- `finish.kind === 'max-tokens'` 返回 `{ kind: 'max-tokens' }`；从 `message.content` 里按 `block.type === 'tool-call'` 过滤出工具调用，一个没有就返回 `{ kind: 'completed' }`。
-- 有工具调用就 `await executeToolCalls(this.loopCtx, turn, step, toolCalls, signal, ...)`，最后一个参数是 acceptor：`context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context])`，把附加上下文排进 next-step 队列。返回的 `concluded` 为真返回 `{ kind: 'completed' }`，否则返回 `null` 交给外层判断。
+`step()` 是一次模型请求的全部，内部是一个带重试的循环。主干四段。
 
-几个要点，每一条都值得停下来看：
+组请求。`buildRequest()` 把系统提示、工具 schema 和 `deriveMessages()` 算出的历史拼成请求。`deriveMessages()` 每一步都从会话日志现算，这是"模型可见即可重建"在代码里的落点：模型历史永远是日志的投影，不是缓存，不存在两份真相。
 
-- `this.session.deriveMessages()` 是请求的真相来源。每一步模型看到的历史，都是从会话日志现算出来的，不是某个内存变量。这是"模型可见即可重建"在代码里的落点。
-- 流式逐块记日志。每个 `assistant/chunk` 都进日志并记下 seq，最后 `assistant/message` 用 `sourceEventSeqs: chunkSeqs` 把它依赖的 chunk 串起来。文档特别说明，`assistant/message` 记录每一次成功的 provider 调用，包括没有内容的和 `max-tokens` 截断的结束；空内容不进投影历史（避免噪音），但持久事件保留它的 usage 和 `sourceEventSeqs`，即使是个空列表。原始 chunk 保真保留，用于回放和 UI。这种"投影干净、原始保真"的双层设计，是会话日志那套机制的核心。
-- 失败走 `agent/request-error` waterfall。错误或被中止的 finish，过这个 waterfall 请求恢复动作，只有返回 `{ kind: 'retry' }` 才 `continue` 重试，否则抛出 `LlmError`。
-- 工具结果可以产生额外上下文。`executeToolCalls` 的最后一个参数是个 acceptor：工具返回的 `additionalContexts` 被 splice 进 next-step 队列，等下一步带给模型。
-- concluded 短路。如果某次工具结果带 `concludesTurn`，step 直接返回 completed，turn 收尾。
+流式记账。请求发出去后逐块消费流：每块先查取消，然后写一条 `assistant/chunk` 进日志、记下它的序号，同时喂给 BlockAssembler 归块。流结束，归总出一条 `assistant/message` 落日志，用 `sourceEventSeqs` 把它依赖的那些 chunk 串起来。
 
-## 请求的冻结与记账：agent/request 与 request/header
+这里藏着一个双层设计：投影干净，原始保真。`assistant/message` 记录每一次成功的 provider 调用，包括空内容的和被 max-tokens 截断的；空内容不进投影历史（不污染模型上下文），但持久事件保留它的 usage 和 chunk 依赖，原始 chunk 全部保真保留，供回放和 UI 用。
 
-`step` 里调的 `buildRequest` 是请求的组装和记账。关键几步：
+失败重试。错误或被中止的流先过 `agent/request-error` waterfall 问一圈恢复动作，只有监听器返回 `{ kind: 'retry' }` 才回到循环开头重来，否则抛出 `LlmError` 交给上层。
 
-第一步，`const proposedConfig = await this.dispatch.waterfall('agent/request', { turn, step, signal }, () => Promise.resolve(seedConfig))`，让插件有机会改写提议配置，默认值是 `seedConfig`。第二步，`preparedCall = await this.loopCtx.llm.prepareCall(proposedConfig, signal)`，再取 `config = preparedCall.config`。第三步，`const header = canonicalHeader(...)` 算规范请求头：对象里始终有 `config`；`preparedCall !== undefined` 时展开 `adapterDefaults: preparedCall.adapterDefaults`；`system` 非空时带上 `system`；`tools.length > 0` 时带上 `tools`。记账走两条分支：`this.requestHeaderLogged` 还没置位，就 `this.session.append('request/header', { header, reason: baseline === undefined ? 'initial' : 'resume' })`，随后置 `this.requestHeaderLogged = true`；已经记过时，只有 `baseline === undefined || !headerEquals(baseline, header)` 成立，即 header 相对基线变了，才 `this.session.append('request/header', { header, reason: 'change' })`。
+执行工具。从消息里过滤出工具调用，交给 `executeToolCalls()`。工具返回的附加上下文被塞进 next-step 队列，等下一步带给模型。如果某个工具结果宣布这个 turn 可以收了（`concludesTurn`），step 直接返回 completed，turn 提前收尾。模型没调任何工具也返回 completed；返回 null 表示"还要再想一步"，交给外层判断。
 
-`agent/request` waterfall 让插件有机会改写请求配置（默认是 seedConfig）。然后 `ctx.llm.prepareCall()` 校验 adapter 字段、物化 reasoning-effort 和 output-token 默认值。返回的 `preparedCall` 绑定了解析默认值的那个 adapter 注册，跨异步解析、header 记账、最终派发都保持同一个 adapter，所以 HMR 换掉一个 provider 的时刻，不会把旧 adapter 的能力结果混进新 adapter 的请求。
+## 请求组装与记账
 
-请求头按需记账：第一次写 `initial`（或恢复时写 `resume`），之后只在 header 变了时写 `change`。这个 header 是请求前缀的规范记录，也是 KV cache 复用判断的依据（那条"字节相同且路由没变即可复用"的完整记账规则，见 09 篇）。
+`step()` 调的 `buildRequest()` 管请求的组装和记账，有三件事。
 
-`seedConfig` 里有个细节叫 adapter-default marker：上一步从 header 里标记了哪些字段是 adapter 算出来的默认值，`requestProposal()` 在下一次提议前把这些标记字段删掉，让当前路由重新算自己的默认值；没标记的显式设置跨 step 和路由变更保留。这保证换路由不会带错上一路由的默认值。
+插件可以改写请求。`agent/request` 是一道 waterfall，监听器可以改提议的配置，连缺的 provider/model 对都可以在这里补上，默认值就是种子配置。
 
-## 工具调度：barrier 与有界滚动池
+adapter 全程绑定。配置定下来后走 `ctx.llm.prepareCall()`：校验 adapter 字段，物化 reasoning-effort 和输出 token 的默认值。返回的 preparedCall 绑定了解析默认值时的那个 adapter 注册，从异步解析、header 记账到最终派发保持同一个 adapter。所以热重载换掉一个 provider 的时刻，不会把旧 adapter 的能力结果混进新 adapter 的请求。
 
-`step` 里的 `executeToolCalls` 在 `tool-calls.ts`，它调度一个 step 内的工具调用。核心规则在文件顶部注释里写明：排他调用构成 barrier，并行调用用有界滚动池，且在启动前重新分类。
+请求头按需记账。header 是请求前缀的规范记录，也是 KV cache 复用判断的依据。第一次写 `request/header` 记 `initial`（恢复会话记 `resume`），之后只在 header 变了时记 `change`，字节相同就不记，日志里没有冗余条目。
 
-主循环用游标 `next` 扫 `planned`：`while (next < planned.length)` 每轮取 `first = planned[next]!`，用 `ctx.tools.executionMode(first.exec).kind` 读它的执行模式；`mode === 'parallel'` 就 `planned.slice(next)` 把后面整批划成一组，否则只取 `[first]`，排他单独成组、并行整批成组。`await runGroup(ctx, turn, step, group, mode, signal, acceptContext)` 跑这一组，之后 `next += outcome.consumed` 前进游标、`concluded ||= outcome.concluded` 累积结束标志；一旦 `outcome.aborted`，剩下的 `planned.slice(next)` 逐个 `appendSkippedToolCall(session, turn, step, call.block)` 补记跳过，直接 `return { concluded }`。
+header 还带一组 marker，标出哪些字段是 adapter 算出来的默认值。下一次提议前，被标记的字段先删掉，让当前路由重新算自己的默认值；没标记的显式设置跨 step 和路由变更保留。这保证换路由不会带错上一路由的默认值。
 
-第一个调用的模式决定这一组怎么跑：排他调用单独成一个 barrier，并行调用把后面所有调用整批放一起。`runGroup` 里管一个有界滚动池，并行度上限是 `maxParallelToolCalls`（默认 10，1 就是串行）。关键纪律有三条。
+## 工具调度：barrier、滚动池、按序提交
 
-重新分类。并行组里，每启动下一个调用前都重新读它的模式，条件是 `nextToStart > 0 && mode === 'parallel' && ctx.tools.executionMode(nextCall.exec).kind !== 'parallel'`，命中就 break，不再往池里启动新调用。
+`executeToolCalls()` 在 `tool-calls.ts`，调度一个 step 内的工具调用。规则写在文件顶部注释里：排他调用构成 barrier，并行调用用有界滚动池，启动前重新分类。
 
-注册表可能在途中变化，把一个原本并行的调用变成排他的，这时就停下，让排他调用作为下一个 barrier 等当前池排空再跑。
+调度按模型给出的顺序扫调用列表。遇到排他调用，它单独成一个 barrier，独占执行；遇到并行调用，把后面连续的并行调用整批划成一组，放进一个滚动池。池子的并行度上限是 `maxParallelToolCalls`，默认 10，设成 1 就是完全串行。
 
-结果按模型顺序提交。`commitReady` 是个 `async (): Promise<void>` 函数，循环条件 `committed < group.length`：每轮取 `slots[committed]`，取到 `undefined` 说明不连续，break 等前面的就绪；取到就做 finalize/finish 并 `appendToolResult`，然后 `committed++`。它只在连续的、按模型给出顺序的 slot 就绪时往前推进。
+三条纪律撑住这个调度器。
 
-调度可以并发（dispatch/body 重叠），但策略、持久结果、结果上下文保持模型顺序。工具可以乱序完成，但落进日志的结果和给模型看的顺序，还是模型给出的顺序。
+启动前重新分类。注册表可能在执行途中变化，把一个原本并行的调用变成排他的。所以池子里每启动下一个调用前，都重新查一遍它的执行模式，发现不并行就停手，让它作为下一个 barrier 等当前池排空再跑。
 
-取消合成结果。如果 signal 被中止，已启动的调用排空并提交，没启动的调用每个补一对 `tool/call` + `tool/result`，错误码 `ABORTED_BEFORE_DISPATCH`，结果文本 "Error: tool call aborted before dispatch"。这样重放时历史一致，不会因为取消而缺结果。
+结果按模型顺序提交。工具可以乱序完成，但落日志的结果和给模型看的顺序，还是模型给出的顺序。调度可以并发（派发和 body 重叠），策略、持久结果、结果上下文保持模型顺序。
 
-## 收尾：turn-stopping 检查点
+取消补合成结果。取消发生时，已启动的调用排空并提交；没启动的每个补一对 `tool/call` + `tool/result`，错误码 `ABORTED_BEFORE_DISPATCH`，结果文本是固定的 "Error: tool call aborted before dispatch"。重放时历史一致，不会因为取消而缺结果。
 
-一个 turn 何时关闭？流程给的条件是"什么都不欠"（nothing is owed）。落到实现上，就是 `turn()` 里的那两个条件：自然停下（`turnEnds` 非空）且 next-step 队列空时，`await this.dispatch.serial('agent/turn-stopping', ...)`，然后 break。
+## 压缩不在模型手里
 
-这个事件和前面的 waterfall 不一样：它是 serial 模式，而且没有 `next()`。架构文档明确，`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件都是 waterfall（监听器必须调 `next()` 委托），而 `agent/turn-stopping` 是 serial 且没有 `next()`。串行、无委托，意味着它是一个纯粹的"收尾时让监听器按顺序看一眼并表态"的检查点，不是层层包裹的中间件。一个监听器可以在这里影响 turn 是否真的停（比如宣布还有事要做），但不能像 waterfall 那样改写一个会向下传的值。turn-stopping 之后就是 `turn/end`，turn 正式关闭，驱动器回到 idle。
+顺着守门人往下，有个设计特别纠正常见误解。很多人以为上下文太长时，是模型自己决定调一个"压缩"或"总结"工具来收缩上下文。dsh 不是这样，它没有面向模型的 compact 工具，压缩是被动触发的事件驱动机制：
 
-## 压缩不在模型手里：maintenance 与被动触发
+- 压缩插件在 `agent/pre-step` 里、请求投影出来之前，探上下文压力。
+- 或者，`agent/request-error` 报出规范的上下文溢出时它才介入。
 
-顺着 pre-step 往下，有个设计特别能纠正常见误解。很多人以为 agent 上下文太长时，是模型自己决定调一个"压缩"或"总结"工具来收缩上下文。dsh 不是这样，它没有面向模型的 compact 工具。压缩不是模型主动决定的，而是一个被动的事件驱动机制：
+任一条满足，可选的工具结果裁剪先跑，然后再做摘要选择。恢复发生在"已关闭的失败 step"和"失败 turn 关闭"之间；只有当裁剪或摘要确实推进了替换的代次，才会开一个新的重试 turn，否则原始的请求错误保持权威。
 
-- 压缩插件在 `agent/pre-step` 里，在请求投影出来之前，探上下文压力。
-- 它只在 `agent/request-error` 报出"规范的上下文溢出"时才介入。
+驱动器侧的承载就是 maintenance 状态：压缩这种不需要模型的工作独占驱动器，不能同时跑 turn。对外 status 上 maintenance 算 idle，UI 看不到收缩动作，只看到 agent 空闲片刻后继续。
 
-两条触发里任一条满足，可选的工具结果裁剪先跑，然后再做摘要选择。恢复发生在"已关闭的失败 step 和失败 turn 关闭"之间；只有当裁剪或摘要确实推进了替换的代次，才会开一个新的重试 turn，否则原始的请求错误保持权威。
+这个设计的含义，我的归纳是：上下文管理是 harness 的职责，不是模型的职责。模型不知道自己的上下文快爆了，是插件在守门人关卡和错误回调里感知压力、主动收缩。这和"把模型当 CPU、把 harness 当操作系统"那条主线一致：内存回收是操作系统的活，不是 CPU 的。
 
-驱动器侧怎么承载压缩？就是三态里的 maintenance：做不需要模型的工作时独占驱动器，不能同时跑 turn。对外 status 上 maintenance 算 idle，UI 看不到一次内部的收缩动作，只看到 agent 空闲片刻后继续。
+## 失败和取消在哪层兜住
 
-这个设计的含义，我的归纳是：上下文管理是 harness 的职责，不是模型的职责。模型不知道自己的上下文快爆了，是 harness 的插件在守门人关卡和错误回调里感知到压力，主动收缩。这和把模型当 CPU、把 harness 当操作系统的那条主线一致：内存回收是操作系统的活，不是 CPU 的活。
+失败分两种下场。最终 adapter 选择、派发、迭代失败以 terminal error 或 aborted finish 从 `ctx.llm` 进来，走 `agent/request-error`，有监听器返回 retry 就重试，没处理的失败是 terminal；中间件、结果处理、工具这些扩展失败直接抛出，关闭当前 turn。但无论哪种，loop 本身不死：`kick()` 的空 catch 把失败兜在驱动器边界，下一个唤醒照常开工。
 
-## 失败和取消：在哪一层兜住
+取消走一个信号。`cancel(cause)` 先清 inbox（除非传了 `keepInbox`），再协作地 abort 当前 turn 的信号；idle 时的取消是 no-op。`turn()` 检测到 aborted，把结束原因记成 `aborted`，`turn/end` 照样写一条。取消原因改变的是报告，不是结果上下文怎么收尾。
 
-读完主干，回头看失败和取消的边界，这是驱动器最硬的部分。
+最后是唤醒锁存的竞态合约，源码里有大段注释专门处理它。一条唤醒输入在 abort 之后、活动还没收敛到 idle 时到达，会被 `wakeRequested` 锁存，在驱动器自己的收敛边界补跑，不需要再发一次唤醒。但 `disposed` 类型的取消从不锁存，保证 teardown 不会傻等一个模型 turn。
 
-插件失败只结束当前 turn，不结束 loop。包 README 的原话：最终 adapter 选择、派发、迭代失败以 terminal error 或 aborted finish 从 `ctx.llm` 进来，进 `agent/request-error`；中间件、结果处理、工具和其他扩展失败仍然抛出，直接关闭 turn。一个处理监听器返回 `{ kind: 'retry' }` 就重试，没处理的失败是 terminal。
+## 两类事件：durable 与 live
 
-取消走一个信号。`cancel()` 清掉 inbox（除非 `keepInbox`），协作地 abort 当前 turn 的信号。签名是 `cancel(cause: AgentCancelCause, options: CancelOptions = {}): void`：`options.keepInbox` 不为真时先 `this.inbox.clear()`，phase 不是 `idle` 再把 `this.phase.wakeRequested` 置回 `false`；随后只要 phase 不是 `idle`，就 `this.phase.abort.abort(cause)`。
+读到这里，turn 流程里的事件其实分成了两类，架构文档划了明确的界。
 
-idle 时的取消是个 no-op。`turn()` 检测到 `signal.aborted`，把 turnEnds 记成 `{ kind: 'aborted', reason }`，`turn/end` 仍然写一条。取消原因改变的是报告，不是结果上下文怎么 finalize。
+持久会话事件：`turn/*`、`step/*`、`user/message`、`assistant/*`、`tool/*`。这些是追加进日志的事实，通过 `session/event` 广播，重载后存活，是重建会话的依据。
 
-唤醒锁存。一条唤醒输入在 abort 之后但活动还没收敛到 idle 时到达，会被 `wakeRequested` 锁存，在驱动器自己的收敛边界 replay，不需要再发一次唤醒。但 `disposed` 类型的取消从不锁存，保证 teardown 不会等一个模型 turn。这条竞态合约是源码里大段注释专门处理的。
+live agent 事件：`agent/*`。这些带着一个活着的 Agent 对象，覆盖 inbox、status、请求构造、方向盘、续作和错误，用来观察或拦截正在进行的工作。
 
-## 两个事件域：durable 与 live
+为什么分开？两类事件回答不同的问题。持久事件回答"发生了什么"，是重建和审计的来源；live 事件回答"现在在干什么、能不能插手"，是协调和拦截的入口。文档对 SDK 用户的建议也很直白：要可回放的转录数据，消费 `session/event`；`agent/*` 是 live 协调 API。混淆两者是常见错误，有人想从 `agent/*` 重建历史，但 live 事件不保证持久。
 
-读到这里你会发现，turn 流程里的事件分成了两类，架构文档给它们划了明确的界：
-
-- 持久会话事件：`turn/*`、`step/*`、`user/message`、`assistant/*`、`tool/*`。这些是追加进日志的事实，通过 `session/event` 广播，要能在重载后存活，是重建会话的依据。
-- live agent 事件：`agent/*`，带着一个活着的 Agent 对象，负责 inbox、step、status、request、validation、continuation，用来观察或拦截在飞的工作。
-
-为什么分开？因为它们解决两个不同的问题。持久事件回答"发生了什么"，是重建和审计的来源；live 事件回答"现在在干什么、能不能插手"，是协调和拦截的入口。
-
-文档对 SDK 用户有一条明确建议：需要可回放的转录数据，消费 `session/event`；`agent/*` 是用于队列、状态、提示拦截、请求构造、方向盘、续作和错误的 live 协调 API。混淆两者是常见错误：有人想从 `agent/*` 重建历史，但 live 事件不保证持久，重建要用 session 事件。
-
-这条区分也解释了"零 step 的 turn 仍记进日志"：一次被拦下的请求，作为 live 协调它没产生 step，但作为一次"尝试过"的事实，它要落一条持久记录，所以 `turn/start` 和 `turn/end` 这些持久事件照样发生，上面 `turn()` 的流程里 `turn/end` 也是无条件写的。
-
-## 这套驱动器的设计要点
-
-把概念和实现压成几条要记住的设计：
-
-**每一步的请求都从日志现算。** `deriveMessages()` 在每个 step 调一次，模型历史永远是日志的投影，不是缓存。
-
-**并发调度，顺序提交。** 工具可以并行跑（有界滚动池，默认上限 10），但结果和上下文按模型顺序落日志。
-
-**adapter 默认值带标记。** 标记的默认值每次重新算，没标记的显式设置保留，换路由不串味。
-
-**turn-stopping 是 serial 无 next()。** 和 pre-step/request 的 waterfall 不同，它是纯粹的收尾检查点。
-
-**失败在驱动器边界兜住。** `kick` 的 try/catch 吞掉一切，单个 turn 的失败不杀死整个 loop。
-
-**取消用合成结果保持重放一致。** 没分发的工具调用补 `ABORTED_BEFORE_DISPATCH`，历史不缺。
-
-**phase 是单一状态机。** idle/maintenance/running 三态管理所有并发，`wakeRequested` 处理忙时唤醒，`disposed` 取消不锁存。
+这条区分也解释了零 step 的 turn 为什么仍记日志：一次被拦下的请求，作为 live 协调它没产生 step，但作为一次"尝试过"的事实，它要落一条持久记录，所以 `turn/start` 和 `turn/end` 照写。
 
 ## 结论
 
-dsh 用 turn 和 step 两个时间单位组织对话：turn 在第一条输入被领取前打开、在什么都不欠时关闭，由零到若干个 step 组成；step 是一次模型请求加它调用的工具。驱动这一切的是 `dsh-agent-loop`，harness 里唯一装着具体循环逻辑的包：`AgentLoop` 注册成工厂，私有驱动器 `ReactLoopAgent` 用三态状态机跑 `kick → turn → step` 循环。每一步先 claim inbox、过 `agent/pre-step` 守门人（可拒绝、可改写，零 step 的 turn 也持久关闭），再用 `deriveMessages()` 从日志现算请求，过 `agent/request` 组装、`prepareCall` 绑定 adapter，流式记 `assistant/chunk` 并归总成 `assistant/message`；工具走 barrier 与有界滚动池调度，乱序完成、按模型顺序提交；压缩不靠模型，靠插件在 pre-step 探压和 request-error 溢出时被动触发，跑在独占的 maintenance 状态里。失败在驱动器边界兜住，取消用合成结果保持重放一致，事件分成 durable 和 live 两个域，前者重建、后者协调。拿着 `agent.ts`、`tool-calls.ts`、`index.ts` 三个文件，你可以从一条用户消息一路追到一次工具结果落进日志。
+压成一句话：dsh 的对话流转就是"领输入、过守门人、从日志现算历史、请求模型、跑工具、判断还欠不欠"，turn 管从交办到交差，step 管想一次加干一次，三态状态机保证同一时刻只有一件事占着驱动器。
+
+细看之后值得带走的是几处分寸。模型历史每步从日志现算、不做缓存，"模型可见即可重建"才立得住。工具乱序完成但按模型顺序提交，重放才是确定的。压缩不交给模型，插件在守门人和错误回调里被动触发，模型因此不用管自己的内存。失败在驱动器边界兜住，取消用合成结果补齐，loop 不死，日志不缺。
+
+拿着 `agent.ts`、`tool-calls.ts`、`index.ts` 三个文件，你可以从一条用户消息一路追到一次工具结果落进日志。
 
 ## 延伸阅读
 
