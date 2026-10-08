@@ -185,7 +185,7 @@ descriptor 是纯日志事件，永不进模型历史，压缩也保留它。头
 
 共享 checkout 的立场很坦率：所有 member 用相同 cwd，写入立即互相可见。文件系统 edit 工具可以拒绝已观察到的陈旧版本，但 Bash、formatter、generator 和外部 writer 会绕过这道屏障；把 teammate 名字或 task owner 当文件锁只会掩盖并发边界。策略要求成员切分任务、记录提示性 write scope、为有序工作加依赖，Lead 检查最终 diff 和跑测试。worktree 隔离不是 harness 运行时行为，部署或提示词可以安排独立 worktree，但 Team 领域不推断 branch、merge，不静默改变 cwd。
 
-实验性状态有机械强制，不只是文档标记：dsh 的 pack 与 publish 集合排除 `packages/experimental/` 下所有 manifest，这些包 `private: true`，发布包、app、Python runtime 通过 dependencies 依赖它们会被顶层检查拒绝。要试 Team 得用显式示例或实验性组合，已发布的基础组合不暴露它。这是"先在真实仓库条件下孵化、再谈稳定义务"的路线，promotion 前要过公开约定、测试证据、具名 owner 的评审。
+实验性状态在发布口径上落地：实验包以带 experimental 前缀的名字公开发布，2026 年 9 月起可以直接从 npm 安装试用，但不带任何稳定性承诺，契约可以随孵化任意改变；出厂的基础组合默认不挂它。promotion 进产品组合前要过公开约定、测试证据、具名 owner 的评审，这是"先在真实仓库条件下孵化、再谈稳定义务"的路线。
 
 ![深度、工具过滤与人设三枚旋钮](imgs/30-20-depth-tools-persona.webp)
 

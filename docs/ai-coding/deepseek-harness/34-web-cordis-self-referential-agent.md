@@ -178,7 +178,7 @@ web-cordis 把"一切皆插件"推到终点：agent 用五个工具在运行时�
 - [tool-cordis README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/extensions/tool-cordis/README.md)：五个工具的模型契约与四类约定
 - [cordis-host-runner README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/extensions/cordis-host-runner/README.md)：运行器服务与沙箱边界
 - [cordis-client-runner README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/extensions/cordis-client-runner/README.md)：浏览器半边的求值、门面与往返编排
-- [web-cordis 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/web-cordis/README.md)：运行命令与自指示例
+- [extensions 包组](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/extensions)：自指工具集四包家族（早期 `examples/web-cordis` 的运行命令已随 2026 年 9 月的 examples 目录移除）
 - [自指工具集 Agent Note](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)：设计决策与被否决方案
 
 上一篇：[dsh 的 ACP 协议与 acp-agent：agent 通话标准怎么落地](./33-acp-protocol-acp-agent.md)

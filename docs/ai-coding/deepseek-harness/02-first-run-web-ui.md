@@ -21,9 +21,9 @@
 
 如果你打算读源码、写插件、或跟踪 `master` 最新改动，从仓库跑：先 `git clone https://github.com/deepseek-ai/deepseek-harness.git` 拿到仓库，`cd deepseek-harness` 进目录，`pnpm install` 装依赖，`pnpm run build` 构建一遍，最后 `pnpm dsh web` 启动。
 
-这个方式需要 pnpm，且要跑一遍 `build`。它的好处是你拿到了完整源码——本系列后面所有"源码导读"篇（06、08、10、14、16）都默认你手上有一份 checkout。第一次跑通选 `npx` 即可，等读到源码篇再切到这种方式。
+这个方式需要 pnpm，且要跑一遍 `build`。它的好处是你拿到了完整源码——本系列后面所有"源码导读"篇（06、07、09、16）都默认你手上有一份 checkout。第一次跑通选 `npx` 即可，等读到源码篇再切到这种方式。
 
-> 顺带说一句：`web` 和 `headless` 是两个内置 profile 模板。`web` 起带界面的服务；`headless` 是一次性 runner，不开 server，接一个任务跑完就退出（40 篇讲自动化集成时会用它）。本文只讲 `web`。
+> 顺带说一句：内置 profile 模板有五个（`web`、`headless`、`sdk`、`sdk-minimal`、`acp`）。`web` 起带界面的服务；`headless` 是一次性 runner，不开 server，接一个任务跑完就退出（40 篇讲自动化集成时会用它）；sdk 两个给编程接入，`acp` 给编辑器类客户端当引擎。2026 年 9 月的版本起还有了桌面应用，桌面形态复用 sdk 的组合，把浏览器前端换成本地窗口，关窗后后台任务还能继续。本文只讲 `web`。
 
 ## 第一步：配模型
 

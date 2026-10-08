@@ -119,11 +119,11 @@ dsh 的一个 prompt 可能触发一串 turn：模型思考、调工具、再思
 
 ![acp-agent 的可运行组合堆栈](imgs/33-11-acp-agent-stack.webp)
 
-## acp-agent 示例：一行命令的可运行组合
+## acp 入口：一个内置 profile 的可运行组合
 
-`examples/acp-agent` 把上面的适配器组成一个完整的、可运行的 ACP 服务器。两条命令：`pnpm run demo:acp` 拉起标准组合，`pnpm run demo:code-mode` 换成同协议但走 Code Mode 工具传输的变体。都需要 DeepSeek 的 API key，从仓库根的 .env 或环境变量读。
+ACP 服务器现在是内置的 `acp` profile，`dsh --profile acp` 一条命令拉起。它由 `dsh-base` 共享核心加 `acp-app` 束叠成：base 贡献模型适配、沙箱、审批、工具注册表，束贡献 ACP 桥接和无人值守的启动语义。早期 `examples/acp-agent` 时代的 demo 组合（标准版与 Code Mode 变体两条命令）已随 2026 年 9 月的 examples 目录移除成为历史。
 
-组合装载的东西比乍看要多。应用本体（`dsh-acp-demo`，内部走 agent-spine-demo）带来：DeepSeek 适配器（默认全量思考、最大推理力度）、沙箱化的 bash 和文件系统栈、一次性审批策略、上下文压缩（阈值比率 0.8，保留 0.08）、子 agent（spawn 委派配 `backgroundMode: continuable`、深度上限 1；fork 委派刻意保持一次式前台，2026-08-10 的架构笔记专门记录了这个选择：可继续子级的 report 工具和提示段排在 fork 继承的历史之前，语义对不上）、工作流引擎加 ralph 工具、todo 工具、重复防护（默认阈值 3、5、8 次触发放告警上下文）、Claude 和 Codex 两套 hooks、派生的会话查询索引。spine 还默认挂载了 goal 领域、goal 模型工具和续跑驱动器（owner 默认值启用），有意省掉 `/goal` 命令服务，因为命令注册表是给人机界面用的，自动化端点没有消费者。可选的 overlay 还能叠上会话查询、文件系统溢出存储、Code Mode、网页抓取。
+组合装载的东西比乍看要多。共享核心带来沙箱化的 bash 和文件系统栈、审批策略、上下文压缩、子 agent 委派、工作流引擎、todo、重复防护、goal 领域和派生的会话查询索引；fork 委派刻意保持一次式前台，2026-08-10 的架构笔记专门记录了这个选择：可继续子级的 report 工具和提示段排在 fork 继承的历史之前，语义对不上。给人机界面用的命令注册表在这里被有意省掉，自动化端点没有消费者。
 
 两个工程细节容易被漏掉，漏掉就会踩坑。一是 stdout 的纯净化：demo 不装任何 stdout 日志器，所有诊断走 stderr，因为 stdout 上是换行分隔的 ACP JSON-RPC 帧，你往组合里加自己的叶子组件时，日志也必须走 stderr。二是会话工作区隔离：每个会话带独立的绝对工作目录，沙箱化的写操作针对那个目录解析 `workspace-write` 策略，所以并发会话可以各用各的项目根互不干扰，平台临时目录作为共享的可写暂存区不变。部署层面用 `DSH_PERMISSION_MODE` 环境变量在 `workspace-write` 和 `danger-full-access` 之间选权限档位。
 
@@ -184,7 +184,7 @@ dsh 在 ACP 里两侧都站，这篇拆的是服务端：一个刻意做窄的�
 - [Agent Client Protocol 官方站点](https://agentclientprotocol.com/)
 - [ACP v1 规范概览](https://agentclientprotocol.com/protocol/v1/overview)
 - [dsh-acp README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/acp/acp/README.md)：服务端全部行为契约
-- [acp-agent 示例 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/acp-agent/README.md)：组合清单与运行命令
+- [acp-app 束](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/bundle/acp-app)：内置 acp profile 的组合层
 - [ACP 协议 GitHub 仓库](https://github.com/agentclientprotocol/agent-client-protocol)
 
 上一篇：[dsh 的 MCP 客户端与记忆服务器接入手册：通用协议在 harness 里的位置](./32-mcp-in-dsh-and-mcp-memory.md)

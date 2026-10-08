@@ -7,7 +7,7 @@
 
 看到 schedule 和 reminder 这两个词，多数人脑子里浮现的是一个通知系统：定个时间，到点了弹浏览器通知、推系统消息、发封邮件。web-schedule 不是这个东西，把它当这个东西用，第一天就会失望。
 
-它的形态是一层 overlay，让一个 `dsh web` 进程拥有会话内的提醒能力。启动命令是 `dsh web --patch examples/web-schedule/cordis.yml`，不改默认的 Web 组合。这个 patch 只插入两个插件：`@deepseek-ai/dsh-time-context` 给模型提供时间上下文，`@deepseek-ai/dsh-schedule` 是能力本体，位于 `packages/schedule/schedule`。加载之后，模型得到三个工具：`schedule_create`、`schedule_list`、`schedule_delete`，每个工具的返回结果都把投递方式标识为 `session-local`。
+它的形态是一层 overlay，让一个 `dsh web` 进程拥有会话内的提醒能力。挂载方式是在默认 Web 组合之外叠一层补丁，不改默认组合本身。这层补丁只插入两个插件：`@deepseek-ai/dsh-time-context` 给模型提供时间上下文，`@deepseek-ai/dsh-schedule` 是能力本体，位于 `packages/schedule/schedule`。加载之后，模型得到三个工具：`schedule_create`、`schedule_list`、`schedule_delete`，每个工具的返回结果都把投递方式标识为 `session-local`。
 
 session-local 这个词是理解全部行为的钥匙。一个提醒到点后的投递，是这个会话的根 agent 等到完全空闲，然后在自己所在的那个对话里排队一个普通的 follow-up turn。它绝不打断 agent 正在做的事，没有单独的提醒卡片，没有特殊回执 UI，就是一条普通消息进了对话，agent 像处理任何用户消息一样处理它。这个边界有专门的决策文档（2026-08-09 的 conversational schedule delivery 简化笔记）：dispatch 是内部队列事实，不是用户的提醒，渲染普通 assistant 回答既避免了第二种交付含义，也从 host 与 client 层移除了 schedule 代码。
 
@@ -125,7 +125,7 @@ reminder_prompt_json: <JSON.stringify(prompt)>
 
 最后看它挂载的方式，这里体现的是 harness 一贯的取舍。
 
-默认的 `dsh web` 没有 schedule 能力，模型看不到这三个工具。想要，就 `--patch examples/web-schedule/cordis.yml` 把这层 overlay 叠上去，插入 time-context 和 schedule 两个插件。owner 只观察插件加载后发布的根 agent，这条限制有明确的理由（决策笔记的替代方案一节）：晚接管会让插件加载顺序激活不可见的 timer，把工具暴露到受支持的根组合之外。
+默认的 `dsh web` 没有 schedule 能力，模型看不到这三个工具。想要，就在 profile 补丁或 `--patch` 覆盖层把 time-context 和 schedule 两行叠上去。owner 只观察插件加载后发布的根 agent，这条限制有明确的理由（决策笔记的替代方案一节）：晚接管会让插件加载顺序激活不可见的 timer，把工具暴露到受支持的根组合之外。2026 年 9 月下旬的 0.1.7 系列把这条默认边界写成了正式口径（定时与时间上下文按默认关闭出厂），同时给这层能力补了提醒的运行历史和最高每分钟一次的重复，本篇讲的持久记录、时间边界和投递纪律没变。
 
 这个安排让默认组合保持精简。一个 headless 的 CI runner、一个只做代码生成的部署，不需要定时能力，也就不会被它的复杂度拖累；需要长期挂着会话做巡检的开发助手，一条命令把能力叠上。能力按需出现，核心不为低频需求买单，这是插件化在这个具体功能上的落点。
 
@@ -157,7 +157,7 @@ web-schedule 用一层 overlay 给会话加了定时能力，内核是一个三�
 
 - [Session-local Schedule 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/schedule.md)：持久记录类型目录、时间边界与回放规则
 - [持久 Schedule 决策笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-08-05-durable-web-schedule.md)：持久化与生命周期决策、被拒绝的替代方案
-- [Session-local Schedule 示例 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/web-schedule/README.md)：overlay 用法与用户可见边界
+- [schedule 包](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/schedule/schedule)：能力本体与复发、持久化测试
 - [对话式交付简化笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/simplification/2026-08-09-conversational-schedule-delivery.md)：为什么没有独立回执
 - [Session 子系统文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/session.md)：turn、排队输入、冷热会话与 fork 的底层语义
 

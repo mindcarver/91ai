@@ -90,11 +90,11 @@ Web 界面的端口既能写在 config 里，也能在启动时用 `--port 8080`
 
 注意这个表里没有"环境变量层"。环境变量不出现在层叠顺序里，它们是值的来源而不是层：config 里写 `apiKeyEnv: DEEPSEEK_API_KEY`，意思是这个字段的值去环境变量里读。层叠决定"这行 config 是谁说了算"，环境变量决定"某个字段的值从哪来"，两个问题正交。
 
-`--patch` 是给一次性场景的：临时挂一个示例组合试一下，比如 `dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"`，用完即走，什么都不留。想持久化，就把内容并进 profile 或 home 的 `cordis.patch.yml`。判断该放哪层的依据是生命周期：跟这个 profile 走的放 profile，跟这台机器上所有 profile 走的放 home，只活一次的放 `--patch`。
+`--patch` 是给一次性场景的：临时挂一份补丁文件试一下，比如 `dsh web --patch ./my-trial.yml`，用完即走，什么都不留。想持久化，就把内容并进 profile 或 home 的 `cordis.patch.yml`。判断该放哪层的依据是生命周期：跟这个 profile 走的放 profile，跟这台机器上所有 profile 走的放 home，只活一次的放 `--patch`。
 
-模块解析也有确定的链条。组合包名称先从 dsh 安装本身找，再从 profile 自己的 node_modules 找，所以内置三个组合包（`dsh-base` 基座、`dsh-web-app` Web 应用、`dsh-headless` 无头模式）永远来自当前安装，树外组合包来自 profile 里 pnpm 管的依赖。patch 行里的裸插件 `name` 从 profile 目录开始按 Node 的规则逐级向上查找，终点是 dsh 维护的安装后备目录 `$DSH_HOME/profiles/node_modules`，那里为安装所依赖的每个包维护一个符号链接，每次启动时修复。
+模块解析也有确定的链条。组合包名称先从 dsh 安装本身找，再从 profile 自己的 node_modules 找，所以内置组合包（`dsh-base` 基座、`dsh-web-app` Web 应用、`dsh-headless` 无头模式、`dsh-sdk-app` SDK 服务器、`dsh-acp-app` ACP 服务器、独立树的 `dsh-sdk-minimal`）永远来自当前安装，树外组合包来自 profile 里 pnpm 管的依赖。patch 行里的裸插件 `name` 从 profile 目录开始按 Node 的规则逐级向上查找，终点是 dsh 维护的安装后备目录 `$DSH_HOME/profiles/node_modules`，那里为安装所依赖的每个包维护一个符号链接，每次启动时修复。
 
-外部插件的进出走 `dsh plugin --profile <name> add <package-or-git-spec>`。它在 profile 缺失时先初始化它（web 和 headless 有随附模板，其他名字装 base），然后以 profile 目录为工作目录把参数转发给 pnpm，add、remove、why、update 全部照常可用。关键是每次成功运行后，系统按当前安装状态更新 `dsh.profile.bundles`：依赖的包在 manifest 里声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`，它就加入配置层栈；没有声明的依赖保留为普通依赖并给一次性警告；被移除的依赖从层栈里删掉。装包即叠层，卸包即撤层，中间没有手工编辑 manifest 的环节。
+外部插件的进出走 `dsh plugin --profile <name> add <package-or-git-spec>`。它在 profile 缺失时先初始化它（五个内置名字有随附模板：web、headless、sdk、sdk-minimal、acp；其他名字装 base），然后以 profile 目录为工作目录把参数转发给 pnpm，add、remove、why、update 全部照常可用。关键是每次成功运行后，系统按当前安装状态更新 `dsh.profile.bundles`：依赖的包在 manifest 里声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`，它就加入配置层栈；没有声明的依赖保留为普通依赖并给一次性警告；被移除的依赖从层栈里删掉。装包即叠层，卸包即撤层，中间没有手工编辑 manifest 的环节。
 
 ## 生命周期错位：活的层和冻的层
 

@@ -67,7 +67,7 @@ postmortem 的教训被沉淀成三条可执行的要求。
 
 守卫要先证明自己会红。一个 guard 只有在回归真的让它失败时才 guard。dsh 的解法是显式断言 `expect('default' in mod).toBe(false)` 加 `unwrapExports` 往返检查，然后照仪式证明它：引入回归，看它红，还原。没看过红的守卫，等于没有守卫。
 
-测发布的产物。一个包的 bin 要在普通 node 下跑构建后的 `lib/bin.js`，因为 tsx 会掩盖一批失败：settle 竞争、模块解析、被吞掉的加载错误。built-artifact smoke（如 `packages/examples/*/tests/built-bin.e2e.ts`）必须保持绿，还要断言配置缺失时以非零码退出。postmortem 里那个陈旧 lib 骗过本地测试的事故，反过来也说明构建产物一旦参与解析就必须被显式测试拥有。
+测发布的产物。一个包的 bin 要在普通 node 下跑构建后的 `lib/bin.js`，因为 tsx 会掩盖一批失败：settle 竞争、模块解析、被吞掉的加载错误。built-artifact smoke 必须保持绿，还要断言配置缺失时以非零码退出。postmortem 里那个陈旧 lib 骗过本地测试的事故，反过来也说明构建产物一旦参与解析就必须被显式测试拥有。
 
 ![测试解析保持源码平面](imgs/43-07-source-plane-resolution.webp)
 
@@ -123,7 +123,7 @@ mock 原则一句话：只 mock 昂贵或不确定的边界，LLM 适配器、�
 
 为什么 transcript 级的钉住不可替代。一个 e2e 断言验证的是你想到要验的东西，一个快照钉住的是你没想到要验的一切。system prompt 的组装顺序、工具 schema 的字段形态、事件流的先后、日志的持久化形状，全在 diff 里。变更把某个 prompt section 弄丢了，断言可能碰巧没盯它，快照一定会红。代价是快照的红噪音更大，所以规则同时要求每个 diff 人审、fixture 用 tokenize 和分层把爆炸半径压到最小：一个叫 `text-turn` 的 ACP 场景钉住完整的 system prompt 和工具 schema，其他 fixture 把它 tokenize 掉，一个 header 改动只影响一个 fixture。
 
-不同 surface 的快照各有归属：ACP 场景在 `examples/<name>/tests/snapshots/`，headless 后端场景归 `examples/headless-agent` 的 canonical-event JSONL，交互终端旅程在 `apps/cli/tests/snapshots/`，浏览器渲染在 `apps/web/tests/snapshots/`。归属清晰的价值在 blast radius：一个 surface 的变更只动自己的快照目录。两个 SDK 必须同步更新，TypeScript 侧的 `examples/jsonrpc-agent/tests/snapshots/` 和 Python 侧的 `scripts/snapshots/python-sdk-single-exe/`，后者只由 python-runtime 的 CI job 跑。fixture 的保留策略也定死了：header 和 payload 保留，body 里的时间和序号信封省略，回放时合成；旧布局由 `scripts/migrate-packed-session-fixtures.ts` 迁移，不让历史 fixture 变成一次性负债。
+不同 surface 的快照各有归属：ACP 场景、headless 后端的 canonical-event JSONL、交互终端旅程、浏览器渲染各自落在自己 surface 的快照目录里（examples 目录时代的具体路径在 2026 年 9 月的重组后以当期仓库为准，归属原则没变）。归属清晰的价值在 blast radius：一个 surface 的变更只动自己的快照目录。两个 SDK 必须同步更新，TypeScript 侧和 Python 侧各有一份，后者只由 python-runtime 的 CI job 跑。fixture 的保留策略也定死了：header 和 payload 保留，body 里的时间和序号信封省略，回放时合成；旧布局由迁移脚本收拾，不让历史 fixture 变成一次性负债。
 
 ![HMR 清理测试](imgs/43-13-hmr-cleanup.webp)
 

@@ -120,30 +120,30 @@ turn 结束
 一个接缝有三个角色：
 
 - **Service Definition**：声明一个能力接口（如"文件系统读写"）。
-- **Service Provider**：实现这个接口（如 `fs-local` 本地实现、`fs-sandbox` 沙箱实现、`fs-e2b` 远程实现）。
+- **Service Provider**：实现这个接口（如 `fs-local` 本地实现、`fs-sandbox` 沙箱实现、`fs-ssh` 远程实现）。
 - **Consumer**：使用这个能力，通常是模型面向的工具。
 
 `dsh` 有几十个这样的接缝：`ctx.llm`（模型）、`ctx.fs`（文件系统）、`ctx.shell`（命令执行）、`ctx.subprocess`（子进程）、`ctx.sandbox`（沙箱）、`ctx.web`（联网）、`ctx.lsp`（语言服务器）、`ctx.subagents`（子 agent）……
 
-接缝的威力在于：**文件系统和子进程共享同一个"执行世界"**。当你把 `ctx.fs` 和 `ctx.subprocess` 都指向一个远程 E2B 沙箱，那么 Bash、PTY、LSP 全都跟着搬过去了，不需要为远程执行单独写一套 provider 分支。一个 provider 的替换，移动了整个产品。
+接缝的威力在于：**文件系统和子进程共享同一个"执行世界"**。当你把 `ctx.fs` 和 `ctx.subprocess` 都指向一台远程 SSH 主机，那么 Bash、PTY、LSP 全都跟着搬过去了，不需要为远程执行单独写一套 provider 分支。一个 provider 的替换，移动了整个产品。
 
 这就是 `dsh` 设计哲学的内核：**不写死任何一个能力，而是为每个能力设计一个可替换的接缝。** 代价是抽象层多、调试链长（48 篇会讲这个代价）；回报是从"一个产品"变成"一族可组合的产品"。
 
 ![能力接缝如何把 provider 替换扩展到整个执行世界](imgs/06-framework-capability-seams.webp)
 
-## 仓库地图：42 篇要拆的东西
+## 仓库地图：48 篇要拆的东西
 
-`dsh` 仓库是一个 pnpm monorepo，`packages/` 下有 50 多个子包。给张极简地图，好让你知道 42 篇在拆什么：
+`dsh` 仓库是一个 pnpm monorepo，`packages/` 下有两百多个子包。给张极简地图，好让你知道 48 篇在拆什么：
 
 | 层 | 代表包 | 干什么 |
 |---|---|---|
 | 核心 spine | `session` / `system-prompt` / `tools` / `agent` / `agent-loop` / `scope` | 会话日志、提示组装、工具注册表、agent 接口与驱动 |
 | 模型 | `llm` / `llm-deepseek` / `llm-pi-ai` | stream 契约与各 provider 适配 |
-| 执行 | `fs` / `shell` / `subprocess` / `terminal` / `lsp` / `code-runtime` | 文件、命令、终端、语言服务器、代码执行 |
+| 执行 | `fs` / `shell` / `subprocess` / `terminal` / `lsp` / `code-runtime` / `ssh` | 文件、命令、终端、语言服务器、代码执行、远程工作区 |
 | 安全 | `sandbox` / `approval` / `permission-presets` | 沙箱、审批、权限预设 |
 | 上下文 | `compaction` / `token-meter` / `spill` / `session-query` | 压缩、计量、溢出、跨会话检索 |
 | 协作 | `subagent` / `jobs` / `workflow` / `goal` / `plan-mode` | 子 agent、后台任务、工作流、目标与计划 |
-| 接入 | `web` / `skill` / `mcp` / `acp` | 联网、技能、MCP、ACP 协议 |
+| 接入 | `web` / `skill` / `mcp` / `acp` / `browser-use` / `computer-use` | 联网、技能、协议接入、浏览器与桌面控制 |
 | 组合 | `boot` / `bundle` / `preset` | 启动装配、bundle 分发、预设 |
 
 每个有独立设计的子系统，本系列都对应一篇（概念）或两篇（概念 + 源码导读）。这不是凑数——`dsh` 的价值恰恰在于这些子系统各自的设计，而不在于"它是一个 agent"这个事实。
@@ -153,7 +153,7 @@ turn 结束
 | 你是 | 建议路径 |
 |---|---|
 | 想搞懂架构的工程师 | 主干 9 篇：01-03、07、09、11、12、13、48（见 README 阅读路径） |
-| 想二次开发 / 写插件 | 主干 + 源码导读（06、09、14、16）+ 18（写适配器） |
+| 想二次开发 / 写插件 | 主干 + 源码导读（06、09、16） |
 | 想上生产 | 主干 + 19（安全）、35-36（配置与可观测）、42（容错） |
 | 只想横向对比选型 | 01 + 12（接缝）+ 48（横评与哲学） |
 

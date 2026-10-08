@@ -1,6 +1,6 @@
 # DeepSeek Harness 架构深读系列
 
-> 不是使用教程，是架构拆解。43 篇文章把 DeepSeek Harness（`dsh`）这个开源 agent harness 从 Cordis 范式、运行时核心、能力接缝、执行子系统，到源码导读、扩展开发、工程化门禁、横向评测和基座实战，逐层讲透。
+> 不是使用教程，是架构拆解。48 篇文章把 DeepSeek Harness（`dsh`）这个开源 agent harness 从 Cordis 范式、运行时核心、能力接缝、执行子系统，到源码导读、扩展开发、工程化门禁、横向评测和基座实战，逐层讲透。
 
 本系列面向想读懂 `dsh` 源码、写插件做二次开发、或在 Claude Code / Cursor / Codex 之外评估一个"全插件化"开源 harness 的工程师与架构师。它不重复讲"AI 会写代码"，而是回答一个具体问题：**一个把"模型之外的一切"都做成可替换插件的 agent harness，内部到底是怎么运转的、它的可组合性设计代价是什么。**
 
@@ -12,7 +12,7 @@
 - **能力接缝（Capability Seams）**：模型适配、文件系统、命令执行、沙箱、子 agent……每一项都是一个"定义 + 提供者 + 消费者"三角色的可换接缝。换一个 provider 等于换了整个产品。
 - **运行时不变量**："模型可见即可重建"——任何到达模型请求的东西都必须能从会话日志重建，运行时会断言这条规矩。
 
-这三层决定了为什么 `dsh` 值得用 43 篇来拆，也决定了本系列的阅读顺序：先 Cordis（地基），再运行时核心（心脏），再接缝与工具（扩展模型），最后是子系统深潜、源码导读和评测。
+这三层决定了为什么 `dsh` 值得用 48 篇来拆，也决定了本系列的阅读顺序：先 Cordis（地基），再运行时核心（心脏），再接缝与工具（扩展模型），最后是子系统深潜、源码导读和评测。
 
 ## 与《Harness Engineering》系列的关系
 
@@ -30,7 +30,7 @@
 4. 然后读 12（能力接缝）和 13（工具管线），这是 `dsh` 区别于"写死 agent"的核心设计。
 5. 收尾读 48（横评与哲学合为一篇），建立横向判断。
 
-如果想做二次开发，主干之后补 06（启动链源码导读，09 已含 session 包源码）、16（LLM stream 契约）和 18（写一个 LLM 适配器）。如果关心生产落地，补 19（安全）、35-36（配置与可观测）、42（容错）。
+如果想做二次开发，主干之后补 06（启动链源码导读，09 已含 session 包源码）、16（LLM stream 契约）和 56（profile 与 bundle 分层）。如果关心生产落地，补 19（安全）、35-36（配置与可观测）、42（容错）。
 
 ## 篇型说明
 
@@ -41,7 +41,7 @@
 
 ## 系列目录
 
-> 本系列共 43 篇，全部已发布。目录按 11 个章节 + 终章组织；每篇文章仍保留独立发布单元，章节用于给读者提供更清晰的阅读路径。
+> 本系列共 48 篇，全部已发布。目录按 11 个章节 + 终章组织；每篇文章仍保留独立发布单元，章节用于给读者提供更清晰的阅读路径。内容基线：官方 v0.1.7-rc.2（2026-09-24）及当期 master；涉及 2026-09 中旬重组（examples 目录移除、E2B 换 SSH、profile 体系落地）前的历史事实，各篇在正文里就地标注。
 
 ### 第 1 章：DeepSeek Harness 是什么，以及怎么第一次跑起来（2 篇）
 
@@ -50,13 +50,14 @@
 | 01 | [模型 + Harness = Agent：DeepSeek Harness 是什么](./01-model-plus-harness-what-is-dsh.md) | `dsh` 的项目定位、在 harness 谱系里的独特位置、"一切皆插件"的开场 |
 | 02 | [从 0 跑起来：first run 全流程](./02-first-run-web-ui.md) | 启动 Web UI、配模型、选 workspace、跑第一个任务 |
 
-### 第 2 章：Cordis 与插件树：一切皆插件如何落地（3 篇）
+### 第 2 章：Cordis 与插件树：一切皆插件如何落地（4 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
 | 03 | [从一篇论文到一棵插件树：Cordis 怎么撑起 DeepSeek Harness 的"一切皆插件"](./03-cordis-and-plugin-composition.md) | 论文两轴、五大范式（第五条是灵魂）、profile/bundle 拼装、`--dump-config` |
 | 06 | [🔍 dsh 启动链源码导读：从 npx 命令到挂载完毕的插件树](./06-boot-chain-source-walkthrough.md) | app-boot / loader / cordis.yml 加载全链路（#03 的实现） |
 | 47 | [dsh 的 Cordis 谱系：从 Koishi 插件框架到这个 harness](./47-cordis-lineage-koishi-plugin-framework-genealogy.md) | Cordis 从哪来、为什么 vendor、18 处本地修改、与同类插件框架的对比 |
+| 56 | [dsh 的 Profile 与 Bundle 分层：一棵插件树长出五个入口](./56-profile-and-bundle-layering.md) | dsh-base 共享核心、模式束覆盖、sdk-minimal 独立树、三条分层纪律 |
 
 ### 第 3 章：一次对话如何流转：Turn、Step、Session Log 与事件系统（3 篇）
 
@@ -81,7 +82,7 @@
 | 16 | [dsh 的 LLM 适配器与 stream 契约：把 provider 差异关在适配器一层](./16-llm-adapter-stream-contract-source-walkthrough.md) | 封闭流式契约、差异吸收、失败归一、重放 |
 | 17 | [dsh 的多模态附件：模型看到的图是派生出来的](./17-multimodal-attachments.md) | 图片准入与规范化、模态门控、请求版本派生、DeepSeek Files API 投递与请求级降级 |
 
-### 第 6 章：执行世界：agent 如何安全地读写、运行、导航和联网（7 篇）
+### 第 6 章：执行世界：agent 如何安全地读写、运行、导航和联网（10 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
@@ -90,10 +91,13 @@
 | 21 | [dsh 命令执行三层：Subprocess / Shell / Terminal](./21-shell-subprocess-terminal.md) | 底层坐标 / bash 执行器 / 持久 PTY 的关系与取舍 |
 | 22 | [dsh 的 LSP 接缝：让 agent 真正"懂"代码](./22-lsp-code-navigation.md) | 四个归一化操作、stdio provider 按工作区池化、能力逐操作检查、lsp-local 翻译 |
 | 23 | [dsh 的 Code Runtime 与 Code Mode：让模型写代码并执行](./23-code-runtime-and-code-mode.md) | ctx.codeRuntime + worker、run_code 传输、子调用原生并发、子调用日志纳入 spill |
-| 24 | [dsh 的 Jobs 与 Workflow：后台任务和编排脚本](./24-jobs-and-workflow-ralph.md) | ctx.jobs 注册表、workflow engine、Ralph 结构化输出 |
+| 24 | [dsh 的 Jobs 与 Workflow：后台任务和编排脚本](./24-jobs-and-workflow-ralph.md) | ctx.jobs 注册表、workflow engine、Ralph 结构化输出与默认禁用 |
 | 25 | [dsh 的 Web 搜索抓取与 Skills 技能系统](./25-web-search-fetch-and-skills.md) | ctx.web 统一多 provider、ctx.skills 按需加载技能体 |
+| 57 | [dsh 的浏览器与 Computer Use：agent 的第三种执行世界](./57-browser-use-and-computer-use.md) | 只存名字的注册表、三后端一接缝、Session 所有权、截图走持久附件 |
+| 59 | [dsh 的 SSH 远程工作区：一次补丁搬走整个执行世界](./59-ssh-remote-workspace.md) | ctx.ssh 连接主人、三 provider 共享连接、摘要钉死、断线不重连不重放 |
+| 60 | [dsh 的跨平台沙箱原语：bwrap、Landlock、Seatbelt 与 Windows ACL](./60-cross-platform-sandbox-primitives.md) | 平台候选链、full/partial 强制力申报、拒绝与运行器故障两套方言 |
 
-### 第 7 章：从短对话到长期 Agent：上下文、记忆、计划与多智能体（6 篇）
+### 第 7 章：从短对话到长期 Agent：上下文、记忆、计划与多智能体（7 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
@@ -103,6 +107,7 @@
 | 30 | [dsh 的子 Agent 与多智能体：怎么调度另一个 agent](./30-subagents-multi-agent.md) | 六种 subagent provider、并行委派与后台优先、审批钉定 never、实验性 Agent Teams |
 | 31 | [dsh 的 web-schedule：会话内的定时、提醒与自动化](./31-web-schedule-timer-automation.md) | schedule/change v1 事件流、至少一次交付、绝对时间权威、冷热恢复 |
 | 55 | [dsh 子代理模型路由：授权-选择-执行三层](./55-dsh-subagent-model-routing.md) | 精确路由白名单、会话级快照、执行器复核；能力门显式拒绝、fork 因 KV 缓存禁用选择 |
+| 58 | [dsh 的 Agent Teams：mailbox、任务板与同级协作](./58-agent-teams-mailbox-task-board.md) | 隐式 Lead、排队减已投递的持久邮箱、CAS 任务板、四条设计承诺 |
 
 ### 第 8 章：协议与客户端：MCP、ACP、Headless、Web Client 与自指 Agent（6 篇）
 
@@ -115,7 +120,7 @@
 | 40 | [dsh 的 Python SDK、Headless 与 JSON-RPC：把 agent 编进流水线](./40-python-sdk-headless-jsonrpc.md) | sdk/sdk-runtime 三平台 wheel、headless 一次性、benchmark 隔离 |
 | 41 | [dsh 的 Web 客户端：Chat Nodes 与多 agent 协议](./41-web-client-chat-nodes-multi-agent-protocol.md) | clientModules 增量扫描、双 WebSocket 下行、HMR、协议接入 |
 
-### 第 9 章：生产化工程：状态、配置、可观测、调试、容错、测试与性能（6 篇）
+### 第 9 章：生产化工程：状态、配置、可观测、调试、容错、测试与性能（7 篇）
 
 | # | 文章 | 重点 |
 |---|------|------|
@@ -125,6 +130,7 @@
 | 38 | [🛠 dsh 的排查与调试：全插件化 harness 怎么追问题](./38-debugging-and-troubleshooting.md) | dump-config、invariants、telemetry 三模式、llm/retry 事件 |
 | 42 | [dsh 的错误处理与容错：这个 harness 怎么不崩](./42-error-handling-fault-tolerance-philosophy.md) | 结构化错误分类学、defensive patterns、dispose 到 quiescence、postmortem 文化 |
 | 43 | [dsh 的测试体系与性能压测：怎么测一个 agent harness](./43-testing-how-to-test-an-agent-harness.md) | 五层测试、with-key 真实 API、llm-mock-server 故障注入、fast-check 属性测试、Web 压测 lane |
+| 61 | [dsh 的 Inspector：给运行中的插件树配一个 DevTools](./61-inspector-devtools-for-plugin-tree.md) | Worker 收全部 CDP 状态、快照投影、Elements 里的 Cordis 树、只绑回环 |
 
 ### 第 10 章：文档即代码：自动生成、校验与双语质量门禁（2 篇）
 
@@ -149,7 +155,7 @@
 
 - **不写成使用手册**。`dsh` 是开源框架，用户文档官方已经完备；本系列的增量在架构拆解和源码理解，不在重复"怎么点按钮"。
 - **源码导读与概念篇配对**。03→06 一组保持"概念 + 源码导读"各自成篇，16 讲 LLM stream 契约与 provider 差异吸收；07（turn/step + agent-loop 源码）、09（会话日志 + session 包源码）、13（工具管线 + 守卫与注册设计）、43（测试政策 + 性能压测）已合为一篇，讲完机制立刻看实现，避免概念悬空。
-- **安全深水区按需展开**。Landlock 原生沙箱、E2B 远程沙箱、凭证密钥的细节分散在 19、20、35 三篇，不单开独立专题；若后续需要可随时插篇。
+- **安全深水区分层展开**。Landlock、Seatbelt、Windows ACL 的沙箱原语单开 60 篇，SSH 远程工作区单开 59 篇；凭证密钥的细节在 35 篇。早期的 E2B 远程沙箱已被官方在 0.1.6 移除，涉及它的例子都改写为 SSH 家族并就地标注。
 
 ## 延伸阅读
 

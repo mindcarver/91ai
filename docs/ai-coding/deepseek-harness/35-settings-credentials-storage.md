@@ -17,7 +17,7 @@ dsh 的会话事件日志有自己的独立子系统，不在这篇的范围。�
 
 两条写入路径的分工值得分清。`update` 把一份稀疏 patch 合并进 user 层，永远不碰 base；`replace` 整段设置 user section，缺席的键回落到继承。`replace({})` 因此成为"重置"的实现：清空 user 层，所有字段回到继承态。合并式 patch 表达不了"移除"这个动作，整段替换才能。
 
-base 的所有权值得单独点明：它住在 `cordis.yml` 里，属于部署，不属于用户。一个 namespace 因此只携带用户可编辑的子集，用户的任何写入都动不了部署钉下的层。这个分层买到的东西很实际：运维可以放心地在组合层声明"这个部署的默认姿态"，不用担心被某次用户配置覆盖得无影无踪；想回部署默认，清掉 user 层就是。两层各自可预期，互不越界。
+base 的所有权值得单独点明：它住在组合层里（bundle 补丁与 profile 的 `cordis.patch.yml`），属于部署，不属于用户。一个 namespace 因此只携带用户可编辑的子集，用户的任何写入都动不了部署钉下的层。这个分层买到的东西很实际：运维可以放心地在组合层声明"这个部署的默认姿态"，不用担心被某次用户配置覆盖得无影无踪；想回部署默认，清掉 user 层就是。两层各自可预期，互不越界。
 
 把一条配置的一生走一遍。插件注册 namespace，带 schema（含默认值）、组合层 base、validate、applies。用户在界面改一个字段：patch 合并进 user 层，schema 先验，validate 后验，都过了才落盘，revision 推进，`settings/updated` 出去（解析值没变就不发，`settings/document-updated` 照发携带新 revision）。owner 是 live 的话，watch 回调按提交顺序异步逐个到达，看到的是深冻结的新快照；owner 是 restart 的话什么都不会发生，界面挂一个待重启标记。用户想直接编辑文件，`prepareDocument()` 给出本地文档的绝对路径，文件型 provider 会顺手物化这份文档，非文件存储返回 undefined，界面据此决定给不给"打开文件"这个按钮。重置就是 `replace({})`，所有字段回到 base 和默认值的继承态。
 

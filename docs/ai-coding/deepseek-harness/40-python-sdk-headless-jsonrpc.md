@@ -1,7 +1,7 @@
 # dsh 的 Python SDK、Headless 与 JSON-RPC：把 agent 编进流水线
 
 > dsh 不只有 Web UI。把它嵌进自动化流程有三种姿势，复杂度递增：headless 用一条命令跑一次性任务，Python SDK 把 agent 当库调，JSON-RPC 是两者脚下共用的 stdio 协议。三种姿势跑的是同一套 agent 组合，差别只在谁来驱动 turns、怎么收结果。
-> 两条最容易踩的边界：runtime 的 stdout 归协议所有，混进任何日志都会破坏通信，诊断信息一律走 stderr；自动化组合默认 danger-full-access，agent 能做 runtime 进程能做的任何事，安全不靠权限策略兜底，靠一次性 checkout 或容器兜底。
+> 两条最容易踩的边界：runtime 的 stdout 归协议所有，混进任何日志都会破坏通信，诊断信息一律走 stderr；默认组合 sdk-minimal 把权限钉死在 danger-full-access，agent 能做 runtime 进程能做的任何事，安全不靠权限策略兜底，靠一次性 checkout 或容器兜底。
 
 ![三种自动化入口](imgs/40-01-three-entry-modes.webp)
 
@@ -13,7 +13,7 @@ dsh 为这类场景提供了三个入口，按嵌入深度排：
 
 | 姿势 | 是什么 | 适合 |
 |---|---|---|
-| Headless（`dsh --profile headless`） | 命令行一次性 runner：接一个任务字符串，创建全新会话，跑完，打印最终 assistant 文本，退出 | shell 里"给我跑一个任务拿结果" |
+| Headless（`dsh --profile headless`） | 命令行一次性 runner：接一个任务字符串（或从 stdin 读），创建或续用一个会话，跑完，打印最终 assistant 文本，退出；`--json` 换成事件流输出 | shell 里"给我跑一个任务拿结果" |
 | Python SDK（`deepseek-harness-sdk`） | 把 dsh 当 Python 库用：`DeepSeekHarness` 管 runtime 生命周期，`Session.run()` 发任务收结果 | Python 程序里编排 agent、复用会话 |
 | JSON-RPC runtime | 底层 stdio 协议，headless 和 SDK 的地基 | 用的不是 Python，自己实现协议客户端 |
 
@@ -29,25 +29,25 @@ dsh 为这类场景提供了三个入口，按嵌入深度排：
 pnpm dsh --profile headless "fix the failing test in this workspace"
 ```
 
-它做四件事：接收一个非空任务字符串，创建并持久化一个全新会话，打印最终 assistant 文本，退出。不开 server，不起 UI，没有任何交互。
+它做的事：接收一个非空任务字符串（位置参数缺省或为单独的 `-` 时从 stdin 读整段），创建并持久化一个全新会话，或者用 `--session-id` 续用一个已存的会话，然后打印最终 assistant 文本，退出。不开 server，不起 UI，没有任何交互。
 
-这个 profile 的组合值得看一眼，因为它声明了"无人值守的 coding agent 长什么样"：DeepSeek V4 模型、本地 bash 和文件系统工具、subagent 委托、带 fresh-agent Ralph 迭代的 workflows、todo_write、JSONL 持久化，再挂上共享 agent spine、一个 root agent、持久化和 checkpoint 策略。测试组合之外还有一个 `advanced.cordis.yml`，在同样的 spine 上加挂 Code Mode 和 Cordis 工具，给需要 agent 改自己插件树的场景做实验底座。官方文档特意强调它"不是第二个产品入口"：headless 不是和 Web UI 并列的另一个产品，而是同一套 spine 换了个无人值守的驱动器。这个定位决定了它没有也不该有自己的专属功能，组合里多出来的每样东西都得在两种入口下都成立。
+这个 profile 的组合值得看一眼，因为它声明了"无人值守的 coding agent 长什么样"：它踩在共享核心 `dsh-base` 之上，继承模型适配、沙箱、审批、工具注册表和安全默认值，自己只补三样：无人值守的启动器（解析任务文本和选项）、runner 驱动器、退出语义（最后一个 turn 正常完成返回 0，其余一律返回 1），并关掉 Web 侧默认开启的热载。官方文档特意强调它"不是第二个产品入口"：headless 不是和 Web UI 并列的另一个产品，而是同一棵共享核心换了个无人值守的驱动器。这个定位决定了它没有也不该有自己的专属功能，组合里多出来的每样东西都得在两种入口下都成立。
 
 凭证走环境变量：`DEEPSEEK_API_KEY` 必须在环境或仓库根目录 gitignore 的 `.env` 里；模型走 OpenAI 兼容代理时加 `DEEPSEEK_BASE_URL`，默认打公开 API。
 
-一个容易踩的坑在"输出"上。测试设施里有一个 headless-driver，能往 stdout 吐规范的会话事件 JSONL，于是总有人想拿它当机器可读的 CLI 输出格式用。文档说得很清楚：那条流是测试专用的，不是受支持的 CLI 输出格式。要机器可读的结果，走 Python SDK 或 JSON-RPC，不要解析 headless 的 stdout。另一个相关事实：子会话不会作为独立条目出现在输出里，它们只通过父会话的工具事件和结果可见。
+输出有一条明确的分界。默认模式下 stdout 只有一行最终答案，模型的推理过程走 stderr（每段带 `dsh:` 前缀），中间的工具输出不打印；监督进程要机器可读的进展时，`--json` 把最终文本那行换成按行分隔的 JSON 事件流，以 `session` 事件开场、`final` 事件收尾，中间是 status、text、thinking、tool_call、tool_result。这条流是投影不是日志：除 final 外每个字符串封顶 8 KiB，投影没建模的事件不会出现，要无损记录去会话 JSONL 里找。一个相关事实不变：子会话不会作为独立条目出现在输出里，它们只通过父会话的工具事件和结果可见。
+
+`--session-id` 的续用语义也值得点名。传入一个已存的会话号，runner 采用那份持久会话继续对话；会话号不存在，任务开始之前就失败，不会悄悄开一份空历史。采用有边界：换过工作目录的会话、子会话、fork 出来的会话、跑在别的 agent 预设下的会话，一律拒绝，一个监督进程没法悄悄顶替别人的对话。
 
 ![Headless 输出边界](imgs/40-03-headless-output-boundary.webp)
 
-![E2B 远程沙箱 overlay 的边界](imgs/40-04-e2b-overlay-boundary.webp)
+### SSH 远程工作区 overlay
 
-### E2B 远程沙箱 overlay
+headless 有一个变体值得知道：远程工作区。SSH 家族把本地的文件系统和子进程 provider 整体指向一台远程 POSIX 机器，模型可见的工具保持原样。效果是 agent 的文件读写、Bash、沙箱、终端全在远程执行，而 Cordis 编排、模型调用、会话状态、日志留在本地。官方明确 headless 类 profile 支持这种排布；浏览器界面的工作区路径仍然假设本地文件系统，完整的远程体验目前在命令行侧。
 
-headless 有一个实用的变体：E2B 沙箱 overlay。`e2b.cordis.yml` 把本地的文件系统和子进程 provider 换成一个共享的 E2B 沙箱，模型可见的工具保持原样。效果是 agent 的 FS、Bash、PTY、LSP 全在远程沙箱里执行，而 Cordis 编排、模型调用、会话状态、日志、skills 留在本地。
+这条边界要划准。远程执行的前提全部前置：连接用部署方预先配好的 OpenSSH 主机别名，认证和主机密钥启动前就绪，运行时不做任何交互式认证；远程机器上预装 helper 和 Node，产物用 SHA-256 摘要钉死；断线不重连不重放，待决操作直接失败，最后一步成没成要由调用方决定是否重来。它不是"云上的一次性沙箱"：远程那台机器就是工作区，文件是持久的，环境是你配的。
 
-这条边界要划准。沙箱里保持和宿主机相同的绝对 cwd，但宿主工作区不会上传也不会挂载：沙箱里的文件改动只存在于沙箱里，宿主机上的会话状态也永远不会同步进去。沙箱在超时和销毁时被杀掉，凭证上多一个 `E2B_API_KEY`。所以它是一个 provider 组合的概念验证，演示"换 provider 等于换执行世界"，不是完整的 harness 迁移，更不是 workspace 同步功能。想要"本地改代码、远程跑验证"的双向流动，这条路不给。
-
-即便只是概念验证，它的价值取向值得记下：把模型驱动的文件改动和命令执行挪进一个用完即弃的远程沙箱，宿主机上只留编排和日志。这和容器里跑 danger-full-access 是同一个思路的两个实现，一个靠本地隔离，一个靠物理距离，防的都是同一件事：agent 犯错时，爆炸半径别落在你的机器上。
+价值取向和容器里跑 danger-full-access 一脉相承：模型驱动的文件改动和命令执行落在远程机器上，宿主机只留编排和日志，agent 犯错时爆炸半径别落在你的笔记本上。
 
 ![SDK 捆绑 runtime](imgs/40-05-sdk-bundled-runtime.webp)
 
@@ -61,7 +61,7 @@ python -m pip install deepseek-harness-sdk
 
 一个命名差异先记住：PyPI 上叫 `deepseek-harness-sdk`，import 时叫 `deepseek_harness`。发行名和模块名不一致，报错找不到模块时先检查是不是 import 错了名字。
 
-安装路径有两条，对应两种用法。纯使用：任何机器上 pip 装 SDK 就够，捆绑 runtime 自带，你的程序跑起来不依赖仓库。要跑官方示例：克隆仓库、起 venv、再装 SDK，因为 `minimal.py` 这类示例脚本和示例配置在仓库的 examples 目录里，PyPI 包不带它们。第一条路是生产用法，第二条路是学习用法，分清楚能少踩"为什么 pip 装完找不到 examples"的迷惑。
+安装路径有两条，对应两种用法。纯使用：任何机器上 pip 装 SDK 就够，捆绑 runtime 自带，你的程序跑起来不依赖仓库。要跑官方示例：克隆仓库、起 venv、再装 SDK，因为 `minimal.py` 这类示例脚本在仓库的 `python/sdk/examples` 目录里，PyPI 包不带它们。第一条路是生产用法，第二条路是学习用法，分清楚能少踩"为什么 pip 装完找不到 examples"的迷惑。
 
 安装 SDK 会同时装上严格同版本的 `deepseek-harness-runtime-bin` 平台 wheel，两个包的版本钉在一起，由仓库根 `package.json` 的共同版本号驱动。这个 wheel 里装的是真正的运行时：一个单文件 Node 可执行程序 `dsh-jsonrpc-agent-pkg-<platform>-<arch>`，外加一个 ripgrep 边车（`-rg` 伴随文件）。目标机器不需要装 Node.js，Node 运行时被编译进了这个可执行文件。平台覆盖是固定的三个组合：`linux-x64`（wheel 标签 `manylinux_2_28_x86_64`）、`linux-arm64`（`manylinux_2_28_aarch64`）、`macos-arm64`（`macosx_14_0_arm64`，保守对齐捆绑 Node 24 可执行文件的 macOS 13.5 部署目标）。不发布源码包。macOS wheel 额外带一个给 node-pty 用的原生 spawn-helper，Linux 用 staged 的 pty.node 插件。一条硬规则：边车文件缺失是启动期硬错误，哪怕你的配置根本不用文件搜索或 PTY，完整性检查照样让进程起不来。宁可拒绝启动，不带病运行。
 
@@ -103,7 +103,7 @@ with DeepSeekHarness(
     )
 ```
 
-逐个看语义。`provider` 选组合里注册的 provider 路由，捆绑默认组合注册的是 `deepseek-official`。`model` 是适配器解析的模型 id，它随每个会话的 initialize 请求经 JSON-RPC 传给 runtime，组合配置自己不钉模型；官方示例脚本 `minimal.py` 的解析顺序是命令行 `--model` 优先，然后 `DSH_MODEL` 环境变量，最后落到 `deepseek-v4-flash`。`max_tokens` 是可选的正整数，作为 root agent 及其进程内后代单次请求的输出 token 上限，不传就留给 provider 默认；压缩摘要不吃这个上限，摘要调用有自己的独立限额，来自压缩插件自己的配置。`cwd` 和 `runtime_cwd` 在子进程启动前就解析成绝对路径，再进环境注入和握手。`session_root` 是设置 `DSH_SESSION_ROOT` 的高层便捷参数；部署 persona 和持久化策略归 `cordis.yml` 管，不要塞进构造参数。`cordis` 指向你自己的组合配置文件。
+逐个看语义。`provider` 选组合里注册的 provider 路由，捆绑默认组合注册的是 `deepseek-official`。`model` 是适配器解析的模型 id，它随每个会话的 initialize 请求经 JSON-RPC 传给 runtime，组合配置自己不钉模型；官方示例脚本 `minimal.py` 的解析顺序是命令行 `--model` 优先，然后 `DSH_MODEL` 环境变量，最后落到 `deepseek-v4-flash`。组合的入口有两档：`profile` 参数选内置组合（示例脚本默认 `sdk-minimal`），`cordis` 参数指向你自己的组合配置文件，二者取一。`max_tokens` 是可选的正整数，作为 root agent 及其进程内后代单次请求的输出 token 上限，不传就留给 provider 默认；压缩摘要不吃这个上限，摘要调用有自己的独立限额，来自压缩插件自己的配置。`cwd` 和 `runtime_cwd` 在子进程启动前就解析成绝对路径，再进环境注入和握手。`session_root` 是设置 `DSH_SESSION_ROOT` 的高层便捷参数；部署 persona 和持久化策略归 `cordis.yml` 管，不要塞进构造参数。
 
 ![RunResult 的六个字段](imgs/40-08-runresult-six-fields.webp)
 
@@ -141,7 +141,7 @@ with DeepSeekHarness(
 
 流水线起一个干净容器，checkout 代码到 `/workspace`。装 SDK，这一步装上的 runtime 可执行文件和 SDK 同版本，容器里没有 Node 也不影响。构造 harness：`cwd` 指向 `/workspace`，`session_root` 指向 CI 的 artifact 目录，让会话日志跟着构建存档，事后排查有据可查。`session_id` 用构建号拼出来，比如 `ci-1234-fix-tests`，全新任务全新 id，不复用历史。
 
-发任务，prompt 就是"fix the failing test in this workspace"。interval 从签收开始，agent 读代码、跑测试、改文件、再跑测试，可能派 subagent 分头查，这些对 CI 全部不可见也不需要可见，CI 要的只有结果。run 返回后先看 `finish_reason`：`completed` 走正常产物流程；`max-tokens` 按你的评测口径决定算过还是不算（`DSH_MAX_TOKENS_AS_SUCCESS` 控制，默认 true 接受截断结果并保留原始原因，CI 里更常见的是设成 false，把超长任务显式筛出来让人看）；`error` 直接让 job 失败并归档 `session_root` 下的 JSONL。
+发任务，prompt 就是"fix the failing test in this workspace"。interval 从签收开始，agent 读代码、跑测试、改文件、再跑测试，可能派 subagent 分头查，这些对 CI 全部不可见也不需要可见，CI 要的只有结果。run 返回后先看 `finish_reason`：`completed` 走正常产物流程；`max-tokens` 按你的评测口径决定算过还是不算（`DSH_MAX_TOKENS_AS_SUCCESS` 控制：完整 `sdk` 组合默认 true 接受截断结果，minimal 组合直接钉死 false，把超长任务显式筛出来让人看）；`error` 直接让 job 失败并归档 `session_root` 下的 JSONL。
 
 artifact 里的 JSONL 日志是这个方案真正的调试资产：每一次模型请求、每一次工具调用、每一轮 turn 的结束原因都在里面，`finish_reason` 说 error 时，答案在日志里而不在 CI 控制台那几行 stdout 里。这也是为什么不鼓励解析 headless 的 stdout：同样的信息在会话日志里有规范格式，控制台输出是给人的，日志才是给机器的。
 
@@ -170,17 +170,17 @@ runtime 继承的正常环境变量表：
 | `DSH_MODEL` | 示例脚本的默认模型，显式参数可覆盖 |
 | `DSH_SESSION_ROOT` | JSONL 会话目录 |
 | `DSH_SYSTEM_PROMPT` | 部署提供的 coding persona，缺省回落到内置提示 |
-| `DSH_MAX_TOKENS_AS_SUCCESS` | true（默认）把 token 受限的 turn 当可接受结果 |
+| `DSH_MAX_TOKENS_AS_SUCCESS` | 完整 sdk 组合默认 true、minimal 组合钉 false，控制 token 受限的 turn 算不算可接受结果 |
 
 `DSH_MAX_TOKENS_AS_SUCCESS` 值得多看一眼，它是评测场景的开关。token 上限截断的 turn 默认被当成可接受结果，`finish_reason` 里保留 `max-tokens` 的原始记录；设成 false 则报告为错误。跑评测时两种口径各有用处：接受截断能看到"尽力而为的答案"，拒绝截断能把超长任务显式筛出来。
 
-### 两个示例组合的分寸
+### 两个内置组合的分寸
 
-仓库给 SDK 配了两个现成组合，分寸值得细看。完整的 `examples/jsonrpc-agent/cordis.yml` 是无人值守 coding agent 的参考：DeepSeek 适配器开满推理（thinking enabled、reasoningEffort max）；bash 超时 60 秒、仅前台；模型可见工具是 bash、read/write/edit、进程内 subagent、todo_write；挂自动上下文压缩（阈值比例 0.8、保留比例 0.16、摘要上限 8192 token、重试一次）；skills 和后台任务显式关闭；persona 缺省是 "You are a coding agent."。
+SDK 现在带两个内置组合，分寸值得细看。`sdk` 踩在共享核心 `dsh-base` 之上：完整工具集、凭据管理、持久化、遥测一样不少，自己只补编程式 persona（系统提示声明模型名和工作目录）、JSON-RPC 服务器，并关掉热载。`sdk-minimal` 反过来，一棵全显式的独立树：内核每一行服务都自己声明，不用的一律不挂，模型可见的面收窄到持久 bash（超时 300 秒）这一档，JSONL 持久化显式关掉压缩。示例脚本默认走 minimal，要完整能力时把 `profile` 换成 `sdk`。
 
-`minimal.cordis.yml` 是 Web 端 minimal preset 的完整独立对应版，面向确定性和测试：模型可见工具恰好两个，owner-scoped 持久 `bash` 和只含 view、create、str_replace、insert 四个动作的 `str_replace_editor`；bash 超时 300 秒；编辑器输出上限 16000 字符；不挂压缩插件；沙箱策略事实作为 runtime user context 记进日志，不追加进系统提示。最后这条是给 debug 用的：想知道某次运行到底处在什么沙箱策略下，去会话日志里查 user context，而不是猜系统提示里有没有写。捆绑的 MCP 客户端也在这层：stdio 和 Streamable HTTP 两种 transport，只消费工具，不支持 Resources 和 Prompts，MCP server 程序本身和凭证永远不会被打包进 runtime。
+两档的差异有实惠的判断价值。完整组合跑到上下文吃紧会自动收窄历史，任务能继续；minimal 的会话会在窗口耗尽时撞上限。跑长任务的自动化选组合时，把"有没有压缩"当成和"有哪些工具"同级的条件来筛，minimal 的极简是为了确定性和可枚举，不是为了生产吞吐。MCP 客户端两档都能用 stdio 和 Streamable HTTP 两种 transport；资源（Resources）的发现有共享核心里的专门插件行负责，minimal 树里也显式挂了这一行。
 
-两个组合的差异在长任务上见分晓：完整组合跑到上下文吃紧会自动收窄历史，任务能继续；minimal 的会话会在窗口耗尽时撞上限，要么靠 `max_tokens` 限制单轮输出苟着，要么任务失败。跑长任务的自动化选组合时，把"有没有压缩插件"当成和"有哪些工具"同级的条件来筛，minimal 的极简是为了演示和测试的确定性，不是为了生产吞吐。
+还有一个安全上的分档要记住：minimal 树把沙箱模式钉死在 danger-full-access，token 受限的 turn 也钉死按失败处理；完整 `sdk` 组合继承共享核心的 workspace-write 默认和 token 受限默认可接受。两档不是强弱关系，是两种立场：minimal 假设你拿它当评测和编排的确定性底座，完整组合假设你拿它当产品。
 
 ![JSON-RPC stdio 管道纪律](imgs/40-14-jsonrpc-stdio-discipline.webp)
 
@@ -192,7 +192,7 @@ runtime 继承的正常环境变量表：
 
 管道纪律是双向的。runtime 侧 stdout 归协议、诊断走 stderr，文档反复强调；你这边对称成立：自己客户端的任何 print、日志、进度条只要落到 stdout，混进的就是同一条协议流。这是自写客户端最常见的翻车点，调试期就把客户端自己的输出全部锁到 stderr。
 
-消费侧的语义照抄 SDK 的经验。prompt 入队拿到 MessageId 就返回，活动边界自己定义；`turn/end` 必须带字符串形式的 reason kind，缺了就是协议错误，按错误处理而不是跳过；通知流横跨 root 和全部后代，想看到 subagent 的动静就得消费通知，只盯响应会漏掉半棵进程树。仓库里 `examples/jsonrpc-agent/minimal.py` 是一个现成的最小驱动样本，命令行上直接给 workspace、session-root、session-id 和任务串就能跑，写客户端之前先读它，比从零猜协议形状快得多。
+消费侧的语义照抄 SDK 的经验。prompt 入队拿到 MessageId 就返回，活动边界自己定义；`turn/end` 必须带字符串形式的 reason kind，缺了就是协议错误，按错误处理而不是跳过；通知流横跨 root 和全部后代，想看到 subagent 的动静就得消费通知，只盯响应会漏掉半棵进程树。仓库里 `python/sdk/examples/minimal.py` 是一个现成的最小驱动样本，命令行上直接给 workspace、dsh-home、session-id 和任务串就能跑，写客户端之前先读它，比从零猜协议形状快得多。
 
 ![会话复用决策](imgs/40-15-session-reuse-decision.webp)
 
@@ -214,7 +214,7 @@ session 维度的决策规则一句话能说完：独立任务全新 id，继续
 
 workspace 维度：`cwd` 圈定 agent 可用的工作区，`session_root` 存会话日志和状态。session 维度：独立任务每次用全新的 session_id，只有下一次调用要继续同一段持久对话时才复用。复用的含义比"接着聊"具体得多：同一个 harness 加同一个 session id，session 拥有的 Bash 进程被保留，工作目录、导出的环境变量、shell 函数全在。这既是便利也是泄漏面，前一个任务 cd 到的目录、export 的变量会原样进入下一个任务，复用前想清楚这个会话的 shell 里沉淀了什么。
 
-权限模式的默认值是 `danger-full-access`：Bash 和编辑器可以修改 runtime 进程能访问的任何路径。这是刻意的选择，不是疏忽。自动化场景没有人在旁边审批，每次工具调用都要确认等于流水线永远卡住，所以干脆不做假门。代价直接写在文档里：只在一次性 checkout 或容器里跑这些组合，别在生产仓库或有敏感数据的机器上直接跑。安全边界靠执行环境隔离保证，不靠权限策略，这两句话是同一件事的正反两面。
+权限模式分档：minimal 树把默认钉死在 `danger-full-access`，Bash 和编辑器可以修改 runtime 进程能访问的任何路径，这是刻意的选择，不是疏忽。自动化场景没有人在旁边审批，每次工具调用都要确认等于流水线永远卡住，所以干脆不做假门。完整 `sdk` 组合继承共享核心的 workspace-write 默认和审批策略，但把它当无人值守组合用的人多半会放开。代价直接写在文档里：只在一次性 checkout 或容器里跑 minimal 这类组合，别在生产仓库或有敏感数据的机器上直接跑。安全边界靠执行环境隔离保证，不靠权限策略，这两句话是同一件事的正反两面。
 
 平台限制来自 PTY：持久 PTY backend 需要 POSIX terminal 环境，Windows 没有对应的 wheel，不是"不稳定"而是根本不发布。在 Windows 上用 SDK 要么换不依赖 PTY 的组合，要么进 WSL 或 Linux 容器。
 
@@ -234,14 +234,14 @@ workspace 维度：`cwd` 圈定 agent 可用的工作区，`session_root` 存会
 
 ## 结论
 
-三种姿势共享同一套 agent 组合，差别只在驱动方：shell 拿一次性结果用 headless，Python 程序里编排用 SDK，其他语言实现 JSON-RPC stdio 客户端。SDK 的体验核心是三件事：捆绑的同版本单文件 runtime，目标机器零 Node 依赖；懒启动跨调用复用的子进程生命周期；owned interval 语义的 RunResult，最终回复来自 root 会话，通知横跨整棵进程树。用的时候记住边界：stdout 归协议、诊断走 stderr；权限默认 danger-full-access，安全靠一次性 checkout 或容器兜底；要机器可读输出走 SDK 或协议，别解析 headless 的 stdout，那条 JSONL 流是测试设施不是产品接口。
+三种姿势共享同一套 agent 组合，差别只在驱动方：shell 拿一次性结果用 headless，Python 程序里编排用 SDK，其他语言实现 JSON-RPC stdio 客户端。SDK 的体验核心是三件事：捆绑的同版本单文件 runtime，目标机器零 Node 依赖；懒启动跨调用复用的子进程生命周期；owned interval 语义的 RunResult，最终回复来自 root 会话，通知横跨整棵进程树。用的时候记住边界：stdout 归协议、诊断走 stderr；minimal 组合权限钉死 danger-full-access，安全靠一次性 checkout 或容器兜底；headless 的机器可读输出用 `--json` 事件流，但它是有截断的投影，无损记录永远去会话 JSONL 里找。
 
 ## 延伸阅读
 
 - [Python SDK 教程](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/python-sdk.md)：安装、首次运行、workspace 与 session id 选择
 - [Python SDK 参考](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)：RunResult 语义、配置注入条件、运行时选择
-- [jsonrpc-agent 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/jsonrpc-agent/README.md)：无人值守组合与极简变体的工具清单
-- [headless-agent 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/examples/headless-agent/README.md)：headless profile 组合与 E2B 概念验证
+- [headless bundle](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/bundle/headless)：一次性 runner 的契约、`--json` 事件流与会话续用
+- [python/sdk/examples](https://github.com/deepseek-ai/deepseek-harness/tree/master/python/sdk/examples)：`minimal.py` 最小驱动样本
 - [SDK Runtime 参考](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/README.md)：两种运行时载体与零配置设计
 
 上一篇：[dsh 的 Conversation Node：给 Web 写一个自定义渲染节点](./39-write-a-conversation-node.md)

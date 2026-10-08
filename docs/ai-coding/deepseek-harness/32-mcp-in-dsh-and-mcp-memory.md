@@ -9,7 +9,7 @@
 
 先把背景立起来，后面的设计判断才有基准。
 
-MCP（Model Context Protocol）是 Anthropic 在 2024 年 11 月开源的协议，目标是把"AI 应用如何连接外部数据源和工具"标准化，截至 2026-08 的权威版本是 2026-07-28 的规范。形态是 JSON-RPC 2.0 消息，两端叫客户端和服务器：客户端是 agent 这边的 harness，服务器是暴露能力的一方。连接建立时先走一次初始化握手，双方交换各自的能力声明；之后服务器暴露三类能力：tools（可调用的工具）、resources（可读取的数据）、prompts（提示模板）。工具列表不是静态的，服务器可以在运行中通知客户端"工具变了"，客户端重新拉取，翻页用游标。
+MCP（Model Context Protocol）是 Anthropic 在 2024 年 11 月开源的协议，目标是把"AI 应用如何连接外部数据源和工具"标准化，截至 2026-08 的权威版本是 2026-07-28 的规范。形态是 JSON-RPC 2.0 消息，两端叫客户端和服务器：客户端是 agent 这边的 harness，服务器是暴露能力的一方。连接建立时先走一次初始化握手，双方交换各自的能力声明；之后服务器暴露三类能力：tools（可调用的工具）、resources（可读取的数据）、prompts（提示模板）。2026 年 9 月的 0.1.6 起，dsh 的桥接升到 MCP SDK v2，并把 resources 的发现与 URI 模板接了进来，共享核心里有专门的 mcp-resources 行。工具列表不是静态的，服务器可以在运行中通知客户端"工具变了"，客户端重新拉取，翻页用游标。
 
 这个协议的价值在算术里。没有标准化时，N 个客户端接 M 个数据源，每个客户端给每个数据源写一套适配，工作量是 N 乘以 M；有了协议，客户端写一次协议实现，服务器写一次协议实现，工作量变成 N 加 M。社区已经沿着这条路堆出了大量现成服务器：GitHub、文件系统、数据库、Slack、记忆系统。一个 harness 支持 MCP，等于拿到了这个生态的入场券，别人写的每个服务器都是你的候选能力。
 
@@ -69,7 +69,7 @@ v1 的桥接只在插件加载时连接一次。stdio 服务器崩溃后，已�
 
 预算是防崩溃循环的关键。一次故障期间共享 `maxAttempts` 次连续失败尝试的预算，默认十次，超过就放弃，注销这个服务器的全部工具，以 error 级别记日志，直到热重载或重启。预算的重置规则经过了认真的推敲：连接存活超过稳定窗口（取 `maxDelayMs`，默认 30 秒，从最长退避间隔推导而不是第五个独立调参项）就清零。决策笔记否决了"每次成功连接即重置"的方案，理由是一个连接短暂成功后立即再崩的循环服务器会在每个周期洗白预算，变成永远重启的风暴，恰恰是失败上限要防的东西。基于运行时间的重置能区分已恢复的服务器和循环崩溃的服务器，不新增配置。
 
-代与代之间完全隔离。每次尝试构建全新的 transport 和 `Client`，因为 SDK 把一个 Protocol 绑定到一个 transport 上终身使用，复用会把通知处理器和已协商的能力状态带进新的服务器实例。失败尝试在旧 transport 报告 `onclose` 之后才进入退避，对 stdio 来说这个信号证明子进程真的退出了；若关闭信号迟迟不来，在 SDK 的有界终止窗口结束后停止重连，不允许两个服务器进程重叠运行。失败信号按代幂等：一次连接拒绝和它自己的 transport 关闭竞态时，恰好调度一次重试。重连定时器用 unref，等待中的退避不阻止进程正常退出。dispose 翻转栅栏、取消待执行的定时器、关闭当前 client，等进行中的尝试和同步队列完成后才注销工具，完全停稳而不是发个停止请求就走。
+代与代之间完全隔离（这一节的重连实现细节按 2026-08 的 SDK 写成，0.1.6 起桥接已升到 MCP SDK v2，微观形状以当期为准）。每次尝试构建全新的 transport 和 `Client`，因为 SDK 把一个 Protocol 绑定到一个 transport 上终身使用，复用会把通知处理器和已协商的能力状态带进新的服务器实例。失败尝试在旧 transport 报告 `onclose` 之后才进入退避，对 stdio 来说这个信号证明子进程真的退出了；若关闭信号迟迟不来，在 SDK 的有界终止窗口结束后停止重连，不允许两个服务器进程重叠运行。失败信号按代幂等：一次连接拒绝和它自己的 transport 关闭竞态时，恰好调度一次重试。重连定时器用 unref，等待中的退避不阻止进程正常退出。dispose 翻转栅栏、取消待执行的定时器、关闭当前 client，等进行中的尝试和同步队列完成后才注销工具，完全停稳而不是发个停止请求就走。
 
 拿两类真实服务器给这个分类器过一遍。第一类，内存里有个偶发 bug 的本地服务器，平均五分钟崩一次。每次崩溃触发退避重连，半秒、一秒、两秒，通常第二三次就连上；每次连接都轻松活过三十秒，预算清零。一整天下来它崩了几十次，也恢复了几十次，用户最多在日志里看到一串 warn。第二类，启动即崩的服务器，依赖缺失，进程起来两秒就死。重连的间隔从半秒爬到三十秒，连接从没活过三十秒，预算只耗不补，第十次尝试后彻底放弃，工具注销，一条 error 日志收尾。两类服务器的处置完全不同，前者是该被容忍的正常波动，后者是需要人介入的配置错误，预算机制就是那条分界线。
 
@@ -127,7 +127,7 @@ stdio 把服务器当成你机器上的一个子进程。它读得到你清洗�
 
 ## mcp-memory：三份配置，一次接入
 
-`examples/mcp-memory/` 不是内置功能，是三份默认关闭的参考配置，演示同一个桥接怎么接三个第三方记忆系统（2026-07-31 的第三方记忆示例决策笔记负责它的定位）。三个选择连版本带提交一起钉死，可复现性给到了提交级：
+官方曾随仓库带过三份默认关闭的参考配置（`examples/mcp-memory/`，2026 年 9 月的重组里随 examples 目录一起移除），演示同一个桥接怎么接三个第三方记忆系统（2026-07-31 的第三方记忆示例决策笔记负责它的定位）。三个选择连版本带提交一起钉死，可复现性给到了提交级：
 
 | 系统 | 钉死版本 | 传输 | 前置 |
 |---|---|---|---|
@@ -135,7 +135,7 @@ stdio 把服务器当成你机器上的一个子进程。它读得到你清洗�
 | MCP Reference Memory | 2026.7.4（提交 6dd0a683） | stdio | npm 全局装 |
 | Engram | v1.20.0（提交 ba9e46ce） | stdio | Go 1.25.10 起，go install 或下载二进制 |
 
-装好服务器后，启动就是一条 patch 命令，比如 Memorix：`dsh web --patch "$PWD/examples/mcp-memory/memorix.cordis.yml"`。想让配置跨启动常驻，把文件里那条 insert 补丁合并进你的 profile 补丁文件，别整个覆盖已有配置。
+装好服务器后，接入就是在你的 profile 补丁或 `--patch` 覆盖层里加一条 insert。想让配置跨启动常驻，把那条 insert 补丁合并进你的 profile 补丁文件，别整个覆盖已有配置。
 
 配置文件本体极简：一条 insert，插件名指向桥接，`serverName` 给个唯一名字，传输选 stdio，命令和参数照服务器的启动方式填。它和接 GitHub 服务器在结构上没有任何区别，三个记忆系统的差异全在上游怎么存数据、怎么检索，dsh 这边做的永远是同一件事：拉起进程、发现工具、注册。
 
@@ -178,7 +178,7 @@ dsh 把 MCP 当生态接口：一个通用桥接插件把任意服务器的工�
 - [MCP 官方规范（2026-07-28）](https://modelcontextprotocol.io/specification/2026-07-28)
 - [dsh-mcp-client README](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)：桥接插件全部行为契约
 - [MCP 客户端自动重连决策笔记](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.md)：监督器、预算与被否决的替代方案
-- [mcp-memory 示例](https://github.com/deepseek-ai/deepseek-harness/tree/master/examples/mcp-memory)：三份参考配置与验证步骤
+- [mcp-resources 包](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp)：resources 发现与 URI 模板的共享行
 - [MCP 官方服务器集合（含 server-memory）](https://github.com/modelcontextprotocol/servers)
 
 上一篇：[dsh 的 web-schedule：会话内的定时、提醒与自动化](./31-web-schedule-timer-automation.md)
