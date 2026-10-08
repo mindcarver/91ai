@@ -24,6 +24,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | 先比较六种 AI 编程工具 | [工具总览](#工具总览) | 先按入口形态、工程集成和风险边界做初筛 |
 | 快速建立 Claude Code 工程认知 | [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 按推荐顺序学习核心机制 |
 | 查 Claude Code 命令和配置 | [Claude Code 工具全书](./claudecode-series/README.md) | 把 78 篇当参考手册，按主题查阅 |
+| 用 SDK 把 agent 装进自己的程序 | [Claude Agent SDK 全书](./claude-agent-sdk-series/README.md) | 33 篇，从进程模型到生产化部署，给写 agent 产品的开发者 |
 | 把 Claude Code 用进真实项目 | [Claude Code 工程化实战](./claude-code-engineering/) | 聚焦工作流、权限、Hooks、MCP、CI/CD 与治理 |
 | 系统掌握 Codex CLI | [Codex CLI 完全指南](./codex-series/) | 从安装、命令走到安全、SDK 和企业治理 |
 | 把 Codex 纳入团队工程流程 | [Codex 工程化实战](./codex-engineering/) | 聚焦 AGENTS.md、沙箱、验证、CI 和团队落地 |
@@ -45,6 +46,7 @@ AI Coding 是当前最值得持续跟踪的 AI 应用方向之一。
 | [Claude Code 工程化学习路径](./claude-code-engineering-learning-path.md) | 想系统学习 Claude Code 工程化的人 | 从 CLAUDE.md、Skills、Subagents、Hooks、MCP 到 Headless、Agent SDK、Plugins 的 32 讲路线。 |
 | [Claude Code 工程化实战系列](./claude-code-engineering/) | 想逐篇阅读和沉淀团队材料的人 | 34 篇独立文章，覆盖个人使用、工作流沉淀、Subagents、MCP、Hooks、CI/CD、SDK、Plugins 和组织治理。 |
 | [Claude Code 工具全书](./claudecode-series/README.md) | 想全面了解 Claude Code 各方面能力的人 | 78 篇独立文章，覆盖安装、CLI 命令、交互模式、配置、权限安全、日常开发工作流、Skills/MCP/Hooks/Subagents、并行开发、Headless/CI/SDK、团队治理和排错。 |
+| [Claude Agent SDK 全书](./claude-agent-sdk-series/README.md) | 要用 SDK 把 agent 引擎嵌入自己程序的开发者 | 33 篇，覆盖 SDK 定位、子进程模型、事件流、会话与存储、自定义工具与 MCP、Tool Search、子代理编排、系统提示与配置加载、权限与 Hooks、检查点、成本与 OTel 观测、托管架构、安全部署、测试评估、Managed Agents 与迁移排错参考。 |
 
 ### Codex 系列
 
