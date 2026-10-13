@@ -28,7 +28,7 @@
 | 05 | [消息流与事件模型：读懂 agent 的每一次心跳](./05-message-stream-events.md) |
 | 06 | [流式输入与人工介入：把审批接进你的程序](./06-streaming-input-approvals.md) |
 | 07 | [结构化输出：把 agent 变成一个 API](./07-structured-outputs.md) |
-| 08 | [会话：创建、恢复与分叉](./08-sessions-resume-fork.md) |
+| 08 | [会话：创建、恢复与分叉](./08-sessions-resume-fork.md) · [一页图解](./eli5-sessions-resume-fork.html) |
 | 09 | [会话存储：让会话跟着你的基础设施走](./09-session-storage.md) |
 
 ## 三、工具体系（10-14）

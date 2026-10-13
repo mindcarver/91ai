@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="一页看懂 Claude Agent SDK 的会话、continue、resume 和 fork，以及它们与文件系统的边界。">
+  <title>会话恢复，找回的是什么？ | Claude Agent SDK 图解</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212b;
+      --muted: #52616d;
+      --line: #cbd4d9;
+      --paper: #f7f9f8;
+      --blue: #246889;
+      --green: #25755c;
+      --orange: #ad572d;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; letter-spacing: 0; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    .wrap { width: min(100% - 48px, 1120px); margin: 0 auto; }
+    header { padding: 44px 0 32px; border-bottom: 1px solid var(--line); }
+    .eyebrow { margin: 0 0 17px; color: var(--blue); font: 700 12px/1.4 ui-monospace, Consolas, monospace; }
+    h1 { max-width: 850px; margin: 0; font-size: clamp(32px, 4.2vw, 55px); line-height: 1.16; font-weight: 800; }
+    .answer { max-width: 830px; margin: 17px 0 0; font-size: clamp(17px, 1.9vw, 21px); line-height: 1.6; color: var(--muted); }
+    .answer strong { color: var(--ink); }
+    main { padding: 34px 0 48px; }
+    .section-label { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: 16px; font-weight: 800; }
+    .section-label span { color: var(--blue); font: 700 12px/1 ui-monospace, Consolas, monospace; }
+    .origin { display: grid; grid-template-columns: minmax(0, 1fr) 85px minmax(0, 1.1fr); align-items: center; gap: 24px; min-height: 190px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); }
+    .origin h2 { margin: 0 0 9px; font-size: 25px; line-height: 1.3; }
+    .origin p { max-width: 430px; margin: 0; color: var(--muted); line-height: 1.65; }
+    .arrow { position: relative; height: 2px; background: var(--ink); }
+    .arrow::after { position: absolute; right: -1px; top: -5px; content: ""; width: 10px; height: 10px; border-top: 2px solid var(--ink); border-right: 2px solid var(--ink); transform: rotate(45deg); }
+    .transcript { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 18px; align-items: center; padding: 18px 0; }
+    .file { position: relative; width: 68px; height: 78px; border: 2px solid var(--blue); background: white; }
+    .file::before { position: absolute; top: 11px; left: 11px; width: 27px; height: 4px; background: var(--blue); box-shadow: 0 11px 0 #a6c5d3, 0 22px 0 #a6c5d3, 0 33px 0 #a6c5d3; content: ""; }
+    .transcript strong { display: block; margin-bottom: 7px; color: var(--blue); font-size: 19px; }
+    .transcript small { display: block; color: var(--muted); line-height: 1.6; font-size: 14px; }
+    .flow { display: block; width: 100%; height: 72px; overflow: visible; }
+    .flow path { fill: none; stroke: var(--line); stroke-width: 2; }
+    .routes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+    .route { min-width: 0; min-height: 226px; padding: 16px 0 0; border-top: 4px solid var(--blue); }
+    .route:nth-child(2) { border-color: var(--green); }
+    .route:nth-child(3) { border-color: var(--orange); }
+    .route-head { display: flex; align-items: baseline; gap: 11px; }
+    .route-head b { color: var(--blue); font: 800 14px/1 ui-monospace, Consolas, monospace; }
+    .route:nth-child(2) .route-head b { color: var(--green); }
+    .route:nth-child(3) .route-head b { color: var(--orange); }
+    .route h3 { margin: 0; font-size: 25px; line-height: 1.25; }
+    .route .selector { min-height: 42px; margin: 15px 0 12px; font: 700 14px/1.5 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+    .route p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .route .result { margin-top: 12px; color: var(--ink); font-weight: 700; }
+    .example { margin: 40px 0 0; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .example h2, .boundary h2 { margin: 0 0 13px; font-size: 18px; }
+    .example-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 17px; line-height: 1.5; }
+    .example-line b { color: var(--orange); }
+    .example-line .step { padding: 5px 0; }
+    .example-line .sep { color: var(--line); font-weight: 800; }
+    .boundary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 38px; margin-top: 40px; }
+    .boundary > div { border-top: 3px solid var(--green); padding-top: 16px; }
+    .boundary > div:last-child { border-color: var(--orange); }
+    .boundary p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .boundary strong { color: var(--ink); }
+    .takeaway { margin: 42px 0 0; padding: 22px 0; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); font-size: 23px; line-height: 1.5; font-weight: 800; }
+    footer { padding: 23px 0 45px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    footer p { margin: 0 0 7px; }
+    @media (max-width: 720px) {
+      .wrap { width: min(100% - 32px, 1120px); }
+      header { padding: 29px 0 25px; }
+      main { padding-top: 27px; }
+      .origin { grid-template-columns: 1fr; gap: 0; padding: 19px 0; }
+      .origin h2 { font-size: 22px; }
+      .arrow { width: 2px; height: 29px; margin: 15px 0 5px 34px; }
+      .arrow::after { top: auto; right: -5px; bottom: -1px; transform: rotate(135deg); }
+      .transcript { padding: 8px 0; }
+      .flow { display: none; }
+      .routes { grid-template-columns: 1fr; gap: 0; margin-top: 22px; }
+      .route { min-height: 0; padding: 15px 0 23px; }
+      .route h3 { font-size: 23px; }
+      .route .selector { min-height: 0; margin: 10px 0; }
+      .example { margin-top: 17px; }
+      .boundary { grid-template-columns: 1fr; gap: 22px; margin-top: 27px; }
+      .takeaway { margin-top: 29px; font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">CLAUDE AGENT SDK / 08 / 一页图解</p>
+      <h1>恢复会话，找回的是什么？</h1>
+      <p class="answer"><strong>找回的是对话历史。</strong>SDK 会保存之前的提问、工具调用和回答；下一次可以接上它，或复制一份历史走另一条路。</p>
+    </div>
+  </header>
+  <main class="wrap">
+    <p class="section-label"><span>01</span> 先留下能找到的历史</p>
+    <section class="origin" aria-label="保存会话历史">
+      <div>
+        <h2>Agent 完成一次任务</h2>
+        <p>例如，读完仓库并分析架构。接收结果时，记下这次任务的 session ID。</p>
+      </div>
+      <div class="arrow" aria-hidden="true"></div>
+      <div class="transcript">
+        <div class="file" aria-hidden="true"></div>
+        <div><strong>保存为会话历史</strong><small>提问 + 回答 + 工具调用及结果<br>session ID 是找回这段历史的号码</small></div>
+      </div>
+    </section>
+
+    <svg class="flow" viewBox="0 0 1120 72" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M560 0 V28 H185 V70 M560 28 V70 M560 28 H935 V70" />
+    </svg>
+    <p class="section-label"><span>02</span> 下一次，选一条路</p>
+    <section class="routes" aria-label="三种接续会话的方式">
+      <div class="route">
+        <div class="route-head"><b>A</b><h3>continue</h3></div>
+        <p class="selector">不填 ID → 找最近一段</p>
+        <p>适合一个目录里只跑一件事。多个任务交替时，“最近”可能不是你要的那次。</p>
+        <p class="result">结果：接着原会话聊。</p>
+      </div>
+      <div class="route">
+        <div class="route-head"><b>B</b><h3>resume</h3></div>
+        <p class="selector">指定 session ID → 精确找回</p>
+        <p>要继续某个明确任务，就保存并传入它的 ID。适合任务列表、失败后续跑。</p>
+        <p class="result">结果：接着指定会话聊。</p>
+      </div>
+      <div class="route">
+        <div class="route-head"><b>C</b><h3>fork</h3></div>
+        <p class="selector">指定 ID + fork → 复制历史</p>
+        <p>从同一段历史开出新会话，拿到新 ID；原会话不被新分支改写。</p>
+        <p class="result">结果：两条对话各走各的。</p>
+      </div>
+    </section>
+
+    <section class="example" aria-label="具体例子">
+      <h2>让例子走一遍</h2>
+      <div class="example-line">
+        <span class="step">原会话：已完成架构分析</span><span class="sep">→</span>
+        <span class="step">resume 原 ID：继续做安全审查</span><span class="sep">/</span>
+        <span class="step"><b>fork 原 ID：</b>另开一条性能审查支线</span>
+      </div>
+    </section>
+
+    <section class="boundary" aria-label="会话与文件的边界">
+      <div>
+        <h2>对话会接上或分叉</h2>
+        <p>恢复时带回先前的对话；fork 会给复制出的对话一个新 ID。<strong>这是会话层的变化。</strong></p>
+      </div>
+      <div>
+        <h2>文件不会跟着分叉</h2>
+        <p>恢复不会回滚文件。两个 fork 若在同一目录改代码，仍会碰到同一批真实文件；需要文件隔离时，为分支准备独立工作目录。</p>
+      </div>
+    </section>
+    <p class="takeaway">记住：session ID 找回对话；fork 复制对话。文件隔离要另做。</p>
+  </main>
+  <footer class="wrap">
+    <p>这张图省略了什么：跨机器恢复需要共享存储或搬运会话文件；关闭持久化后，不能指望下次从磁盘恢复。</p>
+    <p>继续阅读：<a href="./08-sessions-resume-fork.md">系列第 08 篇原文</a> · <a href="https://code.claude.com/docs/en/agent-sdk/sessions">Claude Agent SDK 官方会话文档</a></p>
+  </footer>
+</body>
+</html>
